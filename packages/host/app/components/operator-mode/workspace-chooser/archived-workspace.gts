@@ -1,7 +1,7 @@
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import ArchiveRestoreIcon from '@cardstack/boxel-icons/archive-restore';
@@ -53,8 +53,17 @@ export default class ArchivedWorkspace extends Component<Signature> {
     return backgroundURL ? `url(${backgroundURL})` : '';
   }
 
+  @tracked private restoreError: string | undefined;
+
   private restoreTask = dropTask(async () => {
-    await this.realmServer.unarchiveRealm(this.args.archivedRealm.url);
+    this.restoreError = undefined;
+    try {
+      await this.realmServer.unarchiveRealm(this.args.archivedRealm.url);
+    } catch (error: any) {
+      // Restoring a sealed realm can fail (e.g. a 403 for a non-owner);
+      // surface it on the tile so the action doesn't fail silently.
+      this.restoreError = error.message;
+    }
   });
 
   <template>
@@ -100,6 +109,12 @@ export default class ArchivedWorkspace extends Component<Signature> {
           data-test-archived-workspace-name
         >{{this.name}}</span>
         <span class='status'>Archived</span>
+        {{#if this.restoreError}}
+          <span
+            class='restore-error'
+            data-test-restore-workspace-error
+          >{{this.restoreError}}</span>
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -254,6 +269,12 @@ export default class ArchivedWorkspace extends Component<Signature> {
         color: var(--boxel-400);
         font: 400 var(--boxel-font-xs);
         text-transform: capitalize;
+      }
+      .restore-error {
+        color: var(--boxel-danger);
+        font: 600 var(--boxel-font-xs);
+        text-wrap: wrap;
+        overflow-wrap: anywhere;
       }
     </style>
   </template>

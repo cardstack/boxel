@@ -2,6 +2,8 @@ import { click, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
+import type RealmServerService from '@cardstack/host/services/realm-server';
+
 import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -136,6 +138,44 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
         '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
       )
       .doesNotExist('the restored workspace leaves the Archived section');
+  });
+
+  test('a failed restore surfaces an error and keeps the workspace archived', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+    await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+    await click('[data-test-confirm-archive-button]');
+    await click('[data-test-archived-toggle]');
+    await waitFor(
+      '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
+    );
+
+    // Force the unarchive endpoint to reject (e.g. a 403 for a non-owner) so we
+    // exercise the tile's error branch rather than the happy path.
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    realmServer.unarchiveRealm = () =>
+      Promise.reject(new Error("Could not restore realm 'Workspace A': 403"));
+
+    await click(`[data-test-restore-workspace-btn="${ownedRealmURL}"]`);
+
+    await waitFor('[data-test-restore-workspace-error]');
+    assert
+      .dom('[data-test-restore-workspace-error]')
+      .hasText(
+        "Could not restore realm 'Workspace A': 403",
+        'the restore failure is surfaced on the tile',
+      );
+    assert
+      .dom(
+        '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
+      )
+      .exists('the workspace stays in the Archived section when restore fails');
+    assert
+      .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
+      .doesNotExist('the failed restore does not return it to the active list');
   });
 
   test('the archive confirmation modal can be cancelled', async function (assert) {
