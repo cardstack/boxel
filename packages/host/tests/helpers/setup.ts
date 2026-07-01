@@ -18,8 +18,6 @@ import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
-import { installTestRealmFetchResponderOnce } from './test-realm-service-worker';
-
 import { cleanupMonacoEditorModels } from './index';
 
 // Pin `yaml` into the eager test bundle. `markdown-file-def` parses frontmatter
@@ -669,7 +667,6 @@ export function setupApplicationTest(hooks: NestedHooks) {
   seedAiAssistantClosed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
-  hooks.beforeEach(installTestRealmFetchResponderOnce);
   hooks.afterEach(async function () {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
     resetServiceIfPresent(this.owner, 'service:matrix-service');
@@ -689,7 +686,6 @@ export function setupRenderingTest(hooks: NestedHooks) {
   seedAiAssistantClosed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
-  hooks.beforeEach(installTestRealmFetchResponderOnce);
   hooks.afterEach(async function () {
     await settled();
     (
