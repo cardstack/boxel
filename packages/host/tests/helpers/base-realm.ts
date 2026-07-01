@@ -160,7 +160,6 @@ let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let rawSerializeCard: (typeof CardAPIModule)['serializeCard'];
 let rawSerializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
-let searchDoc: (typeof CardAPIModule)['searchDoc'];
 let searchDocFromFields: (typeof SearchableModule)['searchDocFromFields'];
 
 // Test-side wrappers around the raw card-api serialize functions that
@@ -390,7 +389,6 @@ async function initialize() {
     getBrokenLinks,
     getDataBucket,
     getQueryableValue,
-    searchDoc,
     subscribeToChanges,
     unsubscribeFromChanges,
     flushLogs,
@@ -480,7 +478,6 @@ export {
   getBrokenLinks,
   getDataBucket,
   getQueryableValue,
-  searchDoc,
   searchDocFromFields,
   subscribeToChanges,
   unsubscribeFromChanges,

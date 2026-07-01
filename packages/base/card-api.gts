@@ -332,12 +332,6 @@ export type Searchable = true | string | string[];
 interface Options {
   computeVia?: () => unknown;
   description?: string;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
   // Names which links this field makes searchable. See `Searchable`.
   searchable?: Searchable;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
@@ -379,7 +373,6 @@ export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
   declaredCardThunk?: () => T;
-  isUsed?: true;
   isPolymorphic?: true;
   searchable?: Searchable;
   name: string;
@@ -576,12 +569,6 @@ export interface Field<
     value: any,
     resource: LooseCardResource,
   ): void;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
   isPolymorphic?: true;
   // The links this field makes searchable. This descriptor is the source of
   // truth; `getFieldDefinitions` mirrors it (raw) into the cached
@@ -659,7 +646,6 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
@@ -667,14 +653,12 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
     searchable,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
   }
@@ -989,7 +973,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
@@ -997,14 +980,12 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
     searchable,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
   }
@@ -1220,7 +1201,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
@@ -1230,7 +1210,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
     searchable,
     queryDefinition,
@@ -1239,7 +1218,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
@@ -1659,7 +1637,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
@@ -1669,7 +1646,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
     searchable,
     queryDefinition,
@@ -1678,7 +1654,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
@@ -2322,12 +2297,11 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, searchable } = options ?? {};
+      let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        isUsed,
         searchable,
       });
       (instance as any).configuration = options?.configuration;
@@ -2343,12 +2317,11 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, searchable } = options ?? {};
+      let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        isUsed,
         searchable,
       });
       (instance as any).configuration = options?.configuration;
@@ -2364,7 +2337,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, searchable, query } = options ?? {};
+      let { computeVia, searchable, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2374,7 +2347,6 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
         searchable,
         queryDefinition: query,
       });
@@ -2391,7 +2363,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, searchable, query } = options ?? {};
+      let { computeVia, searchable, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2401,7 +2373,6 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
         searchable,
         queryDefinition: query,
       });
@@ -4518,15 +4489,6 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
     deserialized.set('id', id);
   }
   instance[isSavedInstance] = true;
-}
-
-export function searchDoc<CardT extends BaseDefConstructor>(
-  instance: InstanceType<CardT>,
-): Record<string, any> {
-  return getQueryableValue(instance.constructor, instance) as Record<
-    string,
-    any
-  >;
 }
 
 function makeDescriptor<

@@ -298,6 +298,36 @@ export interface ShimRetryDeps {
 const defaultDelay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Render an unknown thrown value as one readable line for logs. Shim
+// resolvers compile to runtime `import()` calls whose chunk-fetch
+// failures carry the diagnostic signature ("Failed to fetch dynamically
+// imported module", a Chrome `ERR_*` string, an HTTP 50x) in the Error
+// `message`. Captured browser logs render a raw Error passed as a
+// trailing console argument as "[object Object]" and drop that signature,
+// so the message is interpolated into the log string here instead.
+export function describeShimError(err: unknown): string {
+  if (err instanceof Error) {
+    let code = (err as { code?: unknown }).code;
+    let codeSuffix =
+      typeof code === 'string' || typeof code === 'number'
+        ? ` (code ${code})`
+        : '';
+    return `${err.name}: ${err.message}${codeSuffix}`;
+  }
+  if (typeof err === 'string') {
+    return err;
+  }
+  // `JSON.stringify` returns `undefined` (not a string) for `undefined`,
+  // functions, and symbols, and throws on a bigint or a circular object.
+  // Fall back to `String(err)` in both cases so this always returns a
+  // string, honoring the declared return type for any thrown value.
+  try {
+    return JSON.stringify(err) ?? String(err);
+  } catch {
+    return String(err);
+  }
+}
+
 // Minimal logging surface used by `withResolveRetry`. Narrower than
 // `ReturnType<typeof logger>` so tests can pass a no-op stub without
 // having to construct a full `loglevel` instance — the production
@@ -339,15 +369,13 @@ export function withResolveRetry<TArgs extends unknown[], TResult>(
           // error or a missing module wastes the budget and delays
           // the error surfacing to the operator.
           log.debug(
-            `shim resolver for ${label} failed with non-retryable error; not retrying`,
-            err,
+            `shim resolver for ${label} failed with non-retryable error; not retrying: ${describeShimError(err)}`,
           );
           break;
         }
         let waitMs = delaysMs[attempt];
         log.warn(
-          `shim resolver for ${label} failed on attempt ${attempt + 1}/${totalAttempts}; retrying in ${waitMs}ms`,
-          err,
+          `shim resolver for ${label} failed on attempt ${attempt + 1}/${totalAttempts}; retrying in ${waitMs}ms: ${describeShimError(err)}`,
         );
         await delay(waitMs);
       }
@@ -403,7 +431,7 @@ export class PackageShimHandler {
         return null;
       } catch (err: any) {
         this.log.error(
-          `PackageShimHandler#handle threw an error handling ${request.url}`,
+          `PackageShimHandler#handle threw an error handling ${request.url}: ${describeShimError(err)}`,
           err,
         );
         return null;

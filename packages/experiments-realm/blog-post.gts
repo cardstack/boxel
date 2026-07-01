@@ -643,7 +643,6 @@ export class BlogPost extends CardDef {
     },
   });
   @field blog = linksTo(BlogAppCard, {
-    isUsed: true,
     searchable: true,
   });
   @field featuredImage = contains(FeaturedImageField);

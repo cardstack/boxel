@@ -1,14 +1,14 @@
 import { rawArrayValues } from './watched-array';
 import { isSavedInstance } from './-private';
 import {
-  assertIsSerializerName,
-  fieldSerializer,
-  getSerializer,
   isCardError,
+  matchSearchableRoutes,
   primitive,
   relativeTo,
+  routesForField,
 } from '@cardstack/runtime-common';
 import {
+  getDataBucket,
   getFields,
   isLinkError,
   isLinkNotFound,
@@ -19,6 +19,7 @@ import {
 import {
   createFromSerialized,
   getStore,
+  queryableValue,
   resolveRef,
   type BaseDef,
   type BaseDefConstructor,
@@ -28,13 +29,12 @@ import {
 } from './card-api';
 
 // ============================================================================
-// Searchable-driven search-doc generation — NON-AUTHORITATIVE.
+// Searchable-driven search-doc generation.
 //
-// Parallel to `searchDoc` (in card-api), which stays in charge of production
-// indexing. This path derives link depth from the explicit `field.searchable`
-// annotation instead of from what the render happened to load into the store,
-// and loads the named link targets itself (targeted loading) rather than
-// relying on render-driven store residency.
+// The authoritative search-doc generator: it derives link depth from the
+// explicit `field.searchable` annotation rather than from what the render
+// happened to load into the store, and loads the named link targets itself
+// (targeted loading) rather than relying on render-driven store residency.
 //
 // Routes are dotted paths rooted at the CURRENT card's link fields. Depth is
 // governed ENTIRELY by the `searchable` annotations on the card being indexed
@@ -42,12 +42,17 @@ import {
 // re-consult its own `searchable` — only the explicit route continues into it.
 // `true` => the immediate ("self") link; `'a.b'` => the n+1 route a→b; an array
 // combines routes. Cycle clipping, `{ id }` for unfollowed / broken / not-found
-// links, and `linksToMany` id normalization are preserved from
-// `BaseDef[queryableValue]`. The declared field type is enumerated for both
-// links and contained values (not the runtime subtype), which drops the
-// non-queryable polymorphic-subtype bloat.
+// links, and `linksToMany` id normalization match `BaseDef[queryableValue]`. The
+// declared field type is enumerated for both links and contained values (not the
+// runtime subtype), which drops non-queryable polymorphic-subtype bloat.
 export async function searchDocFromFields(
   instance: CardDef,
+  // Collects the URLs of the link targets pulled into the doc. The indexer
+  // unions these into the card's tracked dependencies: an expanded target's
+  // data lives in the search doc, so editing that target must reindex the
+  // owner — whether or not the render happened to load it (a `{ id }`-only link
+  // contributes none, since its target's data is not in the doc).
+  dependencies: Set<string> = new Set(),
 ): Promise<Record<string, any>> {
   let routes = seedSearchableRoutes(
     instance.constructor as unknown as typeof BaseDef,
@@ -58,73 +63,29 @@ export async function searchDocFromFields(
     routes,
     [],
     getStore(instance),
+    dependencies,
   )) as Record<string, any>;
 }
 
 // Build the route set rooted at the indexed card's own link fields. This is
 // the ONLY place `field.searchable` is read — deeper recursion follows the
-// inherited routes, never a pulled-in target's own annotations.
+// inherited routes (via `matchSearchableRoutes`), never a pulled-in target's
+// own annotations.
 function seedSearchableRoutes(cardClass: typeof BaseDef): string[] {
   let routes: string[] = [];
   for (let [fieldName, field] of Object.entries(
     getFields(cardClass, { includeComputeds: true }),
   )) {
-    let searchable = field?.searchable;
-    if (searchable == null) {
-      continue;
-    }
-    if (searchable === true) {
-      routes.push(fieldName); // self link, no deeper
-      continue;
-    }
-    // Tolerate a malformed annotation (a non-string array entry, a non-array
-    // non-string value) rather than emitting a junk route or throwing: a route
-    // can only ever be a dotted field path. An empty array contributes nothing.
-    let paths =
-      typeof searchable === 'string'
-        ? [searchable]
-        : Array.isArray(searchable)
-          ? searchable
-          : [];
-    for (let path of paths) {
-      if (typeof path !== 'string') {
-        continue;
-      }
-      routes.push(path === '' ? fieldName : `${fieldName}.${path}`);
-    }
+    routes.push(...routesForField(fieldName, field?.searchable));
   }
   return routes;
 }
 
-// For `routes` rooted at the current card, find those whose head segment is
-// `fieldName`. `matched` = the field is named by at least one route (so a link
-// is expanded); `tails` = the non-empty remainders, which become the target's
-// routes. An empty tail (head-only route, e.g. from `searchable: true`) marks
-// the link as expanded-but-no-deeper and contributes no tail.
-function matchSearchableRoutes(
-  routes: string[],
-  fieldName: string,
-): { matched: boolean; tails: string[] } {
-  let matched = false;
-  let tails: string[] = [];
-  for (let route of routes) {
-    let dot = route.indexOf('.');
-    let head = dot === -1 ? route : route.slice(0, dot);
-    if (head !== fieldName) {
-      continue;
-    }
-    matched = true;
-    if (dot !== -1) {
-      tails.push(route.slice(dot + 1));
-    }
-  }
-  return { matched, tails };
-}
-
 // Targeted load of a link target by reference: reuse a fully-deserialized
 // resident instance when present, else load + deserialize the document (the
-// same load path the lazy link getter uses, sans dependency tracking — this
-// generator is non-authoritative). Returns undefined if the target errors.
+// same load path the lazy link getter uses). The store load is not itself
+// dependency-tracked; callers record each expanded target in the `dependencies`
+// set instead. Returns undefined if the target errors.
 async function loadSearchableTarget(
   store: CardStore,
   reference: string,
@@ -165,16 +126,18 @@ async function searchableQueryableValue(
   // contained FieldDef value may not be store-associated, but its nested links
   // must still load against the owner's store.
   store: CardStore,
+  dependencies: Set<string>,
 ): Promise<any> {
   if (primitive in fieldCard) {
-    if (fieldSerializer in fieldCard) {
-      assertIsSerializerName((fieldCard as any)[fieldSerializer]);
-      return getSerializer((fieldCard as any)[fieldSerializer]).queryableValue(
-        value,
-        stack,
-      );
-    }
-    return value;
+    // Delegate to the field's own queryableValue. The default handles
+    // serializer-backed primitives; a primitive FieldDef may override it to
+    // shape its indexed form — e.g. JsonField returns null to stay out of the
+    // search index. Reimplementing only the default here would drop that.
+    return (
+      fieldCard as unknown as {
+        [queryableValue](value: any, stack: BaseDef[]): any;
+      }
+    )[queryableValue](value, stack);
   }
   if (value == null) {
     return null;
@@ -196,13 +159,27 @@ async function searchableQueryableValue(
   for (let [fieldName, field] of Object.entries(
     getFields(fieldCard, { includeComputeds: true }),
   )) {
-    // Query-backed relationships can't be invalidated, so they're never in the
-    // doc — same skip as the store-driven path.
+    // Query-backed relationships can't be invalidated, so their value would
+    // always be stale; they are omitted from the doc, matching `queryableValue`.
     if (field?.queryDefinition) {
       continue;
     }
     let { matched, tails } = matchSearchableRoutes(routes, fieldName);
-    let rawValue = peekAtField(value, fieldName);
+    // Search-doc generation is a pure read: reading a declared relationship
+    // through the getter writes `emptyValue` into the data bucket, which marks
+    // an otherwise-unset link "used" and pulls it into the owner card's
+    // serialized relationships. So peek a declared link only when it is already
+    // materialized; an unmaterialized link holds no target and contributes
+    // `null` either way. Contained values and computed fields read normally —
+    // the getter's empty-value write is harmless for the former and absent for
+    // the latter.
+    let isDeclaredLink =
+      (field!.fieldType === 'linksTo' || field!.fieldType === 'linksToMany') &&
+      !field!.computeVia;
+    let rawValue =
+      isDeclaredLink && !getDataBucket(value).has(fieldName)
+        ? null
+        : peekAtField(value, fieldName);
     switch (field!.fieldType) {
       case 'contains': {
         entries.push([
@@ -213,6 +190,7 @@ async function searchableQueryableValue(
             tails,
             nextStack,
             store,
+            dependencies,
           ),
         ]);
         break;
@@ -236,6 +214,7 @@ async function searchableQueryableValue(
             tails,
             nextStack,
             store,
+            dependencies,
           );
           if (v != null) {
             items.push(v);
@@ -255,6 +234,7 @@ async function searchableQueryableValue(
             nextStack,
             store,
             makeAbsoluteURL,
+            dependencies,
           ),
         ]);
         break;
@@ -270,6 +250,7 @@ async function searchableQueryableValue(
             nextStack,
             store,
             makeAbsoluteURL,
+            dependencies,
           ),
         ]);
         break;
@@ -290,6 +271,7 @@ async function searchableLink(
   stack: BaseDef[],
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
+  dependencies: Set<string>,
 ): Promise<any> {
   if (rawValue == null) {
     return null;
@@ -320,17 +302,23 @@ async function searchableLink(
     }
     target = loaded;
   }
+  // The expanded target's data is now in the doc, so it is a dependency of the
+  // indexed card.
+  if (target.id != null) {
+    dependencies.add(makeAbsoluteURL(target.id));
+  }
   return await searchableQueryableValue(
     field.card,
     target,
     tails,
     stack,
     store,
+    dependencies,
   );
 }
 
-// A `linksToMany` value: per-slot `{ id }` / expansion, with the same
-// absolute-URL id normalization the store-driven path applies.
+// A `linksToMany` value: per-slot `{ id }` / expansion, with the absolute-URL
+// id normalization `LinksToMany.queryableValue` applies.
 async function searchableLinksToMany(
   field: Field<BaseDefConstructor>,
   rawValue: any,
@@ -339,6 +327,7 @@ async function searchableLinksToMany(
   stack: BaseDef[],
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
+  dependencies: Set<string>,
 ): Promise<any[] | null> {
   // A whole-field sentinel (errored/unresolved plural) is not iterable; treat
   // as empty, same as `LinksToMany.queryableValue`.
@@ -373,12 +362,18 @@ async function searchableLinksToMany(
       }
       target = loaded;
     }
+    // The expanded target's data is now in the doc, so it is a dependency of
+    // the indexed card.
+    if (target.id != null) {
+      dependencies.add(makeAbsoluteURL(target.id));
+    }
     let expanded = await searchableQueryableValue(
       field.card,
       target,
       tails,
       stack,
       store,
+      dependencies,
     );
     if (expanded != null) {
       out.push(

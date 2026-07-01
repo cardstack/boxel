@@ -1161,14 +1161,7 @@ export class RenderRunner {
         // First pass is the lightweight /types route — just the type
         // chain the ancestor renders below need. The full render.meta
         // (serialized + searchDoc + deps + displayNames) runs once
-        // afterwards, because the fitted/embedded ancestor renders are
-        // what mark linksTo / linksToMany fields as "used"; the final
-        // renderMeta's queryableValue then includes those linked fields
-        // in the search doc. Running render.meta before the ancestor
-        // renders breaks the isUsed-via-non-isolated-render contract
-        // that
-        // `non-isolated formats render linked fields and those links appear in search doc`
-        // covers.
+        // afterwards.
         if (!cardShortCircuit) {
           let typesResult = await runTimedStep<PrerenderTypes>(
             'visit card render.types',

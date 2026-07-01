@@ -12,7 +12,7 @@ import { Post } from './post';
 export class Publication extends CardDef {
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
-  @field featuredPosts = linksToMany(() => Post);
+  @field featuredPosts = linksToMany(() => Post, { searchable: true });
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.cardTitle /></h1>

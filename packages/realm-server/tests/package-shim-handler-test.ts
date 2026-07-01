@@ -99,5 +99,14 @@ module(basename(import.meta.filename), function () {
     test('shimAsyncModule returns null from handle() when the resolver throws permanently', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
+    test('describeShimError surfaces the transient signature from an Error message', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('describeShimError appends a Node socket error code when present', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('describeShimError handles non-Error values without throwing', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
   });
 });

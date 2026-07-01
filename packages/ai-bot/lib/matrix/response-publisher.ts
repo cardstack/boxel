@@ -1,5 +1,10 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  fileLabelFromUrl,
+} from '../read-realm-file.ts';
 import { thinkingMessage } from '../../constants.ts';
 import type ResponseState from '../response-state.ts';
 import {
@@ -34,6 +39,18 @@ function toCommandRequest(
       // and the arguments are not yet available
       result['arguments'] = {};
     }
+  }
+  // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
+  // it in the timeline but never runs it, and give it a human label the
+  // timeline indicator can show ("Read file: <name>") since the raw arguments
+  // carry no description of their own.
+  if (result.name === READ_REALM_FILE_TOOL_NAME) {
+    result.executedBy = AI_BOT_EXECUTOR;
+    let label = fileLabelFromUrl(result.arguments?.url);
+    result.arguments = {
+      ...(result.arguments ?? {}),
+      description: label ? `Read file: ${label}` : 'Read file',
+    };
   }
   return result;
 }

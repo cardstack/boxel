@@ -13,7 +13,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { decodeCommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  AI_BOT_EXECUTOR,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -331,6 +334,29 @@ export default class MessageBuilder {
         );
       }) as CommandResultEvent | undefined);
 
+    // ai-bot ran this one itself (e.g. readRealmFile), so the host never
+    // resolves a command class or runs it. Skip the skill lookup below — it's
+    // pure async churn here (an `await store.get` per enabled skill) that would
+    // leave the indicator blank for a beat while it runs. Build the command
+    // synchronously: 'applying' (loading) until the result event lands, then
+    // applied (success) or invalid + reason (failure).
+    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
+      return new MessageCommand(
+        message,
+        commandRequest,
+        undefined, // no codeRef — never run on the host
+        this.builderContext.effectiveEventId,
+        false, // requiresApproval — never prompts or runs
+        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
+        (commandResultEvent
+          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
+          : 'applying') as CommandStatus,
+        undefined, // no result card (server-handled results carry no output)
+        getOwner(this)!,
+        commandResultEvent?.content.failureReason,
+      );
+    }
+
     // Find command in skills
     let skillCommand:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
@@ -361,6 +387,10 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
+    let commandStatus: CommandStatus = (commandResultEvent?.content[
+      'm.relates_to'
+    ]?.key || 'ready') as CommandStatus;
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
@@ -368,8 +398,7 @@ export default class MessageBuilder {
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      (commandResultEvent?.content['m.relates_to']?.key ||
-        'ready') as CommandStatus,
+      commandStatus,
       commandResultEvent?.content.msgtype ===
         APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.card

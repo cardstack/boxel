@@ -13,5 +13,7 @@ import './locking-test.ts';
 import './interrupt-test.ts';
 import './credit-tracking-test.ts';
 import './user-delegated-realm-server-session-test.ts';
+import './read-realm-file-test.ts';
+import './read-realm-file-fulfillment-test.ts';
 
 QUnit.start();
