@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // atom_html becomes a per-ancestor JSONB map (one entry per render-type key),
