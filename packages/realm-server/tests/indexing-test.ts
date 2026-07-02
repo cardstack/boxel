@@ -1509,7 +1509,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `realm_version` —
+        // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
         // same URL. Any column NOT in the tombstone upsert's SET list keeps
         // its previous value. Before this guard, `has_error` and `error_doc`

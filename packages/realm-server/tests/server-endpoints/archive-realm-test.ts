@@ -316,7 +316,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         },
       };
       await query(context.dbAdapter, [
-        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at) VALUES (`,
+        `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at) VALUES (`,
         param(configURL),
         `,`,
         param(configURL),

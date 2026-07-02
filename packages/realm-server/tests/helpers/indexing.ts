@@ -166,7 +166,7 @@ export async function depsForIndexEntry(
       ['url =', param(url)],
       ['type =', param(type)],
     ]),
-    `ORDER BY realm_version DESC LIMIT 1`,
+    `ORDER BY generation DESC LIMIT 1`,
   ] as Expression)) as { deps: string[] | string | null }[];
   let rawDeps = rows[0]?.deps ?? [];
   if (Array.isArray(rawDeps)) {
@@ -189,7 +189,7 @@ export async function indexedAtForIndexEntry(
       ['url =', param(url)],
       ['type =', param(type)],
     ]),
-    `ORDER BY realm_version DESC LIMIT 1`,
+    `ORDER BY generation DESC LIMIT 1`,
   ] as Expression)) as { indexed_at: string | number | null }[];
   let value = rows[0]?.indexed_at ?? null;
   if (value == null) {
@@ -205,7 +205,7 @@ export async function typeForIndexEntry(
   let rows = (await query(dbAdapter, [
     `SELECT type FROM boxel_index WHERE`,
     ...every([['url =', param(url)]]),
-    `ORDER BY realm_version DESC LIMIT 1`,
+    `ORDER BY generation DESC LIMIT 1`,
   ] as Expression)) as { type: string }[];
   return rows[0]?.type ?? null;
 }
@@ -221,7 +221,7 @@ export async function errorDocForIndexEntry(
       ['url =', param(url)],
       ['type =', param(type)],
     ]),
-    `ORDER BY realm_version DESC LIMIT 1`,
+    `ORDER BY generation DESC LIMIT 1`,
   ] as Expression)) as {
     has_error: boolean | null;
     error_doc: unknown | string | null;

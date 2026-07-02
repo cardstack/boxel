@@ -1457,9 +1457,9 @@ module(basename(import.meta.filename), function () {
 
         let versionBeforeUnpublish = (
           await dbAdapter.execute(
-            `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+            `SELECT current_generation FROM realm_generations WHERE realm_url = '${publishedRealmURL}'`,
           )
-        )[0]?.current_version as number | undefined;
+        )[0]?.current_generation as number | undefined;
 
         // Now unpublish the realm
         let unpublishResponse = await request
@@ -1518,24 +1518,24 @@ module(basename(import.meta.filename), function () {
           'published realm directory should be removed',
         );
 
-        let realmVersion = (
+        let generation = (
           await dbAdapter.execute(
-            `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+            `SELECT current_generation FROM realm_generations WHERE realm_url = '${publishedRealmURL}'`,
           )
-        )[0] as { current_version: number };
+        )[0] as { current_generation: number };
         assert.notStrictEqual(
           versionBeforeUnpublish,
           undefined,
           'realm version of published realm is set before unpublish',
         );
         assert.ok(
-          realmVersion.current_version > (versionBeforeUnpublish ?? 0),
+          generation.current_generation > (versionBeforeUnpublish ?? 0),
           'realm version of published realm is increased',
         );
 
         // Verify that boxel_index entries are tombstoned (marked as deleted) for the unpublished realm
         let indexResultsAfter = await dbAdapter.execute(
-          `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}' AND realm_version = '${realmVersion.current_version}'`,
+          `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}' AND generation = '${generation.current_generation}'`,
         );
         assert.ok(
           indexResultsAfter.length > 0,
