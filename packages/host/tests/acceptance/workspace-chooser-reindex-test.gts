@@ -181,10 +181,12 @@ module('Acceptance | workspace-chooser re-index', function (hooks) {
       .dom('[data-test-boxel-menu-item-text="Re-index"]')
       .isDisabled('Re-index is disabled while the realm is indexing');
 
+    // Leave the menu open: the item's disabled state is derived from the live
+    // indexing flag, so the index event flips it back to enabled in place. (A
+    // second trigger click here would just toggle the open menu shut.)
     simulateIndexDone(mockMatrixUtils, ownedRealmURL);
     await settled();
 
-    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Re-index"]')
       .isNotDisabled('Re-index is enabled again once indexing finishes');
