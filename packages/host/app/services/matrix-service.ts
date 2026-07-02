@@ -31,7 +31,6 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
@@ -120,7 +119,7 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import { skillFileURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -1798,31 +1797,29 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [envSkillId];
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists `defaultSkills`, those win (mode-agnostic). Otherwise we
+  // fall back to the hardcoded, submode-aware set. Ids may name a `.md` skill
+  // file or a legacy `Skill` card; callers resolve them kind-agnostically via
+  // `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = (this.systemCard?.defaultSkills ?? [])
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
+    }
 
+    let interactModeDefaultSkills = [envSkillId];
     let codeModeDefaultSkills = [
       devSkillId,
       envSkillId,
-      skillCardURL('source-code-editing'),
+      skillFileURL('source-code-editing'),
     ];
 
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
-    }
-
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -2687,10 +2684,10 @@ export default class MatrixService extends Service {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      skillCardIdsToActivate: defaultSkillIds,
     });
   }
 

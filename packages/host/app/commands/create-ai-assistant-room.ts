@@ -9,19 +9,30 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
+
+import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseCommand from '../lib/host-base-command';
+import {
+  getSkillSourceCommands,
+  loadSkillSource,
+  type SkillSource,
+} from '../lib/skill-commands';
 
 import type MatrixService from '../services/matrix-service';
+import type StoreService from '../services/store';
 
 export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
   typeof BaseCommandModule.CreateAIAssistantRoomResult
 > {
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   static actionVerb = 'Create';
 
@@ -48,6 +59,83 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     return CreateAIAssistantRoomInput;
   }
 
+  // Collect skill ids from both the id fields (preferred, kind-agnostic) and
+  // the legacy loaded-`Skill`-card fields, de-duped. A skill listed as both
+  // enabled and disabled is treated as enabled.
+  private collectSkillIds(
+    input: BaseCommandModule.CreateAIAssistantRoomInput,
+  ): { enabledIds: string[]; disabledIds: string[] } {
+    let idsOf = (
+      ids: string[] | undefined,
+      cards: SkillModule.Skill[] | undefined,
+    ): string[] => [
+      ...(ids ?? []),
+      ...(cards ?? [])
+        .map((c) => c.id)
+        .filter((id): id is NonNullable<typeof id> => Boolean(id)),
+    ];
+
+    let enabledIds = Array.from(
+      new Set(idsOf(input.enabledSkillIds, input.enabledSkills)),
+    );
+    let enabledSet = new Set(enabledIds);
+    let disabledIds = Array.from(
+      new Set(idsOf(input.disabledSkillIds, input.disabledSkills)),
+    ).filter((id) => !enabledSet.has(id));
+
+    return { enabledIds, disabledIds };
+  }
+
+  // Resolve skill ids to their room-skills-config file defs, uploading skill
+  // cards and `.md` skill files by their respective paths (mirrors the split in
+  // `UpdateRoomSkillsCommand`). Returns the uploaded FileDefs plus the resolved
+  // skill sources so the caller can gather commands.
+  private async resolveSkills(ids: string[]): Promise<{
+    fileDefs: FileDef[];
+    sources: SkillSource[];
+  }> {
+    let skillCardsToUpload: SkillModule.Skill[] = [];
+    let markdownSkillsToUpload: FileDef[] = [];
+    let sources: SkillSource[] = [];
+
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          let source = await loadSkillSource(this.store, id);
+          if (!source) {
+            console.warn(
+              `[CreateAiAssistantRoomCommand] skipping skill "${id}": not a skill card or skill markdown file`,
+            );
+            return;
+          }
+          sources.push(source);
+          if (isSkillCard in source) {
+            skillCardsToUpload.push(source as SkillModule.Skill);
+          } else {
+            markdownSkillsToUpload.push(source as FileDef);
+          }
+        } catch (e) {
+          console.warn(
+            `[CreateAiAssistantRoomCommand] skipping skill "${id}": ${e}`,
+          );
+        }
+      }),
+    );
+
+    let fileDefs: FileDef[] = [];
+    if (skillCardsToUpload.length) {
+      fileDefs = fileDefs.concat(
+        await this.matrixService.uploadCards(skillCardsToUpload as CardDef[]),
+      );
+    }
+    if (markdownSkillsToUpload.length) {
+      fileDefs = fileDefs.concat(
+        await this.matrixService.uploadFiles(markdownSkillsToUpload),
+      );
+    }
+    return { fileDefs, sources };
+  }
+
   protected async run(
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
@@ -60,28 +148,21 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
         'Requires userId to execute CreateAiAssistantRoomCommand',
       );
     }
-    let { enabledSkills, disabledSkills } = input;
-    let enabledSkillFileDefs: FileDef[] | undefined;
-    let commandFileDefs: FileDef[] | undefined;
-    let disabledSkillFileDefs: FileDef[] | undefined;
 
-    if (enabledSkills?.length) {
-      enabledSkillFileDefs = await matrixService.uploadCards(enabledSkills);
-    }
-    if (disabledSkills?.length) {
-      disabledSkillFileDefs = await matrixService.uploadCards(disabledSkills);
-    } else {
-      disabledSkillFileDefs = [];
-    }
+    let { enabledIds, disabledIds } = this.collectSkillIds(input);
+    let [enabled, disabled] = await Promise.all([
+      this.resolveSkills(enabledIds),
+      this.resolveSkills(disabledIds),
+    ]);
 
-    const commandDefinitions = [
-      ...(enabledSkills?.flatMap((skill) => skill.commands) || []),
-      ...(disabledSkills?.flatMap((skill) => skill.commands) || []),
-    ];
-
+    let commandDefinitions = [...enabled.sources, ...disabled.sources].flatMap(
+      (source) => getSkillSourceCommands(source),
+    );
+    let commandFileDefs: FileDef[] = [];
     if (commandDefinitions.length) {
-      commandFileDefs =
-        await matrixService.uploadCommandDefinitions(commandDefinitions);
+      commandFileDefs = await matrixService.uploadCommandDefinitions(
+        matrixService.getUniqueCommandDefinitions(commandDefinitions),
+      );
     }
 
     // Run room creation and module loading in parallel
@@ -118,18 +199,15 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           {
             type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
             content: {
-              enabledSkillCards:
-                enabledSkillFileDefs?.map((skillFileDef) =>
-                  skillFileDef.serialize(),
-                ) ?? [],
-              disabledSkillCards:
-                disabledSkillFileDefs?.map((skillFileDef) =>
-                  skillFileDef.serialize(),
-                ) ?? [],
-              commandDefinitions:
-                commandFileDefs?.map((commandFileDef) =>
-                  commandFileDef.serialize(),
-                ) ?? [],
+              enabledSkillCards: enabled.fileDefs.map((fileDef) =>
+                fileDef.serialize(),
+              ),
+              disabledSkillCards: disabled.fileDefs.map((fileDef) =>
+                fileDef.serialize(),
+              ),
+              commandDefinitions: commandFileDefs.map((commandFileDef) =>
+                commandFileDef.serialize(),
+              ),
             },
           },
         ],

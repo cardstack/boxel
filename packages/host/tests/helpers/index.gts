@@ -123,6 +123,7 @@ export {
   catalogRealmURL,
   skillsRealmURL,
   skillCardURL,
+  skillFileURL,
   devSkillId,
   envSkillId,
 } from '@cardstack/host/lib/utils';

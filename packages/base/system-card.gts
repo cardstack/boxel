@@ -10,6 +10,7 @@ import {
 import BooleanField from './boolean';
 import StringField from './string';
 import enumField from './enum';
+import { MarkdownDef } from './markdown-file-def';
 import { getMenuItems, rri } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -78,6 +79,16 @@ export class SystemCard extends CardDef {
 
   @field modelConfigurations = linksToMany(ModelConfiguration, {
     description: 'List of available model configurations for this system',
+    searchable: true,
+  });
+
+  // Skills enabled by default in new AI assistant rooms. These are `.md` skill
+  // files (`MarkdownDef` whose `boxel.kind: skill` frontmatter makes them a
+  // skill source). When set on the user's active system card, they replace the
+  // host's hardcoded default-skill list for new rooms.
+  @field defaultSkills = linksToMany(MarkdownDef, {
+    description:
+      'Skills enabled by default in new AI assistant rooms (markdown skill files)',
     searchable: true,
   });
 
@@ -359,6 +370,15 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       <div class='system-card-content'>
         <@fields.defaultModelConfiguration />
         <@fields.modelConfigurations />
+
+        <section class='default-skills'>
+          <h3 class='section-heading'>Default Skills</h3>
+          <p class='section-hint'>
+            Skills enabled automatically in new AI assistant sessions when this
+            is your active system card.
+          </p>
+          <@fields.defaultSkills @format='fitted' />
+        </section>
       </div>
     </div>
 
@@ -483,6 +503,22 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
       .system-card-content {
         padding-top: var(--boxel-sp-sm);
+      }
+
+      .default-skills {
+        margin-top: var(--boxel-sp-lg);
+      }
+
+      .section-heading {
+        margin: 0 0 var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+      }
+
+      .section-hint {
+        margin: 0 0 var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-500, #6b7280);
       }
     </style>
   </template>

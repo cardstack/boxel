@@ -28,8 +28,11 @@ export function baseRRI(path: string): RealmResourceIdentifier {
   return rri(`${baseRealmRRI}${path}`);
 }
 
-export const devSkillLocalPath = 'Skill/boxel-development';
-export const envSkillLocalPath = 'Skill/boxel-environment';
+// Default skills for new AI rooms, as `.md` skill files (`boxel.kind: skill`).
+// The legacy `Skill/*.json` cards still exist but the default-skill path now
+// resolves these markdown skills instead.
+export const devSkillLocalPath = 'skills/boxel/SKILL.md';
+export const envSkillLocalPath = 'skills/boxel-environment/SKILL.md';
 
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
