@@ -8,6 +8,7 @@ import {
   FieldDef,
   containsMany,
   getCardMeta,
+  virtualNetworkFor,
   type CardOrFieldTypeIcon,
   BaseDef,
   type CardContext,
@@ -35,7 +36,6 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  resolveRRIReference,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -81,10 +81,18 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
+    // The attached-file identifiers are read as fetchable source URLs (the AI
+    // source-file reader does `new URL(...)`), so this must resolve to a real
+    // URL — keep the VirtualNetwork here (a scoped RRI can't be fetched).
+    let vn = virtualNetworkFor(card);
+    if (!vn) {
+      return [];
+    }
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      card.id,
+      vn.toURL(card.id!),
       undefined,
+      vn,
     )! as ResolvedCodeRef;
     let cardOrFieldModuleURL = codeRef.module
       ? ensureExtension(codeRef.module, { default: '.gts' })
@@ -931,10 +939,15 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      // Resolve the module in RRI space (no VirtualNetwork): a relative module
-      // joins against the spec's id/relative-to base; an absolute or prefix-form
-      // module is returned canonical.
-      return resolveRRIReference(this.ref.module, this.id ?? this[relativeTo]);
+      // `moduleHref` is consumed as a fetchable / absolute URL (source reader's
+      // `new URL(...)`, and URL-form comparisons in the code submode), so it
+      // must resolve to a real URL — keep the VirtualNetwork here (RRI space
+      // would leave a scoped prefix that those readers can't use).
+      let vn = virtualNetworkFor(this);
+      if (!vn) {
+        return undefined;
+      }
+      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
