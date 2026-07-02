@@ -25,6 +25,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "paths": {
+      "lodash": ["node_modules/@types/lodash-es"],
       "https://cardstack.com/base/*": [
         "../base/*.gts",
         "../base/*.ts",
