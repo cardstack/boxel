@@ -16,6 +16,7 @@ import {
   Lock,
   StarFilled,
   TriangleRight,
+  Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
@@ -56,6 +57,26 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get archivedRealms() {
     return this.realmServer.archivedRealms;
+  }
+
+  // Trusted realm servers that couldn't be reached during boot. When present,
+  // an unobtrusive notice names them so the user understands some workspaces
+  // may be missing; the notice clears once the background retry recovers them.
+  private get unreachableRealmServers() {
+    return this.realmServer.unreachableRealmServers;
+  }
+
+  private get unreachableRealmServersMessage() {
+    let hosts = this.unreachableRealmServers.map((serverURL) => {
+      try {
+        return new URL(serverURL).host;
+      } catch {
+        return serverURL;
+      }
+    });
+    let servers =
+      hosts.length === 1 ? hosts[0] : `${hosts.length} realm servers`;
+    return `Couldn’t reach ${servers}. Some workspaces may be missing — retrying…`;
   }
 
   // Show the archived count once we've loaded the list (or already have entries
@@ -376,6 +397,20 @@ export default class WorkspaceChooser extends Component<Signature> {
         {{/in-element}}
       {{/if}}
       <div class='workspace-chooser__content boxel-dark-scrollbar'>
+        {{#if this.unreachableRealmServers.length}}
+          <div
+            class='unreachable-notice'
+            role='status'
+            data-test-unreachable-realm-servers-notice
+          >
+            <WarningIcon
+              width='16'
+              height='16'
+              class='unreachable-notice-icon'
+            />
+            <span>{{this.unreachableRealmServersMessage}}</span>
+          </div>
+        {{/if}}
         <div class='sections-wrapper'>
           <div class='workspace-section' data-test-favorites-section>
             <div class='section-header'>
@@ -600,6 +635,22 @@ export default class WorkspaceChooser extends Component<Signature> {
       .section-empty {
         color: var(--boxel-400);
         font: 400 var(--boxel-font-sm);
+      }
+      .unreachable-notice {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        max-width: 40rem;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: rgba(255 255 255 / 10%);
+        color: var(--boxel-light);
+        font: 400 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .unreachable-notice-icon {
+        --icon-color: var(--boxel-warning-100);
+        flex-shrink: 0;
       }
     </style>
   </template>
