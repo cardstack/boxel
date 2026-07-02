@@ -94,7 +94,10 @@ import {
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
+  unresolveResourceInstanceURLs,
   type IndexedFile,
+  type LooseCardResource,
+  type FileMetaResource,
 } from './index.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
@@ -2379,7 +2382,11 @@ export class Realm {
       let results: AtomicOperationResult[] = writeResults.map(
         ({ path, created }) => ({
           data: {
-            id: this.paths.fileURL(path).href,
+            // Serve the created instance id in canonical RRI (prefix) form, to
+            // match getCard / create / patch (no-op for unmapped realms).
+            id: this.#virtualNetwork.unresolveURL(
+              this.paths.fileURL(path).href,
+            ),
           },
           meta: {
             created,
@@ -4268,6 +4275,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4363,6 +4371,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4539,6 +4548,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4716,6 +4726,7 @@ export class Realm {
           let etag = foreignDeps
             ? undefined
             : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+          this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
             init: {
@@ -4856,6 +4867,7 @@ export class Realm {
         entry && entry.type !== 'error' && !foreignDeps
           ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
           : undefined;
+      this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -4941,6 +4953,22 @@ export class Realm {
       ? 'public'
       : 'private';
     return `${cacheVisibility}, max-age=0, must-revalidate`;
+  }
+
+  // Serve instance ids in canonical RRI (prefix) form. Unresolves the primary
+  // resource's `id` / `links.self` / relationship ids and every loaded link
+  // from URL to registered-prefix form. Unmapped realms have no prefix
+  // mapping, so this is a no-op there (ids stay URL). The write handlers derive
+  // the on-disk path from the request path / `lid` (not `data.id`), so accepting
+  // a prefix-form id needs no change — only the responses are canonicalized.
+  #serveInstanceIdsAsRRI(doc: {
+    data: LooseCardResource | FileMetaResource;
+    included?: (LooseCardResource | FileMetaResource)[];
+  }): void {
+    unresolveResourceInstanceURLs(doc.data, this.#virtualNetwork);
+    for (let resource of doc.included ?? []) {
+      unresolveResourceInstanceURLs(resource, this.#virtualNetwork);
+    }
   }
 
   private async getCard(
@@ -5116,6 +5144,7 @@ export class Realm {
       }
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
+      this.#serveInstanceIdsAsRRI(card);
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the
