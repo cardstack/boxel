@@ -408,9 +408,17 @@ export class RealmIndexQueryEngine {
         emitItem = false;
       }
       if (emitItem && pristine) {
+        // `pristine_doc` is stored with its id unresolved to the realm's
+        // registered alias prefix (e.g. `@cardstack/catalog/...`) for
+        // storage portability. The search-entry's `item` relationship
+        // always points at `cardUrl` (the row's resolved absolute URL,
+        // shared with the entry's own id) — the included resource's id
+        // must match that exactly or a JSON:API consumer's relationship
+        // lookup silently finds nothing.
         let item: CardResource<Saved> = {
           ...pristine,
-          links: { self: pristine.id },
+          id: cardUrl as RealmResourceIdentifier,
+          links: { self: cardUrl },
         };
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
@@ -1385,8 +1393,16 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
-    let omitSet = new Set(omit);
+    let vnForIdentity = this.#realm.virtualNetwork;
+    let realmPath = new RealmPaths(realmURL, vnForIdentity);
+    // `omit`/root ids may arrive in either resolved-URL or registered-alias
+    // form (the search-entry item resource's id is always resolved, while a
+    // fetched linked resource's own pristine_doc-derived id — and the
+    // relationship pointing at it, `relationshipIdStr` below — stays in
+    // alias form for storage portability). Index both spellings under one
+    // key so a root recognized via one form still matches when the same
+    // card is reached again via the other.
+    let omitSet = new Set(omit.flatMap((id) => vnForIdentity.equivalentURLForms(id)));
     let visited = new Set<string>();
 
     type LayerItem = {
@@ -1406,7 +1422,9 @@ export class RealmIndexQueryEngine {
         if (visited.has(resource.id)) {
           continue;
         }
-        visited.add(resource.id);
+        for (let form of vnForIdentity.equivalentURLForms(resource.id)) {
+          visited.add(form);
+        }
       }
       layer.push({
         resource,
