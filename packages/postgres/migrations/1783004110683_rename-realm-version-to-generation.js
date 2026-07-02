@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 // Renames the per-realm "realm version" concept to "generation" throughout the
 // index schema. The stamp column `realm_version` (the generation each row was
 // written at) becomes `generation` on boxel_index, boxel_index_working, and
