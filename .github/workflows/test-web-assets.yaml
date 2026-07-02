@@ -75,7 +75,6 @@ jobs:
           key: ${{ steps.keys.outputs.cache_key }}
           path: |
             packages/boxel-icons/dist
-            packages/boxel-ui/addon/dist
             packages/host/dist
             .ci/test-web-assets/manifest.json
 
@@ -133,7 +132,6 @@ jobs:
           key: ${{ steps.keys.outputs.cache_key }}
           path: |
             packages/boxel-icons/dist
-            packages/boxel-ui/addon/dist
             packages/host/dist
             .ci/test-web-assets/manifest.json
 
@@ -143,7 +141,6 @@ jobs:
           name: ${{ steps.keys.outputs.artifact_name }}
           path: |
             packages/boxel-icons/dist
-            packages/boxel-ui/addon/dist
             packages/host/dist
             .ci/test-web-assets/manifest.json
           retention-days: 7

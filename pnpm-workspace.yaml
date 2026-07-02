@@ -1,6 +1,6 @@
 packages:
   - packages/*
-  - packages/boxel-ui/*
+  - packages/x-boxel-ui/*
   - vendor/*
 
 catalog:
@@ -276,11 +276,9 @@ patchedDependencies:
   ember-css-url@1.0.0: patches/ember-css-url@1.0.0.patch
   ember-basic-dropdown@8.0.4: patches/ember-basic-dropdown@8.0.4.patch
   monaco-editor@0.52.2: patches/monaco-editor@0.52.2.patch
-  "@embroider/compat@3.9.4": patches/@embroider__compat.patch
   ember-eslint-parser: patches/ember-eslint-parser.patch
   openai: patches/openai.patch
   matrix-js-sdk@38.3.0: patches/matrix-js-sdk@38.3.0.patch
-  "@embroider/webpack": patches/@embroider__webpack.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
 allowBuilds:

@@ -32,8 +32,8 @@
         "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
       "@cardstack/runtime-common": ["../runtime-common"],
       "@cardstack/runtime-common/*": ["../runtime-common/*"],
       "@cardstack/postgres": ["../postgres"],

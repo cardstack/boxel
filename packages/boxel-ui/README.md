@@ -1,25 +1,26 @@
-## How to build this addon
+# @cardstack/boxel-ui
 
-### `pnpm build` in the addon/ dir
+[Short description of the addon.]
 
-This command runs the rollup build to create the consumable v2 addon format that is used by the test-app as well as the host package.
+## Compatibility
 
-### Or... `pnpm start` in the addon/ dir
+- Ember.js v5.8 or above
+- Embroider or ember-auto-import v2
 
-This command does the same thing as `pnpm build` but then watches for changes to the addon directory and re-runs the build when somethng changes.
+## Installation
 
-## Notes on rebuild scripts
+```
+ember install @cardstack/boxel-ui
+```
 
-These scripts do not run as part of the build steps above and should be run when changes you have made dictate.
+## Usage
 
-### `pnpm rebuild:icons`
+[Longer description of how to use the addon in apps.]
 
-Icon components in addon/src/icons are code-generated from svg files using `pnpm rebuild:icons` from the addon project. This script also generates src/icons.ts, which is the module that re-exports the icons for consumers of this addon.
+## Contributing
 
-This script should be run when an icon is added, removed, updated, or renamed.
+See the [Contributing](CONTRIBUTING.md) guide for details.
 
-### `pnpm rebuild:usage`
+## License
 
-This script generates src/usage.ts, which is the module that re-exports the usage modules that the test-app uses to include in it's component explorer UI.
-
-This script should be run when a usage file is added, removed, or renamed.
+This project is licensed under the [MIT License](LICENSE.md).

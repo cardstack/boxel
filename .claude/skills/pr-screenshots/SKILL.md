@@ -23,6 +23,7 @@ Visual changes benefit enormously from a screenshot — reviewers react to the a
    ```
    ![preview](https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/.pr-images/<slug>/<name>.png)
    ```
+
 5. **Followup commit** `git rm`s the image and pushes. GitHub still serves the blob from the named commit, so the SHA-pinned reference keeps working.
 
 ## Critical gotcha: pin to the commit SHA, never the branch

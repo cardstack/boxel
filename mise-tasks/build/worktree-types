@@ -6,7 +6,4 @@ set -eu
 echo "Building @cardstack/boxel-icons..."
 pnpm --dir packages/boxel-icons build
 
-echo "Building @cardstack/boxel-ui type declarations..."
-pnpm --dir packages/boxel-ui/addon build:types
-
 echo "Done — worktree type declarations are ready for pnpm lint"

@@ -37,8 +37,8 @@
       "@cardstack/host/tests/*": ["../host/tests/*"],
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
       "*": ["../host/types/*"]
     },
     "types": ["@cardstack/local-types", "qunit", "qunit-dom"]
