@@ -50,10 +50,11 @@ test.describe('Skills', () => {
     ).toContainClass('checked');
   }
 
-  const environmentSkillCardId = `@cardstack/skills/Skill/boxel-environment`;
+  const environmentSkillCardId = `@cardstack/skills/skills/boxel-environment/SKILL.md`;
   const defaultSkillCardsForCodeMode = [
-    `@cardstack/skills/Skill/boxel-development`,
+    `@cardstack/skills/skills/boxel/SKILL.md`,
     environmentSkillCardId,
+    `@cardstack/skills/skills/source-code-editing/SKILL.md`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
