@@ -3542,7 +3542,7 @@ module(basename(import.meta.filename), function () {
           }
         });
 
-        test('creates card instances when it encounters "lid" in the request for requests that has "isUsed: true" links', async function (assert) {
+        test('creates card instances when it encounters "lid" in the request for requests that have linksTo relationships', async function (assert) {
           let response = await request
             .patch('/hassan-x')
             .send({

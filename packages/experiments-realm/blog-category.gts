@@ -81,7 +81,9 @@ export class BlogCategory extends CardDef {
   @field slug = contains(StringField);
   @field pillColor = contains(ColorField);
   @field cardDescription = contains(StringField);
-  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  @field blog = linksTo(BlogAppCard, {
+    searchable: true,
+  });
 
   static embedded = BlogCategoryTemplate;
   static isolated = BlogCategoryTemplate;

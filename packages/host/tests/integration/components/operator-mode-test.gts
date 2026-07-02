@@ -95,6 +95,62 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
   });
 
+  test('navigating to an archived realm shows the sealed state, not card chrome or a generic error', async function (assert) {
+    // A realm sealed by the archive flag answers content requests with 403 and
+    // the X-Boxel-Realm-Archived marker. Intercept the card fetch to reproduce
+    // that response and assert the host renders the sealed state.
+    let networkService = getService('network');
+    networkService.virtualNetwork.mount(
+      async (req: Request) => {
+        if (req.method === 'GET' && req.url.includes('Person/fadhlan')) {
+          return new Response(
+            JSON.stringify({
+              errors: [
+                {
+                  status: '403',
+                  code: 'archived',
+                  title: 'Realm Archived',
+                  detail: `Realm ${testRealmURL} is archived`,
+                },
+              ],
+            }),
+            {
+              status: 403,
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+                'X-Boxel-Realm-Archived': 'true',
+                'X-Boxel-Realm-Url': testRealmURL,
+              },
+            },
+          );
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-archived-realm-state]');
+    assert
+      .dom('[data-test-archived-realm-state]')
+      .containsText(
+        'This workspace is archived',
+        'the sealed/archived state is shown',
+      );
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .containsText('Workspace Archived', 'the archived header is shown');
+    assert
+      .dom('[data-test-card-error]')
+      .doesNotExist('a generic card error is not shown for an archived realm');
+  });
+
   module(
     'card with an error that has a last known good state',
     function (hooks) {

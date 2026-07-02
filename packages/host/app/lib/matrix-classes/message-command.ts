@@ -54,6 +54,12 @@ export default class MessageCommand {
     return this.commandRequest.name;
   }
 
+  // The actor that already executed this tool call (e.g. 'ai-bot' for
+  // readRealmFile). When set, the host records it in the timeline but never runs it.
+  get executedBy() {
+    return this.commandRequest.executedBy;
+  }
+
   get arguments() {
     return this.commandRequest.arguments;
   }

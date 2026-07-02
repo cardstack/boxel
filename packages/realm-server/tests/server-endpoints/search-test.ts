@@ -10,7 +10,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { baseCardRef, rri } from '@cardstack/runtime-common';
+import { archiveRealm, baseCardRef, rri } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
@@ -239,6 +239,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       for (let { id } of janeHtml.relationships.styles.data) {
         assert.true(cssIds.has(id), `referenced stylesheet ${id} is included`);
       }
+    });
+
+    // A federated search payload that names an archived realm must not
+    // return hits. The mechanism is the enumeration filter in
+    // fetchUserPermissions: once a realm is archived, the requester has
+    // no permission for it per the filtered enumeration, so the
+    // multi-realm-authorization middleware short-circuits the request
+    // with 403 before handle-search runs. The handler itself does no
+    // extra work; this test pins the contract end-to-end so a refactor
+    // of the enumeration layer can't silently weaken it.
+    test('archived realms in a federated search payload are refused at the auth boundary', async function (assert) {
+      await archiveRealm(dbAdapter, new URL(secondaryRealm.url));
+
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      });
+      assert.strictEqual(
+        response.status,
+        403,
+        'a request including an archived realm is forbidden',
+      );
+      assert.ok(
+        String(response.body?.errors?.[0] ?? response.text).includes(
+          secondaryRealm.url,
+        ),
+        'the forbidden response names the archived realm',
+      );
+
+      let activeOnly = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+      });
+      assert.strictEqual(
+        activeOnly.status,
+        200,
+        'the same request restricted to the active realm succeeds',
+      );
+      assert.strictEqual(
+        activeOnly.body.meta.page.total,
+        2,
+        'active realms continue to search normally',
+      );
     });
 
     test('cardUrls narrows results across the federation', async function (assert) {

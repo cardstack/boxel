@@ -160,7 +160,6 @@ let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let rawSerializeCard: (typeof CardAPIModule)['serializeCard'];
 let rawSerializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
-let searchDoc: (typeof CardAPIModule)['searchDoc'];
 let searchDocFromFields: (typeof SearchableModule)['searchDocFromFields'];
 
 // Test-side wrappers around the raw card-api serialize functions that
@@ -171,28 +170,14 @@ function serializeCard(
   card: Parameters<(typeof CardAPIModule)['serializeCard']>[0],
   opts?: Partial<Parameters<(typeof CardAPIModule)['serializeCard']>[1]>,
 ): ReturnType<(typeof CardAPIModule)['serializeCard']> {
-  let loader = getService('loader-service').loader;
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `base-realm test helper's serializeCard requires the active loader to have a VirtualNetwork`,
-    );
-  }
-  return rawSerializeCard(card, { virtualNetwork: vn, ...opts });
+  return rawSerializeCard(card, { ...opts });
 }
 
 function serializeFileDef(
   fileDef: Parameters<(typeof CardAPIModule)['serializeFileDef']>[0],
   opts?: Partial<Parameters<(typeof CardAPIModule)['serializeFileDef']>[1]>,
 ): ReturnType<(typeof CardAPIModule)['serializeFileDef']> {
-  let loader = getService('loader-service').loader;
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `base-realm test helper's serializeFileDef requires the active loader to have a VirtualNetwork`,
-    );
-  }
-  return rawSerializeFileDef(fileDef, { virtualNetwork: vn, ...opts });
+  return rawSerializeFileDef(fileDef, { ...opts });
 }
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let getRelationshipMembershipState: (typeof CardAPIModule)['getRelationshipMembershipState'];
@@ -404,7 +389,6 @@ async function initialize() {
     getBrokenLinks,
     getDataBucket,
     getQueryableValue,
-    searchDoc,
     subscribeToChanges,
     unsubscribeFromChanges,
     flushLogs,
@@ -494,7 +478,6 @@ export {
   getBrokenLinks,
   getDataBucket,
   getQueryableValue,
-  searchDoc,
   searchDocFromFields,
   subscribeToChanges,
   unsubscribeFromChanges,

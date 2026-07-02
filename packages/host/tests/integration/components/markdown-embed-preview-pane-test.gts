@@ -22,6 +22,7 @@ import {
   GetCardsContextName,
 } from '@cardstack/runtime-common';
 
+import EmbedFormatSelection from '@cardstack/host/components/markdown-embed-chooser/format-selection';
 import MarkdownEmbedPreviewPane from '@cardstack/host/components/markdown-embed-chooser/pane';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -143,6 +144,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('atom is the default; both placements are available', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -150,6 +152,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -188,6 +191,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('embedded emits a block directive with the embedded keyword', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -195,6 +199,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -217,6 +222,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('the preview tracks the selected format in either placement', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -224,6 +230,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -255,6 +262,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('fitted variant prefills W/H and emits the variant id in both placements', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -262,6 +270,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -301,6 +310,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('editing W/H to unknown dims switches to Custom and emits w:/h:', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -308,6 +318,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -330,6 +341,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('editing W/H to a known variant follows the dropdown to that variant', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -337,6 +349,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -367,6 +380,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('isolated emits in both placements', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -374,6 +388,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -412,6 +427,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('inline + embedded emits the explicit specifier on CTA', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -419,6 +435,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -439,6 +456,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('inline + custom dimensions emit w:/h: in the inline directive', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -446,6 +464,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -468,6 +487,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('refType drives the keyword (file)', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -475,6 +495,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='file'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>
@@ -497,6 +518,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
   test('atom, embedded, isolated carry the has-divider modifier; fitted/custom do not', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
     await render(
       <template>
         <PaneBox>
@@ -504,6 +526,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
             <MarkdownEmbedPreviewPane
               @target={{card}}
               @refType='card'
+              @selection={{selection}}
               @onInsert={{harness.onInsert}}
             />
           </HostContextProvider>

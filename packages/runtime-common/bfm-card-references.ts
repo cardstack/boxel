@@ -1,6 +1,6 @@
 import { escapeHtml } from './helpers/html.ts';
-import type { VirtualNetwork } from './virtual-network.ts';
-import { trimJsonExtension } from './url.ts';
+import { resolveRRIReference, trimJsonExtension } from './url.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { FITTED_FORMATS } from './formats.ts';
 import type { TokenizerAndRendererExtension } from './marked.mts';
 
@@ -11,16 +11,28 @@ const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // (e.g. `code`, ``code``, ```code```).
 const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
-function resolveUrl(
-  ref: string,
-  baseUrl: string | undefined,
-  virtualNetwork: VirtualNetwork,
-): string | null {
+function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
+  let resolved: string;
   try {
-    return virtualNetwork.resolveURL(ref, baseUrl || undefined).href;
+    // Identifiers are canonical RRI; resolve the reference against the base in
+    // RRI space (no VirtualNetwork). The search index tolerates the resulting
+    // canonical-RRI value for the `in:{id}` / `in:{url}` reference queries.
+    resolved = resolveRRIReference(
+      ref,
+      baseUrl ? (baseUrl as RealmResourceIdentifier) : undefined,
+    );
   } catch {
     return null;
   }
+  // Keep only references that resolved to an absolute identifier — a URL or a
+  // prefix-form RRI. A reference that couldn't be made absolute (e.g. a
+  // relative ref with no base) is dropped rather than emitted as a bare,
+  // unmatchable query value.
+  return resolved.startsWith('http://') ||
+    resolved.startsWith('https://') ||
+    resolved.startsWith('@')
+    ? resolved
+    : null;
 }
 
 // ── BFM size spec parsing ──
@@ -274,7 +286,6 @@ export function extractBfmReferences(
   markdown: string,
   baseUrl: string,
   keywords: string[],
-  virtualNetwork: VirtualNetwork,
 ): BfmReference[] {
   // Strip code blocks so references inside them are not extracted
   let stripped = markdown
@@ -291,7 +302,7 @@ export function extractBfmReferences(
 
     for (let match of stripped.matchAll(blockRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
+      let resolved = resolveUrl(rawUrl, baseUrl);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -302,7 +313,7 @@ export function extractBfmReferences(
     }
     for (let match of stripped.matchAll(inlineRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
+      let resolved = resolveUrl(rawUrl, baseUrl);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -328,6 +339,164 @@ export function extractBfmReferences(
   return refs;
 }
 
+// ── Markdown embed chooser bridge ──
+//
+// Lets the base-realm markdown editor (in `packages/base/`) open the host-
+// side combined chooser modal without importing host services directly. The
+// host modal registers itself on `globalThis` at mount time; runtime-common
+// exposes the typed accessors below. Mirrors the `chooseCard` / `chooseFile`
+// pattern used by other host-side modals.
+
+export interface MarkdownEmbedResult {
+  refType: 'card' | 'file';
+  url: string;
+  bfm: string;
+}
+
+export type MarkdownEmbedResolution =
+  | MarkdownEmbedResult
+  | { remove: true }
+  | undefined;
+
+export interface MarkdownEmbedInitialTarget {
+  refType: 'card' | 'file';
+  url: string;
+  // Either a pre-parsed `BfmSizeSpec` or the raw specifier text after `|`.
+  sizeSpec?: BfmSizeSpec | string;
+  // The directive's placement (`::` block vs `:` inline), carried separately
+  // from `sizeSpec` so a size-less block directive seeds block placement
+  // instead of collapsing to an inline atom.
+  kind?: 'inline' | 'block';
+}
+
+export interface MarkdownEmbedChooser {
+  chooseCardOrFile(opts: {
+    defaultTab?: 'card' | 'file';
+  }): Promise<MarkdownEmbedResolution>;
+  editEmbed(
+    target: MarkdownEmbedInitialTarget,
+  ): Promise<MarkdownEmbedResolution>;
+}
+
+const MARKDOWN_EMBED_CHOOSER_KEY = '_CARDSTACK_MARKDOWN_EMBED_CHOOSER';
+
+export async function chooseMarkdownEmbed(
+  opts: { defaultTab?: 'card' | 'file' } = {},
+): Promise<MarkdownEmbedResolution> {
+  let here = globalThis as any;
+  let chooser: MarkdownEmbedChooser | undefined =
+    here[MARKDOWN_EMBED_CHOOSER_KEY];
+  if (!chooser) {
+    throw new Error(
+      `no cardstack markdown-embed chooser is available in this environment`,
+    );
+  }
+  return chooser.chooseCardOrFile(opts);
+}
+
+export async function editMarkdownEmbed(
+  target: MarkdownEmbedInitialTarget,
+): Promise<MarkdownEmbedResolution> {
+  let here = globalThis as any;
+  let chooser: MarkdownEmbedChooser | undefined =
+    here[MARKDOWN_EMBED_CHOOSER_KEY];
+  if (!chooser) {
+    throw new Error(
+      `no cardstack markdown-embed chooser is available in this environment`,
+    );
+  }
+  return chooser.editEmbed(target);
+}
+
+export interface BfmRefRange {
+  kind: 'inline' | 'block';
+  // Half-open range into the original markdown string as UTF-16 code-unit
+  // offsets (i.e. JS string indices, the same units CodeMirror positions use):
+  // `markdown.slice(from, to)` reproduces the directive verbatim. Suitable for
+  // a CodeMirror dispatch that replaces or deletes the directive in place.
+  from: number;
+  to: number;
+  refType: string;
+  // Unresolved URL as written between `[` and `]` — callers resolve against
+  // a base URL when they need the canonical form.
+  url: string;
+  // Raw size specifier after `|` (e.g. `'embedded'`, `'tall-tile'`,
+  // `'w:400 h:200'`). Undefined when the directive has no `|` segment.
+  sizeSpec?: string;
+}
+
+/**
+ * Locates every BFM reference site in `markdown` and returns its source
+ * character range (UTF-16 code-unit offsets), refType, URL, and size specifier
+ * (verbatim — no URL resolution).
+ *
+ * Differs from `extractBfmReferences` in two ways: indices are into the
+ * ORIGINAL markdown (not a code-stripped copy), and matches are not
+ * deduplicated — every site is its own range. References inside fenced code
+ * blocks and inline code are skipped.
+ *
+ * Intended for editor-side tooling — cursor-over-ref detection, in-place
+ * replacement, deletion — where every directive needs its own `[from, to]`.
+ */
+export function extractBfmRefRanges(
+  markdown: string,
+  keywords: string[] = ['card', 'file'],
+): BfmRefRange[] {
+  // Collect code regions to skip. Sorted spans in the original markdown.
+  let codeRegions: Array<[number, number]> = [];
+  for (let m of markdown.matchAll(FENCED_CODE_RE)) {
+    codeRegions.push([m.index!, m.index! + m[0].length]);
+  }
+  for (let m of markdown.matchAll(INLINE_CODE_RE)) {
+    codeRegions.push([m.index!, m.index! + m[0].length]);
+  }
+  codeRegions.sort((a, b) => a[0] - b[0]);
+  let isInCode = (pos: number) =>
+    codeRegions.some(([s, e]) => pos >= s && pos < e);
+
+  let ranges: BfmRefRange[] = [];
+
+  for (let keyword of keywords) {
+    let escaped = escapeRegExp(keyword);
+    // Block directive must be alone on its line — mirror the render-side
+    // tokenizer's trailing `\s*(?:\n|$)` and the editor widget's `[ \t]*$` so
+    // detection and rendering stay in lockstep (a directive with trailing text
+    // is not an embed). `[^\]\n]+` keeps a `]`-less directive from spanning
+    // lines. The trailing `[ \t]*` is folded into the range so `to` reaches the
+    // line end, matching the block widget's decorated span.
+    let blockRe = new RegExp(`^::${escaped}\\[([^\\]\\n]+)\\][ \\t]*$`, 'gm');
+    let inlineRe = new RegExp(`(?<!:):${escaped}\\[([^\\]]+)\\]`, 'g');
+
+    for (let match of markdown.matchAll(blockRe)) {
+      if (isInCode(match.index!)) continue;
+      let { url, specifier } = splitBfmContent(match[1]);
+      ranges.push({
+        kind: 'block',
+        from: match.index!,
+        to: match.index! + match[0].length,
+        refType: keyword,
+        url,
+        sizeSpec: specifier,
+      });
+    }
+    for (let match of markdown.matchAll(inlineRe)) {
+      if (isInCode(match.index!)) continue;
+      let { url, specifier } = splitBfmContent(match[1]);
+      ranges.push({
+        kind: 'inline',
+        from: match.index!,
+        to: match.index! + match[0].length,
+        refType: keyword,
+        url,
+        sizeSpec: specifier,
+      });
+    }
+  }
+
+  ranges.sort((a, b) => a.from - b.from);
+  return ranges;
+}
+
 /**
  * Convenience wrapper that extracts only `:card[URL]` / `::card[URL]`
  * references and returns just the resolved URL strings.
@@ -335,11 +504,8 @@ export function extractBfmReferences(
 export function extractCardReferenceUrls(
   markdown: string,
   baseUrl: string,
-  virtualNetwork: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
-    (r) => r.url,
-  );
+  return extractBfmReferences(markdown, baseUrl, ['card']).map((r) => r.url);
 }
 
 /**
@@ -349,11 +515,8 @@ export function extractCardReferenceUrls(
 export function extractFileReferenceUrls(
   markdown: string,
   baseUrl: string,
-  virtualNetwork: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['file'], virtualNetwork).map(
-    (r) => r.url,
-  );
+  return extractBfmReferences(markdown, baseUrl, ['file']).map((r) => r.url);
 }
 
 /**

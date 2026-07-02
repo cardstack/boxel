@@ -77,14 +77,7 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
 
 export async function serializeCard(card: CardDef): Promise<CardResource> {
   let api = await apiFor(card);
-  let loader = loaderFor(card);
-  let virtualNetwork = loader.getVirtualNetwork();
-  if (!virtualNetwork) {
-    throw new Error(
-      `serializeCard test helper requires a Loader with an attached VirtualNetwork`,
-    );
-  }
-  return api.serializeCard(card, { virtualNetwork }).data as CardResource;
+  return api.serializeCard(card, {}).data as CardResource;
 }
 
 // we can relax the resource here since we will be asserting an ID when we

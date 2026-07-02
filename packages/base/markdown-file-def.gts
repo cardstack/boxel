@@ -4,7 +4,6 @@ import {
   extractFileReferenceUrls,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
-  VirtualNetwork,
   type FrontmatterParseError,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
@@ -17,7 +16,6 @@ import {
   containsMany,
   field,
   linksToMany,
-  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import {
@@ -497,11 +495,7 @@ export class MarkdownDef extends FileDef {
       if (!this.content) {
         return [];
       }
-      return extractCardReferenceUrls(
-        this.content,
-        this.id ?? '',
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractCardReferenceUrls(this.content, this.id ?? '');
     },
   });
 
@@ -518,11 +512,7 @@ export class MarkdownDef extends FileDef {
       if (!this.content) {
         return [];
       }
-      return extractFileReferenceUrls(
-        this.content,
-        this.id ?? '',
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractFileReferenceUrls(this.content, this.id ?? '');
     },
   });
 
@@ -629,16 +619,8 @@ export class MarkdownDef extends FileDef {
       // `frontmatter.rawContent`, and the verbatim file is always served from
       // the realm, so nothing is lost.
       content: body,
-      cardReferenceUrls: extractCardReferenceUrls(
-        body,
-        url,
-        new VirtualNetwork(),
-      ),
-      fileReferenceUrls: extractFileReferenceUrls(
-        body,
-        url,
-        new VirtualNetwork(),
-      ),
+      cardReferenceUrls: extractCardReferenceUrls(body, url),
+      fileReferenceUrls: extractFileReferenceUrls(body, url),
     };
 
     // Boxel-specific frontmatter is namespaced under `boxel:`; generic

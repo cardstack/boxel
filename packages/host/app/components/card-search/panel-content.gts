@@ -454,12 +454,30 @@ export default class PanelContent extends Component<Signature> {
         margin-bottom: 0;
       }
       /* Mini variant — tighten the layout so the chooser fits into a
-         narrow side-by-side envelope. */
+         narrow side-by-side envelope. No top padding here: the results header
+         below is sticky, and a top padding on the scroll container leaves a
+         transparent band above the pinned header that scrolled rows bleed
+         through. The header's own padding-block supplies its breathing room;
+         keep the bottom padding for end-of-list room. */
       .search-sheet-content.mini {
-        padding-block: var(--boxel-sp-xs);
+        padding-block: 0 var(--boxel-sp-xs);
       }
+      /* Pin the results header to the top of the .search-sheet-content
+         scroll container so the "Searching…"/count indicator stays visible
+         while the results scroll underneath it. The opaque background matches
+         the container so scrolled cards are fully occluded, and z-index keeps
+         it above the in-flow result sections. */
       .search-sheet-content.mini :deep(.search-result-header) {
         padding-block: var(--boxel-sp-xs);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: var(--boxel-light);
+      }
+      /* The summary is 16px bold in the full sheet; in the mini envelope drop
+         it to the chooser's shared 14px scale (weight stays 600). */
+      .search-sheet-content.mini :deep(.search-result-header .summary) {
+        font: 600 var(--boxel-font-sm);
       }
       /* Summary + Sort sit on one row, with the Sort dropdown shrunk to
          fit its label rather than padded to a comfortable touch target. */

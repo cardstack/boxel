@@ -17,9 +17,9 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import {
-  DELEGATED_REALM_SESSION_SIGNATURE_HEADER,
-  DELEGATED_REALM_SESSION_TIMESTAMP_HEADER,
-  verifyDelegatedRealmSessionRequest,
+  DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER,
+  DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER,
+  verifyDelegatedUserRealmSessionRequest,
 } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 
 // Token lifetime per the v1 security design (CS-11551): 30 minutes. Long
@@ -58,10 +58,10 @@ export default function handleDelegateSession({
     let request = await fetchRequestFromContext(ctxt);
     let rawBody = await request.text();
 
-    let auth = verifyDelegatedRealmSessionRequest({
+    let auth = verifyDelegatedUserRealmSessionRequest({
       secret: aiBotDelegationSecret,
-      timestamp: ctxt.get(DELEGATED_REALM_SESSION_TIMESTAMP_HEADER),
-      signature: ctxt.get(DELEGATED_REALM_SESSION_SIGNATURE_HEADER),
+      timestamp: ctxt.get(DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER),
+      signature: ctxt.get(DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER),
       rawBody,
       now: Date.now(),
     });

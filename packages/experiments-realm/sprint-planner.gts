@@ -227,5 +227,5 @@ export class SprintPlanner extends CardDef {
   static headerColor = '#ff7f7b';
   static prefersWideFormat = true;
   static isolated = SprintPlannerIsolated;
-  @field project = linksTo(() => Project);
+  @field project = linksTo(() => Project, { searchable: true });
 }

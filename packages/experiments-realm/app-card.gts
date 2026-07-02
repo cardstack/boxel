@@ -10,7 +10,6 @@ import {
   Component,
   realmURL,
   StringField,
-  virtualNetworkFor,
   type CardContext,
   type CreateCardFn,
   FieldsTypeFor,
@@ -292,15 +291,10 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     if (!this.args.activeTab?.ref?.name || !this.args.activeTab.ref.module) {
       return;
     }
-    let vn = virtualNetworkFor(this.args.model as any);
-    if (!vn) {
-      return;
-    }
     return codeRefWithAbsoluteIdentifier(
       this.args.activeTab.ref,
       this.args.currentRealm,
       undefined,
-      vn,
     );
   }
 

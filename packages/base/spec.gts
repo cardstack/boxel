@@ -81,6 +81,9 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
+    // The attached-file identifiers are read as fetchable source URLs (the AI
+    // source-file reader does `new URL(...)`), so this must resolve to a real
+    // URL — keep the VirtualNetwork here (a scoped RRI can't be fetched).
     let vn = virtualNetworkFor(card);
     if (!vn) {
       return [];
@@ -659,15 +662,10 @@ class Isolated extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -783,15 +781,10 @@ class Edit extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -946,6 +939,10 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
+      // `moduleHref` is consumed as a fetchable / absolute URL (source reader's
+      // `new URL(...)`, and URL-form comparisons in the code submode), so it
+      // must resolve to a real URL — keep the VirtualNetwork here (RRI space
+      // would leave a scoped prefix that those readers can't use).
       let vn = virtualNetworkFor(this);
       if (!vn) {
         return undefined;
@@ -954,7 +951,7 @@ export class Spec extends CardDef {
     },
   });
   @field linkedExamples = linksToMany(CardDef);
-  @field containedExamples = containsMany(FieldDef, { isUsed: true });
+  @field containedExamples = containsMany(FieldDef);
   @field cardTitle = contains(SpecTitleField);
   @field cardDescription = contains(SpecDescriptionField);
 
@@ -992,18 +989,11 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: (() => {
-                let vn = virtualNetworkFor(this);
-                if (!vn) {
-                  throw new Error('No VirtualNetwork available');
-                }
-                return codeRefWithAbsoluteIdentifier(
-                  this.ref,
-                  vn.toURL(this.id),
-                  undefined,
-                  vn,
-                ) as ResolvedCodeRef;
-              })(),
+              codeRef: codeRefWithAbsoluteIdentifier(
+                this.ref,
+                this.id,
+                undefined,
+              ) as ResolvedCodeRef,
               realm: this[realmURL]?.href,
               exampleCard: this,
             });

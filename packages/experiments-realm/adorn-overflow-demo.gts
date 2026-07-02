@@ -127,9 +127,9 @@ class AdornOverflowDemoIsolated extends Component<typeof AdornOverflowDemo> {
 export class AdornOverflowDemo extends CardDef {
   static displayName = 'Adorn Overflow Demo';
 
-  @field backlog = linksToMany(ProjectInitiativeTask);
-  @field inProgress = linksToMany(ProjectInitiativeTask);
-  @field done = linksToMany(ProjectInitiativeTask);
+  @field backlog = linksToMany(ProjectInitiativeTask, { searchable: true });
+  @field inProgress = linksToMany(ProjectInitiativeTask, { searchable: true });
+  @field done = linksToMany(ProjectInitiativeTask, { searchable: true });
 
   static isolated = AdornOverflowDemoIsolated;
 }

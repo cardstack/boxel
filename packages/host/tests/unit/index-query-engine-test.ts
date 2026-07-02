@@ -19,6 +19,7 @@ import {
   type Definition,
   type LooseCardResource,
   FilterRefersToNonexistentTypeError,
+  isFilterRefersToNonsearchableFieldError,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -107,8 +108,12 @@ module('Unit | query', function (hooks) {
       @field name = contains(StringField);
       @field nickNames = containsMany(StringField);
       @field address = contains(Address);
-      @field bestFriend = linksTo(() => Person);
-      @field friends = linksToMany(() => Person);
+      // These relationships are queried through (e.g. `bestFriend.friends.name`,
+      // `friends.bestFriend.name`), so they are annotated `searchable` to pull
+      // their targets into the search doc — the query compiler now rejects a
+      // filter that crosses a relationship hop that isn't searchable.
+      @field bestFriend = linksTo(() => Person, { searchable: 'friends' });
+      @field friends = linksToMany(() => Person, { searchable: 'bestFriend' });
       @field age = contains(NumberField);
       @field isHairy = contains(BooleanField);
       @field lotteryNumbers = containsMany(NumberField);
@@ -128,6 +133,21 @@ module('Unit | query', function (hooks) {
       @field venue = contains(StringField);
       @field date = contains(DateField);
     }
+    // Exercises the query-time searchability check: `headquarters` is searchable
+    // (its target is in the search doc), `ceo`/`staff` are not (bare `{ id }`
+    // only), and `matchingPeople` is query-backed (never in the doc at all).
+    class Org extends CardDef {
+      @field name = contains(StringField);
+      @field headquarters = linksTo(() => Person, { searchable: true });
+      @field ceo = linksTo(() => Person);
+      @field staff = linksToMany(() => Person);
+      @field matchingPeople = linksToMany(() => Person, {
+        query: {
+          filter: { eq: { name: 'match' } },
+          page: { size: 10, number: 0 },
+        },
+      });
+    }
 
     loader.shimModule(`${testRealmURL}address`, { Address });
     loader.shimModule(`${testRealmURL}person`, { Person });
@@ -135,6 +155,7 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}cat`, { Cat });
     loader.shimModule(`${testRealmURL}spec`, { SimpleSpec });
     loader.shimModule(`${testRealmURL}event`, { Event });
+    loader.shimModule(`${testRealmURL}org`, { Org });
 
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',
@@ -233,6 +254,8 @@ module('Unit | query', function (hooks) {
             return await buildDefinition(SimpleSpec);
           case `${testRealmURL}event/Event`:
             return await buildDefinition(Event);
+          case `${testRealmURL}org/Org`:
+            return await buildDefinition(Org);
           default:
             throw new FilterRefersToNonexistentTypeError(codeRef, {
               cause: `Definition for ${stringify(codeRef)} not found`,
@@ -1388,6 +1411,193 @@ module('Unit | query', function (hooks) {
         `Your filter refers to a nonexistent field "nonExistentField" on type ${stringify(
           type,
         )}`,
+      );
+    }
+  });
+
+  test(`errors when a filter crosses a non-searchable relationship`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `ceo` is a plain (non-searchable) linksTo, so its target is only a
+          // bare `{ id }` in the search doc — `ceo.name` is not there.
+          eq: { 'ceo.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(
+        err.reason,
+        'not-searchable',
+        'reason is not-searchable',
+      );
+      assert.true(
+        err.message.includes('"ceo"'),
+        `message names the relationship: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('not searchable'),
+        `message explains it is not searchable: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('searchable: true'),
+        `message names the annotation to add: ${err.message}`,
+      );
+    }
+  });
+
+  test(`errors when a filter crosses a non-searchable relationship deeper in the path`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `headquarters` is searchable (self only), but its target's
+          // `bestFriend` link is not reached by any route, so the hop into it
+          // is not covered.
+          eq: { 'headquarters.bestFriend.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(
+        err.reason,
+        'not-searchable',
+        'reason is not-searchable',
+      );
+      assert.true(
+        err.message.includes('"headquarters.bestFriend"'),
+        `message names the deeper hop: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes(`searchable: 'bestFriend'`),
+        `message names the route to add to the head field: ${err.message}`,
+      );
+    }
+  });
+
+  test(`errors when a filter crosses a query-backed relationship`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `matchingPeople` is query-backed: never in the search doc at all.
+          eq: { 'matchingPeople.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(err.reason, 'query-backed', 'reason is query-backed');
+      assert.true(
+        err.message.includes('"matchingPeople"'),
+        `message names the relationship: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('query-backed'),
+        `message explains it is query-backed: ${err.message}`,
+      );
+    }
+  });
+
+  test(`a searchable relationship path compiles and runs`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    // `headquarters` is `searchable: true`, so its target is in the doc and a
+    // path through it is allowed — the query compiles and executes (no throw).
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: {
+        on: orgType,
+        eq: { 'headquarters.name': 'Robin' },
+      },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'the searchable path ran without error',
+    );
+  });
+
+  test(`a filter on a relationship's id is allowed even when it is not searchable`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    // `ceo` is not searchable, but every relationship keeps its `{ id }`, so a
+    // reference filter on `ceo.id` reads an always-present value and is allowed.
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: {
+        on: orgType,
+        eq: { 'ceo.id': `${testRealmURL}mango` },
+      },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'the id reference filter ran without error',
+    );
+  });
+
+  test(`a nonexistent field beyond a searchable relationship still reports the nonexistent-field error`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `headquarters` is searchable, so the hop is fine — but `nope` does
+          // not exist, so resolution (not searchability) is what fails.
+          eq: { 'headquarters.nope': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.false(
+        isFilterRefersToNonsearchableFieldError(err),
+        'does not throw the searchability error',
+      );
+      assert.true(
+        err.message.includes('nonexistent field "headquarters.nope"'),
+        `reports the nonexistent-field error: ${err.message}`,
       );
     }
   });

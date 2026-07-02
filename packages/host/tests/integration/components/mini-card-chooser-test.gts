@@ -205,6 +205,22 @@ module('Integration | mini-card-chooser', function (hooks) {
       timeout: 5000,
     });
 
+    // The results header carries the "Searching…"/count indicator and lives
+    // inside the same scroll container as the rows, so it must be sticky to
+    // stay visible while the list scrolls.
+    const resultHeader = document.querySelector(
+      '[data-test-mini-card-chooser] [data-test-search-result-header]',
+    );
+    assert.ok(
+      resultHeader,
+      'the results header is rendered once search is live',
+    );
+    assert.strictEqual(
+      getComputedStyle(resultHeader!).position,
+      'sticky',
+      'the results header sticks so the Searching…/count indicator stays visible while scrolling',
+    );
+
     // Capture the URL of every visible row, then click each in turn and
     // assert that exactly that row carries the selected marker.
     const buttonEls = Array.from(

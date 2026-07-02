@@ -26,11 +26,14 @@
  *                        and dump `await searchDocFromFields(instance)` per card.
  *
  * Output: a per-card report of real divergences and a non-zero exit if any are
- * found. `_cardType` (appended by the prerender meta route, not the generator)
- * is ignored. With `--ignore-shallow-links`, a relationship that is `{ id }`-only
- * (or null) on one side and absent on the other is treated as equivalent — the
- * known, intended `{ id }`-vs-omitted difference — so the report surfaces only
- * divergences that matter (changed expansions, missing data).
+ * found. The comparison logic (`diffDoc`) is shared with the generation tests
+ * via `@cardstack/runtime-common` so both judge parity identically. `_cardType`
+ * (appended by the prerender meta route, not the generator) is ignored. With
+ * `--ignore-shallow-links`, a relationship that is `{ id }`-only (or null) on one
+ * side and absent on the other is treated as equivalent — the known, intended
+ * `{ id }`-vs-omitted difference, ignored at any nesting depth (a pulled-in card
+ * carries the same shallow base-card links) — so the report surfaces only
+ * divergences that matter (changed references, lost expansions, real data).
  *
  * Usage:
  *   node packages/realm-server/scripts/searchable-parity-diff.ts \
@@ -38,7 +41,7 @@
  */
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import stringify from 'safe-stable-stringify';
+import { diffDoc } from '@cardstack/runtime-common';
 
 type SearchDoc = Record<string, unknown>;
 type DocMap = Record<string, SearchDoc>;
@@ -65,73 +68,6 @@ function parseArgs(argv: string[]) {
     generated: string;
     ignoreShallowLinks: boolean;
   };
-}
-
-// A relationship slot is "shallow" when it carries no contained data beyond a
-// bare reference: `null`, a bare `{ id }`, or a plural whose every element is
-// shallow (an empty plural included). The store-driven path omits unused links
-// while this generator keeps the `{ id }`, so under --ignore-shallow-links a
-// shallow-vs-absent slot is treated as equivalent — see `diffDoc`.
-export function isShallowLink(value: unknown): boolean {
-  if (value == null) return true;
-  if (Array.isArray(value)) return value.every(isShallowLink);
-  if (typeof value !== 'object') return false;
-  let keys = Object.keys(value as object);
-  return keys.length === 1 && keys[0] === 'id';
-}
-
-// The bare reference ids carried by a shallow slot, flattened across a plural.
-// A `null` / absent / empty slot contributes none. Used to tell the intended
-// omit-vs-keep-`{id}` difference (one side has no ids) apart from a CHANGED
-// reference (`{id:A}` vs `{id:B}`), which is a real divergence worth reporting.
-export function shallowIds(value: unknown): string[] {
-  if (value == null) return [];
-  if (Array.isArray(value)) return value.flatMap(shallowIds);
-  if (typeof value === 'object') {
-    let id = (value as { id?: unknown }).id;
-    return typeof id === 'string' ? [id] : [];
-  }
-  return [];
-}
-
-export function diffDoc(
-  live: SearchDoc,
-  generated: SearchDoc,
-  ignoreShallowLinks: boolean,
-): string[] {
-  let diffs: string[] = [];
-  let strip = (d: SearchDoc) => {
-    let { _cardType, ...rest } = d;
-    return rest;
-  };
-  let l = strip(live ?? {});
-  let g = strip(generated ?? {});
-  let keys = new Set([...Object.keys(l), ...Object.keys(g)]);
-  for (let key of keys) {
-    let lPresent = key in l;
-    let gPresent = key in g;
-    let lv = (l as SearchDoc)[key];
-    let gv = (g as SearchDoc)[key];
-    if (ignoreShallowLinks && isShallowLink(lv) && isShallowLink(gv)) {
-      let lIds = shallowIds(lv);
-      let gIds = shallowIds(gv);
-      // Omit-vs-keep-`{id}` (one side carries no ids) is the intended,
-      // ignored difference. A changed reference (both sides present, ids
-      // differ) is a real divergence and falls through to be reported.
-      if (lIds.length === 0 || gIds.length === 0) {
-        continue;
-      }
-      if (stringify(lIds) === stringify(gIds)) {
-        continue;
-      }
-    }
-    let ls = lPresent ? (stringify(lv) ?? 'null') : 'absent';
-    let gs = gPresent ? (stringify(gv) ?? 'null') : 'absent';
-    if (ls !== gs) {
-      diffs.push(`    ${key}: live=${ls} generated=${gs}`);
-    }
-  }
-  return diffs;
 }
 
 function main() {
@@ -164,7 +100,7 @@ function main() {
     if (docDiffs.length > 0) {
       divergent++;
       console.log(`DIVERGENT ${url}`);
-      for (let d of docDiffs) console.log(d);
+      for (let d of docDiffs) console.log(`    ${d}`);
     }
   }
 

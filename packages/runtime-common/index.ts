@@ -754,6 +754,7 @@ export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
@@ -768,6 +769,7 @@ export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
 export * from './expression.ts';
+export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
@@ -1384,8 +1386,13 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
-  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
+// A local id is a client-minted token for an instance that has not yet been
+// saved to a realm — it is neither a URL nor a prefix-form RRI. Both remote
+// forms are syntactically distinguishable (URLs start with `http`, prefix-form
+// RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
+// canonical RRI by the time they reach here.
+export function isLocalId(id: string) {
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {

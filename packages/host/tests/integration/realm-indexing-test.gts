@@ -18,6 +18,7 @@ import {
   type LooseSingleCardDocument,
   type IndexedInstance,
   type Realm,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -82,6 +83,26 @@ function assertInnerHtmlMatches(
   );
   let cleanedExpected = cleanWhiteSpace(expected!);
   assert.strictEqual(cleanedActual, cleanedExpected, message);
+}
+
+// Asserts the indexed search doc exactly equals `expected`. Search docs are
+// generated solely by the searchable-driven generator, so `expected` is that
+// generator's output: every relationship is present (a non-`searchable` link is
+// `{ id }` for a set target / `null` for an unset one; a `searchable` link is
+// expanded), and base-card links like `cardTheme` / `cardInfo.cardThumbnail`
+// appear too. `diffDoc(..., false)` is an exact comparison (no tolerance) that
+// reports a readable field-by-field diff on failure.
+function expectSearchDoc(
+  assert: Assert,
+  actual: Record<string, any> | null | undefined,
+  expected: Record<string, any>,
+  message?: string,
+) {
+  assert.deepEqual(
+    diffDoc(expected, actual ?? {}, false),
+    [],
+    message ?? 'indexed search doc matches the searchable-driven generator',
+  );
 }
 
 module(`Integration | realm indexing`, function (hooks) {
@@ -1100,7 +1121,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1113,7 +1134,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1229,7 +1251,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1242,7 +1264,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1302,7 +1325,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}people-skill`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Skill',
         id: `${testRealmURL}people-skill`,
         instructions: 'How to win friends and influence people',
@@ -1314,7 +1337,8 @@ module(`Integration | realm indexing`, function (hooks) {
             cardTitle: 'Switch Submode',
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1853,13 +1877,13 @@ module(`Integration | realm indexing`, function (hooks) {
     });
     let { searchDoc } =
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       searchDoc,
       {
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         firstName: 'Van Gogh',
         id: `${testRealmURL}vangogh`,
         cardTitle: 'Untitled Card',
@@ -2705,7 +2729,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Person/hassan`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
@@ -2717,13 +2742,14 @@ module(`Integration | realm indexing`, function (hooks) {
         cardDescription: 'Person',
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `search doc includes fullName field`,
     );
   });
 
-  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+  test(`search doc includes a 'linksTo' field the render never loaded when it is searchable`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -2786,7 +2812,8 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let entry = await getInstance(realm, new URL(`${testRealmURL}Post/1`));
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         _cardType: 'Post',
@@ -2801,7 +2828,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Publication/pacific`,
         },
         views: 5,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2809,7 +2837,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Publication/pacific`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry2?.searchDoc,
       {
         _cardType: 'Publication',
@@ -2822,6 +2851,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/1`,
             publication: {
@@ -2836,6 +2866,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/2`,
             publication: {
@@ -2845,9 +2876,10 @@ module(`Integration | realm indexing`, function (hooks) {
             views: 24,
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
-      `publication search doc includes featuredPosts relationship via isUsed=true`,
+      `publication search doc includes featuredPosts relationship via its searchable annotation`,
     );
   });
 
@@ -2926,7 +2958,7 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Spec/booking`),
     );
-    assert.deepEqual(entry?.searchDoc, {
+    expectSearchDoc(assert, entry?.searchDoc, {
       _cardType: 'Spec',
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
@@ -2939,7 +2971,8 @@ module(`Integration | realm indexing`, function (hooks) {
       isCard: true,
       isComponent: false,
       isField: false,
-      cardInfo: { theme: null },
+      cardTheme: null,
+      cardInfo: { cardThumbnail: null, theme: null },
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -3148,7 +3181,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
@@ -3158,6 +3191,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             owner: null,
             cardTitle: 'Mango',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
           {
@@ -3165,6 +3199,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             owner: null,
             cardTitle: 'Van Gogh',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
@@ -3172,7 +3207,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Hassan Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3269,7 +3305,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
@@ -3278,7 +3314,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Burcu Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3407,7 +3444,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}pet-person-spec`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Spec',
         id: `${testRealmURL}pet-person-spec`,
         cardTitle: 'PetPerson',
@@ -3420,7 +3457,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3571,7 +3609,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3585,9 +3623,11 @@ module(`Integration | realm indexing`, function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3773,7 +3813,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3786,10 +3826,12 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           cardDescription: 'Dog friend',
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3919,7 +3961,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/mango`),
     );
     if (mangoEntry) {
-      assert.deepEqual(mangoEntry.searchDoc, {
+      expectSearchDoc(assert, mangoEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
@@ -3933,9 +3975,11 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           cardDescription: 'Dog owner',
+          cardTheme: null,
           cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -4044,7 +4088,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -4053,7 +4097,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -4275,7 +4320,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let hassanEntry = await getInstance(realm, new URL(hassanID));
     if (hassanEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         hassanEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4288,17 +4334,20 @@ module(`Integration | realm indexing`, function (hooks) {
               firstName: 'Mango',
               cardTitle: 'Mango',
               friends: [{ id: hassanID }],
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               cardTitle: 'Van Gogh',
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'hassan searchData is correct',
       );
@@ -4450,7 +4499,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let mangoEntry = await getInstance(realm, new URL(mangoID));
     if (mangoEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         mangoEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4473,13 +4523,16 @@ module(`Integration | realm indexing`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: { theme: null },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                 },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'mango searchData is correct',
       );
@@ -4631,7 +4684,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let vanGoghEntry = await getInstance(realm, new URL(vanGoghID));
     if (vanGoghEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         vanGoghEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4645,10 +4699,8 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: 'Hassan',
               friends: [
                 {
-                  cardInfo: {
-                    cardThumbnail: null,
-                    theme: null,
-                  },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                   firstName: 'Mango',
                   friends: [
                     {
@@ -4660,10 +4712,12 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
                 { id: vanGoghID },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'vanGogh searchData is correct',
       );

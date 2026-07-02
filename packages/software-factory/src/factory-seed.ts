@@ -8,9 +8,18 @@
  * cards, then marks the seed issue as done.
  */
 
+import { posix } from 'node:path';
+
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type { FactoryBrief } from './factory-brief.ts';
 
 import { logger } from './logger.ts';
+import {
+  inferIssueTrackerModuleUrl,
+  linkRelationshipToCard,
+  toRealmRelativePath,
+} from './realm-operations.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
 
 /**
@@ -100,6 +109,74 @@ export async function createSeedIssue(
 
   log.info(`Seed issue created: ${SEED_ISSUE_PATH}`);
   return { issueId: SEED_ISSUE_PATH, status: 'created' };
+}
+
+// ---------------------------------------------------------------------------
+// Post-bootstrap project link
+// ---------------------------------------------------------------------------
+
+export interface LinkProjectToSeedIssueOptions {
+  client: BoxelCLIClient;
+  realmUrl: string;
+  workspaceDir: string;
+  /** From `inferDarkfactoryModuleUrl(realmUrl)`. */
+  darkfactoryModuleUrl: string;
+  /**
+   * How many times to retry the Project search when it comes back empty.
+   * The Project is synced to the realm fire-and-forget (no `waitForIndex`),
+   * so an empty result can just mean the indexer hasn't caught up. The
+   * post-loop backstop sets this so a fast run doesn't permanently leave the
+   * seed issue's project link unset; the in-loop hook leaves it at the
+   * default 0 — the backstop is its safety net.
+   */
+  searchRetries?: number;
+  /** Delay between empty-result retries. Defaults to `SEARCH_RETRY_DELAY_MS`. */
+  searchRetryDelayMs?: number;
+}
+
+/**
+ * Point the bootstrap seed issue's `project` relationship at the Project the
+ * bootstrap issue created, once it exists in the realm.
+ *
+ * The seed issue is written before the loop runs, when no Project exists yet,
+ * so it starts with no `project` link. After the bootstrap issue creates and
+ * syncs a Project, this finds it and patches the workspace seed issue in
+ * place. Returns `true` when it modified the issue so the caller can sync; a
+ * no-op (no Project indexed, the seed issue missing, or the link already
+ * correct) returns `false`.
+ */
+export async function linkProjectToSeedIssue(
+  options: LinkProjectToSeedIssueOptions,
+): Promise<boolean> {
+  let { client, realmUrl, workspaceDir, darkfactoryModuleUrl } = options;
+  let issueTrackerModuleUrl = inferIssueTrackerModuleUrl(darkfactoryModuleUrl);
+
+  return linkRelationshipToCard({
+    client,
+    realmUrl,
+    workspaceDir,
+    cardFile: SEED_ISSUE_FILE,
+    relationshipKey: 'project',
+    targetLabel: 'Project',
+    search: () =>
+      client.search(realmUrl, {
+        filter: { type: { module: issueTrackerModuleUrl, name: 'Project' } },
+        // One Project per bootstrapped realm; newest-first so a re-run that
+        // somehow produced more than one links the most recently created
+        // (the default first-id selection then takes the newest).
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
+      }),
+    // The `self` link is relative to the seed issue's directory, matching how
+    // the agent encodes implementation-issue project links (`../Projects/<slug>`).
+    buildLink: (id, realm) =>
+      posix.relative(
+        posix.dirname(SEED_ISSUE_PATH),
+        toRealmRelativePath(id, realm),
+      ),
+    log,
+    searchRetries: options.searchRetries,
+    searchRetryDelayMs: options.searchRetryDelayMs,
+  });
 }
 
 // ---------------------------------------------------------------------------
