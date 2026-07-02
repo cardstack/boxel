@@ -9,6 +9,7 @@ import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
+import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
@@ -91,6 +92,7 @@ export default class Workspace extends Component<Signature> {
               <RealmIcon
                 class='workspace-realm-icon'
                 @realmInfo={{this.realmInfo}}
+                @canAnimate={{true}}
               />
             </div>
           </div>
@@ -184,6 +186,11 @@ export default class Workspace extends Component<Signature> {
             <span class='visibility-label'>{{this.visibility}}</span>
           </span>
         </div>
+        {{#if this.reindexError}}
+          <p class='reindex-error' data-test-reindex-error>
+            {{this.reindexError}}
+          </p>
+        {{/if}}
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
@@ -486,6 +493,14 @@ export default class Workspace extends Component<Signature> {
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
         max-width: var(--boxel-xxs-container);
+      }
+      .reindex-error {
+        max-width: var(--boxel-xxs-container);
+        margin: var(--boxel-sp-5xs) 0 0;
+        color: var(--boxel-danger);
+        font: 600 var(--boxel-font-xs);
+        text-align: center;
+        overflow-wrap: anywhere;
       }
       .info > span {
         text-overflow: ellipsis;
@@ -1055,10 +1070,17 @@ export default class Workspace extends Component<Signature> {
   @tracked private showArchiveModal = false;
   @tracked private archiveError: string | undefined;
   @tracked private isHostDropdownOpen = false;
+  @tracked private reindexError: string | undefined;
+  private reindexErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask.perform();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.clearReindexError();
   }
 
   private loadRealmTask = task(async () => {
@@ -1088,7 +1110,23 @@ export default class Workspace extends Component<Signature> {
         action: this.openRealmConfig,
       }),
     ];
-    // Archive is owner-only and appears only on tiles the user owns.
+    // Re-index and Archive are owner-only and appear only on tiles the user
+    // owns.
+    if (this.canReindexWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Re-index',
+          icon: RefreshIcon,
+          action: this.reindexWorkspaceTask.perform,
+          // Gate on the live indexing flag, not reindexWorkspaceTask.isRunning:
+          // the task resolves the instant the 204 lands (sub-second), while the
+          // reindex itself runs much longer. isIndexing stays true for the whole
+          // pass. Repeat clicks are server-safe regardless (the reindex queue
+          // coalesces them), so this guard is purely a UX nicety.
+          disabled: this.isReindexing,
+        }),
+      );
+    }
     if (this.canArchiveWorkspace) {
       items.push(
         new MenuItem({
@@ -1206,6 +1244,14 @@ export default class Workspace extends Component<Signature> {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
+  private get canReindexWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get isReindexing() {
+    return this.realmInfo.isIndexing;
+  }
+
   private get deleteSummaryText() {
     if (!this.deleteSummary) {
       return null;
@@ -1305,6 +1351,28 @@ export default class Workspace extends Component<Signature> {
       this.archiveError = error.message;
     }
   });
+
+  private reindexWorkspaceTask = dropTask(async () => {
+    this.clearReindexError();
+    try {
+      await this.realm.fullReindex(this.args.realmIdentifier);
+    } catch (error: any) {
+      this.reindexError = String(error?.message ?? error);
+      // Auto-dismiss after a few seconds. A plain setTimeout (not an
+      // ember-concurrency timeout) so it does not keep test `settled()` waiting.
+      this.reindexErrorTimer = setTimeout(() => {
+        this.reindexError = undefined;
+      }, 5000);
+    }
+  });
+
+  private clearReindexError() {
+    if (this.reindexErrorTimer) {
+      clearTimeout(this.reindexErrorTimer);
+      this.reindexErrorTimer = undefined;
+    }
+    this.reindexError = undefined;
+  }
 
   private loadDeleteSummaryTask = dropTask(async () => {
     try {
