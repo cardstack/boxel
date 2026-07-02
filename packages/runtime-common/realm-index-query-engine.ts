@@ -408,9 +408,17 @@ export class RealmIndexQueryEngine {
         emitItem = false;
       }
       if (emitItem && pristine) {
+        // `pristine_doc` is stored with its id unresolved to the realm's
+        // registered alias prefix (e.g. `@cardstack/catalog/...`) for
+        // storage portability. The search-entry's `item` relationship
+        // always points at `cardUrl` (the row's resolved absolute URL,
+        // shared with the entry's own id) — the included resource's id
+        // must match that exactly or a JSON:API consumer's relationship
+        // lookup silently finds nothing.
         let item: CardResource<Saved> = {
           ...pristine,
-          links: { self: pristine.id },
+          id: cardUrl as RealmResourceIdentifier,
+          links: { self: cardUrl },
         };
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
