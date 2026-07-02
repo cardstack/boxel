@@ -965,6 +965,28 @@ export default class StoreService extends Service implements StoreInterface {
     if (opts?.doNotPersist) {
       await this.stopAutoSaving(instance);
     }
+    // Resolve any linked-card relationships first. This can require a
+    // network fetch, and a sibling task elsewhere may mutate other fields on
+    // this same live instance while we wait. Snapshotting the instance below
+    // (for the merge + write-back further down) only after this resolves
+    // keeps that snapshot from going stale and reverting the sibling's write.
+    let linkedCards = await this.loadPatchedInstances(patch, instance.id);
+    for (let [field, value] of Object.entries(linkedCards)) {
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
+        }
+        let inner = instance;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
+      } else {
+        (instance as any)[field] = value;
+      }
+    }
     let doc = await this.cardService.serializeCard(instance, {
       omitQueryFields: true,
     });
@@ -987,23 +1009,6 @@ export default class StoreService extends Service implements StoreInterface {
     }
     if (patch.meta) {
       doc.data.meta = merge(doc.data.meta, patch.meta);
-    }
-    let linkedCards = await this.loadPatchedInstances(patch, instance.id);
-    for (let [field, value] of Object.entries(linkedCards)) {
-      if (field.includes('.')) {
-        let parts = field.split('.');
-        let leaf = parts.pop();
-        if (!leaf) {
-          throw new Error(`bug: error in field name "${field}"`);
-        }
-        let inner = instance;
-        for (let part of parts) {
-          inner = (inner as any)[part];
-        }
-        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
-      } else {
-        (instance as any)[field] = value;
-      }
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);

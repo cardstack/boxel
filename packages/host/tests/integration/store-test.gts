@@ -1593,6 +1593,65 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
+    let targetId = `${testRealmURL}Person/hassan`;
+    let instance = (await storeService.get(targetId)) as any;
+
+    let gate = new Deferred<void>();
+    let enteredGate = new Deferred<void>();
+    let originalLoadPatchedInstances = (storeService as any)
+      .loadPatchedInstances;
+    (storeService as any).loadPatchedInstances = async function (
+      this: unknown,
+      ...args: any[]
+    ) {
+      let result = await originalLoadPatchedInstances.apply(this, args);
+      // simulate a slow relationship load (e.g. fetching a not-yet-cached
+      // linked card) so a concurrent field write on the same live instance
+      // can land in the window between the patch's snapshot and its
+      // eventual write-back
+      enteredGate.fulfill();
+      await gate.promise;
+      return result;
+    };
+
+    try {
+      let patchPromise = storeService.patch(targetId, {
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}Person/jade` },
+          },
+        },
+      });
+
+      // wait until the patch has actually reached the gated relationship
+      // load before mutating a sibling field, so the write lands squarely in
+      // the window the patch's snapshot needs to still be sensitive to
+      await enteredGate.promise;
+
+      // a sibling background task (e.g. an unrelated auto-linking step, as in
+      // the catalog listing-create flow) mutates a different field on the
+      // same live instance while the patch above is still in flight
+      instance.name = 'Race Winner';
+
+      gate.fulfill();
+      await patchPromise;
+    } finally {
+      (storeService as any).loadPatchedInstances = originalLoadPatchedInstances;
+    }
+
+    assert.strictEqual(
+      instance.name,
+      'Race Winner',
+      "the concurrent field write is not clobbered by the patch's stale snapshot",
+    );
+    assert.strictEqual(
+      instance.bestFriend?.id,
+      `${testRealmURL}Person/jade`,
+      'the patch itself was still applied',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([
