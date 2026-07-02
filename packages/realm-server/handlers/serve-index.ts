@@ -119,10 +119,32 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             config.publishedRealmBoxelSiteDomain = serverURL.host;
           }
 
+          // Codespace single-origin: when the realm server reverse-proxies
+          // Matrix onto its own origin (see proxyRequest in server.ts), point
+          // the host's matrixURL here so the browser's Matrix traffic uses the
+          // one forwarded port (Matrix is codespace-specific and would
+          // otherwise need its own public port). Icons are NOT proxied: the
+          // host's baked iconsURL is a public CDN (boxel-icons.boxel.ai) that
+          // works cross-origin and needs no codespace port — proxying them to
+          // a local icons server that isn't built here just 404s and breaks
+          // card rendering.
+          let proxyMatrix =
+            process.env.REALM_SERVER_PROXY_MATRIX_ICONS === 'true';
+
           config = merge({}, config, {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
-            matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
+            // The browser-facing Matrix URL can differ from the realm
+            // server's own backend connection (e.g. in a Codespace the
+            // backend talks to Synapse on localhost while the browser must
+            // use the public forwarded URL). When proxying Matrix through
+            // this origin, point the browser here; otherwise RESOLVED_MATRIX_URL
+            // (or the backend URL) is the browser-facing Matrix URL.
+            matrixURL: proxyMatrix
+              ? serverURL.origin
+              : (
+                  process.env.RESOLVED_MATRIX_URL ?? matrixClient.matrixURL.href
+                ).replace(/\/$/, ''),
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
             realmServerURL: serverURL.href,

@@ -673,7 +673,7 @@ export class PgAdapter implements DBAdapter {
           ignorePattern: '.*\\.eslintrc\\.js|package\\.json',
           log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
-        await this.fixupEnvironmentModePermissions(config);
+        await this.fixupHostedRealmPermissions(config);
         return;
       } catch (err: any) {
         if (!err.message?.includes('Another migration is already running')) {
@@ -685,31 +685,45 @@ export class PgAdapter implements DBAdapter {
     }
   }
 
-  // In environment mode, migrations seed realm_user_permissions with hardcoded
-  // localhost:4201/4202 URLs. Rewrite them to the Traefik hostnames so realm
-  // ownership lookups work.
-  private async fixupEnvironmentModePermissions(config: Config) {
+  // Migrations seed realm_user_permissions with hardcoded localhost:4201/4202
+  // URLs. When the realm server is hosted under a different public origin, its
+  // realm-ownership and read-permission lookups key off the realm's actual
+  // URL, so those rows must be rewritten to that origin — otherwise every
+  // bootstrap realm 403s. Two hosting modes need this:
+  //   - environment mode (BOXEL_ENVIRONMENT): rewrite to the Traefik hostnames
+  //     derived from the env slug (realm-server / realm-test).
+  //   - an explicit public-URL override (REALM_SERVER_PERMISSIONS_BASE_URL):
+  //     single-origin deployments such as GitHub Codespaces, where the realm
+  //     is served under one forwarded https URL with no separate :4202 peer.
+  // The override wins when both are set.
+  private async fixupHostedRealmPermissions(config: Config) {
+    let baseOverride = process.env.REALM_SERVER_PERMISSIONS_BASE_URL;
     let branch = process.env.BOXEL_ENVIRONMENT;
-    if (!branch) {
+
+    let realmServerUrl: string | undefined;
+    let realmTestUrl: string | undefined;
+    if (baseOverride) {
+      realmServerUrl = baseOverride.replace(/\/$/, '');
+    } else if (branch) {
+      let slug = branch
+        .toLowerCase()
+        .replace(/\//g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      realmServerUrl = `http://realm-server.${slug}.localhost`;
+      realmTestUrl = `http://realm-test.${slug}.localhost`;
+    } else {
       return;
     }
-    let slug = branch
-      .toLowerCase()
-      .replace(/\//g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
 
     let client = new Client(config);
     try {
       await client.connect();
-      let realmServerUrl = `http://realm-server.${slug}.localhost`;
-      let realmTestUrl = `http://realm-test.${slug}.localhost`;
       // Match both http and https canonicals — realm-server speaks HTTPS in
       // local dev now, so a DB seeded after the CS-11114 flip stores
       // `https://localhost:42XX/...` permission rows; older rows can still
-      // be on `http://`. The regex collapses both into the env-mode
-      // Traefik hostname.
+      // be on `http://`. The regex collapses both into the hosted origin.
       let result = await client.query(
         `UPDATE realm_user_permissions
          SET realm_url = regexp_replace(realm_url, '^https?://localhost:4201/', $1)
@@ -718,19 +732,21 @@ export class PgAdapter implements DBAdapter {
       );
       if (result.rowCount && result.rowCount > 0) {
         log.info(
-          `Environment mode: rewrote ${result.rowCount} permission URL(s) from localhost:4201 to ${realmServerUrl}`,
+          `Rewrote ${result.rowCount} permission URL(s) from localhost:4201 to ${realmServerUrl}`,
         );
       }
-      let result2 = await client.query(
-        `UPDATE realm_user_permissions
-         SET realm_url = regexp_replace(realm_url, '^https?://localhost:4202/', $1)
-         WHERE realm_url ~ '^https?://localhost:4202/'`,
-        [`${realmTestUrl}/`],
-      );
-      if (result2.rowCount && result2.rowCount > 0) {
-        log.info(
-          `Environment mode: rewrote ${result2.rowCount} permission URL(s) from localhost:4202 to ${realmTestUrl}`,
+      if (realmTestUrl) {
+        let result2 = await client.query(
+          `UPDATE realm_user_permissions
+           SET realm_url = regexp_replace(realm_url, '^https?://localhost:4202/', $1)
+           WHERE realm_url ~ '^https?://localhost:4202/'`,
+          [`${realmTestUrl}/`],
         );
+        if (result2.rowCount && result2.rowCount > 0) {
+          log.info(
+            `Rewrote ${result2.rowCount} permission URL(s) from localhost:4202 to ${realmTestUrl}`,
+          );
+        }
       }
     } finally {
       await client.end();

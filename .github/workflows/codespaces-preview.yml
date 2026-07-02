@@ -1,0 +1,51 @@
+name: Codespaces Preview
+
+# Builds the boxel-host app and deploys it to S3. The build is GENERIC — it
+# does not bake in any Codespace's URLs, because the realm server rewrites the
+# host's Ember config (Matrix / realm-server / resolved-realm URLs) at serve
+# time (see packages/realm-server/handlers/serve-index.ts). A Codespace's
+# start-services.sh points the realm's distURL at this S3 bundle and serves it
+# with this Codespace's endpoints injected, so one generic build per code
+# change serves every Codespace — no per-Codespace rebuild.
+on:
+  push:
+    branches:
+      - codespaces-10255
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-codespaces-preview:
+    name: Build and deploy the generic host bundle for Codespace previews
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/init
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/boxel-host
+          aws-region: us-east-1
+
+      - name: Load staging app environment variables (overridden at serve time)
+        shell: bash
+        run: cat packages/host/config/staging.env >> $GITHUB_ENV
+
+      - name: Set branch name for the S3 prefix
+        shell: bash
+        run: |
+          echo "PR_BRANCH_NAME=$(echo "${GITHUB_REF_NAME}" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)" >> $GITHUB_ENV
+
+      - name: Build and deploy host bundle
+        shell: bash
+        env:
+          S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
+          AWS_S3_BUCKET: boxel-host-preview.stack.cards
+          AWS_REGION: us-east-1
+          AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
+        run: pnpm deploy:boxel-host:preview-staging

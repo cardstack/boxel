@@ -60,7 +60,6 @@ export function proxyAsset(
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
   let upstreamPath = `${assetsURL.pathname.replace(/\/$/, '')}/${filename}`;
-  let client = assetsURL.protocol === 'https:' ? https : http;
   // Direct upstream proxy. Replaces the previous koa-proxies + http-proxy
   // stack which forwarded `req.headers` verbatim into Node's
   // `http.ClientRequest`; under HTTP/2 that included pseudo-headers
@@ -75,12 +74,122 @@ export function proxyAsset(
     if (ctxt.path !== from) {
       return next();
     }
+    await pipeUpstreamAsset(ctxt, assetsURL, upstreamPath, opts);
+  };
+}
+
+// Proxy any request whose path begins with one of `prefixes` (or equals a
+// prefix exactly, for single-file entries) to the host-dist upstream,
+// preserving the full request path. Used in Codespace previews where the
+// host app is rewritten to load its assets from the realm server's own
+// origin (so the browser stays same-origin and no cross-origin CORS headers
+// are needed); the realm then proxies those `/assets/…`, `/@embroider/…`
+// and favicon requests to the actual host bundle (S3/CloudFront). In normal
+// deployments the served HTML points assets straight at the host CDN, so
+// these paths are never requested from the realm origin and this middleware
+// is dormant.
+export function proxyAssetPaths(
+  prefixes: string[],
+  upstreamURL: URL,
+  opts?: ProxyOptions,
+): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
+  let base = upstreamURL.pathname.replace(/\/$/, '');
+  return async (ctxt, next) => {
+    if (ctxt.method !== 'GET' && ctxt.method !== 'HEAD') {
+      return next();
+    }
+    let path = ctxt.path;
+    if (!prefixes.some((p) => path === p || path.startsWith(p))) {
+      return next();
+    }
+    await pipeUpstreamAsset(ctxt, upstreamURL, `${base}${path}`, opts);
+  };
+}
+
+async function pipeUpstreamAsset(
+  ctxt: Koa.Context,
+  assetsURL: URL,
+  upstreamPath: string,
+  opts?: ProxyOptions,
+): Promise<void> {
+  let client = assetsURL.protocol === 'https:' ? https : http;
+  let forwardedHeaders: Record<string, string> = {};
+  for (let [name, value] of Object.entries(ctxt.req.headers)) {
+    if (name.startsWith(':')) continue;
+    // Node's http.ClientRequest rejects connection-specific hop-by-hop
+    // headers when targeting an HTTP/1.1 upstream.
+    if (name === 'host') continue;
+    if (typeof value === 'string') {
+      forwardedHeaders[name] = value;
+    } else if (Array.isArray(value)) {
+      forwardedHeaders[name] = value.join(', ');
+    }
+  }
+  for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
+    forwardedHeaders[key] = value;
+  }
+
+  let upstreamRes = await new Promise<http.IncomingMessage>(
+    (resolve, reject) => {
+      let upstreamReq = client.request(
+        {
+          method: ctxt.method,
+          hostname: assetsURL.hostname,
+          // `assetsURL.port` is the empty string for default-port URLs;
+          // fall through to the protocol default.
+          port: assetsURL.port || (client === https ? 443 : 80),
+          path: upstreamPath,
+          headers: forwardedHeaders,
+        },
+        resolve,
+      );
+      upstreamReq.on('error', reject);
+      upstreamReq.end();
+    },
+  );
+
+  ctxt.status = upstreamRes.statusCode ?? 502;
+  for (let [name, value] of Object.entries(upstreamRes.headers)) {
+    if (value == null) continue;
+    // Strip hop-by-hop headers (Node manages them per-connection) plus
+    // anything else the h2 response layer will reject. `host` is
+    // irrelevant on the response side.
+    if (H2_FORBIDDEN_RESPONSE_HEADERS.has(name.toLowerCase())) {
+      continue;
+    }
+    ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
+  }
+  for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
+    ctxt.set(key, value);
+  }
+  ctxt.body = upstreamRes;
+}
+
+// Reverse-proxy any request whose path begins with one of `prefixes` to a
+// backend, preserving method, path+query, request body, and streaming the
+// response back. Unlike proxyAsset/proxyAssetPaths (GET-only), this forwards
+// the request body, so it handles POST/PUT and long-poll responses (Matrix
+// sync). Used in Codespace previews to fold Matrix (`/_matrix`,
+// `/.well-known/matrix`) and the icons server (`/@cardstack/boxel-icons`)
+// onto the realm server's own origin, so the browser only ever talks to the
+// one forwarded port — no separate cross-origin ports to make public. Must
+// run before any body-consuming middleware so `ctxt.req` is still unread.
+// Dormant in normal deployments (those paths aren't routed here).
+export function proxyRequest(
+  prefixes: string[],
+  upstreamURL: URL,
+): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
+  let client = upstreamURL.protocol === 'https:' ? https : http;
+  let base = upstreamURL.pathname.replace(/\/$/, '');
+  return async (ctxt, next) => {
+    let path = ctxt.path;
+    if (!prefixes.some((p) => path === p || path.startsWith(p))) {
+      return next();
+    }
 
     let forwardedHeaders: Record<string, string> = {};
     for (let [name, value] of Object.entries(ctxt.req.headers)) {
       if (name.startsWith(':')) continue;
-      // Node's http.ClientRequest rejects connection-specific hop-by-hop
-      // headers when targeting an HTTP/1.1 upstream.
       if (name === 'host') continue;
       if (typeof value === 'string') {
         forwardedHeaders[name] = value;
@@ -88,42 +197,33 @@ export function proxyAsset(
         forwardedHeaders[name] = value.join(', ');
       }
     }
-    for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
-      forwardedHeaders[key] = value;
-    }
 
     let upstreamRes = await new Promise<http.IncomingMessage>(
       (resolve, reject) => {
         let upstreamReq = client.request(
           {
             method: ctxt.method,
-            hostname: assetsURL.hostname,
-            // `assetsURL.port` is the empty string for default-port URLs;
-            // fall through to the protocol default.
-            port: assetsURL.port || (client === https ? 443 : 80),
-            path: upstreamPath,
+            hostname: upstreamURL.hostname,
+            port: upstreamURL.port || (client === https ? 443 : 80),
+            path: `${base}${ctxt.originalUrl}`,
             headers: forwardedHeaders,
           },
           resolve,
         );
         upstreamReq.on('error', reject);
-        upstreamReq.end();
+        // Forward the request body for POST/PUT/etc.; for bodyless methods the
+        // piped request stream simply ends right away.
+        ctxt.req.pipe(upstreamReq);
       },
     );
 
     ctxt.status = upstreamRes.statusCode ?? 502;
     for (let [name, value] of Object.entries(upstreamRes.headers)) {
       if (value == null) continue;
-      // Strip hop-by-hop headers (Node manages them per-connection) plus
-      // anything else the h2 response layer will reject. `host` is
-      // irrelevant on the response side.
       if (H2_FORBIDDEN_RESPONSE_HEADERS.has(name.toLowerCase())) {
         continue;
       }
       ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
-    }
-    for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
-      ctxt.set(key, value);
     }
     ctxt.body = upstreamRes;
   };

@@ -21,6 +21,8 @@ import {
   ecsMetadata,
   methodOverrideSupport,
   proxyAsset,
+  proxyAssetPaths,
+  proxyRequest,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
 
@@ -939,6 +941,7 @@ export class RealmServer {
   private queue: QueuePublisher;
   private definitionLookup: DefinitionLookup;
   private assetsURL: URL;
+  private hostDistURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
@@ -976,6 +979,7 @@ export class RealmServer {
     queue,
     definitionLookup,
     assetsURL,
+    hostDistURL,
     getIndexHTML,
     matrixRegistrationSecret,
     matrixAdminUsername,
@@ -1000,6 +1004,12 @@ export class RealmServer {
     queue: QueuePublisher;
     definitionLookup: DefinitionLookup;
     assetsURL: URL;
+    // Upstream for proxying host-app static assets (`/assets/…`,
+    // `/@embroider/…`, favicons) when the served HTML points them at the
+    // realm server's own origin — see `proxyAssetPaths`. Defaults to
+    // `assetsURL`; only differs when assets are rewritten to be same-origin
+    // (Codespace previews) while the actual bundle still lives elsewhere.
+    hostDistURL?: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
@@ -1047,6 +1057,7 @@ export class RealmServer {
     this.queue = queue;
     this.definitionLookup = definitionLookup;
     this.assetsURL = assetsURL;
+    this.hostDistURL = hostDistURL ?? assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
@@ -1092,6 +1103,23 @@ export class RealmServer {
     });
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
+      .use(async (ctx, next) => {
+        // GitHub Codespaces port forwarding terminates TLS at the edge and
+        // forwards to the backend over plain HTTP with `Host: localhost:<port>`
+        // and no x-forwarded-proto. The realm then builds realm-content URLs
+        // as http://localhost/… (see fullRequestURL), which match none of the
+        // realms registered under their https://<codespace> identities — so
+        // every card/module request 404s while path-based control endpoints
+        // (login, _server-session, assets) still work. REALM_SERVER_ASSUME_HTTPS
+        // pins the scheme and host to the realm's own serverURL so URL
+        // resolution matches. Off by default; production load balancers set
+        // these headers correctly, so this never fires there.
+        if (process.env.REALM_SERVER_ASSUME_HTTPS === 'true') {
+          ctx.req.headers['x-forwarded-proto'] = 'https';
+          ctx.req.headers['host'] = this.serverURL.host;
+        }
+        await next();
+      })
       .use(httpLogging)
       .use(ecsMetadata)
       .use(
@@ -1120,6 +1148,35 @@ export class RealmServer {
           // blocking the QUERY behind it.
           maxAge: 86400,
         }),
+      )
+      // Codespace single-origin: fold Matrix onto this realm server's own
+      // origin so the reviewer's browser uses the one forwarded port for
+      // Matrix instead of a separate cross-origin port that would need to be
+      // public. serve-index points the host's matrixURL here. Placed before
+      // the body-reading middleware so Matrix POST bodies are intact, and
+      // before the realm router so `/_matrix` never falls through to realm
+      // routing. Icons are NOT proxied — the host's baked iconsURL is a public
+      // CDN that works cross-origin. Off in normal deployments.
+      .use(
+        (() => {
+          if (process.env.REALM_SERVER_PROXY_MATRIX_ICONS !== 'true') {
+            return async (_ctx: Koa.Context, next: Koa.Next) => next();
+          }
+          let matrixProxy = proxyRequest(
+            ['/_matrix/', '/.well-known/matrix/'],
+            new URL(this.matrixClient.matrixURL.href),
+          );
+          return async (ctx: Koa.Context, next: Koa.Next) => {
+            let p = ctx.path;
+            if (
+              p.startsWith('/_matrix/') ||
+              p.startsWith('/.well-known/matrix/')
+            ) {
+              return matrixProxy(ctx, next);
+            }
+            return next();
+          };
+        })(),
       )
       .use(async (ctx, next) => {
         // Disable browser cache for all data requests to the realm server. The condition captures our supported mime types but not others,
@@ -1172,11 +1229,28 @@ export class RealmServer {
         }),
       )
       .use(
-        proxyAsset('/auth-service-worker.js', this.assetsURL, {
+        proxyAsset('/auth-service-worker.js', this.hostDistURL, {
           requestHeaders: {
             'accept-encoding': 'identity',
           },
         }),
+      )
+      // When the served HTML rewrites asset URLs to the realm server's own
+      // origin (Codespace previews, where assetsURL === serverURL so the
+      // browser stays same-origin and avoids cross-origin CORS on ES-module
+      // scripts), proxy those static host-app requests through to the real
+      // bundle. Dormant in normal deployments: there the HTML points assets
+      // straight at the host CDN, so these paths are never requested here.
+      .use(
+        proxyAssetPaths(
+          [
+            '/assets/',
+            '/@embroider/',
+            '/boxel-favicon.png',
+            '/boxel-webclip.png',
+          ],
+          this.hostDistURL,
+        ),
       )
       .use(serveIndex)
       .use(serveFromRealm);

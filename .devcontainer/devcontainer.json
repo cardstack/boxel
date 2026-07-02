@@ -1,0 +1,56 @@
+{
+  "name": "Boxel PR Review",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/boxel",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "dockerDashComposeVersion": "v2",
+      "installDockerBuildx": false
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+
+  "forwardPorts": [4201, 4206, 8008],
+  "portsAttributes": {
+    "4201": { "label": "Realm Server", "onAutoForward": "silent" },
+    "4206": { "label": "Icons Server", "onAutoForward": "silent" },
+    "8008": { "label": "Matrix/Synapse", "onAutoForward": "silent" }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "nohup setsid bash .devcontainer/start-services.sh > /workspaces/.boxel-start-services.log 2>&1 < /dev/null &",
+
+  "customizations": {
+    "codespaces": {
+      "repositories": {
+        "cardstack/boxel-catalog": { "permissions": { "contents": "read" } },
+        "cardstack/boxel-skills": { "permissions": { "contents": "read" } }
+      }
+    },
+    "vscode": {
+      "extensions": [
+        "cardstack.boxel-tools",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "typed-ember.glint-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "64gb"
+  }
+}
