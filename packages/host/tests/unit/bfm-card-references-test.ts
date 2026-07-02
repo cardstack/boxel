@@ -1302,6 +1302,31 @@ module('Unit | bfm-card-references', function () {
       assert.strictEqual(ranges[0].url, './real');
     });
 
+    test('a lone backtick does not swallow later directives across a blank line', function (assert) {
+      // A stray lone backtick (here in `Mod-\``) must not pair — across a blank
+      // line — with a backtick in a later fence, which would form a spurious
+      // inline-code region hiding every directive in between. Inline code
+      // content ends at a paragraph break, so both real refs still surface and
+      // only the ref genuinely inside the fence is skipped.
+      let markdown = [
+        '- Keyboard shortcuts (Mod-`)',
+        '',
+        'Inline card reference: :card[./friend-1]',
+        '',
+        '::card[./jane-doe]',
+        '',
+        '```typescript',
+        ':card[./inside-fence]',
+        '```',
+      ].join('\n');
+      let ranges = extractBfmRefRanges(markdown);
+      assert.deepEqual(
+        ranges.map((r) => r.url),
+        ['./friend-1', './jane-doe'],
+        'inline and block refs after the lone backtick both surface; the fenced ref stays skipped',
+      );
+    });
+
     test('emits one range per site (no deduplication)', function (assert) {
       let markdown = ':card[./mango] then :card[./mango]';
       let ranges = extractBfmRefRanges(markdown);
