@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'v*'
+  pull_request:
+
+env:
+  FORCE_COLOR: 1
+  PNPM_VERSION: 6.15.0
+
+jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+
+      - uses: pnpm/action-setup@v2.4.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14.x
+          cache: 'pnpm'
+
+      - run: pnpm install
+      - run: pnpm lint
+
+  test-node:
+    strategy:
+      matrix:
+        node-version: [12.x, 14.x, 16.x]
+
+    name: Tests (Node.js ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+
+      - uses: pnpm/action-setup@v2.4.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - run: pnpm install
+      - run: pnpm test -- --coverage
+
+  test-eslint:
+    strategy:
+      matrix:
+        eslint-version: [7.0.0]
+
+    name: Tests (ESLint ${{ matrix.eslint-version }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac # v4
+
+      - uses: pnpm/action-setup@v2.4.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14.x
+          # cache disabled because the extra `pnpm add` might conflict with the
+          # `test-node` job cache, and there is currently no way to influence
+          # the cache key
+          # cache: 'pnpm'
+
+      - run: pnpm install
+      - run: pnpm add --save-dev eslint@${{ matrix.eslint-version }}
+      - run: pnpm test
