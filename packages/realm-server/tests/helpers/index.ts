@@ -2019,6 +2019,12 @@ type InternalPermissionedRealmSetupOptions = {
   published?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  // Register a realm-prefix (RRI) mapping for this realm on the VirtualNetwork
+  // *before* it is indexed, so the realm's canonical form is the prefix — the
+  // realm is indexed and served in prefix form (unlike an unmapped realm whose
+  // canonical form is its URL). Retrofitting a mapping after indexing is an
+  // invalid state (definition lookups keyed by the URL form no longer resolve).
+  realmPrefixMapping?: string;
 };
 
 async function startPermissionedRealmFixture(
@@ -2035,6 +2041,7 @@ async function startPermissionedRealmFixture(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmPrefixMapping,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2086,6 +2093,11 @@ async function startPermissionedRealmFixture(
   }
 
   let virtualNetwork = createVirtualNetwork();
+  // Register the prefix mapping before the realm is created/indexed so it is
+  // indexed (and served) in canonical prefix form.
+  if (realmPrefixMapping) {
+    virtualNetwork.addRealmMapping(realmPrefixMapping, resolvedRealmURL.href);
+  }
 
   let testRealmServer = await runTestRealmServer({
     virtualNetwork,
@@ -2168,6 +2180,7 @@ export function setupPermissionedRealm(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmPrefixMapping,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2194,6 +2207,9 @@ export function setupPermissionedRealm(
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
+    // Register a realm-prefix (RRI) mapping before indexing so the realm's
+    // canonical form is the prefix (indexed + served in prefix form).
+    realmPrefixMapping?: string;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2221,6 +2237,7 @@ export function setupPermissionedRealm(
         published,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
+        realmPrefixMapping,
       });
       testRealmServer = server;
 

@@ -23,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
 import {
+  setupPermissionedRealm,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   setupMatrixRoom,
@@ -920,6 +921,46 @@ module(basename(import.meta.filename), function () {
           );
           assert.ok(response.body.data, 'full body is returned');
           assert.ok(response.get('etag'), '200 response still carries an ETag');
+        });
+      });
+
+      module('prefix-mapped realm (RRI serving)', function (hooks) {
+        // A realm mapped from the start (indexed *with* its prefix mapping), so
+        // its canonical form is the prefix — the server serves instance ids in
+        // prefix (RRI) form. (Retrofitting a mapping onto an already-indexed
+        // realm is invalid: definition lookups keyed by the URL form break.)
+        let mappedRealmURL = new URL('http://127.0.0.1:4448/prefixed/');
+        let mappedRequest: RealmRequest;
+        setupPermissionedRealm(hooks, {
+          fixture: 'realistic',
+          realmURL: mappedRealmURL,
+          permissions: { '*': ['read'] },
+          realmPrefixMapping: '@test-prefix/',
+          onRealmSetup: (args) => {
+            mappedRequest = withRealmPath(args.request, mappedRealmURL);
+          },
+        });
+
+        test('serves instance ids in canonical RRI (prefix) form', async function (assert) {
+          let response = await mappedRequest
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          let json = response.body;
+          assert.strictEqual(
+            json.data.id,
+            '@test-prefix/person-1',
+            'data.id is served in canonical prefix (RRI) form',
+          );
+          assert.strictEqual(
+            json.data.links.self,
+            '@test-prefix/person-1',
+            'links.self is served in canonical prefix (RRI) form',
+          );
         });
       });
 
