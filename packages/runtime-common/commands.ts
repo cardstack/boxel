@@ -133,7 +133,11 @@ function friendlyModuleName(fullModuleUrl: string) {
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
+  // `functionName` is a recomputed `computeVia` field (never persisted), and
+  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // every command name self-consistent.
+  virtualNetwork?: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
