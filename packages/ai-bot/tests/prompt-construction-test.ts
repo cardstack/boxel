@@ -17,6 +17,7 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -40,6 +41,7 @@ import {
   buildPromptForModel,
   getPromptParts,
   getRelevantCards,
+  getSkillEntryPoints,
   getTools,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
@@ -7199,5 +7201,94 @@ module('fill missing capability fields from fallback constant', (hooks) => {
       true,
       'no-event branch fills toolsSupported from the default row',
     );
+  });
+});
+
+module('getSkillEntryPoints', () => {
+  function skillsConfigEvent(
+    content: Record<string, unknown>,
+    { origin_server_ts = 1000 }: { origin_server_ts?: number } = {},
+  ): DiscreteMatrixEvent {
+    return {
+      type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      event_id: `skills-${origin_server_ts}`,
+      origin_server_ts,
+      state_key: '',
+      content: {
+        enabledSkillCards: [],
+        disabledSkillCards: [],
+        commandDefinitions: [],
+        ...content,
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: { age: 1000 },
+      status: EventStatus.SENT,
+    } as unknown as DiscreteMatrixEvent;
+  }
+
+  test('returns [] when there is no skills-config event', (assert) => {
+    assert.deepEqual(getSkillEntryPoints([]), []);
+  });
+
+  test('returns [] for a legacy skills-config event with no entry points', (assert) => {
+    let eventList = [
+      skillsConfigEvent({
+        enabledSkillCards: [{ sourceUrl: 'https://realm/u/jane/Skill/foo' }],
+      }),
+    ];
+    assert.deepEqual(getSkillEntryPoints(eventList), []);
+  });
+
+  test('reads the enabled entry points from the skills-config event', (assert) => {
+    let entryPoints = [
+      {
+        realm: 'https://realm/u/jane/',
+        url: 'https://realm/u/jane/skills/a/SKILL.md',
+      },
+      {
+        realm: 'https://realm/u/jane/',
+        url: 'https://realm/u/jane/skills/b/SKILL.md',
+      },
+    ];
+    let eventList = [
+      skillsConfigEvent({
+        enabledSkillEntryPoints: entryPoints,
+        disabledSkillEntryPoints: [
+          {
+            realm: 'https://realm/u/jane/',
+            url: 'https://realm/u/jane/skills/c/SKILL.md',
+          },
+        ],
+      }),
+    ];
+    assert.deepEqual(getSkillEntryPoints(eventList), entryPoints);
+  });
+
+  test('uses the latest skills-config event', (assert) => {
+    let latest = [
+      {
+        realm: 'https://realm/u/jane/',
+        url: 'https://realm/u/jane/skills/new/SKILL.md',
+      },
+    ];
+    let eventList = [
+      skillsConfigEvent(
+        {
+          enabledSkillEntryPoints: [
+            {
+              realm: 'https://realm/u/jane/',
+              url: 'https://realm/u/jane/skills/old/SKILL.md',
+            },
+          ],
+        },
+        { origin_server_ts: 1000 },
+      ),
+      skillsConfigEvent(
+        { enabledSkillEntryPoints: latest },
+        { origin_server_ts: 2000 },
+      ),
+    ];
+    assert.deepEqual(getSkillEntryPoints(eventList), latest);
   });
 });

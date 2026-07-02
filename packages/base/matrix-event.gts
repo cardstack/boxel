@@ -4,7 +4,7 @@ import type {
   ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import {
+import type {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
@@ -26,10 +26,12 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   CodeRef,
   APP_BOXEL_LLM_MODE,
-  type LLMMode,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { type SerializedFile } from './file-api';
+import type {
+  LLMMode,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
+import type { SerializedFile } from './file-api';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -260,12 +262,28 @@ export interface CardMessageContent {
   };
 }
 
+// A pull-model skill entry point: a room's advertised reference to a skill,
+// held by realm URL rather than uploaded into Matrix. The bot resolves the
+// SKILL.md live over HTTP at tool-call time (see the `readRealmFile` tool),
+// so edits to the skill are always reflected without re-enabling it. Carries
+// both the realm root (what a delegated read token is scoped to) and the full
+// file URL, the pair the read tool needs.
+export interface SkillEntryPoint {
+  realm: string;
+  url: string;
+}
+
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
     enabledSkillCards: SerializedFile[];
     disabledSkillCards: SerializedFile[];
     commandDefinitions?: SerializedFile[];
+    // Pull-model skill entry points, referenced by realm URL. Optional so
+    // legacy events (push-only, pre-pull-model) parse unchanged; the two lists
+    // mirror the enabled/disabled split of the legacy skill cards above.
+    enabledSkillEntryPoints?: SkillEntryPoint[];
+    disabledSkillEntryPoints?: SkillEntryPoint[];
   };
 }
 

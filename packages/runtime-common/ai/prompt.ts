@@ -35,6 +35,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   EncodedCommandRequest,
   MatrixEventWithBoxelContext,
+  SkillEntryPoint,
   SkillsConfigEvent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
@@ -457,6 +458,21 @@ export async function getDisabledSkillIds(
   return skillsConfigEvent.content.disabledSkillCards.map(
     (serializedFile) => serializedFile.sourceUrl,
   );
+}
+
+// A room's advertised pull-model skill entry points (SkillDef refs by realm
+// URL), read from the latest skills-config state event. These are the skills
+// the bot lists in the tier-1 prompt and resolves on demand via `readRealmFile`
+// — distinct from the legacy pushed `enabledSkillCards`. Returns [] for legacy
+// rooms that predate the pull model.
+export function getSkillEntryPoints(
+  eventList: DiscreteMatrixEvent[],
+): SkillEntryPoint[] {
+  let skillsConfigEvent = findLast(
+    eventList,
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  ) as SkillsConfigEvent;
+  return skillsConfigEvent?.content.enabledSkillEntryPoints ?? [];
 }
 
 function setRelevantCards(

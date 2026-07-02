@@ -13,6 +13,7 @@ import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
+  SkillEntryPoint,
 } from 'https://cardstack.com/base/matrix-event';
 
 import Mutex from '../mutex';
@@ -30,6 +31,8 @@ export type SkillsConfig = {
   enabledSkillCards: SerializedFile[];
   disabledSkillCards: SerializedFile[];
   commandDefinitions: SerializedFile[];
+  enabledSkillEntryPoints: SkillEntryPoint[];
+  disabledSkillEntryPoints: SkillEntryPoint[];
 };
 
 export default class Room {
@@ -79,7 +82,7 @@ export default class Room {
     return this._roomState !== undefined;
   }
 
-  get skillsConfig() {
+  get skillsConfig(): SkillsConfig {
     const content = this._roomState?.events
       .get(APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)
       ?.get('')?.event.content ?? {
@@ -96,10 +99,8 @@ export default class Room {
         ? content.disabledSkillCards
         : [],
       commandDefinitions: content.commandDefinitions ?? [],
-    } as {
-      enabledSkillCards: SerializedFile[];
-      disabledSkillCards: SerializedFile[];
-      commandDefinitions: SerializedFile[];
+      enabledSkillEntryPoints: content.enabledSkillEntryPoints ?? [],
+      disabledSkillEntryPoints: content.disabledSkillEntryPoints ?? [],
     };
   }
 
