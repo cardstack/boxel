@@ -1,6 +1,6 @@
 import { escapeHtml } from './helpers/html.ts';
-import type { VirtualNetwork } from './virtual-network.ts';
-import { trimJsonExtension } from './url.ts';
+import { resolveRRIReference, trimJsonExtension } from './url.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { FITTED_FORMATS } from './formats.ts';
 import type { TokenizerAndRendererExtension } from './marked.mts';
 
@@ -11,16 +11,28 @@ const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // (e.g. `code`, ``code``, ```code```).
 const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
-function resolveUrl(
-  ref: string,
-  baseUrl: string | undefined,
-  virtualNetwork: VirtualNetwork,
-): string | null {
+function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
+  let resolved: string;
   try {
-    return virtualNetwork.resolveURL(ref, baseUrl || undefined).href;
+    // Identifiers are canonical RRI; resolve the reference against the base in
+    // RRI space (no VirtualNetwork). The search index tolerates the resulting
+    // canonical-RRI value for the `in:{id}` / `in:{url}` reference queries.
+    resolved = resolveRRIReference(
+      ref,
+      baseUrl ? (baseUrl as RealmResourceIdentifier) : undefined,
+    );
   } catch {
     return null;
   }
+  // Keep only references that resolved to an absolute identifier — a URL or a
+  // prefix-form RRI. A reference that couldn't be made absolute (e.g. a
+  // relative ref with no base) is dropped rather than emitted as a bare,
+  // unmatchable query value.
+  return resolved.startsWith('http://') ||
+    resolved.startsWith('https://') ||
+    resolved.startsWith('@')
+    ? resolved
+    : null;
 }
 
 // ── BFM size spec parsing ──
@@ -274,7 +286,6 @@ export function extractBfmReferences(
   markdown: string,
   baseUrl: string,
   keywords: string[],
-  virtualNetwork: VirtualNetwork,
 ): BfmReference[] {
   // Strip code blocks so references inside them are not extracted
   let stripped = markdown
@@ -291,7 +302,7 @@ export function extractBfmReferences(
 
     for (let match of stripped.matchAll(blockRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
+      let resolved = resolveUrl(rawUrl, baseUrl);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -302,7 +313,7 @@ export function extractBfmReferences(
     }
     for (let match of stripped.matchAll(inlineRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
+      let resolved = resolveUrl(rawUrl, baseUrl);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -493,11 +504,8 @@ export function extractBfmRefRanges(
 export function extractCardReferenceUrls(
   markdown: string,
   baseUrl: string,
-  virtualNetwork: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
-    (r) => r.url,
-  );
+  return extractBfmReferences(markdown, baseUrl, ['card']).map((r) => r.url);
 }
 
 /**
@@ -507,11 +515,8 @@ export function extractCardReferenceUrls(
 export function extractFileReferenceUrls(
   markdown: string,
   baseUrl: string,
-  virtualNetwork: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['file'], virtualNetwork).map(
-    (r) => r.url,
-  );
+  return extractBfmReferences(markdown, baseUrl, ['file']).map((r) => r.url);
 }
 
 /**
