@@ -188,7 +188,7 @@ export default class PanelContent extends Component<Signature> {
   // The `search-entry` query for the main realm search, built from the
   // shared `Query` builder via `searchEntryWireQueryFromQuery`. Fitted is the
   // default rendering, so no `htmlQuery` override is needed in the default
-  // variant; the mini variant overrides it to the uniform CardDef atom pill
+  // variant; the mini variant pins it to the uniform CardDef fitted tile
   // (see `withMiniHtmlQuery`). Realms ride alongside. Undefined leaves the
   // search idle (the skip cases: empty search key or a URL paste, handled
   // separately).
@@ -220,13 +220,15 @@ export default class PanelContent extends Component<Signature> {
   }
 
   // In the mini card chooser every result row renders as the uniform CardDef
-  // atom pill instead of each card's own fitted template. Bind that rendering
-  // through the wire filter's top-level `eq` htmlQuery — atom format at the
-  // CardDef render type. The `eq` carries only the htmlQuery binding, which the
-  // search-entry engine lifts out and then dissolves the now-empty `eq`, so the
-  // rest of the filter is untouched; `buildSearchQuery`/`buildRecentsQuery`
-  // never emit a top-level `eq`, so there is nothing to collide with. Non-mini
-  // variants pass through unchanged and keep the fitted default.
+  // fitted tile instead of each card's own fitted template. Bind that
+  // rendering through the wire filter's top-level `eq` htmlQuery — fitted
+  // format at the CardDef render type, served from the per-ancestor
+  // `fitted_html` entries the index already carries. The `eq` carries only the
+  // htmlQuery binding, which the search-entry engine lifts out and then
+  // dissolves the now-empty `eq`, so the rest of the filter is untouched;
+  // `buildSearchQuery`/`buildRecentsQuery` never emit a top-level `eq`, so
+  // there is nothing to collide with. Non-mini variants pass through unchanged
+  // and keep the native fitted default.
   private withMiniHtmlQuery(wire: SearchEntryWireQuery): SearchEntryWireQuery {
     if (this.args.variant !== 'mini') {
       return wire;
@@ -235,7 +237,7 @@ export default class PanelContent extends Component<Signature> {
       ...wire.filter,
       eq: {
         ...wire.filter?.eq,
-        htmlQuery: { eq: { format: 'atom', renderType: baseCardRef } },
+        htmlQuery: { eq: { format: 'fitted', renderType: baseCardRef } },
       },
     };
     return { ...wire, filter };

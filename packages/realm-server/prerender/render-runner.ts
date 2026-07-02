@@ -1114,7 +1114,7 @@ export class RenderRunner {
         let meta: PrerenderMeta = emptyMeta;
         let typesForAncestors: PrerenderTypes = { types: null };
         let headHTML: string | null = null;
-        let atomHTML: Record<string, string> | null = null;
+        let atomHTML: string | null = null;
         let iconHTML: string | null = null;
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
@@ -1127,6 +1127,13 @@ export class RenderRunner {
               cb: () => renderHTML(page, 'head', 0, captureOptions),
               assign: (v: string) => {
                 headHTML = v;
+              },
+            },
+            {
+              name: 'visit card atom render',
+              cb: () => renderHTML(page, 'atom', 0, captureOptions),
+              assign: (v: string) => {
+                atomHTML = v;
               },
             },
             {
@@ -1191,19 +1198,6 @@ export class RenderRunner {
                 ),
               assign: (v: Record<string, string>) => {
                 embeddedHTML = v;
-              },
-            },
-            {
-              name: 'visit card atom render',
-              cb: () =>
-                renderAncestors(
-                  page,
-                  'atom',
-                  typesForAncestors.types!,
-                  captureOptions,
-                ),
-              assign: (v: Record<string, string>) => {
-                atomHTML = v;
               },
             },
           ];
@@ -1318,7 +1312,7 @@ export class RenderRunner {
           let fileShortCircuit = false;
           let isolatedHTML: string | null = null;
           let headHTML: string | null = null;
-          let atomHTML: Record<string, string> | null = null;
+          let atomHTML: string | null = null;
           let iconHTML: string | null = null;
           let embeddedHTML: Record<string, string> | null = null;
           let fittedHTML: Record<string, string> | null = null;
@@ -1432,23 +1426,17 @@ export class RenderRunner {
                     embeddedHTML = v as Record<string, string>;
                   },
                 },
-                {
-                  name: 'visit file atom render',
-                  cb: () =>
-                    renderAncestors(
-                      page,
-                      'atom',
-                      effectiveTypes!,
-                      captureOptions,
-                    ),
-                  assign: (v) => {
-                    atomHTML = v as Record<string, string>;
-                  },
-                },
               );
             }
 
             steps.push(
+              {
+                name: 'visit file atom render',
+                cb: () => renderHTML(page, 'atom', 0, captureOptions),
+                assign: (v) => {
+                  atomHTML = v as string;
+                },
+              },
               {
                 name: 'visit file icon render',
                 cb: () => renderIcon(page, captureOptions),

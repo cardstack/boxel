@@ -96,7 +96,7 @@ export interface InstanceEntry {
   headHtml?: string;
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
-  atomHtml?: Record<string, string>;
+  atomHtml?: string;
   iconHTML?: string;
   markdown?: string;
   types: string[];
@@ -161,7 +161,7 @@ export interface FileEntry {
   headHtml?: string;
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
-  atomHtml?: Record<string, string>;
+  atomHtml?: string;
   iconHTML?: string;
   markdown?: string;
   // See InstanceEntry.diagnostics.
@@ -394,9 +394,6 @@ export class Batch {
       entry.embedded_html = entry.embedded_html
         ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
         : entry.embedded_html;
-      entry.atom_html = entry.atom_html
-        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.atom_html)
-        : entry.atom_html;
       this.updateIds(entry.search_doc, sourceRealmURL);
       if (entry.error_doc) {
         entry.error_doc = this.normalizeErrorDoc(

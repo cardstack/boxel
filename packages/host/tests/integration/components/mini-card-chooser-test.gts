@@ -129,9 +129,9 @@ module('Integration | mini-card-chooser', function (hooks) {
       static displayName = 'Movie';
       @field title = contains(StringField);
     }
-    // Overrides `fitted` with a distinctive marker so the atom-rendering test
-    // can prove the mini chooser rows use the uniform CardDef atom pill, not
-    // this card's own fitted template.
+    // Overrides `fitted` with a distinctive marker so the uniform-rendering
+    // test can prove the mini chooser rows use the CardDef-level fitted tile,
+    // not this card's own fitted template.
     class Gadget extends CardDef {
       static displayName = 'Gadget';
       @field title = contains(StringField);
@@ -391,7 +391,7 @@ module('Integration | mini-card-chooser', function (hooks) {
       .doesNotExist('Movie-type cards are excluded by a Book baseFilter');
   });
 
-  test('rows render the uniform CardDef atom pill, not each card’s own template', async function (assert) {
+  test('rows render the uniform CardDef fitted tile, not each card’s own template', async function (assert) {
     const gadget = `${testRealmURL}gadgets/atomizer`;
 
     const selections: string[] = [];
@@ -417,13 +417,13 @@ module('Integration | mini-card-chooser', function (hooks) {
       { timeout: 5000 },
     );
 
-    // The row renders the default atom pill (served from the ancestor-aware
-    // atom index at renderType CardDef)…
+    // The row renders CardDef's default fitted template (served from the
+    // per-ancestor fitted index at renderType CardDef)…
     assert
       .dom(
-        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] .atom-default-template`,
+        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] .fitted-template`,
       )
-      .exists('the row renders the uniform CardDef atom pill');
+      .exists('the row renders the uniform CardDef fitted tile');
     // …and not the Gadget's own fitted template.
     assert
       .dom(
@@ -433,7 +433,7 @@ module('Integration | mini-card-chooser', function (hooks) {
         'the card’s own fitted template does not leak into the row',
       );
 
-    // Selection still works from an atom row.
+    // Selection still works from an ancestor-rendered row.
     await click(
       `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"]`,
     );
@@ -441,7 +441,7 @@ module('Integration | mini-card-chooser', function (hooks) {
     assert.deepEqual(
       selections,
       [gadget],
-      'clicking an atom row fires onSelect with the canonical URL',
+      'clicking an ancestor-rendered row fires onSelect with the canonical URL',
     );
   });
 });

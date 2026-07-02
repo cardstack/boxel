@@ -592,7 +592,7 @@ export function buildInvalidModuleResponseError(
 
 export async function renderAncestors(
   page: Page,
-  format: 'embedded' | 'fitted' | 'atom',
+  format: 'embedded' | 'fitted',
   types: string[],
   opts?: CaptureOptions,
 ): Promise<Record<string, string> | RenderError> {

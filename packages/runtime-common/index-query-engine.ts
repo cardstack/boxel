@@ -157,7 +157,7 @@ export interface IndexedFile {
   headHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
-  atomHtml: { [refURL: string]: string } | null;
+  atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
   realmVersion: number;
@@ -175,7 +175,7 @@ export interface IndexedInstance {
   headHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
-  atomHtml: { [refURL: string]: string } | null;
+  atomHtml: string | null;
   markdown: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;

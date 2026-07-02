@@ -588,14 +588,7 @@ module('Unit | index-writer', function (hooks) {
             ]),
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
-          atom_html: Object.fromEntries(
-            types.map((type) => [
-              type,
-              `<span class="atom">Atom HTML for ${type
-                .split('/')
-                .pop()!}</span>`,
-            ]),
-          ),
+          atom_html: `<span class="atom">Atom HTML</span>`,
           head_html: `<span class="head">Head HTML</span>`,
           icon_html: '<svg>test icon</svg>',
         },
@@ -672,12 +665,7 @@ module('Unit | index-writer', function (hooks) {
           ]),
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
-        atom_html: Object.fromEntries(
-          destTypes.map((type) => [
-            type,
-            `<span class="atom">Atom HTML for ${type.split('/').pop()!}</span>`,
-          ]),
-        ),
+        atom_html: `<span class="atom">Atom HTML</span>`,
         head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         markdown: null,
@@ -759,12 +747,7 @@ module('Unit | index-writer', function (hooks) {
             ]),
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
-          atom_html: Object.fromEntries(
-            types.map((type) => [
-              type,
-              `<span class="atom">Atom HTML for ${type}</span>`,
-            ]),
-          ),
+          atom_html: `<span class="atom">Atom HTML</span>`,
           head_html: null,
           icon_html: '<svg>test icon</svg>',
         },
@@ -836,12 +819,7 @@ module('Unit | index-writer', function (hooks) {
           ]),
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
-        atom_html: Object.fromEntries(
-          types.map((type) => [
-            type,
-            `<span class="atom">Atom HTML for ${type}</span>`,
-          ]),
-        ),
+        atom_html: `<span class="atom">Atom HTML</span>`,
         head_html: null,
         last_modified: String(modified),
         resource_created_at: String(modified),

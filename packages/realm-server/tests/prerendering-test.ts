@@ -4251,17 +4251,8 @@ module(basename(import.meta.filename), function () {
 
         test('atom HTML', function (assert) {
           assert.ok(
-            /Untitled Cat/.test(result.atomHTML![`${realmURL2}cat/Cat`]),
-            `failed to match atom html:${JSON.stringify(result.atomHTML)}`,
-          );
-        });
-
-        test('parent atom HTML', function (assert) {
-          assert.ok(
-            /Untitled Cat/.test(
-              result.atomHTML!['@cardstack/base/card-api/CardDef'],
-            ),
-            `failed to match atom html:${JSON.stringify(result.atomHTML)}`,
+            /Untitled Cat/.test(result.atomHTML!),
+            `failed to match atom html:${result.atomHTML}`,
           );
         });
 
