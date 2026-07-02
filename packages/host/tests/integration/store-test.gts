@@ -1591,6 +1591,56 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
+    let targetId = `${testRealmURL}Person/hassan`;
+    let instance = (await storeService.get(targetId)) as any;
+
+    let gate = new Deferred<void>();
+    let originalLoadPatchedInstances = (
+      storeService as any
+    ).loadPatchedInstances.bind(storeService);
+    (storeService as any).loadPatchedInstances = async (...args: any[]) => {
+      let result = await originalLoadPatchedInstances(...args);
+      // simulate a slow relationship load (e.g. fetching a not-yet-cached
+      // linked card) so a concurrent field write on the same live instance
+      // can land in the window between the patch's initial snapshot and its
+      // eventual write-back
+      await gate.promise;
+      return result;
+    };
+
+    try {
+      let patchPromise = storeService.patch(targetId, {
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}Person/jade` },
+          },
+        },
+      });
+
+      // a sibling background task (e.g. an unrelated auto-linking step, as in
+      // the catalog listing-create flow) mutates a different field on the
+      // same live instance while the patch above is still in flight
+      instance.name = 'Race Winner';
+
+      gate.fulfill();
+      await patchPromise;
+    } finally {
+      (storeService as any).loadPatchedInstances = originalLoadPatchedInstances;
+    }
+
+    assert.strictEqual(
+      instance.name,
+      'Race Winner',
+      "the concurrent field write is not clobbered by the patch's stale snapshot",
+    );
+    assert.strictEqual(
+      instance.bestFriend?.id,
+      `${testRealmURL}Person/jade`,
+      'the patch itself was still applied',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([
