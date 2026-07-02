@@ -1357,7 +1357,7 @@ export default class Workspace extends Component<Signature> {
     try {
       await this.realm.fullReindex(this.args.realmIdentifier);
     } catch (error: any) {
-      this.reindexError = error.message;
+      this.reindexError = String(error?.message ?? error);
       // Auto-dismiss after a few seconds. A plain setTimeout (not an
       // ember-concurrency timeout) so it does not keep test `settled()` waiting.
       this.reindexErrorTimer = setTimeout(() => {

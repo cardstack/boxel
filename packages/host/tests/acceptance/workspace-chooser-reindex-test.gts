@@ -45,8 +45,7 @@ function simulateIndexDone(mockMatrixUtils: any, realmURL: string) {
     testRealmInfo.realmUserId!,
     {
       eventName: 'index',
-      indexType: 'incremental',
-      invalidations: [],
+      indexType: 'full',
       realmURL,
     },
     { type: APP_BOXEL_REALM_EVENT_TYPE },
