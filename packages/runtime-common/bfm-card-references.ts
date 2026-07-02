@@ -8,8 +8,15 @@ import type { TokenizerAndRendererExtension } from './marked.mts';
 // These avoid backtick-in-regex issues that break content-tag in .gts files.
 const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // Match code spans with any number of consecutive backticks as delimiter
-// (e.g. `code`, ``code``, ```code```).
-const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
+// (e.g. `code`, ``code``, ```code```). Content may span soft line breaks but
+// not a blank line: a paragraph break ends the span (per CommonMark). Without
+// the blank-line guard a stray lone backtick pairs lazily across blank lines
+// with a later fence, producing a spurious code region that swallows real
+// directives.
+const INLINE_CODE_RE = new RegExp(
+  '(`+)((?:(?!\\n[ \\t]*\\n)[\\s\\S])*?)\\1',
+  'g',
+);
 
 function resolveUrl(
   ref: string,
