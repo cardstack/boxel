@@ -244,7 +244,7 @@ module('Unit | index-writer', function (hooks) {
           current_generation: 5,
         },
       ],
-      'the "production" realm versions are correct',
+      'the "production" realm generations are correct',
     );
   });
 
@@ -1596,7 +1596,7 @@ module('Unit | index-writer', function (hooks) {
           current_generation: 1,
         },
       ],
-      'the "production" realm versions are correct',
+      'the "production" realm generations are correct',
     );
   });
 

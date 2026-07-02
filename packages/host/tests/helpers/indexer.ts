@@ -104,8 +104,8 @@ export type TestIndexRow =
 //    row in the boxel_index table, as well as any additional fields that you
 //    wish to set from the `data` object.
 //
-// the realm version table will default to version 1 of the testRealmURL if no
-// value is supplied
+// the realm generations table will default to generation 1 of the testRealmURL
+// if no value is supplied
 export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,

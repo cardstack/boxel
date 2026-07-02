@@ -1526,11 +1526,11 @@ module(basename(import.meta.filename), function () {
         assert.notStrictEqual(
           versionBeforeUnpublish,
           undefined,
-          'realm version of published realm is set before unpublish',
+          'realm generation of published realm is set before unpublish',
         );
         assert.ok(
           generation.current_generation > (versionBeforeUnpublish ?? 0),
-          'realm version of published realm is increased',
+          'realm generation of published realm is increased',
         );
 
         // Verify that boxel_index entries are tombstoned (marked as deleted) for the unpublished realm
