@@ -1,9 +1,14 @@
+import './qunit-bootstrap.ts'; // configures QUnit before any test registers
+import QUnit from 'qunit';
 import './factory-brief.test.ts';
+import './validation-run-cache.test.ts';
 import './factory-prompt-loader.test.ts';
 import './factory-entrypoint.test.ts';
 import './factory-entrypoint.integration.test.ts';
 import './factory-skill-loader.test.ts';
 import './factory-target-realm.test.ts';
+import './factory-realm-index.test.ts';
+import './factory-seed.test.ts';
 import './factory-test-realm.test.ts';
 import './factory-tool-executor.test.ts';
 import './factory-tool-executor.integration.test.ts';
@@ -20,7 +25,10 @@ import './test-step.test.ts';
 import './lint-step.test.ts';
 import './eval-step.test.ts';
 import './eval-execution.test.ts';
+import './instantiate-discovery.test.ts';
 import './instantiate-step.test.ts';
 import './parse-step.test.ts';
 import './port-allocator.test.ts';
 import './find-and-hold-available-port.test.ts';
+
+QUnit.start();

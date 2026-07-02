@@ -11,8 +11,10 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {
   adminImpersonateUser,
+  appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
   logoutMatrixAccessToken,
@@ -99,21 +101,17 @@ export default function handleUpsertRealmUserPermission({
       return;
     }
 
-    let realmURL: URL;
-    try {
-      realmURL = new URL(realm);
-    } catch {
-      await sendResponseForBadRequest(ctxt, `realm "${realm}" is not a URL`);
-      return;
-    }
     // realm_user_permissions is keyed by exact `realm_url` string. Normalise
     // to the canonical realm-root form (no querystring or fragment, single
     // trailing slash) so a caller passing `https://h/r` and another passing
     // `https://h/r/?token=...` write to the same row instead of a stray
     // permission whose URL the realm runtime never consults.
-    realmURL.search = '';
-    realmURL.hash = '';
-    let normalizedRealmHref = ensureTrailingSlash(realmURL.href);
+    let normalizedRealmURL = normalizeRealmURL(realm);
+    if (!normalizedRealmURL) {
+      await sendResponseForBadRequest(ctxt, `realm "${realm}" is not a URL`);
+      return;
+    }
+    let normalizedRealmHref = normalizedRealmURL.href;
 
     let readResult = parseBoolFlag(ctxt.URL.searchParams.get('read'), 'read');
     if (!readResult.ok) {
@@ -192,6 +190,19 @@ export default function handleUpsertRealmUserPermission({
             realmURL: normalizedRealmHref,
           });
           appendedToAccountData = !alreadyPresent;
+          // Keep `app.boxel.realm-servers` in lockstep with `app.boxel.realms`
+          // during the source-of-truth transition (CS-11655). Derive the
+          // realm-server origin from the realm URL — the host normalises the
+          // same way via the JWT's `realmServerURL` claim, but JWTs aren't
+          // in scope on this admin-impersonate path.
+          await appendRealmServerToUserAccountData({
+            matrixURL: matrixClient.matrixURL,
+            userId: user,
+            userAccessToken: userToken,
+            realmServerURL: ensureTrailingSlash(
+              new URL(normalizedRealmHref).origin,
+            ),
+          });
         } catch (e: any) {
           matrixAccountDataWarning = `account_data sync failed: ${e?.message ?? String(e)}`;
           log.warn(

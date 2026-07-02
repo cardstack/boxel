@@ -81,8 +81,8 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
   await fillIn('[data-test-search-field]', cardId);
-  await click(`[data-test-card-catalog-item="${cardId}"]`);
-  await click('[data-test-card-catalog-go-button]');
+  await click(`[data-test-item-button="${cardId}"]`);
+  await click('[data-test-card-chooser-go-button]');
 }
 
 async function waitForSessionPreparationToFinish(
@@ -497,7 +497,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -1180,10 +1180,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+      `[data-test-item-button="https://cardstack.com/base/types/card"]`,
     );
 
-    await click(`[data-test-card-catalog-go-button]`);
+    await click(`[data-test-card-chooser-go-button]`);
 
     await waitUntil(() => id);
     id = id!;
@@ -1517,8 +1517,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-chooser-go-button]');
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert
       .dom(
@@ -2580,8 +2580,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       await click('[data-test-attach-button]');
       await click('[data-test-attach-card-btn]');
       await fillIn('[data-test-search-field]', 'Plant spec');
-      await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+      await click('[data-test-card-chooser-go-button]');
 
       // Verify the spec card appears only once (not duplicated)
       let specCards = document.querySelectorAll(
@@ -2660,8 +2660,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Plant spec');
-    await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -3771,7 +3771,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       );
   });
 
-  test('shows an error and persists the prompt in case the message failed to send', async function (assert) {
+  test('failed send leaves a failed bubble + retry alert; input clears at click-time', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -3814,22 +3814,18 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
       await click('[data-test-send-message-btn]');
 
+      // New design: the optimistic bubble carries the failure + the retry
+      // affordance; the input clears at click-time and stays clear.
       await waitFor('[data-test-boxel-alert="error"]');
       assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
-      assert
-        .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
-        .hasText(
-          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.',
-        );
-
-      await waitUntil(
-        () => matrixService.getMessageToSend(roomId!) === failingMessage,
-      );
+      assert.dom('[data-test-user-message]').exists({ count: 1 });
+      assert.dom('[data-test-card-error]').containsText('Failed to send');
+      assert.dom('[data-test-alert-action-button="Retry"]').exists();
       assert
         .dom(`[data-test-message-field="${roomId}"]`)
         .hasValue(
-          failingMessage,
-          'Draft message is restored after a failed send attempt',
+          '',
+          'input clears at click-time — the message lives in the bubble now',
         );
     } finally {
       matrixService.sendMessage = originalSendMessage;

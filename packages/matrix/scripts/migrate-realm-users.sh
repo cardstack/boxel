@@ -3,12 +3,12 @@
 : ${REALM_SECRET_SEED:="shhh! it's a secret"}
 export REALM_SECRET_SEED
 
-ts-node --transpileOnly ./scripts/migrate-realm-user @realm-server:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @node-test_realm-server:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @base_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @boxel_homepage_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @submission_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @experiments_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @software_factory_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @node-test_realm:localhost
-ts-node --transpileOnly ./scripts/migrate-realm-user @test_realm:localhost
+node ./scripts/migrate-realm-user.ts @realm-server:localhost
+node ./scripts/migrate-realm-user.ts @node-test_realm-server:localhost
+node ./scripts/migrate-realm-user.ts @base_realm:localhost
+node ./scripts/migrate-realm-user.ts @boxel_homepage_realm:localhost
+node ./scripts/migrate-realm-user.ts @submission_realm:localhost
+node ./scripts/migrate-realm-user.ts @experiments_realm:localhost
+node ./scripts/migrate-realm-user.ts @software_factory_realm:localhost
+node ./scripts/migrate-realm-user.ts @node-test_realm:localhost
+node ./scripts/migrate-realm-user.ts @test_realm:localhost

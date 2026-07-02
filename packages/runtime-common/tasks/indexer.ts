@@ -3,6 +3,7 @@ import type { Task, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
   notifyAllFileChanges,
+  notifyRealmIndexUpdated,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
@@ -382,6 +383,15 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // fall back to a bounded staleness window because the next
     // reader's transpile path re-tombstones the L2 row.
     await notifyAllFileChanges(dbAdapter, args.realmURL);
+    // Same chokepoint, index-derived caches: emit realm_index_updated so
+    // every mounted Realm drops `#inFlightSearch`, `#cachedRealmInfo`, and
+    // `#cachedHostRoutingMap`. The from-scratch swap may have changed
+    // realm.json (RealmInfo, hostRoutingRules) or the index contents these
+    // caches derive from. The byte-cache wildcard above does not cover them,
+    // and the from-scratch reindex paths (`/_reindex`, `/_full-reindex`, the
+    // Grafana variants, direct `enqueueReindexRealmJob`) don't otherwise run
+    // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
+    await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
     reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,

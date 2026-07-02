@@ -3,9 +3,14 @@ import { Deferred } from './deferred.ts';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
 import { executableExtensions, logger } from './index.ts';
 
-import { CardError, iconNotFoundMessage } from './error.ts';
-import flatMap from 'lodash/flatMap';
 import {
+  CardError,
+  iconNotFoundMessage,
+  stringifyErrorForLog,
+} from './error.ts';
+import { flatMap } from 'lodash-es';
+import {
+  shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
@@ -309,52 +314,48 @@ export class Loader {
     });
   }
 
-  async getConsumedModules(
-    moduleIdentifier: string,
-    consumed: string[] = [],
-    initialIdentifier = moduleIdentifier,
-  ): Promise<string[]> {
+  async getConsumedModules(moduleIdentifier: string): Promise<string[]> {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
     // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = this.virtualNetwork
-      ? this.virtualNetwork.toURL(moduleIdentifier).href
-      : new URL(moduleIdentifier).href;
-    let resolvedInitial = this.virtualNetwork
-      ? this.virtualNetwork.toURL(initialIdentifier).href
-      : new URL(initialIdentifier).href;
+    // The walk is Set-based and resolves each identifier once: this runs per
+    // module across large dependency graphs, so an array-scan accumulator or
+    // a per-identifier URL construction multiplies into real render time.
+    let resolveHref = (id: string) =>
+      this.virtualNetwork
+        ? this.virtualNetwork.toURLHref(id)
+        : new URL(id).href;
+    let visited = new Set<string>();
+    let walk = async (id: string, href: string): Promise<void> => {
+      if (visited.has(href)) {
+        return;
+      }
+      visited.add(href);
 
-    if (consumed.includes(resolvedHref)) {
-      return [];
-    }
+      let module = this.getModule(href);
+      if (!module || module.state === 'fetching') {
+        // we haven't yet tried importing the module or we are still in the
+        // process of importing the module
+        try {
+          await this.import<Record<string, any>>(id);
+        } catch (err: any) {
+          this.log.warn(
+            `encountered an error trying to load the module ${id}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
+          );
+        }
+        module = this.getModule(href);
+      }
+      if (module?.state === 'evaluated' || module?.state === 'broken') {
+        for (let consumedModule of module.consumedModules) {
+          await walk(consumedModule, resolveHref(consumedModule));
+        }
+      }
+    };
+    let initialHref = resolveHref(moduleIdentifier);
+    await walk(moduleIdentifier, initialHref);
     // you can't consume yourself
-    if (resolvedHref !== resolvedInitial) {
-      consumed.push(resolvedHref);
-    }
-
-    let module = this.getModule(resolvedHref);
-
-    if (!module || module.state === 'fetching') {
-      // we haven't yet tried importing the module or we are still in the process of importing the module
-      try {
-        await this.import<Record<string, any>>(moduleIdentifier);
-      } catch (err: any) {
-        this.log.warn(
-          `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
-        );
-      }
-    }
-    if (module?.state === 'evaluated' || module?.state === 'broken') {
-      for (let consumedModule of module?.consumedModules ?? []) {
-        await this.getConsumedModules(
-          consumedModule,
-          consumed,
-          initialIdentifier,
-        );
-      }
-      return [...new Set(consumed)]; // Get rid of duplicates
-    }
-    return [];
+    visited.delete(initialHref);
+    return [...visited];
   }
 
   static identify(
@@ -394,10 +395,17 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      trackRuntimeModuleDependency(
-        resolvedModuleIdentifier,
-        dependencyTrackingContext,
-      );
+      // Normalize tracker keys to the virtual-alias URL form when one
+      // exists (the dependency tracker requires `http://`/`https://`
+      // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
+      // prefix forms can't be used as keys). Without this, a base
+      // module imported via the virtual alias
+      // (`https://cardstack.com/base/X`) and the same module imported
+      // via the RRI prefix (`@cardstack/base/X` → resolveImport →
+      // resolved real URL `https://localhost:4201/base/X`) get tracked
+      // as two separate entries.
+      let trackingKey = this.canonicalizeTrackingKey(resolvedModuleIdentifier);
+      trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
@@ -447,14 +455,29 @@ export class Loader {
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): void {
+    // This walk repeats on every import() of the same module (e.g. when
+    // deserializing many cards of one type) yet records the identical node set
+    // each time; the probe collapses repeats to one Set lookup. Scoped apart
+    // from the relationship walk because this one excludes shimmed modules, so
+    // the two record slightly different node sets.
+    if (
+      !shouldTrackRuntimeModuleGraph(
+        'import',
+        rootModuleIdentifier,
+        dependencyTrackingContext,
+      )
+    ) {
+      return;
+    }
     for (let moduleIdentifier of this.collectKnownModuleDependencies(
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        trackRuntimeModuleDependency(
-          moduleIdentifier,
-          dependencyTrackingContext,
-        );
+        // Same canonicalization as the top-level import-time tracking
+        // call — collapse virtual-alias / resolved real URL forms onto
+        // the virtual-alias URL.
+        let trackingKey = this.canonicalizeTrackingKey(moduleIdentifier);
+        trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
       }
     }
   }
@@ -738,7 +761,10 @@ export class Loader {
       let detail = err?.code
         ? `${err.message} (${err.code})`
         : (err?.message ?? String(err));
-      this.log.error(`fetch failed for ${url}: ${detail}`, err);
+      this.log.error(
+        `fetch failed for ${url}: ${detail}`,
+        stringifyErrorForLog(err),
+      );
 
       let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
@@ -755,12 +781,35 @@ export class Loader {
     }
   };
 
+  // Cache key for the per-module maps. Collapses the virtual-alias URL and the
+  // resolved real URL of the same module onto one key, so a base module
+  // imported via the alias (`https://cardstack.com/base/X`) and via the RRI
+  // prefix (`@cardstack/base/X` → resolveImport → resolved real URL) share one
+  // cached module — and therefore one class object. Without this, the alias
+  // and RRI forms evaluate as two distinct modules and `instanceof` /
+  // polymorphic-field identity checks across them diverge. Mirrors the
+  // real→virtual convention used by `canonicalizeTrackingKey`.
+  private moduleCacheKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    if (this.virtualNetwork) {
+      try {
+        let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
+        if (virtual) {
+          return virtual.href;
+        }
+      } catch {
+        // not a parseable URL (e.g. a bare specifier) — fall through
+      }
+    }
+    return trimmed;
+  }
+
   private getModule(moduleIdentifier: string): Module | undefined {
-    return this.modules.get(trimModuleIdentifier(moduleIdentifier));
+    return this.modules.get(this.moduleCacheKey(moduleIdentifier));
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
+    this.modules.set(this.moduleCacheKey(moduleIdentifier), module);
   }
 
   private setCanonicalModuleURL(
@@ -768,13 +817,31 @@ export class Loader {
     canonicalURL: string,
   ) {
     this.moduleCanonicalURLs.set(
-      trimModuleIdentifier(moduleIdentifier),
+      this.moduleCacheKey(moduleIdentifier),
       canonicalURL,
     );
   }
 
   private getCanonicalModuleURL(moduleIdentifier: string): string | undefined {
-    return this.moduleCanonicalURLs.get(trimModuleIdentifier(moduleIdentifier));
+    return this.moduleCanonicalURLs.get(this.moduleCacheKey(moduleIdentifier));
+  }
+
+  // Collapse a module identifier to its virtual-alias URL form when one
+  // exists, so the dependency tracker keys aren't fragmented across the
+  // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
+  // (`https://localhost:4201/base/X`) for the same module. Returns the
+  // input unchanged when no virtual alias is registered.
+  private canonicalizeTrackingKey(moduleIdentifier: string): string {
+    if (!this.virtualNetwork) {
+      return moduleIdentifier;
+    }
+    try {
+      let parsed = new URL(moduleIdentifier);
+      let virtual = this.virtualNetwork.mapURL(parsed, 'real-to-virtual');
+      return virtual ? virtual.href : moduleIdentifier;
+    } catch {
+      return moduleIdentifier;
+    }
   }
 
   private captureIdentitiesOfModuleExports(
@@ -845,7 +912,7 @@ export class Loader {
         // module entry for the lifetime of this loader (every future
         // `import` would rethrow without retrying). Drop the entry so
         // the next `import` re-enters `fetchModule` and refetches.
-        this.modules.delete(trimModuleIdentifier(moduleIdentifier));
+        this.modules.delete(this.moduleCacheKey(moduleIdentifier));
       } else {
         this.setModule(moduleIdentifier, {
           state: 'broken',
@@ -1074,7 +1141,9 @@ export class Loader {
         },
       });
     } catch (err) {
-      this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      this.log.error(
+        `fetch failed for ${moduleURL}: ${stringifyErrorForLog(err)}`,
+      ); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...

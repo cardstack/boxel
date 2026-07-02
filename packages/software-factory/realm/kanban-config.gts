@@ -1,7 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
 
-import { IssueOptionField } from './issue-option';
+import { IssueOptionField } from './issue-option.gts';
 
 export interface Option {
   value: string;
@@ -22,7 +22,7 @@ export const issueStatusOptions: Option[] = [
   {
     value: 'in_progress',
     label: 'In Progress',
-    color: '#f9cd4a',
+    color: '#b8860b',
   },
   { value: 'blocked', label: 'Blocked', color: '#db1731' },
   { value: 'review', label: 'In Review', color: '#285028' },
@@ -32,6 +32,7 @@ export const issueStatusOptions: Option[] = [
 export const issueTypeOptions: Option[] = [
   { value: 'bootstrap', label: 'Bootstrap' },
   { value: 'feature', label: 'Feature' },
+  { value: 'adjustment', label: 'Adjustment' },
   { value: 'bug', label: 'Bug' },
   { value: 'task', label: 'Task' },
   { value: 'research', label: 'Research' },
@@ -89,32 +90,23 @@ export function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
   return options.map((option) => new IssueOptionField(option));
 }
 
-type IssueStatusOptionSource = {
-  issueStatusOptions?: Array<{
-    value?: string | null;
-    label?: string | null;
-    color?: string | null;
-  }>;
-};
+type IssueOptionArray = Array<{
+  value?: string | null;
+  label?: string | null;
+  color?: string | null;
+}>;
 
-type IssueStatusOwner = { project?: IssueStatusOptionSource | null };
-
-function hasProject(
-  owner: IssueStatusOwner | IssueStatusOptionSource,
-): owner is IssueStatusOwner {
+function hasProject<S extends object>(
+  owner: S | { project?: S | null },
+): owner is { project?: S | null } {
   return 'project' in owner;
 }
 
-export function configuredIssueStatusOptions(
-  owner: IssueStatusOwner | IssueStatusOptionSource | null | undefined,
+function resolveOptions(
+  optionArray: IssueOptionArray | null | undefined,
+  defaults: Option[],
 ): Option[] {
-  let statusOptions = owner
-    ? hasProject(owner)
-      ? owner.project?.issueStatusOptions
-      : owner.issueStatusOptions
-    : undefined;
-
-  let configured = (statusOptions ?? [])
+  let configured = (optionArray ?? [])
     .map(
       (option): Option => ({
         value: option.value ?? '',
@@ -123,28 +115,91 @@ export function configuredIssueStatusOptions(
       }),
     )
     .filter((option) => option.value && option.label);
+  return configured.length ? configured : defaults;
+}
 
-  return configured.length ? configured : issueStatusOptions;
+type IssueStatusOptionSource = { issueStatusOptions?: IssueOptionArray };
+type IssueStatusOwner = { project?: IssueStatusOptionSource | null };
+
+export function getIssueStatusOptions(
+  owner: IssueStatusOwner | IssueStatusOptionSource | null | undefined,
+): Option[] {
+  let options = owner
+    ? hasProject(owner)
+      ? owner.project?.issueStatusOptions
+      : owner.issueStatusOptions
+    : undefined;
+  return resolveOptions(options, issueStatusOptions);
+}
+
+type IssueTypeOptionSource = { issueTypeOptions?: IssueOptionArray };
+type IssueTypeOwner = { project?: IssueTypeOptionSource | null };
+
+export function getIssueTypeOptions(
+  owner: IssueTypeOwner | IssueTypeOptionSource | null | undefined,
+): Option[] {
+  let options = owner
+    ? hasProject(owner)
+      ? owner.project?.issueTypeOptions
+      : owner.issueTypeOptions
+    : undefined;
+  return resolveOptions(options, issueTypeOptions);
+}
+
+type IssuePriorityOptionSource = { issuePriorityOptions?: IssueOptionArray };
+type IssuePriorityOwner = { project?: IssuePriorityOptionSource | null };
+
+export function getIssuePriorityOptions(
+  owner: IssuePriorityOwner | IssuePriorityOptionSource | null | undefined,
+): Option[] {
+  let options = owner
+    ? hasProject(owner)
+      ? owner.project?.issuePriorityOptions
+      : owner.issuePriorityOptions
+    : undefined;
+  return resolveOptions(options, issuePriorityOptions);
+}
+
+export function getProjectStatusOptions(
+  owner: { projectStatusOptions?: IssueOptionArray | null } | null | undefined,
+): Option[] {
+  return resolveOptions(owner?.projectStatusOptions, projectStatusOptions);
 }
 
 export const IssueStatusField = enumField(StringField, {
   options: function (this: {
     project?: { issueStatusOptions?: IssueOptionField[] } | null;
   }) {
-    return configuredIssueStatusOptions(this);
+    return getIssueStatusOptions(this);
   },
+  defaultOptions: issueStatusOptions,
 });
 
 export const IssueTypeField = enumField(StringField, {
-  options: issueTypeOptions,
+  options: function (this: {
+    project?: { issueTypeOptions?: IssueOptionField[] } | null;
+  }) {
+    return getIssueTypeOptions(this);
+  },
+  defaultOptions: issueTypeOptions,
 });
 
 export const IssuePriorityField = enumField(StringField, {
-  options: issuePriorityOptions,
+  options: function (this: {
+    project?: { issuePriorityOptions?: IssueOptionField[] } | null;
+  }) {
+    return getIssuePriorityOptions(this);
+  },
+  defaultOptions: issuePriorityOptions,
 });
 
 export const ProjectStatusField = enumField(StringField, {
-  options: projectStatusOptions,
+  options: function (this: {
+    projectStatusOptions?: IssueOptionField[] | null;
+  }) {
+    return getProjectStatusOptions(this);
+  },
+  defaultOptions: projectStatusOptions,
 });
 
 export const GroupByField = enumField(StringField, {

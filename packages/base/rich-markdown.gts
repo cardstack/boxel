@@ -1,11 +1,9 @@
 import {
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   fieldSerializer,
   relativeTo,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { TrackedObject } from 'tracked-built-ins';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -13,6 +11,7 @@ import {
   CardDef,
   Component,
   FieldDef,
+  FileDef,
   MarkdownField,
   StringField,
   contains,
@@ -23,6 +22,9 @@ import {
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
+import MarkdownEditorModeSelect, {
+  type MarkdownEditorMode,
+} from './components/markdown-editor-mode-select';
 import { CardContextConsumer } from './field-component';
 
 /**
@@ -49,32 +51,59 @@ export class RichMarkdownField extends FieldDef {
   /** The raw markdown text. Uses MarkdownField for textarea edit UI. */
   @field content = contains(MarkdownField);
 
-  /** Resolved absolute URLs of `:card[URL]` and `::card[URL]` references. */
+  /**
+   * Absolute base URL that relative `:card`/`:file` refs resolve against,
+   * derived from this field's `relativeTo` location. Empty string when the
+   * field has no location yet.
+   */
+  private get refBaseUrl(): string {
+    let rel = this[relativeTo];
+    if (!rel) {
+      return '';
+    }
+    // `relativeTo` is already a canonical RRI; references resolve against it in
+    // RRI space (no VirtualNetwork).
+    return typeof rel === 'string' ? rel : rel.href;
+  }
+
+  /** Resolved canonical-RRI references of `:card[URL]` and `::card[URL]`. */
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: RichMarkdownField) {
       if (!this.content) {
         return [];
       }
-      let rel = this[relativeTo];
-      let baseUrl = rel
-        ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-          : rel.href
-        : '';
-      return extractCardReferenceUrls(
-        this.content,
-        baseUrl,
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractCardReferenceUrls(this.content, this.refBaseUrl);
     },
   });
 
   /** Cards referenced in the markdown, loaded via query. */
   @field linkedCards = linksToMany(CardDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
+      },
+    },
+  });
+
+  /** Resolved absolute URLs of `:file[URL]` and `::file[URL]` references. */
+  @field fileReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: RichMarkdownField) {
+      if (!this.content) {
+        return [];
+      }
+      return extractFileReferenceUrls(this.content, this.refBaseUrl);
+    },
+  });
+
+  /**
+   * Files referenced in the markdown, loaded via query. Resolved by `url`
+   * rather than `id`: a FileDef's search doc carries no queryable `id`
+   * (unlike CardDef instances), so `in: { id }` never matches.
+   */
+  @field linkedFiles = linksToMany(FileDef, {
+    query: {
+      filter: {
+        in: { url: '$this.fileReferenceUrls' },
       },
     },
   });
@@ -100,6 +129,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -127,6 +157,7 @@ export class RichMarkdownField extends FieldDef {
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
         @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
@@ -145,10 +176,10 @@ export class RichMarkdownField extends FieldDef {
 
   static edit = class Edit extends Component<typeof this> {
     _modeState = new TrackedObject({
-      value: 'compose' as 'compose' | 'source' | 'preview',
+      value: 'compose' as MarkdownEditorMode,
     });
 
-    get _mode(): 'compose' | 'source' | 'preview' {
+    get _mode(): MarkdownEditorMode {
       return this._modeState.value;
     }
 
@@ -176,37 +207,33 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
-    setMode = (mode: 'compose' | 'source' | 'preview') => {
+    get linkedFiles(): FileDef[] | null {
+      try {
+        return this.args.model?.linkedFiles ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
+    setMode = (mode: MarkdownEditorMode) => {
       this._modeState.value = mode;
     };
     <template>
       <div class='rich-markdown-editor'>
-        <div class='rich-markdown-mode-switcher' data-test-mode-switcher>
-          <button
-            class='mode-btn {{if (eq this._mode "compose") "mode-btn--active"}}'
-            data-test-mode-compose
-            type='button'
-            {{on 'click' (fn this.setMode 'compose')}}
-          >Compose</button>
-          <button
-            class='mode-btn {{if (eq this._mode "source") "mode-btn--active"}}'
-            data-test-mode-source
-            type='button'
-            {{on 'click' (fn this.setMode 'source')}}
-          >Source</button>
-          <button
-            class='mode-btn {{if (eq this._mode "preview") "mode-btn--active"}}'
-            data-test-mode-preview
-            type='button'
-            {{on 'click' (fn this.setMode 'preview')}}
-          >Preview</button>
-        </div>
-
         {{#if (eq this._mode 'preview')}}
+          {{! Preview has no CodeMirrorEditor, so the sticky mode selector
+              lives in its own docked bar above the rendered markdown. }}
+          <div class='rich-markdown-toolbar' data-test-markdown-toolbar>
+            <MarkdownEditorModeSelect
+              @mode={{this._mode}}
+              @onChange={{this.setMode}}
+            />
+          </div>
           <div class='rich-markdown-preview' data-test-markdown-preview>
             <MarkdownTemplate
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
+              @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
@@ -217,11 +244,19 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
+              @linkedFiles={{this.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
               @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
-            />
+            >
+              <:leadingControls>
+                <MarkdownEditorModeSelect
+                  @mode={{this._mode}}
+                  @onChange={{this.setMode}}
+                />
+              </:leadingControls>
+            </CodeMirrorEditor>
           </CardContextConsumer>
         {{/if}}
       </div>
@@ -230,49 +265,41 @@ export class RichMarkdownField extends FieldDef {
         .rich-markdown-editor {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xxxs);
         }
 
-        .rich-markdown-mode-switcher {
+        /* Single source of truth for the docked sticky bar, shared by the
+           compose/source toolbar (rendered inside CodeMirrorEditor) and the
+           preview-only bar below — keeps the two from drifting. CodeMirrorEditor
+           is used solely by this field, so owning its bar appearance here is
+           safe. */
+        .rich-markdown-toolbar,
+        .rich-markdown-editor :deep(.codemirror-toolbar) {
+          position: sticky;
+          top: 0;
+          z-index: 10;
           display: flex;
-          width: fit-content;
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          overflow: hidden;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-5xs);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+          background: var(--muted, var(--boxel-100));
+          border-bottom: 1px solid var(--border, var(--boxel-200));
+          border-top-left-radius: var(--boxel-border-radius);
+          border-top-right-radius: var(--boxel-border-radius);
         }
 
-        .mode-btn {
-          padding: 2px 12px;
-          border: none;
-          border-right: 1px solid var(--boxel-border-color, #c4c4c4);
-          background: transparent;
-          font: inherit;
-          font-size: 0.8rem;
-          cursor: pointer;
-          color: var(--boxel-400, #666);
-          transition:
-            background-color 0.15s,
-            color 0.15s;
-        }
-
-        .mode-btn:last-child {
-          border-right: none;
-        }
-
-        .mode-btn:hover:not(.mode-btn--active) {
-          background: var(--boxel-100, #f5f5f5);
-        }
-
-        .mode-btn--active {
-          background: var(--boxel-highlight, #0078d4);
-          color: white;
+        .rich-markdown-toolbar {
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-bottom: 1px solid var(--border, var(--boxel-200));
         }
 
         .rich-markdown-preview {
           min-height: 120px;
           padding: var(--boxel-sp-xs);
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-top: none;
+          border-bottom-left-radius: var(--boxel-border-radius);
+          border-bottom-right-radius: var(--boxel-border-radius);
         }
       </style>
     </template>

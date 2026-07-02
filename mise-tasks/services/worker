@@ -13,7 +13,7 @@ set -o pipefail
 # SIGTERM this script during Ctrl-C; without this trap the pipefail-aware
 # pipe below exits 143, mise reports it as "task failed", and run-p prints
 # `ERROR: "start:worker-development" exited with 143` — pure shutdown
-# noise. Real crashes (ts-node faulting on its own) still propagate, since
+# noise. Real crashes (node faulting on its own) still propagate, since
 # the trap only fires when *we* receive the signal.
 trap 'exit 0' INT TERM
 
@@ -40,8 +40,7 @@ NODE_ENV=development \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
   OPENROUTER_REALM_URL="${REALM_BASE_URL}/openrouter/" \
-  ts-node \
-  --transpileOnly worker-manager \
+  node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --port="${WORKER_PORT}" \

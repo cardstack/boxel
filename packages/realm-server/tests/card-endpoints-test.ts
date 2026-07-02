@@ -1,10 +1,12 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readJSONSync, statSync, writeFileSync } = fsExtra;
 import type {
   Realm,
   Relationship,
@@ -15,11 +17,11 @@ import {
   ri,
   baseRRI,
   rri,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
@@ -94,7 +96,7 @@ function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
   return chunk;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
@@ -1281,7 +1283,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1346,7 +1348,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -2331,7 +2333,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -2450,26 +2452,31 @@ module(basename(__filename), function () {
             'file contents are correct',
           );
 
-          let query: Query = {
-            filter: {
-              on: {
-                module: rri(`${testRealmHref}person`),
-                name: 'Person',
-              },
-              eq: {
-                firstName: 'Van Gogh',
-              },
-            },
-          };
-
           response = await request
             .post('/_search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ ...query });
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                    eq: { firstName: 'Van Gogh' },
+                  },
+                },
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(response.body.data.length, 1, 'found one card');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'found one search result',
+          );
         });
 
         test('PATCH preserves nested contains attribute values on disk', async function (assert) {
@@ -3535,7 +3542,7 @@ module(basename(__filename), function () {
           }
         });
 
-        test('creates card instances when it encounters "lid" in the request for requests that has "isUsed: true" links', async function (assert) {
+        test('creates card instances when it encounters "lid" in the request for requests that have linksTo relationships', async function (assert) {
           let response = await request
             .patch('/hassan-x')
             .send({
@@ -4336,7 +4343,7 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'CardDef',
                 },
               },

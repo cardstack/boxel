@@ -39,6 +39,7 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  testModuleRealm,
   testRealmURL,
   testRRI,
   cardInfo,
@@ -78,7 +79,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Captain } from '../../cards/captain';
+import type { Captain } from '../../../../test-realm-cards/contents/captain';
 
 let loader: Loader;
 
@@ -164,92 +165,6 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM',
-    );
-  });
-
-  test('@field rendered-html is rejected by the field-system guard (reserved relationship key)', function (assert) {
-    assert.throws(
-      () => {
-        // `rendered-html` is the reserved platform relationship key linking a
-        // card to its prerendered-HTML resource; it must never be a userland
-        // field. The guard throws at definition time, like `id`.
-        class Bad extends CardDef {
-          @field 'rendered-html' = contains(StringField);
-        }
-        return Bad;
-      },
-      /reserved relationship key/,
-      '@field rendered-html throws at definition time',
-    );
-  });
-
-  test('a rendered-html relationship key is skipped on deserialize while ordinary field relationships still deserialize', async function (assert) {
-    class Pet extends CardDef {
-      @field firstName = contains(StringField);
-    }
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-    }
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test-cards.gts': { Person, Pet },
-      },
-    });
-
-    let doc: LooseSingleCardDocument = {
-      data: {
-        type: 'card',
-        id: `${testRealmURL}Person/hassan`,
-        attributes: { firstName: 'Hassan' },
-        relationships: {
-          pet: {
-            links: { self: `${testRealmURL}Pet/mango` },
-            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
-          },
-          // The reserved platform key — the server attaches it to point a card
-          // at its rendered-html resource. The deserializer must skip it, never
-          // interpret it as a field.
-          'rendered-html': {
-            data: { id: `${testRealmURL}Person/hassan`, type: 'rendered-html' },
-          },
-        },
-        meta: {
-          adoptsFrom: { module: testRRI('test-cards'), name: 'Person' },
-        },
-      },
-      included: [
-        {
-          id: testRRI('Pet/mango'),
-          type: 'card',
-          attributes: { firstName: 'Mango' },
-          meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' } },
-        },
-      ],
-    };
-
-    let person = await createFromSerialized<typeof Person>(
-      doc.data,
-      doc,
-      undefined,
-    );
-
-    assert.strictEqual(
-      person.firstName,
-      'Hassan',
-      'the card deserialized cleanly alongside the reserved relationship key',
-    );
-    let { pet } = person;
-    assert.ok(
-      pet instanceof Pet,
-      'the ordinary linksTo relationship still deserialized',
-    );
-    assert.strictEqual((pet as Pet)?.firstName, 'Mango');
-
-    assert.notOk(
-      'rendered-html' in getFields(Person),
-      'rendered-html is not instantiated as a field',
     );
   });
 
@@ -960,7 +875,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let resource = {
       attributes: {
         ref,
@@ -1006,7 +921,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
       .data.attributes?.ref;
@@ -5864,7 +5779,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/captain'),
+                module: rri(`${testModuleRealm}captain`),
                 name: 'Captain',
               },
             },
@@ -5889,7 +5804,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`https://localhost:4202/test/captain`),
+              module: rri(`${testModuleRealm}captain`),
               name: 'Boat',
             },
           },

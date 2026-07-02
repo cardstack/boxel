@@ -10,12 +10,22 @@ import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
 import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
-import type { EncodedCommandRequest } from '../base/matrix-event';
+import type { EncodedCommandRequest } from '../base/matrix-event.gts';
+
+// `executedBy` value for tool calls ai-bot runs itself in-process (e.g.
+// readRealmFile).
+export const AI_BOT_EXECUTOR = 'ai-bot';
 
 export interface CommandRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
+  // Names the actor that ran (or will run) this tool call — e.g. AI_BOT_EXECUTOR
+  // for tools ai-bot executes itself. It's a value (not a boolean) so it can
+  // identify *which* actor in a multi-bot / multi-user room, and so the field
+  // can later carry e.g. 'host' too. The host therefore matches its own
+  // executor explicitly rather than treating any value as "not mine to run".
+  executedBy?: string;
 }
 
 export const CommandContextStamp = Symbol.for('CommandContext');
@@ -170,6 +180,9 @@ export function decodeCommandRequest(
       // ignore malformed nested json; validation will report a clearer error later
     }
   }
+  if (commandRequest.executedBy != null) {
+    decodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
   return decodedCommandRequest;
 }
 
@@ -189,6 +202,9 @@ export function encodeCommandRequest(
   }
   if (commandRequest.arguments) {
     encodedCommandRequest.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  if (commandRequest.executedBy != null) {
+    encodedCommandRequest.executedBy = commandRequest.executedBy;
   }
   return encodedCommandRequest;
 }

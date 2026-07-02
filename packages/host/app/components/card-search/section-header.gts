@@ -101,6 +101,9 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         font: 500 var(--boxel-font);
         color: var(--boxel-450);
       }
+      .search-sheet-section-header:not(:has(.show-only)) .count {
+        margin-left: auto;
+      }
       .show-only {
         margin-left: auto;
         display: flex;

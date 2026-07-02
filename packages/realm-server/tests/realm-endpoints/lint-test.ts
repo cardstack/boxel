@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
@@ -12,7 +13,7 @@ import {
 } from '../helpers/prettier-test-utils.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | POST _lint', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
@@ -438,7 +439,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
+        `import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 
 export class MyCard extends CardDef {
@@ -502,7 +503,7 @@ export class MyCard extends CardDef {
       assert.strictEqual(
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import MyComponent from 'somewhere';
 
@@ -681,7 +682,7 @@ export class MyCard extends CardDef {
 
       // Should use single quotes based on prettier configuration
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/string'"),
+        responseJson.output.includes("'@cardstack/base/string'"),
         'Single quotes are used for imports',
       );
       assert.ok(
@@ -714,13 +715,207 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
+        `import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
 `,
         'X-Filename header is used for parser detection',
+      );
+    });
+
+    // Verify /_lint loads host's actual lint config rather than a
+    // hand-maintained ESLint subset, and that ember-template-lint runs
+    // alongside ESLint. None of these rules fire if either piece is missing.
+
+    test('ember/no-empty-glimmer-component-classes fires (from host plugin:ember/recommended-gts)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gts')
+        .send(`import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  <template>
+    <p>Hello</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string }[];
+      assert.ok(
+        messages.some(
+          (m) => m.ruleId === 'ember/no-empty-glimmer-component-classes',
+        ),
+        'host plugin:ember/recommended-gts rule should be reported',
+      );
+    });
+
+    test('@cardstack/boxel/no-raf-for-state fires (host rule, was missing from inline config)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gts')
+        .send(`import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+export default class Sample extends Component {
+  @tracked count = 0;
+  bump = () => {
+    requestAnimationFrame(() => { this.count = this.count + 1; });
+  };
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string; severity: number }[];
+      let hit = messages.find(
+        (m) => m.ruleId === '@cardstack/boxel/no-raf-for-state',
+      );
+      assert.ok(hit, '@cardstack/boxel/no-raf-for-state should be reported');
+      assert.strictEqual(
+        hit?.severity,
+        2,
+        'no-raf-for-state is error severity',
+      );
+    });
+
+    test('ember-template-lint runs alongside ESLint (no-invalid-interactive)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'interactive.gts').send(`<template>
+  <div onclick={{this.doThing}}>{{@arg}}</div>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+      }[];
+      assert.ok(
+        messages.some(
+          (m) =>
+            m.source === 'template-lint' &&
+            m.ruleId === 'no-invalid-interactive',
+        ),
+        'template-lint no-invalid-interactive should be reported with source=template-lint',
+      );
+    });
+
+    test('lints .gjs files with the gts parser (host config has no .gjs override)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gjs')
+        .send(`import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  <template>
+    <p>Hello</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        ruleId: string | null;
+        message: string;
+      }[];
+      assert.notOk(
+        messages.some(
+          (m) =>
+            m.message.includes('Parsing error') ||
+            m.message.includes('ESLint failed'),
+        ),
+        `no parse errors for .gjs: ${JSON.stringify(messages)}`,
+      );
+      assert.ok(
+        messages.some(
+          (m) => m.ruleId === 'ember/no-empty-glimmer-component-classes',
+        ),
+        'ESLint rules fire on .gjs content',
+      );
+    });
+
+    test('host app/** overrides do not apply to realm files named app/*', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'app/sample.gts')
+        .send(`import { tracked } from '@glimmer/tracking';
+import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  @tracked count = 0;
+  <template>
+    <p>{{this.count}}</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string | null }[];
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'import/order'),
+        'host app/**-only import/order should not fire on realm content',
+      );
+      assert.ok(
+        body.output.indexOf('@glimmer/tracking') <
+          body.output.indexOf('@glimmer/component'),
+        'imports not reordered by host app/**-only import/order autofix',
+      );
+    });
+
+    test('invalid X-Filename returns a lint error payload, not a failed job', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', '../../../etc/passwd.gts')
+        .send(`let x = 1;\n`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      assert.false(body.passed, 'lint reports failure');
+      assert.ok(
+        body.messages.some((m: { message: string }) =>
+          m.message.includes('invalid filename'),
+        ),
+        `payload carries the validation problem: ${JSON.stringify(
+          body.messages,
+        )}`,
       );
     });
 

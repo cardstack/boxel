@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   internalKeyFor,
   rri,
@@ -7,6 +8,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   userInitiatedPriority,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -28,6 +30,7 @@ import {
   cardInfo,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
+  searchCardsForTest,
 } from './helpers/index.ts';
 import {
   depsForIndexEntry,
@@ -97,7 +100,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class PetPerson extends CardDef {
         @field firstName = contains(StringField);
-        @field pet = linksTo(() => Pet);
+        @field pet = linksTo(() => Pet, { searchable: true });
         @field nickName = contains(StringField, {
           computeVia: function (this: Person) {
             if (this.pet?.firstName) {
@@ -142,7 +145,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class Post extends CardDef {
         static displayName = 'Post';
-        @field author = linksTo(Person);
+        @field author = linksTo(Person, { searchable: true });
         @field message = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -397,7 +400,7 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
         },
@@ -459,7 +462,7 @@ function makeTestRealmFileSystem(): Record<
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
 
@@ -799,27 +802,39 @@ module(basename(__filename), function () {
 
       let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
       if (hassanEntry) {
+        // The searchable-driven generator is authoritative: every relationship
+        // is present (an unset link is `null`, a set one expands per its
+        // `searchable` annotation), and every card carries its base-card fields
+        // (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+        // generator output; `diffDoc(..., false)` reports any deviation.
         assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
+          diffDoc(
+            {
+              id: hassanId,
+              pet: {
+                id: `${testRealm}ringo`,
+                cardTitle: 'Untitled Card',
+                firstName: 'Ringo',
+                cardTheme: null,
+                cardInfo: {
+                  cardThumbnail: null,
+                  theme: null,
+                },
+              },
+              nickName: "Ringo's buddy",
+              _cardType: 'PetPerson',
+              firstName: 'Hassan',
               cardTitle: 'Untitled Card',
-              firstName: 'Ringo',
+              cardTheme: null,
               cardInfo: {
+                cardThumbnail: null,
                 theme: null,
               },
             },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            cardTitle: 'Untitled Card',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
-            },
-          },
+            hassanEntry.searchDoc ?? {},
+            false,
+          ),
+          [],
           'searchData is correct',
         );
       } else {
@@ -898,42 +913,42 @@ module(basename(__filename), function () {
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/embedded.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/isolated-and-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/missing-template.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/field-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-editor.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'contains-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'field-component.gts',
         },
       ];
@@ -1129,7 +1144,7 @@ module(basename(__filename), function () {
         'deps include mismatch extractor module',
       );
       assert.ok(
-        deps.includes('https://cardstack.com/base/file-api'),
+        deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
       );
     });
@@ -1165,7 +1180,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: rri('https://cardstack.com/base/text-file-def'),
+          module: rri('@cardstack/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1618,15 +1633,18 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mang-Mang' },
             },
-            eq: { firstName: 'Mang-Mang' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -2028,14 +2046,17 @@ module(basename(__filename), function () {
           export class Intentionally Thrown Error {}
         `,
         );
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            type: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
             },
           },
-        });
+        );
         assert.deepEqual(
           result,
           [],
@@ -2053,7 +2074,7 @@ module(basename(__filename), function () {
         `,
         );
         result = (
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               type: {
                 module: rri(`${testRealm}person`),
@@ -2339,7 +2360,7 @@ module(basename(__filename), function () {
         }
 
         try {
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               on: {
                 module: rri(`${testRealm}deep-card`),
@@ -2427,7 +2448,7 @@ module(basename(__filename), function () {
           }
 
           try {
-            await realm.realmIndexQueryEngine.searchCards({
+            await searchCardsForTest(realm.realmIndexQueryEngine, {
               filter: {
                 on: {
                   module: rri(`${testRealm}deep-card`),
@@ -4307,15 +4328,18 @@ module(basename(__filename), function () {
       test('can incrementally index deleted instance', async function (assert) {
         await realm.delete('mango.json');
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mango' },
             },
-            eq: { firstName: 'Mango' },
           },
-        });
+        );
         assert.strictEqual(result.length, 0, 'found no documents');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -4355,15 +4379,18 @@ module(basename(__filename), function () {
       `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { nickName: 'Van Gogh-poo' },
             },
-            eq: { nickName: 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
@@ -4561,29 +4588,35 @@ module(basename(__filename), function () {
         `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { 'author.nickName': 'Van Gogh-poo' },
             },
-            eq: { 'author.nickName': 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
       test('can incrementally index instance that depends on deleted card source', async function (assert) {
         await realm.delete('post.gts');
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              type: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                type: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
               },
             },
-          });
+          );
           assert.deepEqual(
             result,
             [],
@@ -4653,15 +4686,18 @@ module(basename(__filename), function () {
       `,
         );
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              on: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                on: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
+                eq: { nickName: 'Van Gogh-poo' },
               },
-              eq: { nickName: 'Van Gogh-poo' },
             },
-          });
+          );
           assert.strictEqual(result.length, 1, 'found the post instance');
         }
       });

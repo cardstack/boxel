@@ -43,6 +43,7 @@ import {
   type Format,
 } from '../../helpers/playground';
 import { setRecentFiles } from '../../helpers/recent-files-cards';
+import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const { resolvedBaseRealmURL } = ENV;
@@ -245,7 +246,7 @@ const commentSpec2 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -293,7 +294,7 @@ const commentSpec1 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -385,7 +386,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -431,7 +432,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -470,7 +471,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1170,7 +1171,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1190,7 +1191,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1213,7 +1214,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {
@@ -1235,7 +1236,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.searchCards({
+      ({ data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {

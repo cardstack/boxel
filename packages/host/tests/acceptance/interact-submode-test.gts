@@ -29,6 +29,7 @@ import type {
 
 import {
   percySnapshot,
+  testModuleRealm,
   testRealmURL,
   visitOperatorMode,
   type TestContextWithSave,
@@ -952,9 +953,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-links-to-editor="pet"] [data-test-add-new]`,
       );
-      await click(
-        `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
-      );
+      await click(`[data-test-item-button-create-new="${testRealmURL}"]`);
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
@@ -964,7 +963,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
+      setActiveRealms([testRealmURL, `${testModuleRealm}`]);
       await visitOperatorMode({
         stacks: [
           [
@@ -975,7 +974,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
           [
             {
-              id: 'https://localhost:4202/test/hassan',
+              id: `${testModuleRealm}hassan`,
               format: 'isolated',
             },
           ],

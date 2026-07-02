@@ -1,14 +1,17 @@
 import type { Command } from 'commander';
+import { registerArchiveCommand } from './archive.ts';
 import { registerCancelIndexingCommand } from './cancel-indexing.ts';
 import { registerCreateCommand } from './create.ts';
 import { registerHistoryCommand } from './history.ts';
 import { registerIndexingErrorsCommand } from './indexing-errors.ts';
+import { registerIngestCardCommand } from './ingest-card.ts';
 import { registerListCommand } from './list.ts';
 import { registerMilestoneCommand } from './milestone.ts';
 import { registerPublishCommand } from './publish.ts';
 import { registerPullCommand } from './pull.ts';
 import { registerPushCommand } from './push.ts';
 import { registerRemoveCommand } from './remove.ts';
+import { registerRestoreCommand } from './restore.ts';
 import { registerStatusCommand } from './status.ts';
 import { registerSyncCommand } from './sync.ts';
 import { registerUnpublishCommand } from './unpublish.ts';
@@ -20,16 +23,19 @@ export function registerRealmCommand(program: Command): void {
     .command('realm')
     .description('Manage realms on the realm server');
 
+  registerArchiveCommand(realm);
   registerCancelIndexingCommand(realm);
   registerCreateCommand(realm);
   registerHistoryCommand(realm);
   registerIndexingErrorsCommand(realm);
+  registerIngestCardCommand(realm);
   registerListCommand(realm);
   registerMilestoneCommand(realm);
   registerPublishCommand(realm);
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerRemoveCommand(realm);
+  registerRestoreCommand(realm);
   const sync = registerSyncCommand(realm);
   registerStatusCommand(sync);
   registerUnpublishCommand(realm);

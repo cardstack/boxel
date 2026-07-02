@@ -881,13 +881,14 @@ Rule of thumb: a render that **completes but is heavy** → `.cpuprofile` (+ hea
 
 All live at `/<env>/boxel/<NAME>` (Systems Manager → Parameter Store). The bucket itself (`PRERENDER_ARTIFACTS_BUCKET`) and the key prefix (`PRERENDER_ARTIFACTS_ENV`) are wired by Terraform — don't set them by hand.
 
-| Parameter                             | Values                                                                             | Effect                                                                                                                                                                     |
-| ------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PRERENDER_PROFILE_AFFINITY`          | comma-separated affinity keys, e.g. `realm:https://realms.cardstack.com/team/foo/` | **Required to target.** Only renders whose affinity key exactly matches are profiled at all (Tier 1 + Tier 2). Empty / `off` → everything inert.                           |
-| `PRERENDER_PROFILE_CPUPROFILE`        | `true` / `false`                                                                   | Persist the full `.cpuprofile` for targeted renders.                                                                                                                       |
-| `PRERENDER_PROFILE_TRACE`             | `true` / `false`                                                                   | Capture the streaming trace for targeted renders.                                                                                                                          |
-| `PRERENDER_PROFILE_HEAP`              | `true` / `false`                                                                   | Capture the heap allocation-sampling profile for targeted renders.                                                                                                         |
-| `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default                                           | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated). |
+| Parameter                             | Values                                                                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRERENDER_PROFILE_AFFINITY`          | comma-separated affinity keys, e.g. `realm:https://realms.cardstack.com/team/foo/` | **Required to target.** Only renders whose affinity key exactly matches are profiled at all (Tier 1 + Tier 2). Empty / `off` → everything inert.                                                                                                                                                                                                                                                                                                                                                            |
+| `PRERENDER_PROFILE_CPUPROFILE`        | `true` / `false`                                                                   | Persist the full `.cpuprofile` for targeted renders.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `PRERENDER_PROFILE_TRACE`             | `true` / `false`                                                                   | Capture the streaming trace for targeted renders.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `PRERENDER_PROFILE_HEAP`              | `true` / `false`                                                                   | Capture the heap allocation-sampling profile for targeted renders.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default                                           | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated).                                                                                                                                                                                                                                                                                                                                  |
+| `PRERENDER_V8_PROF`                   | `true` / `false`                                                                   | Arm V8's `--prof` kernel-`SIGPROF` CPU sampler at Chrome launch — **renderer-wide, NOT affinity-gated**. The capture that survives a hard CPU peg that starves the CDP captures above (kernel preemption needs no thread cooperation). On a render timeout the raw log is streamed to the artifacts bucket as a `v8log` (symbolized offline with `node --prof-process`); the timeout line reports the upload. See **Mode I**. Needs a prerender-server task **restart** (not just redeploy) to take effect. |
 
 The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDER_PROFILE_AFFINITY` is operator-managed and must already exist. The affinity key is `realm:` + the realm's canonical URL **with trailing slash** — the same value Mode A/B logs print as `affinity=…`.
 
@@ -927,6 +928,85 @@ The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — eve
 - The `.cpuprofile` and `.heapprofile` need the renderer thread to serialize, so a **fully-wedged** render produces neither — only the streaming trace comes back. That's by design (Tier 1's summary has the same limit); the trace is the wedge tool.
 - Browser-wide tracing is **single-flight** — only one trace runs at a time across the whole pool. Concurrent targeted renders skip their trace (logged at `debug`), so don't expect a trace for _every_ render under load; constrain concurrency or accept the gaps. The summary and the cpuprofile/heap captures are per-render and unaffected.
 - Captured artifacts are anonymized only at the key level (host stripped). The blobs themselves contain card URLs and code paths — treat them as you would any prerender diagnostic.
+- If the renderer is so pegged that even `Debugger.enable` / `Profiler.enable` time out, **all of Mode H is starved** — the cpuprofile, heap, _and_ the trace's sampler setup all need the renderer to service a CDP message. Read that case from the timeout-path `pausedStack` / `--prof` signals instead — **Mode I**.
+
+## Mode I — a render is wedged in a synchronous CPU peg (reading the renderer from outside)
+
+**When to use this mode.** Mode A classified a render as a hard CPU peg (`mainThreadResponsive=false`, `scriptBusy≈1`), or a from-scratch index rejected mid-run on a card that never wrote a row (Mode C), and Mode H's heavyweight captures came back empty / `(idle)`. The renderer's main thread is spinning in a synchronous JS (or native) loop — the worst case for inspection, because a fully-pegged thread can't service the CDP protocol message that _arms_ a debugger or profiler (`Debugger.enable` / `Profiler.enable` time out), so the CDP captures are starved. Two timeout-path signals read it anyway, because neither needs the pegged thread to cooperate. They ride on the same render-timeout log line as `cpuTopFrames`, in the **prerender-server** log.
+
+A healthy render finishes well under 30s; the render-level timeout (`RENDER_TIMEOUT_MS`, default 60s) fires before the request-level abort (render + 60s overhead), so these are captured and logged before the worker gives up on the visit. (If a wedge ever rejects with no timeout line at all, the diagnostic block itself was starved — that is itself the `<debugger-enable-timeout>` signal below.)
+
+### `pausedStack` — a one-shot debugger pause (always on, can't mask)
+
+```
+pausedStack: [depth=N] fn @ url:line:col  <-  caller  <-  …      jsHeapUsedMB=…
+```
+
+A single CDP `Debugger.pause` on the timeout path. V8 honors the pause at the next interrupt check (a loop back-edge or call), so it lands _inside_ a synchronous loop without the loop yielding — the same mechanism as the DevTools "pause" button on a hung `while(true)` page. It adds **zero overhead until the one pause**, so unlike a continuous sampler it can't perturb (mask) a timing-sensitive wedge. Three outcomes:
+
+- **A frame list** → the function the loop is in (`fn @ url:line`) and the call chain out to the render driver. `depth` is the live JS stack depth: a huge depth is runaway recursion; a small depth is a tight loop. A bare scriptId for `url` (no path) means the frame is in eval'd / dynamically-built code.
+- **`<pause-timeout>`** → the pause was requested but no back-edge honored it in budget. Most likely a long **non-yielding native call** (a catastrophic regex, a native sort) — no JS back-edge to interrupt. Pivot to `--prof`.
+- **`<debugger-enable-timeout>`** → the thread is so pegged it couldn't even service `Debugger.enable`. The hardest peg; CDP can't read it at all. Pivot to `--prof`.
+
+### V8 `--prof` log → S3 artifact (gated; the only capture that survives a hard peg)
+
+When `pausedStack` is starved, the kernel-signal sampler is the capture that still works. `--prof` (knob: `PRERENDER_V8_PROF`, Mode H table) arms V8's `SIGPROF`-driven sampler at Chrome **launch**: the kernel timer preempts the pegged thread mid-instruction on a schedule it can't refuse — no protocol message, no back-edge, no cooperation — and a **separate thread** writes the samples to a file. So it records the spinning frame even when CDP is dead, and never needs the thread to serialize at `stop` (the failure mode of the CDP `Profiler`). Renderer-wide, not affinity-gated.
+
+It is **not** symbolized in-container — the log accumulates every render on the isolate since launch (tens of MB), and `node --prof-process` on that blows the render-timeout budget (that's why an in-container summary kept coming back empty). Instead, on the timeout the prerender server **streams the raw log to the prerender S3 artifacts bucket** as a `v8log` artifact, keyed `env/realm/jobId/card/step/<ts>.v8log` — so the wedging task's log is self-identifying (no shelling into the N prerender tasks to find it). Once the upload is durable the server **deletes the local log** (the wedged page is evicted, so its isolate writes no more), keeping these tens-of-MB files from piling up on the container disk. The timeout log line reports the outcome:
+
+- `v8ProfLog: uploaded … (NMB) to artifact bucket (local log removed) …` — success; fetch the artifact (below). If several renderer isolates were active this run the line instead reads `(largest of N this-run logs, runner-up …MB — kept …; re-symbolize another with the helper's --key)` — the largest is a heuristic for the pegged isolate, so if its frames don't look wedged, `--list` the candidates and `--key` a different one.
+- `v8ProfLog: <v8 --prof log not persisted …; kept local …>` — sink disabled / budget spent / upload failed, so the local copy is **retained** (not destroyed for a capture you can't fetch).
+- `v8ProfLog: <no v8 --prof log from this run; seen: …>` — armed but no log written (e.g. the browser didn't relaunch after the flag flip).
+
+Arm it:
+
+1. Set SSM `/<env>/boxel/PRERENDER_V8_PROF` = `true`.
+2. **Restart** the prerender-server tasks — the renderer must relaunch to pick up the `--js-flags=--prof` launch flag (a value flip alone, or a redeploy reusing the running browser, won't arm it): `aws ecs update-service --cluster <env> --service boxel-prerender-server-<env> --force-new-deployment`.
+3. Re-run the index. On a wedge, grep the prerender-server log for `v8ProfLog: uploaded` — and pull the artifact (next section).
+4. Set it back to `false` + restart when done — it samples **every** render while on.
+
+> **Expect a multi-minute lag between the job rejecting and the `.v8log` landing in S3.** The worker rejects the indexing job at the shorter **request-abort** timeout (`client-aborted after 120000ms` in the manager log), but the `v8log` only uploads when the prerender-server's longer **render-level** timeout (`RENDER_TIMEOUT_MS`) fires — the renderer keeps pegging after the worker gives up — plus the S3 PUT. Observed gap on staging: job rejected at `20:02:33`, `v8ProfLog: uploaded` + artifact in S3 at `20:07:52` (~5 min later). So don't read "job rejected, no artifact yet" as a failed capture — poll the bucket (`symbolize-prerender-wedge.sh … --list`, or `s3api list-objects-v2`) for a few minutes before concluding the capture didn't happen.
+
+**Symbolize offline.** With an aws-access session for the env (`boxel-claude-readonly` has `s3:GetObject`/`ListBucket` on `boxel-prerender-artifacts-*`), the helper fetches the newest matching `.v8log` and runs `node --prof-process` for you:
+
+```sh
+packages/realm-server/scripts/symbolize-prerender-wedge.sh --env staging --realm bxl-dependency-order-test
+# --key <exact-s3-key> for a specific artifact; --list to just enumerate candidates; --top N for deeper sections
+```
+
+It self-documents why this is offline rather than in-container. Under the hood it's just:
+
+```sh
+aws s3api list-objects-v2 --bucket boxel-prerender-artifacts-<env> --prefix <env>/ ...   # newest .v8log for the realm
+aws s3 cp s3://boxel-prerender-artifacts-<env>/<key> /tmp/wedge.v8log
+node --prof-process /tmp/wedge.v8log \
+  | sed -n '/\[Summary\]/,+14p; /\[JavaScript\]/,+30p; /\[Bottom up (heavy) profile\]/,+50p'
+```
+
+The log self-contains its `code-creation` records, so `--prof-process` names the JS frames from the file alone — no binaries or source maps. Native/Chrome frames stay opaque (that'd need Chrome debug symbols); the JS layer is what names the wedge. The peg dominates the cumulative log (a 60s spin at 1 kHz is ~60k ticks; every other render on the tab is sub-second), so the top self-time frame — and the heaviest `[Bottom up]` path — is the wedge.
+
+**Masking note.** `--prof` samples continuously, but for a _synchronous_ peg that doesn't matter: a sync loop's control flow doesn't depend on timing, so sampling records _where_ it spins without changing _that_ it spins. The heavier CDP profiler / trace masking that's bitten before is the risk for _timing-sensitive async_ work — so confirm `mainThreadResponsive=false` before reaching for it.
+
+### Reading it
+
+- **Frame / top sample** → the function to fix. Follow the chain: a card computed inside a Glimmer `revalidate → rerender → evaluate` chain is a render-invalidation storm (a computed that dirties tracked state during render → re-render → re-evaluate → …), not a data or serialize cost — and not something the field-getter ceiling or a serialize cycle-guard will catch.
+- **`jsHeapUsedMB`** (on the `pausedStack` line) → flat across the peg is a tight compute / recursion loop; climbing is a combinatorial re-build of shared subtrees (breadth).
+
+### Getting the logs
+
+```sh
+aws --profile claude-<env> logs filter-log-events \
+  --log-group-name ecs-boxel-prerender-server-<env> \
+  --filter-pattern '"<realm-or-card>" "timed out after"' --start-time <epoch-ms> \
+  --query 'events[*].message' --output text
+```
+
+Lines are FireLens-wrapped (`{"log":"…"}`); pull `.log`. Strip everything after ` DOM:` — the `pausedStack:` / `v8ProfLog:` / discriminators are all before it. The `v8ProfLog:` line carries the S3 key of the uploaded `--prof` log; fetch + symbolize it per the previous section.
+
+### What this mode can't tell you
+
+- If `pausedStack` is starved AND `--prof` shows the time in opaque native frames with no JS attribution, the peg is inside a native builtin — the frame names it, but the _why_ needs reading that builtin's inputs (e.g. a pathological regex / string).
+- It's a CPU-peg mode. A render that's idle-waiting (`mainThreadResponsive=true`, `cpuTopFrames (idle)`, a long-pending fetch) is a **data stall** — Mode A's `pendingFetches` / Mode G, not this.
 
 ## Field-by-field reading
 
@@ -1208,7 +1288,7 @@ Path A is faster, doesn't require server config changes, and works against stagi
 
 ### Path A — direct token mint (the common case)
 
-The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `ts-node --transpileOnly` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
+The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `node` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
 
 **The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
 

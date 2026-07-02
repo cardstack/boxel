@@ -442,7 +442,7 @@ function buildSpecJson({ componentName, cardDescription, readMe }) {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },

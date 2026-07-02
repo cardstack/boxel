@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   buildArtifactKey,
   getMaxSessionBytes,
@@ -7,6 +8,9 @@ import {
   shouldCaptureCpuProfile,
   shouldCaptureTrace,
   shouldCaptureHeap,
+  uploadArtifact,
+  __resetArtifactSinkSessionForTests,
+  type ArtifactKind,
 } from '../prerender/artifact-sink.ts';
 
 // The heavyweight artifact sink is gated by env (a configured bucket plus
@@ -88,11 +92,12 @@ module('prerender artifact-sink key', function (hooks) {
   });
 
   test('each artifact kind maps to its conventional file suffix', function (assert) {
-    let suffix = (kind: 'cpuprofile' | 'trace' | 'heap') =>
+    let suffix = (kind: ArtifactKind) =>
       buildArtifactKey({ kind }, now, 0).split('.').slice(1).join('.');
     assert.strictEqual(suffix('cpuprofile'), 'cpuprofile');
     assert.strictEqual(suffix('trace'), 'trace.json');
     assert.strictEqual(suffix('heap'), 'heapprofile');
+    assert.strictEqual(suffix('v8log'), 'v8log');
   });
 
   test('the seq disambiguates artifacts that share a millisecond', function (assert) {
@@ -158,6 +163,19 @@ module('prerender artifact-sink gates', function (hooks) {
       anyArtifactCaptureEnabled(),
       'a bucket with every mode off → nothing to capture',
     );
+  });
+
+  test('uploadArtifact reports false when the sink is disabled, so a caller never destroys its only local copy', async function (assert) {
+    // The V8 --prof path deletes its local log only on a confirmed upload;
+    // this is the contract it gates on. No bucket configured → no upload
+    // attempt, no S3 — a pure, dependency-free assertion of the false return.
+    __resetArtifactSinkSessionForTests();
+    delete process.env.PRERENDER_ARTIFACTS_BUCKET;
+    let uploaded = await uploadArtifact({
+      kind: 'v8log',
+      body: Buffer.from('not going anywhere'),
+    });
+    assert.false(uploaded, 'disabled sink → false');
   });
 });
 

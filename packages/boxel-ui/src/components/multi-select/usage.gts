@@ -8,7 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 import type { Select } from 'ember-power-select/types';
-import { includes } from 'lodash';
+import { includes } from 'lodash-es';
 import pluralize from 'pluralize';
 
 import cn from '../../helpers/cn.ts';

@@ -1,5 +1,5 @@
 /* eslint-env node */
-import { readFileSync, readdirSync, writeFileSync } from 'fs-extra';
+import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { resolve, join } from 'path';
 import {
   parse,
@@ -16,9 +16,9 @@ import {
 // much more simplistic than postgres.
 
 const args = process.argv;
-const migrationsDir = resolve(join(__dirname, '..', 'migrations'));
+const migrationsDir = resolve(join(import.meta.dirname, '..', 'migrations'));
 const sqliteSchemaDir = resolve(
-  join(__dirname, '..', '..', 'host', 'config', 'schema'),
+  join(import.meta.dirname, '..', '..', 'host', 'config', 'schema'),
 );
 const INDENT = '  ';
 const SQLITE_PK_COLUMN_MAPPING: Record<string, Record<string, string>> = {
@@ -291,8 +291,12 @@ function prepareDump(sql: string): string {
 
 function getSchemaFilename(): string {
   let files = readdirSync(migrationsDir);
+  // Only timestamped migration files — ignores non-migration entries in the
+  // dir such as `package.json` (pins the dir to type:commonjs) and
+  // `.eslintrc.js`. Must stay in sync with getLatestSchemaFile in
+  // packages/host/config/environment.js, which validates the schema file name.
   let lastFile = files
-    .filter((f) => f !== '.eslintrc.js')
+    .filter((f) => /^\d+_/.test(f))
     .sort()
     .pop()!;
   return `${lastFile.replace(/_.*/, '')}_schema.sql`;

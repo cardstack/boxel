@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { query, param } from '@cardstack/runtime-common';
@@ -48,7 +49,7 @@ async function notify(
   ]);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('PgAdapter.subscribe', function (hooks) {
     let dbAdapter: PgAdapter;
 

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { NetworkInflightTracker } from '../prerender/network-inflight-tracker.ts';
 
 // The tracker is the one render-hang signal that survives a wedged page

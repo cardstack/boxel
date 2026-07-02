@@ -1,9 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test as SupertestTest } from 'supertest';
 import sinon from 'sinon';
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
+import { archiveRealm, unarchiveRealm } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
@@ -16,7 +18,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
 import type { RealmServer } from '../server.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('realm auth handler', function (hooks) {
     let dbAdapter: PgAdapter;
     let request: SuperTest<SupertestTest>;
@@ -176,6 +178,54 @@ module(basename(__filename), function () {
       assert.false(
         testRealmServer.testingOnlyReconciler.mounted.has(testRealmHref),
         'the handler did NOT cold-mount the realm — mount remains deferred to the next per-realm request',
+      );
+    });
+
+    test('POST /_realm-auth omits archived realms; unarchive restores them', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!archived-test-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      let realmAuthRequest = () =>
+        request
+          .post('/_realm-auth')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: matrixUserId, sessionRoom: 'server-session-room' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send('{}');
+
+      let before = await realmAuthRequest();
+      assert.strictEqual(before.status, 200);
+      assert.ok(
+        before.body[testRealmHref],
+        'active realm appears in the response',
+      );
+
+      await archiveRealm(dbAdapter, new URL(testRealmHref));
+      let archived = await realmAuthRequest();
+      assert.strictEqual(archived.status, 200);
+      assert.notOk(
+        archived.body[testRealmHref],
+        'archived realm is omitted from the response',
+      );
+
+      await unarchiveRealm(dbAdapter, new URL(testRealmHref));
+      let restored = await realmAuthRequest();
+      assert.strictEqual(restored.status, 200);
+      assert.ok(
+        restored.body[testRealmHref],
+        'unarchived realm reappears in the response',
       );
     });
   });

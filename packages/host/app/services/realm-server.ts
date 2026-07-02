@@ -15,10 +15,14 @@ import { TrackedArray } from 'tracked-built-ins';
 import {
   baseRealm,
   ensureTrailingSlash,
+  publishRealm as publishRealmOperation,
   SupportedMimeType,
   Deferred,
   ri,
   testRealmURL,
+  unpublishRealm as unpublishRealmOperation,
+  waitForReady as waitForReadyOperation,
+  type RealmClient,
   type RealmIdentifier,
   type RealmInfo,
   type JWTPayload,
@@ -80,6 +84,18 @@ interface AvailableRealm {
   type: 'base' | 'catalog' | 'user';
 }
 
+// Display metadata for an archived realm, as returned by the owner-only
+// `GET /_archived-realms` endpoint. Archived realms are sealed (their `_info`
+// / session endpoints answer 403), so the chooser renders their tiles from
+// this metadata rather than mounting each realm.
+export interface ArchivedRealmInfo {
+  url: string;
+  name: string;
+  iconURL: string | null;
+  backgroundURL: string | null;
+  archivedAt: string | null;
+}
+
 type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
 export default class RealmServerService extends Service {
@@ -92,6 +108,8 @@ export default class RealmServerService extends Service {
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
+  private archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
+  private archivedRealmsFetched = false;
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
@@ -119,6 +137,11 @@ export default class RealmServerService extends Service {
       { type: 'base', url: baseRealm.url },
       ...catalogRealms,
     ]);
+    // Clear in place rather than reassigning: the `archivedRealms` @cached
+    // getter tracks this array's tag, so mutating it (not swapping the
+    // reference) is what makes the getter recompute to the empty list.
+    this.archivedRealmsList.splice(0, this.archivedRealmsList.length);
+    this.archivedRealmsFetched = false;
     this.eventSubscribers = new Map();
     this._ready = new Deferred<void>();
     this._ready.fulfill();
@@ -211,6 +234,87 @@ export default class RealmServerService extends Service {
     }
   }
 
+  // Archive a realm via the owner-only `POST /_archive-realm` endpoint. On
+  // success the realm leaves the active "Your Workspaces" list and joins the
+  // archived list, so the chooser reflects the new state without a reload.
+  async archiveRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(`${this.url.href}_archive-realm`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': SupportedMimeType.JSONAPI,
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          id: realmURL,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let err = `Could not archive realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let identifier = ri(realmURL);
+    await this.setAvailableRealmIdentifiers(
+      this.userRealmIdentifiers.filter((url) => url !== identifier),
+    );
+    await this.fetchArchivedRealms({ force: true });
+  }
+
+  // Restore an archived realm via the owner-only `POST /_unarchive-realm`
+  // endpoint. On success the realm leaves the archived list and returns to the
+  // active "Your Workspaces" list.
+  async unarchiveRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_unarchive-realm`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'realm',
+            id: realmURL,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not restore realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let identifier = ri(realmURL);
+    let index = this.archivedRealmsList.findIndex(
+      (realm) => ri(realm.url) === identifier,
+    );
+    if (index >= 0) {
+      this.archivedRealmsList.splice(index, 1);
+    }
+    await this.setAvailableRealmIdentifiers([
+      ...this.userRealmIdentifiers,
+      identifier,
+    ]);
+  }
+
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
@@ -256,6 +360,48 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
+  // Boot assembly reads `app.boxel.realm-servers` and asks each trusted
+  // server (via `_realm-auth`) which realms the current user has. Returns
+  // the union of realm URLs across all trusted servers. assertOwnRealmServer()
+  // keeps the single-server invariant — it rejects any list that includes a
+  // server other than the user's own until multi-realm-server federation
+  // ships.
+  async fetchUserRealmsFromTrustedServers(
+    trustedServerURLs: string[],
+  ): Promise<string[]> {
+    if (trustedServerURLs.length === 0) {
+      return [];
+    }
+    // TODO: remove once multi-realm-server federation lands.
+    this.assertOwnRealmServer(trustedServerURLs);
+    await this.login();
+    let perServerRealmURLs = await Promise.all(
+      trustedServerURLs.map(async (serverURL) => {
+        let normalizedServerURL = ensureTrailingSlash(serverURL);
+        let response = await this.network.fetch(
+          `${normalizedServerURL}_realm-auth`,
+          {
+            method: 'POST',
+            headers: {
+              Accept: SupportedMimeType.JSONAPI,
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.token}`,
+            },
+          },
+        );
+        if (!response.ok) {
+          let responseText = await response.text();
+          throw new Error(
+            `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
+          );
+        }
+        let tokens = (await response.json()) as Record<string, string>;
+        return Object.keys(tokens);
+      }),
+    );
+    return [...new Set(perServerRealmURLs.flat())];
+  }
+
   @cached
   get availableRealmIdentifiers(): RealmIdentifier[] {
     return this.availableRealms.map((r) => ri(r.url));
@@ -287,15 +433,7 @@ export default class RealmServerService extends Service {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
       : undefined;
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      sessionTokens = {};
-    }
+    let sessionTokens = this.readSessionTokens();
 
     let realmServerURLs = new Set<string>();
 
@@ -325,6 +463,16 @@ export default class RealmServerService extends Service {
     }
 
     return [...realmServerURLs];
+  }
+
+  private readSessionTokens(): Record<string, string> {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    try {
+      return JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return {};
+    }
   }
 
   private normalizeRealmServerURL(url: string): string {
@@ -358,6 +506,11 @@ export default class RealmServerService extends Service {
   @cached
   get displayedCatalogRealmIdentifiers(): RealmIdentifier[] {
     return this.catalogRealmIdentifiers;
+  }
+
+  @cached
+  get archivedRealms(): ArchivedRealmInfo[] {
+    return [...this.archivedRealmsList];
   }
 
   @cached
@@ -442,6 +595,64 @@ export default class RealmServerService extends Service {
     });
 
     this._ready.fulfill();
+  }
+
+  // Fetch the caller's archived realms from the owner-only
+  // `GET /_archived-realms` endpoint. The endpoint is scoped server-side to
+  // realms the caller owns, so non-owners receive an empty list. Cached after
+  // the first fetch; pass `{ force: true }` to refresh after an
+  // archive/restore.
+  async fetchArchivedRealms(opts?: { force?: boolean }) {
+    if (this.archivedRealmsFetched && !opts?.force) {
+      return;
+    }
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.origin}/_archived-realms`,
+      {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${this.token}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch archived realms for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+
+    let { data } = (await response.json()) as {
+      data?: Array<{
+        id?: string;
+        attributes?: {
+          name?: string;
+          iconURL?: string | null;
+          backgroundURL?: string | null;
+          archivedAt?: string | null;
+        };
+      }>;
+    };
+
+    let archived: ArchivedRealmInfo[] = (data ?? [])
+      .filter((entry): entry is { id: string; attributes?: any } =>
+        Boolean(entry?.id),
+      )
+      .map((entry) => ({
+        url: ensureTrailingSlash(entry.id),
+        name: entry.attributes?.name ?? entry.id,
+        iconURL: entry.attributes?.iconURL ?? null,
+        backgroundURL: entry.attributes?.backgroundURL ?? null,
+        archivedAt: entry.attributes?.archivedAt ?? null,
+      }));
+
+    this.archivedRealmsList.splice(
+      0,
+      this.archivedRealmsList.length,
+      ...archived,
+    );
+    this.archivedRealmsFetched = true;
   }
 
   async fetchRealmInfos(realmUrls: string[]): Promise<{
@@ -913,33 +1124,48 @@ export default class RealmServerService extends Service {
     return registrations;
   }
 
+  // Adapts this service's realm-server auth/config into the portable
+  // `RealmClient` the shared realm operations consume. Operations issued here
+  // only hit realm-server endpoints, so a single `authedFetch` carrying the
+  // realm-server token suffices.
+  private get realmClient(): RealmClient {
+    return {
+      realmServerURL: ensureTrailingSlash(this.url.href),
+      config: {
+        spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        siteDomain: ENV.publishedRealmBoxelSiteDomain,
+      },
+      authedFetch: (url, init) => this.authedFetch(url, init),
+    };
+  }
+
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
+    return publishRealmOperation(this.realmClient, {
+      sourceRealmURL,
+      publishedRealmURL,
+    });
+  }
 
-    const response = await this.network.fetch(
-      `${this.url.href}_publish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          sourceRealmURL,
-          publishedRealmURL,
-        }),
-      },
-    );
+  async unpublishRealm(publishedRealmURL: string) {
+    await this.login();
+    return unpublishRealmOperation(this.realmClient, { publishedRealmURL });
+  }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Publish realm failed: ${response.status} - ${errorText}`,
-      );
-    }
-
-    return response.json();
+  // Polls <publishedRealmURL>_readiness-check until the published realm is
+  // indexed and viewable. `_publish-realm` returns 202 before indexing
+  // finishes, so callers that need the realm ready wait here — the Publish UI
+  // keeps its "Publishing…" state until this resolves.
+  async waitForRealmReady(
+    publishedRealmURL: string,
+    opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  ) {
+    await this.login();
+    return waitForReadyOperation(this.realmClient, {
+      publishedRealmURL,
+      timeoutMs: opts?.timeoutMs,
+      pollIntervalMs: opts?.pollIntervalMs,
+    });
   }
 
   async checkDomainAvailability(
@@ -1014,6 +1240,45 @@ export default class RealmServerService extends Service {
     };
   }
 
+  // Asks the server for this realm's unlisted-link path segment, allocating a
+  // fresh server-generated one when none exists (or when `regenerate` is set).
+  // The slug is always determined by the server so it can't be hand-picked.
+  async allocateUnlistedPath(
+    sourceRealmURL: string,
+    options: { regenerate?: boolean } = {},
+  ): Promise<{ sourceRealmURL: string; slug: string }> {
+    await this.login();
+
+    let response = await this.authedFetch(
+      `${this.url.href}_unlisted-realm-path`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceRealmURL,
+          regenerate: options.regenerate ?? false,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `Allocate unlisted link failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    let {
+      data: { attributes },
+    } = (await response.json()) as {
+      data: { attributes: { sourceRealmURL: string; slug: string } };
+    };
+    return { sourceRealmURL: attributes.sourceRealmURL, slug: attributes.slug };
+  }
+
   async deleteBoxelClaimedDomain(claimedDomainId: string): Promise<void> {
     await this.login();
 
@@ -1061,34 +1326,6 @@ export default class RealmServerService extends Service {
 
     if (!response.ok) {
       throw new Error(await response.text());
-    }
-
-    return response.json();
-  }
-
-  async unpublishRealm(publishedRealmURL: string) {
-    await this.login();
-
-    const response = await this.network.fetch(
-      `${this.url.href}_unpublish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          publishedRealmURL,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Unpublish realm failed: ${response.status} - ${errorText}`,
-      );
     }
 
     return response.json();
@@ -1168,16 +1405,7 @@ export default class RealmServerService extends Service {
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
-    let sessionTokens: Record<string, string> = {};
-    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
-    if (!sessionStr) {
-      return undefined;
-    }
-    try {
-      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
-    } catch {
-      return undefined;
-    }
+    let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];

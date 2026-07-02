@@ -98,6 +98,7 @@ export default class AiAssistantActionBar extends Component<Signature> {
         border-top-left-radius: var(--chat-input-area-border-radius);
         align-items: center;
         border: 1px solid #777;
+        border-top: none;
 
         position: relative;
         z-index: 1;

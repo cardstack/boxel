@@ -241,7 +241,7 @@ export async function validateEmail(
     await opts.onAppTrigger(appPage);
   } else {
     await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-      'Please check your email to complete registration.',
+      'Please check your email to complete registration',
     );
   }
 
@@ -507,13 +507,15 @@ export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page.locator('[data-test-attach-button]').click();
   await page.locator('[data-test-attach-card-btn]').click();
   await page
-    .locator('[data-test-card-catalog-modal] [data-test-search-field]')
+    .locator('[data-test-card-chooser-modal] [data-test-search-field]')
     .fill(cardId);
   await page
-    .locator(`[data-test-card-catalog-item="${cardId}"]`)
+    .locator(
+      `[data-test-card-chooser-modal] [data-test-item-button="${cardId}"]`,
+    )
     .first()
     .click();
-  await page.locator('[data-test-card-catalog-go-button]').click();
+  await page.locator('[data-test-card-chooser-go-button]').click();
 }
 
 export async function setupTwoStackItems(
@@ -570,12 +572,17 @@ export async function sendMessage(
   await expect(
     page.locator(`[data-test-message-field="${roomId}"]`),
   ).toHaveValue('');
-  await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
-  ).toHaveCount(0);
+  // The new message bubble is rendered optimistically a moment after the draft
+  // clears. Wait for it to appear before asserting that nothing is pending:
+  // checking for no-pending first can pass in the window before the bubble
+  // exists, returning from this helper while the send is still in flight rather
+  // than after the server has acknowledged it.
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messageCountBeforeSend + 1,
   );
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.waitForSelector(`[data-test-room-settled]`);
 }
 

@@ -840,8 +840,7 @@ export async function startIsolatedRealmStack({
     };
 
     let workerArgs = [
-      '--transpileOnly',
-      'worker-manager',
+      'worker-manager.ts',
       `--port=${actualWorkerManagerPort}`,
       `--matrixURL=${context.matrixURL}`,
       `--prerendererUrl=${prerenderURL}`,
@@ -893,7 +892,7 @@ export async function startIsolatedRealmStack({
       attempt++;
       // Release the worker-manager port holder right before the child binds.
       await workerManagerPortInfo.releaseHolder();
-      workerManager = spawn('ts-node', workerArgs, {
+      workerManager = spawn('node', workerArgs, {
         cwd: realmServerDir,
         env,
         stdio: managedProcessStdio,
@@ -962,8 +961,7 @@ export async function startIsolatedRealmStack({
     }
 
     let serverArgs = [
-      '--transpileOnly',
-      'main',
+      'main.ts',
       `--port=${actualRealmServerPort}`,
       `--serverURL=${realmServerURL.href}`,
       `--matrixURL=${context.matrixURL}`,
@@ -1013,7 +1011,7 @@ export async function startIsolatedRealmStack({
     // Release the realm-server port holder right before the child binds.
     await realmServerPortInfo.releaseHolder();
     let realmServerSpawnedAt = Date.now();
-    let realmServer = spawn('ts-node', serverArgs, {
+    let realmServer = spawn('node', serverArgs, {
       cwd: realmServerDir,
       env,
       stdio: managedProcessStdio,

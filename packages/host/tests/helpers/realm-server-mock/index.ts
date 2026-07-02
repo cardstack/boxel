@@ -56,6 +56,7 @@ function ensureRealmServerMockState(
     };
     state = {
       realmPermissions,
+      archivedRealms: new Map<string, { archivedAt: string }>(),
       handler,
       ensureSessionRoom: sessionRoomEnsurer,
     };

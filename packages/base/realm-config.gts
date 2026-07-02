@@ -5,7 +5,9 @@ import {
   field,
   contains,
   containsMany,
+  getRelationshipMembershipState,
   linksTo,
+  realmURL,
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
@@ -27,7 +29,7 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
@@ -102,6 +104,19 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     this.args.model.path = `/${trimmed}`;
   }
 
+  // The chooser is locked to the consuming realm; pass it through
+  // explicitly rather than letting LinksToEditor read it from
+  // `RealmURLContext`. The context is only provided by the operator-mode
+  // stack item, so in code submode (where the realm config renders via
+  // the playground / spec preview, outside any stack item) `this.realmURL`
+  // in LinksToEditor is undefined and the chooser falls back to
+  // unscoped search across every realm. The field's own `[realmURL]`
+  // getter is populated by `propagateRealmContext` when the owning
+  // RealmConfig card loads, so it works in either submode.
+  get consumingRealm(): URL | undefined {
+    return this.args.model[realmURL];
+  }
+
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
       <div class='row'>
@@ -118,7 +133,10 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
         </div>
         <span class='arrow' aria-hidden='true'>→</span>
         <div class='instance-cell'>
-          <@fields.instance @lockConsumingRealm={{true}} />
+          <@fields.instance
+            @lockConsumingRealm={{true}}
+            @consumingRealm={{this.consumingRealm}}
+          />
         </div>
       </div>
       {{#if this.pathWarning}}
@@ -268,6 +286,30 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // Routing rules whose linked target card no longer exists. The
+  // `instance` linksTo resolves to a terminal broken-link state once the
+  // editor has tried to load it ('not-found' for a 404, 'error' for an
+  // upstream failure). Surfacing these lets the owner repair the rule
+  // before publishing — a dangling target otherwise degrades that routed
+  // path to a 404 placeholder on the published site.
+  get danglingRoutingRulePaths(): string[] {
+    let rules = this.args.model.hostRoutingRules ?? [];
+    let paths: string[] = [];
+    for (let rule of rules) {
+      if (!rule) {
+        continue;
+      }
+      let slot = getRelationshipMembershipState(
+        rule as unknown as CardDef,
+        'instance',
+      ).membership?.[0];
+      if (slot?.kind === 'not-found' || slot?.kind === 'error') {
+        paths.push(rule.path ?? '(no path)');
+      }
+    }
+    return paths;
+  }
+
   // CardInfoTemplates.edit insists on a strict `CardDef` for `@model`;
   // the template arg here is `PartialFields<RealmConfig>` (every field
   // optional, including `id`), so cast to the looser shape it actually
@@ -293,6 +335,18 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 >
                   Duplicate paths:
                   {{#each this.duplicatePaths as |p i|}}
+                    {{#if i}}, {{/if}}<code>{{p}}</code>
+                  {{/each}}
+                </div>
+              {{/if}}
+              {{#if this.danglingRoutingRulePaths.length}}
+                <div
+                  class='warning'
+                  role='status'
+                  data-test-dangling-routing-warning
+                >
+                  These paths point to a card that no longer exists:
+                  {{#each this.danglingRoutingRulePaths as |p i|}}
                     {{#if i}}, {{/if}}<code>{{p}}</code>
                   {{/each}}
                 </div>

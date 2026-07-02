@@ -26,6 +26,7 @@ import type {
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as Searchable from 'https://cardstack.com/base/searchable';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -73,6 +74,13 @@ export default class CardService extends Service {
     Loader,
     Promise<typeof CardAPI>
   >;
+  // The searchable-driven search-doc generator lives in its own base module so
+  // it stays out of every card's dependency closure; cache it per-loader the
+  // same way the card-api module is cached.
+  declare private loaderToSearchableLoadingCache: WeakMap<
+    Loader,
+    Promise<typeof Searchable>
+  >;
   declare clientRequestIds: LimitedSet<string>;
 
   constructor(owner: Owner) {
@@ -93,10 +101,23 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
+  async getSearchable(): Promise<typeof Searchable> {
+    let loader = this.loaderService.loader;
+    if (!this.loaderToSearchableLoadingCache.has(loader)) {
+      let searchablePromise = loader.import<typeof Searchable>(
+        'https://cardstack.com/base/searchable',
+      );
+      this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
+      return searchablePromise;
+    }
+    return this.loaderToSearchableLoadingCache.get(loader)!;
+  }
+
   resetState() {
     this.subscriber = undefined;
     this.clientRequestIds = new LimitedSet(250);
     this.loaderToCardAPILoadingCache = new WeakMap();
+    this.loaderToSearchableLoadingCache = new WeakMap();
     this.sizeLimitError.clear();
   }
 
@@ -200,11 +221,10 @@ export default class CardService extends Service {
 
   async serializeCard(
     card: CardDef,
-    opts?: Omit<SerializeOpts, 'virtualNetwork'> & { withIncluded?: true },
+    opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     let serialized = api.serializeCard(card, {
-      virtualNetwork: this.network.virtualNetwork,
       ...opts,
     });
     if (!opts?.withIncluded) {

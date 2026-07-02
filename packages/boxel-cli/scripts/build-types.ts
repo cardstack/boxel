@@ -66,7 +66,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Preprocessor } from 'content-tag';
 import * as ts from 'typescript';
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_PACKAGES = resolve(PACKAGE_ROOT, '..');
 
 // ---------------------------------------------------------------------------

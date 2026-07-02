@@ -1,12 +1,7 @@
-import { createServer, type Server } from 'node:http';
-import { readFileSync } from 'node:fs';
-import { join, normalize, resolve } from 'node:path';
-
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { runRealmQunit } from '@cardstack/boxel-cli/api';
 
 import { logger } from './logger.ts';
-
-import { chromium } from '@playwright/test';
 
 import { getNextValidationSequenceNumber } from './realm-operations.ts';
 import { createTestRun, completeTestRun } from './test-run-cards.ts';
@@ -20,10 +15,28 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types.ts';
-import { findHostDistPackageDir } from '@cardstack/realm-test-harness';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
+
 let log = logger('test-run-execution');
+
+// How long to wait for the in-browser QUnit suite to reach `runEnd` before
+// giving up. A hung test page (boot error, infinite loop, never-resolving
+// promise) would otherwise block for boxel-cli's full 300s default with no
+// signal. Default 60s; override via FACTORY_TEST_TIMEOUT_MS for a heavy suite.
+const DEFAULT_QUNIT_TIMEOUT_MS = 60_000;
+
+function qunitTimeoutMs(): number {
+  let raw = process.env.FACTORY_TEST_TIMEOUT_MS;
+  let parsed = raw != null && raw.trim() !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_QUNIT_TIMEOUT_MS;
+}
 
 // ---------------------------------------------------------------------------
 // Resume Logic
@@ -172,250 +185,6 @@ async function getNextSequenceNumber(
 }
 
 // ---------------------------------------------------------------------------
-// QUnit Test Page
-// ---------------------------------------------------------------------------
-
-/**
- * Build the HTML for a self-contained QUnit test runner page.
- *
- * Reads the host app's tests/index.html to extract the script/link tags it
- * uses (vendor.js, test-support.js, chunk files, etc.), then builds a page
- * that loads QUnit independently and injects result-collection hooks. The
- * page uses the host's compiled test bundles for Ember, test helpers, and
- * the live-test infrastructure (test-helper.js → live-test.js).
- *
- * The realmURL query param tells live-test.js which realm to discover
- * .test.gts files from.
- */
-function buildQunitTestPageHtml(opts: {
-  /** URL of our local server that serves static host dist assets */
-  assetServerUrl: string;
-  hostDistDir: string;
-  targetRealm: string;
-  /** Browser-accessible URL of the realm server (compat proxy) */
-  realmProxyUrl: string;
-  /** Optional slug identifying the issue under test — shown in the page title. */
-  slug?: string;
-}): string {
-  let host = opts.assetServerUrl.replace(/\/$/, '');
-  // Ember config URLs must use the browser-accessible realm proxy,
-  // not the internal realm server port or our asset server.
-  let browserOrigin = opts.realmProxyUrl.replace(/\/$/, '');
-
-  // Read the host's test index.html to extract its script and link tags
-  let testIndexPath = resolve(opts.hostDistDir, 'tests', 'index.html');
-  let testIndexHtml: string;
-  try {
-    testIndexHtml = readFileSync(testIndexPath, 'utf8');
-  } catch {
-    throw new Error(
-      `Could not read host test page at ${testIndexPath}. ` +
-        `Ensure the host app has been built with test support.`,
-    );
-  }
-
-  // Extract and rewrite meta tags. The Ember config meta tag contains
-  // resolvedBaseRealmURL, resolvedSkillsRealmURL, realmServerURL, matrixURL,
-  // etc. that need to point to the harness's realm server, not the URLs
-  // from when the host was built.
-  let metaTags = (testIndexHtml.match(/<meta[^>]+>/g) ?? [])
-    .filter((tag) => !tag.includes('charset') && !tag.includes('viewport'))
-    .map((tag) => {
-      if (!tag.includes('config/environment')) return tag;
-      // Decode the Ember config, rewrite URLs, re-encode
-      let match = tag.match(/content="([^"]+)"/);
-      if (!match) return tag;
-      try {
-        let config = JSON.parse(decodeURIComponent(match[1]));
-        // Rewrite realm-related URLs to the harness's realm server
-        if (config.resolvedBaseRealmURL) {
-          config.resolvedBaseRealmURL = `${browserOrigin}/base/`;
-        }
-        if (config.resolvedSkillsRealmURL) {
-          config.resolvedSkillsRealmURL = `${browserOrigin}/skills/`;
-        }
-        if (config.resolvedOpenRouterRealmURL) {
-          config.resolvedOpenRouterRealmURL = `${browserOrigin}/openrouter/`;
-        }
-        if (config.realmServerURL) {
-          config.realmServerURL = `${browserOrigin}/`;
-        }
-        if (config.matrixURL) {
-          // Keep matrixURL as-is — the harness Synapse is on a random port
-          // that we don't know here. Tests that need Matrix use mock-matrix.
-        }
-        let encoded = encodeURIComponent(JSON.stringify(config));
-        return tag.replace(/content="[^"]+"/, `content="${encoded}"`);
-      } catch {
-        return tag;
-      }
-    });
-
-  // Extract <script> and <link> tags, rewriting paths to absolute host URLs
-  let scriptTags = (
-    testIndexHtml.match(/<script[^>]*src="[^"]*"[^>]*><\/script>/g) ?? []
-  )
-    .filter(
-      (tag) =>
-        !tag.includes('testem.js') && !tag.includes('ember-cli-live-reload'),
-    )
-    .map((tag) => tag.replace(/src="\/([^"]*)"/g, `src="${host}/$1"`));
-
-  let linkTags = (
-    testIndexHtml.match(/<link[^>]*rel="stylesheet"[^>]*>/g) ?? []
-  ).map((tag) => tag.replace(/href="\/([^"]*)"/g, `href="${host}/$1"`));
-
-  let moduleScripts = (
-    testIndexHtml.match(/<script type="module">[^]*?<\/script>/g) ?? []
-  ).map((tag) => tag.replace(/from '\/([^']*)'/g, `from '${host}/$1'`));
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  ${metaTags.join('\n  ')}
-  <title>Software Factory Card Tests${opts.slug ? ` — ${opts.slug}` : ''}</title>
-  ${linkTags.join('\n  ')}
-</head>
-<body>
-  <div id="qunit"></div>
-  <div id="qunit-fixture">
-    <div id="ember-testing-container">
-      <div id="ember-testing"></div>
-    </div>
-  </div>
-
-  <script>
-    globalThis.process = { env: {}, version: '', cwd() { return '/'; } };
-    // Mirror the host's tests/index.html inline shim — vite-bundled code
-    // references the Node \`global\` symbol, and buildQunitTestPageHtml only
-    // extracts <script src> and <script type="module"> blocks, dropping the
-    // source's plain inline <script> that defines this. Without it, Ember
-    // boot throws "global is not defined" and QUnit never starts.
-    globalThis.global = globalThis;
-
-    // -----------------------------------------------------------------------
-    // Result collection for Playwright extraction.
-    // Poll for QUnit to become available and attach hooks immediately,
-    // before QUnit.start() fires. This avoids a race where the 'load'
-    // event fires after QUnit has already started running tests.
-    // -----------------------------------------------------------------------
-    window.__qunitResults = { tests: [], runEnd: null };
-    (function attachQUnitHooks() {
-      if (typeof QUnit !== 'undefined') {
-        QUnit.on('testEnd', function(d) {
-          window.__qunitResults.tests.push({
-            name: d.name, module: d.module, status: d.status,
-            runtime: d.runtime,
-            errors: (d.errors || []).map(function(e) {
-              return { message: e.message, stack: e.stack };
-            }),
-          });
-        });
-        QUnit.on('runEnd', function(d) {
-          window.__qunitResults.runEnd = d;
-        });
-      } else {
-        setTimeout(attachQUnitHooks, 10);
-      }
-    })();
-
-    // liveTest and realmURL params are passed directly in the page URL
-    // so test-helper.js sees them when it checks window.location.search.
-  </script>
-
-  ${moduleScripts.join('\n  ')}
-
-  <!-- Host app scripts (vendor, test-support, app, test chunks) -->
-  ${scriptTags.join('\n  ')}
-</body>
-</html>`;
-}
-
-/**
- * Start a minimal HTTP server that serves:
- * - / → our custom QUnit test page HTML
- * - /assets/* → static files from the host's dist/assets/ directory
- *
- * Returns the server URL and a setter to update the HTML content
- * (needed because the HTML references the server's own URL for assets).
- */
-async function startTestPageServer(
-  hostDistDir: string,
-): Promise<{ url: string; server: Server; setHtml: (h: string) => void }> {
-  let mimeTypes: Record<string, string> = {
-    '.js': 'application/javascript',
-    '.css': 'text/css',
-    '.map': 'application/json',
-    '.html': 'text/html',
-    '.wasm': 'application/wasm',
-    '.svg': 'image/svg+xml',
-    '.png': 'image/png',
-    '.woff2': 'font/woff2',
-    '.woff': 'font/woff',
-    '.ttf': 'font/ttf',
-  };
-
-  let html = '';
-  let setHtml = (h: string) => {
-    html = h;
-  };
-
-  return new Promise((res, rej) => {
-    let server = createServer((req, reply) => {
-      let url = (req.url ?? '/').split('?')[0];
-
-      // Serve static files from host dist (assets, wasm, fonts, etc.)
-      if (url !== '/') {
-        let normalized = normalize(url.slice(1));
-        // Reject path traversal attempts (e.g., /../package.json)
-        if (normalized.startsWith('..') || normalized.startsWith('/')) {
-          reply.writeHead(403);
-          reply.end('Forbidden');
-          return;
-        }
-        let filePath = resolve(hostDistDir, normalized);
-        if (!filePath.startsWith(resolve(hostDistDir))) {
-          reply.writeHead(403);
-          reply.end('Forbidden');
-          return;
-        }
-        try {
-          let content = readFileSync(filePath);
-          let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
-          let contentType = mimeTypes[ext] ?? 'application/octet-stream';
-          reply.writeHead(200, {
-            'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*',
-          });
-          reply.end(content);
-        } catch {
-          reply.writeHead(404);
-          reply.end('Not found');
-        }
-        return;
-      }
-
-      // Default: serve the test page HTML
-      reply.writeHead(200, {
-        'Content-Type': 'text/html',
-        'Access-Control-Allow-Origin': '*',
-      });
-      reply.end(html);
-    });
-    server.on('error', rej);
-    server.listen(0, '127.0.0.1', () => {
-      let addr = server.address();
-      if (!addr || typeof addr === 'string') {
-        rej(new Error('Failed to start test page server'));
-        return;
-      }
-      res({ url: `http://127.0.0.1:${addr.port}`, server, setHtml });
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Pure QUnit Runner
 // ---------------------------------------------------------------------------
 
@@ -425,8 +194,12 @@ interface QunitRunnerOptions {
   hostAppUrl: string;
   hostDistDir?: string;
   debug?: boolean;
-  /** Optional slug shown in the served test page title. */
-  slug?: string;
+  /**
+   * When set, the browser run is memoized per workspace fingerprint, so the
+   * agent's mid-turn `run_tests` and the pipeline's test step don't both
+   * drive the same QUnit suite over an unchanged realm.
+   */
+  cache?: ValidationRunCache;
 }
 
 interface QunitRunnerOutput {
@@ -442,106 +215,77 @@ interface QunitRunnerOutput {
 async function runQunitInBrowser(
   options: QunitRunnerOptions,
 ): Promise<QunitRunnerOutput> {
-  let start = Date.now();
-  let browser;
-  let testPageServer: Server | undefined;
-
-  try {
-    // Locate the host app's dist directory — contains tests/index.html and assets.
-    // In worktrees, the local host/dist may not exist; fall back to the root
-    // repo checkout's host dist (same logic as the harness support services).
-    let hostDistDir =
-      options.hostDistDir ??
-      join(
-        findHostDistPackageDir() ?? resolve(__dirname, '../../host'),
-        'dist',
-      );
-
-    // Start a local server to serve both the test HTML page and the host's
-    // dist assets. All asset references point to our server, so no external
-    // host app is needed — fully hermetic.
-    let {
-      url: testPageUrl,
-      server,
-      setHtml,
-    } = await startTestPageServer(hostDistDir);
-    testPageServer = server;
-
-    // Build HTML using our server URL for asset references.
-    // realmProxyUrl = hostAppUrl = the compat proxy that the browser can reach.
-    let html = buildQunitTestPageHtml({
-      assetServerUrl: testPageUrl,
-      hostDistDir,
-      targetRealm: options.targetRealm,
-      realmProxyUrl: options.hostAppUrl,
-      slug: options.slug,
-    });
-    setHtml(html);
-
-    log.debug(
-      `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealm}`,
+  if (options.cache) {
+    // Key by the run inputs so a cache instance shared across realms or
+    // runner configurations can never serve another run's results.
+    let key = `qunit:${cacheKeyForInputs([
+      options.targetRealm,
+      options.hostAppUrl,
+      options.hostDistDir ?? '',
+    ])}`;
+    return options.cache.getOrRun(key, () =>
+      runQunitInBrowserUncached(options),
     );
-
-    browser = await chromium.launch({ headless: true });
-    let page = await browser.newPage();
-
-    if (options.debug) {
-      page.on('console', (msg) => {
-        log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
-      });
-      page.on('pageerror', (err) => {
-        log.debug(`[browser] PAGE ERROR: ${err.message}`);
-      });
-    }
-
-    // Intercept requests to the target realm and inject the Authorization
-    // header. live-test.js fetches _mtimes and modules without auth, but
-    // private realms require it. Using page.route() injects auth at the
-    // network level before any page scripts run.
-    let realmParam = encodeURIComponent(options.targetRealm);
-    let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
-
-    let realmToken = await options.client.getRealmToken(options.targetRealm);
-    if (realmToken) {
-      let realmOrigin = new URL(options.targetRealm).origin;
-      await page.route(`${realmOrigin}/**`, (route) => {
-        let headers = {
-          ...route.request().headers(),
-          Authorization: realmToken,
-        };
-        route.continue({ headers });
-      });
-    }
-
-    await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-
-    // Wait for QUnit to finish (results collected via inline script hooks).
-    // Note: waitForFunction(fn, arg, options) — pass null as arg so the
-    // timeout option is correctly in the third position.
-    await page.waitForFunction(
-      () => (window as any).__qunitResults?.runEnd !== null,
-      null,
-      { timeout: 300_000 },
-    );
-
-    let qunitResults: QunitResults = await page.evaluate(
-      () => (window as any).__qunitResults,
-    );
-
-    let durationMs = Date.now() - start;
-    log.debug(
-      `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
-    );
-
-    return { qunitResults, durationMs };
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-    if (testPageServer) {
-      testPageServer.close();
-    }
   }
+  return runQunitInBrowserUncached(options);
+}
+
+async function runQunitInBrowserUncached(
+  options: QunitRunnerOptions,
+): Promise<QunitRunnerOutput> {
+  // Delegate to boxel-cli's QUnit engine (CS-11579). The factory no longer
+  // maintains its own host-dist-bound runner: boxel-cli owns the browser
+  // plumbing and the test harness (its bundled copy), so the factory has no
+  // dependency on a live `packages/host/dist` build. We pass the realm token
+  // we already hold so boxel-cli authenticates without needing a CLI profile
+  // for the target realm.
+  // boxel-cli matches the realm token by normalized (trailing-slashed) URL and
+  // keys its caches the same way, so normalize before fetching the token AND
+  // running — otherwise a non-normalized realm URL misses auth on a private
+  // realm and splits cache keys.
+  let realmUrl = ensureTrailingSlash(options.targetRealm);
+  let authorization =
+    (await options.client.getRealmToken(realmUrl)) ?? undefined;
+  // The factory owns the timeout value (boxel-cli only exposes the knob) so a
+  // hung test page fails fast instead of blocking the full 300s default.
+  let timeoutMs = qunitTimeoutMs();
+  let start = Date.now();
+  let qunitResults: QunitResults;
+  let durationMs: number;
+  try {
+    let run = await runRealmQunit(realmUrl, {
+      hostAppUrl: options.hostAppUrl,
+      timeoutMs,
+      ...(options.hostDistDir ? { hostDistDir: options.hostDistDir } : {}),
+      ...(options.debug ? { debug: options.debug } : {}),
+      ...(authorization ? { authorization } : {}),
+    });
+    // Direct assignment (no cast) so the compiler enforces that boxel-cli's
+    // QunitResults stays structurally compatible with the factory's.
+    qunitResults = run.qunitResults;
+    durationMs = run.durationMs;
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    // boxel-cli labels *only* the run-end wait timeout with this marker; a
+    // page.goto / asset-fetch stall surfaces as its own Playwright error and is
+    // rethrown untouched below. Translate just the run-end case into an
+    // actionable diagnostic, preserving the original error as `cause`.
+    if (/did not reach runEnd within/i.test(message)) {
+      let waited = Date.now() - start;
+      throw new Error(
+        `QUnit suite did not finish within ${timeoutMs}ms (waited ${waited}ms). ` +
+          `The page never reached runEnd — likely an Ember boot error, a hanging ` +
+          `test, or a never-resolving promise. Re-run with --debug for browser ` +
+          `console output, or raise FACTORY_TEST_TIMEOUT_MS for a heavier suite.`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+  log.debug(
+    `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+  );
+  return { qunitResults, durationMs };
 }
 
 // ---------------------------------------------------------------------------
@@ -581,7 +325,7 @@ export async function executeTestRunFromRealm(
       hostAppUrl: options.hostAppUrl,
       hostDistDir: options.hostDistDir,
       debug: options.debug,
-      slug: options.slug,
+      cache: options.cache,
     });
 
     let attrs = parseQunitResults(qunitResults);
@@ -674,6 +418,7 @@ export async function runTestsInMemory(
       hostAppUrl: options.hostAppUrl,
       hostDistDir: options.hostDistDir,
       debug: options.debug,
+      cache: options.cache,
     });
 
     let attrs = parseQunitResults(qunitResults);

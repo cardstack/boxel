@@ -50,6 +50,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       role='region'
       aria-labelledby={{@id}}
       aria-hidden={{if @isOpen 'false' 'true'}}
+      inert={{unless @isOpen true}}
     >
       <div class='boxel-accordion-item-content-inner'>
         {{yield to='content'}}

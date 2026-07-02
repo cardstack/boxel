@@ -118,6 +118,22 @@ test.describe('Room messages', () => {
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, room1, `message ${i}`);
     }
+
+    // Every message must be persisted on the server before logging out;
+    // otherwise the re-login below rebuilds a timeline that is missing whatever
+    // send had not yet landed. Verify the server side directly so a regression
+    // surfaces here rather than as a short count after pagination.
+    await expect
+      .poll(async () => {
+        let events = await getRoomEvents(username, password, room1);
+        return events.filter(
+          (e) =>
+            e.type === 'm.room.message' &&
+            e.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+        ).length;
+      })
+      .toBe(totalMessageCount);
+
     await logout(page);
 
     await login(page, username, password, { url: appURL });
@@ -199,8 +215,8 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
     await page.locator(`[data-test-search-field]`).fill(testCard);
-    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${testCard}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
     ).toContainText('Hassan');
@@ -237,8 +253,8 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-card-btn]').click();
 
     await page.locator(`[data-test-search-field]`).fill('Mango the Puppy');
-    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${testCard}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
     ).toContainText('Mango the Puppy');

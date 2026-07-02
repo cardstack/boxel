@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
@@ -466,5 +467,44 @@ module('issue-scheduler > RealmIssueStore blockedBy resolution', function () {
           ? 'undefined (treated as still blocked)'
           : (picked?.id ?? 'unknown')),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RealmIssueStore.listIssues — match Issue cards from either re-export module
+// ---------------------------------------------------------------------------
+
+module('issue-scheduler > RealmIssueStore issue-type filter', function () {
+  // `Issue` is defined in `issue-tracker` and re-exported by `darkfactory`
+  // (same class). A Boxel `type` filter resolves to the canonical definition
+  // module, so listIssues queries `issue-tracker#Issue` — which matches the
+  // card regardless of which module it was authored adopting.
+  test('listIssues queries the canonical issue-tracker#Issue type', async function (assert) {
+    let realmUrl = 'http://localhost:4201/user/my-test-realm/';
+    let darkfactoryModuleUrl =
+      'http://localhost:4201/software-factory/darkfactory';
+    let captured: { filter?: { type?: { module?: string; name?: string } } } =
+      {};
+
+    let mockClient = {
+      async search(_realm: string, query: typeof captured) {
+        captured = query;
+        return { ok: true, data: [] };
+      },
+    } as unknown as BoxelCLIClient;
+
+    let store = new RealmIssueStore({
+      realmUrl,
+      darkfactoryModuleUrl,
+      client: mockClient,
+      workspaceDir: '/tmp/scheduler-issue-type-filter-fixture',
+    });
+
+    await store.listIssues();
+
+    assert.deepEqual(captured.filter?.type, {
+      module: 'http://localhost:4201/software-factory/issue-tracker',
+      name: 'Issue',
+    });
   });
 });

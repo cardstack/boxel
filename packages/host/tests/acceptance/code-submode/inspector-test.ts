@@ -18,8 +18,9 @@ import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   Deferred,
+  type Realm,
   type ResolvedCodeRef,
   rri,
   fileDefFormats,
@@ -31,6 +32,8 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   elementIsVisible,
@@ -74,7 +77,7 @@ const realmAFiles: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -83,7 +86,7 @@ const realmAFiles: Record<string, any> = {
 };
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -97,8 +100,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -132,8 +135,8 @@ const personCardSource = `
   }
 `;
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -158,8 +161,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -178,14 +181,28 @@ const employeeCardSource = `
 
 const erroringModuleSource = `throw new Error('boom');`;
 
+// Initial source throws at module evaluation so the loader marks the entry
+// `state: 'broken'`. An external writer (the AI agent's card+source POST in
+// the real flow) then replaces it with a valid CardDef. A parse-level
+// failure would propagate as an uncaught error in qunit, so we use a
+// runtime throw — the loader-cache behaviour the regression guards is
+// identical for both failure modes.
+const brokenThenFixedSource = `throw new Error('initial broken module');`;
+const brokenThenFixedValidSource = `
+  import { CardDef } from '@cardstack/base/card-api';
+  export class BrokenThenFixed extends CardDef {
+    static displayName = 'Broken Then Fixed';
+  }
+`;
+
 const inThisFileSource = `
   import {
     contains,
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -260,8 +277,8 @@ const componentModuleSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -296,8 +313,8 @@ const exportsSource = `
     field,
     CardDef,
     FieldDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class AncestorCard1 extends CardDef {
     static displayName = 'AncestorCard1';
@@ -324,8 +341,8 @@ const specialExportsSource = `
     contains,
     field,
     CardDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   class AncestorCard extends CardDef {
     static displayName = 'Ancestor';
@@ -350,7 +367,7 @@ const importsSource = `
     field,
     linksTo,
     linksToMany
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   export class ChildCard1 extends AncestorCard2 {
     static displayName = 'ChildCard1';
@@ -387,9 +404,9 @@ const reExportSource = `
     FieldDef,
     BaseDef as BDef,
     contains,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import NumberField from 'https://cardstack.com/base/number';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import NumberField from '@cardstack/base/number';
 
   export const exportedVar = 'exported var';
 
@@ -402,16 +419,16 @@ const reExportSource = `
   export default NumberField;
   export { Person as Human } from './person';
 
-  export { default as Date } from 'https://cardstack.com/base/date';
+  export { default as Date } from '@cardstack/base/date';
 `;
 
 const fileDefSource = `
-  import { FileDef } from 'https://cardstack.com/base/file-api';
+  import { FileDef } from '@cardstack/base/file-api';
   import {
     contains,
     field,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class CustomFileDef extends FileDef {
     static displayName = 'custom file';
@@ -420,7 +437,7 @@ const fileDefSource = `
 `;
 
 const pngDefModuleSource = `
-  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+  export { PngDef } from '@cardstack/base/png-image-def';
 `;
 
 const localInheritSource = `
@@ -429,7 +446,7 @@ const localInheritSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   class GrandParent extends CardDef {
     static displayName = 'local grandparent';
@@ -457,6 +474,7 @@ const localInheritSource = `
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
+  let realm: Realm;
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
@@ -487,7 +505,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ adapter } = await withCachedRealmSetup(async () => {
+    ({ adapter, realm } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
@@ -516,6 +534,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'command-module.gts': commandModuleSource,
           'component-module.gts': componentModuleSource,
           'erroring-module.gts': erroringModuleSource,
+          'broken-then-fixed.gts': brokenThenFixedSource,
           'empty-file.gts': '',
           'sample-styles.css': 'body { color: red; }',
           'person-entry.json': {
@@ -532,7 +551,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -2063,7 +2082,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.expect(11);
     let expectedSrc = `
 import { ExportedCard } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
 }`.trim();
@@ -2172,7 +2191,7 @@ export class TestCard extends ExportedCard {
         content,
         `
 import { ExportedField } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
@@ -2277,7 +2296,7 @@ export class TestFileDef extends CustomFileDef {
     assert.expect(4);
     let expectedSrc = `
 import { ExportedCard as ExportedCardParent } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
 }`.trim();
@@ -2617,6 +2636,78 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-delete-module-button]').exists();
   });
 
+  // When an external writer (e.g. the AI agent's card+source POST) replaces
+  // a previously-broken .gts with a valid one, the open code-mode view must
+  // reflect the fix without a page reload. Regression guard: the host's
+  // module loader caches compile failures under state: 'broken'; without an
+  // explicit loader reset on the FileResource invalidation path, the
+  // re-read would re-hit the cached broken entry and leave the
+  // module-inspector stuck on SyntaxErrorDisplay.
+  test('code mode recovers when a previously-broken module is fixed by an external write', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}broken-then-fixed.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    assert
+      .dom('[data-test-syntax-error]')
+      .exists('initial broken source surfaces a syntax error');
+
+    // Drop any pre-existing store subscriptions so the test exercises the
+    // path the fix protects — store.handleInvalidations only fires when the
+    // store has a subscription, and the regression originally surfaced in
+    // code mode where no card instance from the realm had been loaded.
+    let store = getService('store') as unknown as {
+      subscriptions: Map<string, { unsubscribe: () => void }>;
+    };
+    for (let [key, sub] of [...store.subscriptions]) {
+      sub.unsubscribe();
+      store.subscriptions.delete(key);
+    }
+    assert.strictEqual(
+      store.subscriptions.size,
+      0,
+      'store has no realm subscriptions before the external write',
+    );
+
+    let incrementalEvent = new Deferred<void>();
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
+          incrementalEvent.fulfill();
+        }
+      },
+    );
+
+    // realm.write mirrors a card+source POST: the realm transpiles, indexes,
+    // and broadcasts the `incremental` invalidation event over matrix. No
+    // X-Boxel-Client-Request-Id is passed, so the FileResource subscription
+    // treats this as an external (anonymous) write — the same path the agent
+    // takes when patching a card def.
+    await realm.write('broken-then-fixed.gts', brokenThenFixedValidSource);
+    await incrementalEvent.promise;
+    await settled();
+
+    assert
+      .dom('[data-test-syntax-error]')
+      .doesNotExist(
+        'syntax error is cleared after the external write replaces the broken source with a valid one',
+      );
+    assert
+      .dom('[data-test-card-module-definition]')
+      .exists('the module inspector renders the fixed card definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText(
+        'Broken Then Fixed',
+        'the fixed displayName is reflected in the inspector',
+      );
+  });
+
   test('can delete an erroring module file', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
@@ -2771,12 +2862,10 @@ export class ExportedCard extends ExportedCardParent {
       .dom('[data-test-create-listing-modal]')
       .exists('confirmation modal appears after clicking Create Listing');
 
-    await waitFor(
-      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
-    );
+    await waitFor(`[data-test-selected-example="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .exists('the opened instance is pre-selected');
     assert
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')

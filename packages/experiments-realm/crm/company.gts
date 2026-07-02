@@ -68,7 +68,7 @@ class ViewCompanyTemplate extends Component<typeof Company> {
 export class Company extends CardDef {
   static displayName = 'Company';
   static icon = CompanyIcon;
-  @field crmApp = linksTo(() => CrmApp);
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
   @field name = contains(StringField);
   @field industry = contains(StringField);
   @field headquartersAddress = contains(AddressField);

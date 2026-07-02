@@ -71,6 +71,43 @@ test.describe('Publish realm', () => {
     await page.bringToFront();
   });
 
+  test('it can publish an unlisted link', async ({ page }) => {
+    await openPublishRealmModal(page);
+
+    await page.waitForSelector('[data-test-unlisted-link-url]');
+    let publishedURL = (
+      await page.locator('[data-test-unlisted-link-url]').innerText()
+    ).replace(/\s+/g, '');
+
+    // The unlisted link is the user's own space subdomain with a random path.
+    expect(publishedURL).toMatch(
+      new RegExp(`^https://${user.username}\\.localhost:4205/[a-z0-9]+/$`),
+    );
+
+    await page.locator('[data-test-unlisted-link-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+    await page.waitForSelector(
+      '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+    );
+
+    let newTabPromise = page.waitForEvent('popup');
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+      )
+      .click();
+
+    let newTab = await newTabPromise;
+    await newTab.waitForLoadState();
+
+    await expect(newTab).toHaveURL(publishedURL);
+    await expect(
+      newTab.locator(`[data-test-card="${publishedURL}index"]`),
+    ).toBeVisible();
+    await newTab.close();
+    await page.bringToFront();
+  });
+
   test('it validates, claims, and publishes to a custom subdomain', async ({
     page,
   }) => {
@@ -243,6 +280,9 @@ test.describe('Publish realm', () => {
     page,
     request,
   }) => {
+    // Two full publish+index cycles plus a readiness wait — give this E2E
+    // flow more than the default per-attempt budget.
+    test.setTimeout(120_000);
     // CS-11043 regression net. The bug was: a republish reported success
     // server-side but the published URL kept serving the previous publish's
     // rendered HTML, sometimes for tens of hours. Every existing
@@ -426,15 +466,24 @@ test.describe('Publish realm', () => {
       .click();
     let secondTab = await secondTabPromise;
     await secondTab.waitForLoadState();
-    // Generous retry budget: if waitForResponse above was downgraded
-    // to null, the publish may not yet be done by the time we land on
-    // the published URL. The assertion retries until the sentinel
-    // appears or this budget expires, which gives slow republishes
-    // room to land without flapping the test.
-    await expect(secondTab.locator('[data-test-sentinel-output]')).toHaveText(
-      updatedSentinel,
-      { timeout: 120_000 },
-    );
+    // The publish handler returns 202 before the reindex finishes, and a tab
+    // that loaded before it landed won't re-fetch on its own — so reload until
+    // the published URL serves the updated sentinel. The retry budget gives the
+    // background reindex room to settle.
+    await expect
+      .poll(
+        async () => {
+          await secondTab.reload({ waitUntil: 'domcontentloaded' });
+          return (
+            (await secondTab
+              .locator('[data-test-sentinel-output]')
+              .textContent()
+              .catch(() => null)) ?? ''
+          );
+        },
+        { timeout: 60_000, intervals: [2_000] },
+      )
+      .toBe(updatedSentinel);
     await expect(secondTab.locator('body')).not.toContainText(initialSentinel);
     await secondTab.close();
     await page.bringToFront();

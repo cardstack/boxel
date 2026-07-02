@@ -3,12 +3,15 @@ import { access } from 'fs/promises';
 import { join, resolve } from 'path';
 import {
   PUBLISHED_DIRECTORY_NAME,
+  ensureTrailingSlash,
+  insertPermissions,
   logger,
   param,
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import { isEnvironmentMode } from './dev-service-registry.ts';
 
 const log = logger('realm-server:registry-backfill');
 
@@ -80,6 +83,21 @@ export async function runRegistryBackfill(
   await safeStep('stale-bootstrap-check', () =>
     warnOnStaleBootstrapRows(opts, bootstrapUrls ?? new Set()),
   );
+  // Environment mode mounts the dev realms at per-environment Traefik URLs,
+  // which the static-URL permission migrations never seed. Without parity,
+  // public realms 401 unauthenticated readers AND any bootstrap realm whose
+  // CLI fromUrl is scoped (e.g. `@cardstack/skills/`) has its realm.url set
+  // to the env-served URL and so finds no realm-owner row at boot —
+  // `Realm#startup` → `getRealmOwnerUserId()` throws "Cannot determine
+  // realm owner", which silently aborts the from-scratch-index and leaves
+  // the realm mounted with zero rows in boxel_index. Mirror every
+  // standard-mode permission row (public-read, realm-owner, named-user
+  // read/write) onto the env-mode URL by matching pathname.
+  if (isEnvironmentMode()) {
+    await safeStep('env-permission-parity', () =>
+      seedEnvironmentPermissionParity(opts),
+    );
+  }
 
   // Note: `sourceDiscovered` is the number of realm directories seen on
   // disk, not the number of INSERTs actually executed. Under ON CONFLICT DO
@@ -136,6 +154,120 @@ async function upsertBootstrapRealms(
     ]);
   }
   return seen;
+}
+
+// Mirror every standard-mode realm_user_permissions row (public read,
+// realm-owner, named-user read/write) onto each bootstrap realm at the
+// env-mode URL by path-matching. Static-URL permission migrations
+// (`http://localhost:4201/<endpoint>/`, canonical base URL) don't match
+// env-mode `realm-server.<slug>.localhost/<endpoint>/` URLs, so without
+// this every scoped-fromUrl bootstrap realm (skills, openrouter, …) boots
+// with no realm-owner row and its from-scratch-index aborts immediately
+// in `getRealmOwnerUserId()`, leaving the realm mounted but unindexed.
+//
+// Per-(username, env-url) granularity: only inserts if no row exists at
+// the env URL for that user — so a custom permission added later via the
+// admin UI isn't clobbered by a subsequent boot. The path-keyed match
+// keeps this in lockstep with whatever the migrations declare (no second
+// hardcoded realm list); only realms whose path is already declared in
+// `realm_user_permissions` are touched, so it cannot grant access to a
+// realm policy never authorized.
+//
+// Matrix server_name is always "localhost" for `*.localhost` subdomains
+// (see `userIdFromUsername` in matrix-client.ts), so usernames like
+// `@skills_realm:localhost` work in both standard and env mode unchanged.
+async function seedEnvironmentPermissionParity(
+  opts: RegistryBackfillOpts,
+): Promise<number> {
+  type PermRow = {
+    realm_url: string;
+    username: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+  };
+  let allRows = (await query(opts.dbAdapter, [
+    `SELECT realm_url, username, read, write, realm_owner FROM realm_user_permissions`,
+  ])) as PermRow[];
+
+  // Bucket existing permissions by URL pathname so we can match a
+  // bootstrap realm's env-mode pathname against the standard-mode source
+  // rows that share it. Also bucket by env-mode URL so we can skip rows
+  // a previous boot already mirrored (idempotency without an upsert).
+  let pathToRows = new Map<string, PermRow[]>();
+  let envUrlSeenUsernames = new Map<string, Set<string>>();
+  for (let row of allRows) {
+    let pathname: string;
+    try {
+      pathname = new URL(row.realm_url).pathname;
+    } catch {
+      continue;
+    }
+    if (!pathToRows.has(pathname)) {
+      pathToRows.set(pathname, []);
+    }
+    pathToRows.get(pathname)!.push(row);
+    if (!envUrlSeenUsernames.has(row.realm_url)) {
+      envUrlSeenUsernames.set(row.realm_url, new Set());
+    }
+    envUrlSeenUsernames.get(row.realm_url)!.add(row.username);
+  }
+
+  let seeded = 0;
+  for (let { url } of opts.bootstrapRealms) {
+    let realmURL = new URL(ensureTrailingSlash(url));
+    let sourceRows = pathToRows.get(realmURL.pathname);
+    if (!sourceRows?.length) {
+      continue;
+    }
+    let existingAtEnv =
+      envUrlSeenUsernames.get(realmURL.href) ?? new Set<string>();
+    // Coalesce sibling source rows (e.g. localhost:4201 + localhost:4205
+    // both grant the same user) by OR-ing their permission bits, so a
+    // single env-mode row carries the union of standard-mode grants.
+    let coalesced = new Map<
+      string,
+      { read: boolean; write: boolean; realm_owner: boolean }
+    >();
+    for (let row of sourceRows) {
+      if (row.realm_url === realmURL.href) {
+        continue; // skip rows already at the env URL
+      }
+      let existing = coalesced.get(row.username) ?? {
+        read: false,
+        write: false,
+        realm_owner: false,
+      };
+      coalesced.set(row.username, {
+        read: existing.read || row.read,
+        write: existing.write || row.write,
+        realm_owner: existing.realm_owner || row.realm_owner,
+      });
+    }
+    let toInsert: Record<string, Array<'read' | 'write' | 'realm-owner'>> = {};
+    for (let [username, perms] of coalesced) {
+      if (existingAtEnv.has(username)) {
+        continue;
+      }
+      let actions: Array<'read' | 'write' | 'realm-owner'> = [];
+      if (perms.read) actions.push('read');
+      if (perms.write) actions.push('write');
+      if (perms.realm_owner) actions.push('realm-owner');
+      if (actions.length === 0) {
+        continue;
+      }
+      toInsert[username] = actions;
+    }
+    if (Object.keys(toInsert).length === 0) {
+      continue;
+    }
+    await insertPermissions(opts.dbAdapter, realmURL, toInsert);
+    seeded += Object.keys(toInsert).length;
+    log.info(
+      `seeded env-mode permission parity for ${realmURL.href}: ${Object.keys(toInsert).join(', ')}`,
+    );
+  }
+  return seeded;
 }
 
 async function upsertSourceRealms(opts: RegistryBackfillOpts): Promise<number> {

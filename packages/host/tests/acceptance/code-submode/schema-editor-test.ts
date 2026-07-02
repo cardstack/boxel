@@ -10,7 +10,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI, Deferred } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -333,7 +333,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -347,13 +347,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
                 cardDescription: 'A field that captures big int values',
                 specType: 'field',
                 ref: {
-                  module: `${baseRealm.url}big-integer`,
+                  module: `${baseRealmRRI}big-integer`,
                   name: 'default',
                 },
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -367,13 +367,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
                 cardDescription: 'A field that captures date values',
                 specType: 'field',
                 ref: {
-                  module: `${baseRealm.url}date`,
+                  module: `${baseRealmRRI}date`,
                   name: 'default',
                 },
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -703,12 +703,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     // There is some additional thing we are waiting on here, probably the
     // card to load in the card resource, but I'm not too sure so using waitUntil instead
     await waitUntil(() =>
@@ -732,14 +732,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-search-field]');
     await fillIn('[data-test-search-field]', 'Date');
 
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
-    );
+    await waitFor(`[data-test-item-button="${testRealmURL}fields/date-field"]`);
 
-    await click(
-      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
-    );
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}fields/date-field"]`);
+    await click('[data-test-card-chooser-go-button]');
     // There is some additional thing we are waiting on here, probably the
     // card to load in the card resource, but I'm not too sure so using waitUntil instead
     await waitUntil(() =>
@@ -807,12 +803,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
     await waitFor('.card-chooser-area [data-test-selected-type-display-name]');
@@ -843,12 +839,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+      '[data-test-item-button="http://test-realm/test/person-entry"]',
     );
     await click(
-      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+      '[data-test-item-button="http://test-realm/test/person-entry"]',
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPerson');
     await click('[data-test-boxel-radio-option-id="one"]');
 
@@ -873,13 +869,13 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+      '[data-test-item-button="http://test-realm/test/person-entry"]',
       waitForOpts,
     );
     await click(
-      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+      '[data-test-item-button="http://test-realm/test/person-entry"]',
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
     await click('[data-test-boxel-radio-option-id="many"]');
     await click('[data-test-save-field-button]');
@@ -987,12 +983,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
+      `[data-test-item-button="${testRealmURL}fields/biginteger-field"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');
     await click('[data-test-boxel-radio-option-id="one"]');
 
@@ -1028,8 +1024,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-selected-type="Supervisor"]').exists();
 
     await click('[data-test-choose-card-button]');
-    await click(`[data-test-card-catalog-item="${testRealmURL}person-entry"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-chooser-go-button]');
     await fillIn('[data-test-field-name-input]', 'supervisedBy');
     await click('[data-test-boxel-radio-option-id="many"]');
 
@@ -1210,7 +1206,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-tooltip-content]');
     assert
       .dom('[data-test-tooltip-content]')
-      .hasText('https://cardstack.com/base/card-api (BaseDef)');
+      .hasText('@cardstack/base/card-api (BaseDef)');
 
     await triggerEvent(
       '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',

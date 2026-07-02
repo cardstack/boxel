@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type {
   ProjectData,
@@ -167,6 +168,26 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     assert.true(
       skills.includes('software-factory-operations'),
       'includes software-factory-operations for factory workflow',
+    );
+  });
+
+  test('includes software-factory-operations even for sparse issues with no workflow keywords', function (assert) {
+    // Regression: a one-line human-authored adjustment added via the board
+    // UI ("Modernize the look") used to miss the operations skill because the
+    // loader gated it on workflow keywords in the issue text. Every
+    // non-bootstrap issue is a delivery issue, so it must always load.
+    let resolver = new DefaultSkillResolver();
+    let issue = makeIssue({
+      title: 'Modernize the look of the calculator',
+      issueType: 'adjustment',
+    });
+    let project = makeProject();
+
+    let skills = resolver.resolve(issue, project);
+
+    assert.true(
+      skills.includes('software-factory-operations'),
+      'sparse adjustment issue still loads the operations skill',
     );
   });
 
@@ -920,11 +941,13 @@ module('factory-skill-loader > re-resolution on new issue', function () {
       skills1.includes('ember-best-practices'),
       'issue1 gets ember-best-practices',
     );
-    assert.false(
-      skills1.includes('software-factory-operations'),
-      'issue1 does not get software-factory-operations',
-    );
 
+    // software-factory-operations now loads for every non-bootstrap issue,
+    // so it's no longer the differentiator — ember-best-practices is.
+    assert.true(
+      skills1.includes('software-factory-operations'),
+      'issue1 gets software-factory-operations (always loaded)',
+    );
     assert.true(
       skills2.includes('software-factory-operations'),
       'issue2 gets software-factory-operations',

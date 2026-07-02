@@ -12,14 +12,27 @@ import {
 } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as yaml from 'yaml';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
-import { clearRemoteRealmCache } from './realm-server-mock/routes';
-
 import { cleanupMonacoEditorModels } from './index';
+
+// Pin `yaml` into the eager test bundle. `markdown-file-def` parses frontmatter
+// with it, but the app shims `yaml` lazily (see `externals.ts`) so web users
+// who never render markdown frontmatter don't download it. Under test that lazy
+// `import('yaml')` is a per-render chunk fetch, and a single transient failure
+// is cached by the engine as a permanent module rejection (only a page reload
+// clears it), wedging every later render in the page. Importing it eagerly here
+// — `setup.ts` loads at test-bundle boot — means the chunk is already resolved,
+// so the app's lazy `import('yaml')` returns it without a fetch in tests; the
+// app's lazy shim is untouched. The `parse` reference keeps the bundler from
+// tree-shaking this import away (and asserts the module actually bundled).
+if (typeof yaml.parse !== 'function') {
+  throw new Error('expected `yaml` to be bundled into the host test build');
+}
 
 // Map of fetch calls currently in flight, keyed by a globally-unique per-call
 // id so overlapping identical requests each occupy their own slot, and so a
@@ -664,7 +677,6 @@ export function setupApplicationTest(hooks: NestedHooks) {
     )?.resetAll();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
-    clearRemoteRealmCache();
   });
 }
 
@@ -681,7 +693,6 @@ export function setupRenderingTest(hooks: NestedHooks) {
     )?.resetAll();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
-    clearRemoteRealmCache();
   });
 }
 

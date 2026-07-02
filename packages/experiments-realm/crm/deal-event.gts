@@ -235,7 +235,7 @@ export class DealEvent extends CardDef {
   @field attendees = contains(NumberField);
   @field subject = contains(StringField);
   @field location = contains(StringField);
-  @field assignee = linksTo(() => Representative);
+  @field assignee = linksTo(() => Representative, { searchable: 'crmApp' });
   @field startDateTime = contains(DateTimeField);
   @field endDateTime = contains(DateTimeField);
   @field eventType = contains(StringField);

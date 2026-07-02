@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
@@ -258,7 +259,7 @@ function withEnv<T>(
   }
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   hooks.before(function () {
     tmpCertDir = mkdtempSync(join(tmpdir(), 'realm-listener-test-'));
     let pair = makeCert(tmpCertDir);
@@ -516,12 +517,13 @@ module(basename(__filename), function (hooks) {
     );
   });
 
-  test('h2 diagnostics (passive ping + session snapshot) do not disrupt serving', async function (assert) {
-    // With REALM_SERVER_HTTP2_DIAGNOSTICS on, every accepted session is swept
-    // every 5s — a passive PING + a state snapshot. Hold one h2 connection open
-    // across a sweep and confirm the session still serves afterwards, i.e. the
-    // observer-only diagnostics neither throw in the interval nor perturb the
-    // session they watch.
+  test('h2 keepalive + diagnostics do not disrupt serving', async function (assert) {
+    // Every accepted session gets the PING keepalive, and with
+    // REALM_SERVER_HTTP2_DIAGNOSTICS on it is also swept every 5s for a state
+    // snapshot. Hold one h2 connection open across a keepalive ping and a
+    // diagnostics sweep and confirm the session still serves afterwards: a
+    // healthy peer pongs, so the keepalive must never tear it down, and the
+    // observer-only diagnostics must neither throw nor perturb the session.
     let prior = process.env.REALM_SERVER_HTTP2_DIAGNOSTICS;
     process.env.REALM_SERVER_HTTP2_DIAGNOSTICS = '1';
     let restoreEnv = () => {
@@ -551,13 +553,13 @@ module(basename(__filename), function (hooks) {
     try {
       assert.true(isHttp2, 'listener advertises h2 mode');
       assert.strictEqual(await request('/_alive'), 200, 'first request OK');
-      // Cross at least one 5s sweep so the passive ping + snapshot run against
-      // the live session.
+      // Cross at least one 5s keepalive ping and one diagnostics sweep so
+      // both run against the live session.
       await new Promise((r) => setTimeout(r, 5500));
       assert.strictEqual(
         await request('/_alive'),
         200,
-        'request after a diagnostics sweep still OK — ping did not disrupt the session',
+        'request after a keepalive ping + diagnostics sweep still OK',
       );
     } finally {
       client.close();

@@ -18,6 +18,7 @@ import type {
 import {
   addCommentToIssue,
   ensureJsonExtension,
+  inferIssueTrackerModuleUrl,
   toRealmRelativePath,
 } from './realm-operations.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
@@ -199,22 +200,22 @@ export interface RealmIssueStoreConfig {
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
-  private darkfactoryModuleUrl: string;
+  private issueTrackerModuleUrl: string;
   private client: BoxelCLIClient;
   private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
-    this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
+    this.issueTrackerModuleUrl = inferIssueTrackerModuleUrl(
+      config.darkfactoryModuleUrl,
+    );
     this.client = config.client;
     this.workspaceDir = config.workspaceDir;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
     let result = await this.client.search(this.realmUrl, {
-      filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-      },
+      filter: { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
     });
 
     if (!result.ok) {
@@ -230,8 +231,10 @@ export class RealmIssueStore implements IssueStore {
   async refreshIssue(issueId: string): Promise<SchedulableIssue> {
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-        eq: { id: issueId },
+        every: [
+          { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
+          { eq: { id: issueId } },
+        ],
       },
     });
 
@@ -308,11 +311,12 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // We expect exactly one Project card per target realm. The search
-    // index stays on the realm — card mutations happen locally.
+    // We expect exactly one Project card per target realm. The search index
+    // stays on the realm — card mutations happen locally. Match by the
+    // canonical `issue-tracker` module (see the constructor).
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Project' },
+        type: { module: this.issueTrackerModuleUrl, name: 'Project' },
       },
       sort: [{ by: 'lastModified', direction: 'desc' as const }],
     });

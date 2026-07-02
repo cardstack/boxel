@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  baseRealmRRI,
   rri,
   trimExecutableExtension,
   type RenderRouteOptions,
@@ -75,6 +76,24 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const BROKEN_MODULE = `export const Broken = ;`;
+  // One resolvable `searchable` path (author → name) and one unresolvable one
+  // (reviewer → bogus). Definition-build validation records only the bad path
+  // on `meta.diagnostics.searchablePathIssues`, tagged with its owning def.
+  const SEARCHABLE_MODULE = `
+    import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+
+    export class SearchAuthor extends CardDef {
+      static displayName = 'SearchAuthor';
+      @field name = contains(StringField);
+    }
+
+    export class SearchArticle extends CardDef {
+      static displayName = 'SearchArticle';
+      @field title = contains(StringField);
+      @field author = linksTo(() => SearchAuthor, { searchable: 'name' });
+      @field reviewer = linksTo(() => SearchAuthor, { searchable: 'bogus' });
+    }
+  `;
 
   hooks.beforeEach(async function () {
     ({ adapter, realm } = await withCachedRealmSetup(async () =>
@@ -86,6 +105,7 @@ module('Acceptance | prerender | module', function (hooks) {
           'parent.gts': PARENT_MODULE,
           'child.gts': CHILD_MODULE,
           'broken.gts': BROKEN_MODULE,
+          'searchable-card.gts': SEARCHABLE_MODULE,
         },
       }),
     ));
@@ -127,7 +147,7 @@ module('Acceptance | prerender | module', function (hooks) {
       'types include the card itself',
     );
     assert.ok(
-      personEntry.types.includes(`${baseRealm.url}card-api/CardDef`),
+      personEntry.types.includes(`${baseRealmRRI}card-api/CardDef`),
       'types include base card',
     );
   });
@@ -357,6 +377,33 @@ module('Acceptance | prerender | module', function (hooks) {
         : undefined,
       'Updated Person',
       'updated display name observed after clearCache flag',
+    );
+  });
+
+  test('records unresolvable searchable paths on meta.diagnostics, tagged with the owning def', async function (assert) {
+    let moduleURL = `${testRealmURL}searchable-card.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { status, model } = captureModuleResult();
+    assert.strictEqual(status, 'ready', 'module loads');
+
+    let articleKey = `${trimExecutableExtension(rri(moduleURL))}/SearchArticle`;
+    assert.deepEqual(
+      model.meta?.diagnostics?.searchablePathIssues,
+      [{ codeRef: articleKey, fieldName: 'reviewer', path: 'bogus' }],
+      'only the unresolvable path is recorded, tagged with its owning def — the resolvable author→name path is not',
+    );
+  });
+
+  test('a module with no searchable annotations produces no diagnostics meta (inert)', async function (assert) {
+    let moduleURL = `${testRealmURL}person.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+    assert.strictEqual(
+      model.meta?.diagnostics?.searchablePathIssues,
+      undefined,
+      'no searchablePathIssues meta when nothing is annotated',
     );
   });
 });

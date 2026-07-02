@@ -21,6 +21,7 @@ import {
   instantiateRealmSpecs,
   type InstantiateCardFn,
   type InstanceInstantiationRecord,
+  type SearchSpecsResult,
   type SpecInfo,
 } from '../instantiate-execution.ts';
 import {
@@ -44,10 +45,13 @@ export type {
   InstantiateModuleResult,
   SpecInfo,
 } from '../instantiate-execution.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 export interface InstantiateValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   instantiateResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Example instance
@@ -61,9 +65,7 @@ export interface InstantiateValidationStepConfig {
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
   /** Injected for testing — defaults to a spec search via the shared engine. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecsResult>;
   /** Injected for testing — defaults to the shared engine's instantiate-card caller. */
   instantiateCardFn?: InstantiateCardFn;
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
@@ -277,6 +279,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
         instantiateCardFn: this.config.instantiateCardFn,
+        cache: this.config.cache,
       },
       specInfos,
     );

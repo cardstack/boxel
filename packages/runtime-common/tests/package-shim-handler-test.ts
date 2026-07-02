@@ -6,6 +6,7 @@ import {
   wrapWithStrictNamespace,
   isRetryableShimResolveError,
   withResolveRetry,
+  describeShimError,
   type ShimRetryLogger,
 } from '../package-shim-handler.ts';
 
@@ -222,7 +223,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       );
       handler.shimModule('@cardstack/runtime-common', {
         Loader: class {},
-        baseRealm: 'https://cardstack.com/base/',
+        baseRealm: '@cardstack/base/',
       });
       let requestUrl = `${PACKAGES_FAKE_ORIGIN}@cardstack/runtime-common`;
       let response = await handler.handle(new Request(requestUrl));
@@ -259,7 +260,7 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       // `/marked-sync` subpath, not on the main runtime-common barrel.
       handler.shimModule('@cardstack/runtime-common', {
         Loader: class {},
-        baseRealm: 'https://cardstack.com/base/',
+        baseRealm: '@cardstack/base/',
       });
       handler.shimModule('@cardstack/runtime-common/marked-sync', {
         markdownToHtml: () => '',
@@ -657,6 +658,68 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         'handler returns null after all retries failed (existing contract preserved)',
       );
     },
+
+  'describeShimError surfaces the transient signature from an Error message':
+    async (assert) => {
+      let described = describeShimError(
+        new TypeError(
+          'Failed to fetch dynamically imported module: https://packages/yaml',
+        ),
+      );
+      assert.true(
+        described.includes('Failed to fetch dynamically imported module'),
+        'the chunk-fetch signature is interpolated into the string (not hidden as "[object Object]")',
+      );
+      assert.true(
+        described.includes('TypeError'),
+        'the error name is included',
+      );
+    },
+
+  'describeShimError appends a Node socket error code when present': async (
+    assert,
+  ) => {
+    let err = Object.assign(new Error('connect failed'), {
+      code: 'ECONNRESET',
+    });
+    assert.strictEqual(
+      describeShimError(err),
+      'Error: connect failed (code ECONNRESET)',
+      'err.code is appended so socket/DNS failures are identifiable',
+    );
+  },
+
+  'describeShimError handles non-Error values without throwing': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      describeShimError('plain string failure'),
+      'plain string failure',
+      'a thrown string is returned verbatim',
+    );
+    assert.strictEqual(
+      describeShimError({ status: 503 }),
+      '{"status":503}',
+      'a plain object is JSON-serialized',
+    );
+    // Values where `JSON.stringify` returns `undefined` (or throws) must
+    // still produce a string, since the return type is `string`.
+    assert.strictEqual(
+      typeof describeShimError(undefined),
+      'string',
+      'a thrown `undefined` still yields a string, not `undefined`',
+    );
+    assert.strictEqual(
+      typeof describeShimError(() => {}),
+      'string',
+      'a thrown function still yields a string',
+    );
+    assert.strictEqual(
+      typeof describeShimError(10n),
+      'string',
+      'a bigint (which JSON.stringify throws on) still yields a string',
+    );
+  },
 });
 
 export default tests;

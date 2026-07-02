@@ -1,25 +1,35 @@
-import { getOwner } from '@ember/owner';
-import type Owner from '@ember/owner';
+import { registerDestructor } from '@ember/destroyable';
+import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { cached } from '@glimmer/tracking';
 
+import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
+
+import { isEqual } from 'lodash-es';
+import { TrackedArray } from 'tracked-built-ins';
 
 import {
   ensureTrailingSlash,
+  subscribeToRealm,
   baseFileRef,
-  type CardResource,
   type CodeRef,
-  type FileMetaResource,
-  type Saved,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
-import type { DataQuery } from '@cardstack/runtime-common/query';
 
-import { getSearchData, type SearchDataResource } from './search-data';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
+import type StoreService from '../services/store';
+
+const waiter = buildWaiter('file-tree-from-index-resource:search-waiter');
 
 interface Args {
   named: {
     realmURL: string;
     fileTypeFilter?: CodeRef;
+    // Optional equality constraints on indexed file fields (e.g.
+    // `{ kind: 'skill' }`), narrowing the tree beyond the type anchor.
+    fileFieldFilter?: Record<string, unknown>;
   };
 }
 
@@ -31,74 +41,124 @@ export interface FileTreeNode {
 }
 
 export class FileTreeFromIndexResource extends Resource<Args> {
-  // Use private field to avoid Glimmer autotracking - this prevents the error:
+  @service declare private store: StoreService;
+
+  // Use private fields to avoid Glimmer autotracking - this prevents the error:
   // "You attempted to update `realmURL` but it had already been used previously in the same computation"
   #realmURL: string | undefined;
   #fileTypeFilter: CodeRef | undefined;
-  private search: SearchDataResource | undefined;
+  #fileFieldFilter: Record<string, unknown> | undefined;
+  #subscription: { realmURL: string; unsubscribe: () => void } | undefined;
+  // @ts-ignore we use this.loaded for test instrumentation.
+  private loaded: Promise<void> | undefined;
+  private _fileURLs = new TrackedArray<string>();
 
-  modify(_positional: never[], named: Args['named']) {
-    let { realmURL, fileTypeFilter } = named;
-    let normalizedURL = ensureTrailingSlash(realmURL);
-    this.#fileTypeFilter = fileTypeFilter;
-
-    // Always update - the search resource handles deduplication internally
-    this.#realmURL = normalizedURL;
-
-    // Create search data resource for file-meta type in this realm
-    let owner = getOwner(this) as Owner;
-    this.search = getSearchData(
-      this,
-      owner,
-      () => this.query,
-      () => (this.#realmURL ? [this.#realmURL] : undefined),
-      { isLive: true },
-    );
+  constructor(owner: object) {
+    super(owner);
+    registerDestructor(this, () => {
+      this.#subscription?.unsubscribe();
+    });
   }
 
-  private get query(): DataQuery | undefined {
-    if (!this.#realmURL) {
-      return undefined;
+  modify(_positional: never[], named: Args['named']) {
+    let { realmURL, fileTypeFilter, fileFieldFilter } = named;
+    let normalizedURL = ensureTrailingSlash(realmURL);
+    let unchanged =
+      this.#realmURL === normalizedURL &&
+      isEqual(this.#fileTypeFilter, fileTypeFilter) &&
+      isEqual(this.#fileFieldFilter, fileFieldFilter);
+    this.#fileTypeFilter = fileTypeFilter;
+    this.#fileFieldFilter = fileFieldFilter;
+    this.#realmURL = normalizedURL;
+
+    if (this.#subscription?.realmURL !== normalizedURL) {
+      this.#subscription?.unsubscribe();
+      this.#subscription = {
+        realmURL: normalizedURL,
+        unsubscribe: subscribeToRealm(
+          normalizedURL,
+          (event: RealmEventContent) => {
+            if (
+              event.eventName !== 'index' ||
+              ('indexType' in event && event.indexType !== 'incremental')
+            ) {
+              return;
+            }
+            this.search.perform();
+          },
+        ),
+      };
     }
-    return {
-      filter: {
-        type: this.#fileTypeFilter ?? baseFileRef,
-      },
-      asData: true,
-      fields: { 'file-meta': [] },
-    };
+
+    if (unchanged) {
+      return;
+    }
+    this.loaded = this.search.perform();
   }
 
   get isLoading(): boolean {
-    return this.search?.isLoading ?? true;
+    return this.search.isRunning;
+  }
+
+  private search = restartableTask(async () => {
+    let realmURL = this.#realmURL;
+    if (!realmURL) {
+      return;
+    }
+    let token = waiter.beginAsync();
+    try {
+      let { data } = await this.store.searchEntries(this.query, [realmURL]);
+      let fileURLs = data.map((entry) => entry.id).filter(Boolean);
+      this._fileURLs.splice(0, this._fileURLs.length, ...fileURLs);
+    } finally {
+      waiter.endAsync(token);
+    }
+  });
+
+  // The file tree only needs each matched file's URL — the `search-entry`
+  // ids. The fieldset pins the leanest projection the wire grammar offers (a
+  // single-field sparse item) rather than full serializations or renderings.
+  private get query(): SearchEntryWireQuery {
+    let fieldFilter = this.#fileFieldFilter;
+    let eq =
+      fieldFilter && Object.keys(fieldFilter).length > 0
+        ? Object.fromEntries(
+            // Field paths in the search-entry wire grammar are `item.`-prefixed.
+            Object.entries(fieldFilter).map(([field, value]) => [
+              `item.${field}`,
+              value,
+            ]),
+          )
+        : undefined;
+    return {
+      filter: {
+        'item.on': this.#fileTypeFilter ?? baseFileRef,
+        ...(eq ? { eq } : {}),
+      },
+      fields: { 'search-entry': ['item.name'] },
+    };
   }
 
   @cached
   get entries(): FileTreeNode[] {
-    if (!this.search || !this.#realmURL) {
+    if (!this.#realmURL) {
       return [];
     }
 
-    let resources = this.search.resources;
-    let tree = this.buildTreeFromResources(resources);
+    let tree = this.buildTreeFromFileURLs(this._fileURLs);
     return this.sortEntries(tree);
   }
 
-  private buildTreeFromResources(
-    resources: (CardResource<Saved> | FileMetaResource)[],
-  ): Map<string, FileTreeNode> {
+  private buildTreeFromFileURLs(fileURLs: string[]): Map<string, FileTreeNode> {
     let root = new Map<string, FileTreeNode>();
 
-    for (let resource of resources) {
-      if (!resource.id) {
-        continue;
-      }
-      // Extract relative path from resource URL
-      // The resource id is the full URL like "http://localhost:4200/myworkspace/path/to/file.txt"
+    for (let fileURL of fileURLs) {
+      // Extract relative path from the file URL
+      // The search-entry id is the full URL like "http://localhost:4200/myworkspace/path/to/file.txt"
       // We need just "path/to/file.txt"
       // Decode percent-encoded characters (e.g. emoji filenames appear as %F0%9F%8E%89 in URLs)
       let relativePath = decodeURIComponent(
-        resource.id.replace(this.#realmURL!, ''),
+        fileURL.replace(this.#realmURL!, ''),
       );
 
       // Skip if the path is empty or just the realm root
@@ -165,9 +225,11 @@ export function fileTreeFromIndex(
   parent: object,
   realmURL: () => string,
   fileTypeFilter?: () => CodeRef | undefined,
+  fileFieldFilter?: () => Record<string, unknown> | undefined,
 ) {
   return FileTreeFromIndexResource.from(parent, () => ({
     realmURL: realmURL(),
     fileTypeFilter: fileTypeFilter?.(),
+    fileFieldFilter: fileFieldFilter?.(),
   })) as FileTreeFromIndexResource;
 }

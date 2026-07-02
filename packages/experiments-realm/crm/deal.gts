@@ -172,8 +172,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
   get hasStakeholders() {
     return (
-      this.args.model.primaryStakeholder ||
-      (this.args.model.stakeholders?.length ?? 0) > 0 //stakeholders is a proxy array
+      //stakeholders is a proxy array
+      (this.args.model.primaryStakeholder || (this.args.model.stakeholders?.length ?? 0) > 0)
     );
   }
 
@@ -1566,9 +1566,12 @@ export class Deal extends CardDef {
   static displayName = 'Deal';
   static headerColor = '#f8f7fa';
   static icon = DealIcon;
-  @field crmApp = linksTo(() => CrmApp);
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
   @field name = contains(StringField);
-  @field account = linksTo(() => Account);
+  @field account = linksTo(
+    () => Account,
+    { searchable: ['company', 'primaryContact', 'primaryContact.company'] },
+  );
   @field status = contains(DealStatus);
   @field priority = contains(DealPriority);
   @field closeDate = contains(DateField);
@@ -1596,10 +1599,10 @@ export class Deal extends CardDef {
     },
   });
   @field healthScore = contains(PercentageField);
-  @field event = linksTo(() => DealEvent);
+  @field event = linksTo(() => DealEvent, { searchable: 'assignee.crmApp' });
   @field notes = contains(MarkdownField);
-  @field primaryStakeholder = linksTo(() => Contact);
-  @field stakeholders = linksToMany(() => Contact);
+  @field primaryStakeholder = linksTo(() => Contact, { searchable: 'crmApp' });
+  @field stakeholders = linksToMany(() => Contact, { searchable: 'crmApp' });
   @field valueBreakdown = containsMany(ValueLineItem);
   @field isActive = contains(BooleanField, {
     computeVia: function (this: Deal) {
@@ -1608,7 +1611,6 @@ export class Deal extends CardDef {
         this.status.label !== 'Closed Lost'
       );
     },
-    isUsed: true,
   });
   //TODO: Fix after CS-7670. Maybe no fix needed
   @field headquartersAddress = contains(AddressField, {

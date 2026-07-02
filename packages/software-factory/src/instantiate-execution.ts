@@ -27,6 +27,11 @@ import { validateRealmRelativePath } from './realm-relative-path.ts';
 import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
 import { readCard } from './workspace-fs.ts';
 
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
+
 let log = logger('instantiate-execution');
 
 // ---------------------------------------------------------------------------
@@ -73,13 +78,27 @@ export type InstantiateCardFn = (
   instanceData?: string,
 ) => Promise<InstantiateModuleResult>;
 
+export interface SearchSpecsResult {
+  specs: SpecInfo[];
+  error?: string;
+  /**
+   * Raw Spec-card count from the realm search, before the card/app
+   * filter. Lets discovery distinguish "the index hasn't caught up yet"
+   * (zero raw hits — worth polling) from "Spec cards exist but none are
+   * instantiable" (final — return immediately instead of polling to the
+   * deadline). Optional because injected `searchSpecsFn` test doubles
+   * predate it: `undefined` means "no raw-count signal" and is treated
+   * as final, so an injected empty result returns immediately instead
+   * of polling for 30s.
+   */
+  totalSpecCards?: number;
+}
+
 export interface DiscoverRealmSpecsOptions {
   targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to a client.search over Spec cards. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecsResult>;
 }
 
 export interface InstantiateRealmSpecsOptions {
@@ -94,6 +113,12 @@ export interface InstantiateRealmSpecsOptions {
   workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + spec
+   * set, so the agent's mid-turn `run_instantiate` and the pipeline's
+   * instantiate step don't both instantiate the same unchanged examples.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface InstantiateRealmSpecsOutput {
@@ -123,6 +148,8 @@ export interface RunInstantiateInMemoryOptions {
   path?: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /** See {@link InstantiateRealmSpecsOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunInstantiateFailure {
@@ -159,14 +186,14 @@ export interface RunInstantiateResult {
 
 /**
  * Search the realm for Spec cards and return the ref + linkedExamples for
- * each card/app spec. Field specs are skipped (they don't produce
- * instantiable cards). linkedExample URLs that resolve outside the target
- * realm are dropped to prevent leaking the realm auth token to external
- * origins.
+ * each card/app spec. Specs of any other specType (field, component,
+ * command) are skipped — they don't reference instantiable cards.
+ * linkedExample URLs that resolve outside the target realm are dropped to
+ * prevent leaking the realm auth token to external origins.
  */
 export async function discoverRealmSpecs(
   options: DiscoverRealmSpecsOptions,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchSpecsFn =
     options.searchSpecsFn ??
     ((realmUrl: string) => defaultSearchSpecs(options.client, realmUrl));
@@ -174,10 +201,15 @@ export async function discoverRealmSpecs(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency.
+  // pushed Spec files isn't penalized for indexing latency. Poll ONLY on
+  // affirmative evidence of that race — the search itself returned zero
+  // Spec cards (`totalSpecCards === 0`). When Spec cards were found but
+  // the card/app filter dropped them all, or an injected searchSpecsFn
+  // reports no raw count at all, the result is final — polling can't
+  // change the answer.
   return retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0,
+    (r) => !r.error && r.specs.length === 0 && r.totalSpecCards === 0,
   );
 }
 
@@ -190,6 +222,25 @@ export async function discoverRealmSpecs(
  * exercised.
  */
 export async function instantiateRealmSpecs(
+  options: InstantiateRealmSpecsOptions,
+  specs: SpecInfo[],
+): Promise<InstantiateRealmSpecsOutput> {
+  if (options.cache) {
+    let inputs = specs.flatMap((s) => [
+      s.specId,
+      s.moduleUrl,
+      s.cardName,
+      ...s.exampleUrls,
+    ]);
+    let key = `instantiate:${cacheKeyForInputs(inputs)}`;
+    return options.cache.getOrRun(key, () =>
+      instantiateRealmSpecsUncached(options, specs),
+    );
+  }
+  return instantiateRealmSpecsUncached(options, specs);
+}
+
+async function instantiateRealmSpecsUncached(
   options: InstantiateRealmSpecsOptions,
   specs: SpecInfo[],
 ): Promise<InstantiateRealmSpecsOutput> {
@@ -364,6 +415,7 @@ export async function runInstantiateInMemory(
         client: options.client,
         workspaceDir: options.workspaceDir,
         instantiateCardFn,
+        cache: options.cache,
       },
       specsResult.specs,
     );
@@ -622,7 +674,7 @@ function emptyErrorResult(errorMessage: string): RunInstantiateResult {
 async function defaultSearchSpecs(
   client: BoxelCLIClient,
   realmUrl: string,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchResult = await client.search(realmUrl, {
     filter: { type: specRef },
   });
@@ -631,6 +683,7 @@ async function defaultSearchSpecs(
     return { specs: [], error: searchResult.error };
   }
 
+  let totalSpecCards = (searchResult.data ?? []).length;
   let specs: SpecInfo[] = [];
   for (let card of searchResult.data ?? []) {
     let specId = (card as Record<string, unknown>).id as string | undefined;
@@ -645,10 +698,16 @@ async function defaultSearchSpecs(
       continue;
     }
 
-    // Field specs don't produce instantiable instances — skip.
+    // Only card/app specs reference instantiable CardDefs. Field,
+    // component, and command specs point at exports the prerenderer
+    // cannot instantiate — catalog cards commonly ship them alongside
+    // the card spec — so they are skipped rather than failing the run.
+    // Same allowlist `boxel realm ingest-card` applies at seed time.
     let specType = attributes.specType as string | undefined;
-    if (specType === 'field') {
-      log.info(`Spec ${specId} is a field spec — skipping`);
+    if (specType !== 'card' && specType !== 'app') {
+      log.info(
+        `Spec ${specId} has specType ${specType ?? '(none)'} — not instantiable, skipping`,
+      );
       continue;
     }
 
@@ -699,7 +758,7 @@ async function defaultSearchSpecs(
     });
   }
 
-  return { specs };
+  return { specs, totalSpecCards };
 }
 
 /**

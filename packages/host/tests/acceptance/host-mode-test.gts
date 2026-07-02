@@ -323,7 +323,7 @@ module('Acceptance | host mode tests', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -352,6 +352,30 @@ module('Acceptance | host mode tests', function (hooks) {
               adoptsFrom: {
                 module: `${testHostModeRealmURL}broken-card`,
                 name: 'BrokenCard',
+              },
+            },
+          },
+        },
+        // A valid card definition whose module imports a dependency that does
+        // not exist, so resolving the import 404s. The card itself is found;
+        // it just can't load because a dependency is missing — a legitimate
+        // error state, distinct from the card not being found.
+        'missing-dep-card.gts': `
+          import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import { MissingThing } from './missing-dependency';
+          export class MissingDepCard extends CardDef {
+            static displayName = 'MissingDepCard';
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{MissingThing}}</div></template>
+            };
+          }
+        `,
+        'MissingDepCard/instance.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}missing-dep-card`,
+                name: 'MissingDepCard',
               },
             },
           },
@@ -397,6 +421,115 @@ module('Acceptance | host mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test('host mode fetches the card head from the search API and injects it', async function (assert) {
+    // The published page talks to its realm server directly (cookie creds), so
+    // the head prefetch goes through the global fetch rather than the virtual
+    // network. Intercept the head query, assert its shape, and answer with a
+    // search-entry doc whose `html` resource carries the head markup so the
+    // injection path is exercised end-to-end.
+    let cardUrl = `${testHostModeRealmURL}Pet/mango`;
+    let htmlId = `${cardUrl}#head#${testHostModeRealmURL}pet/Pet`;
+    let capturedHeadQuery: any;
+    let realFetch = globalThis.fetch;
+    globalThis.fetch = async (input: any, init?: any) => {
+      let url = typeof input === 'string' ? input : (input?.url ?? '');
+      if (url.includes('_federated-search') && init?.body) {
+        let body = JSON.parse(init.body);
+        if (body?.filter?.eq?.htmlQuery) {
+          capturedHeadQuery = body;
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: 'search-entry',
+                  id: cardUrl,
+                  relationships: {
+                    html: { data: [{ type: 'html', id: htmlId }] },
+                  },
+                },
+              ],
+              included: [
+                {
+                  type: 'html',
+                  id: htmlId,
+                  attributes: {
+                    format: 'head',
+                    html: '<title data-test-card-head-title>Mango</title>\n<meta property="og:title" content="Mango" />',
+                  },
+                },
+              ],
+              meta: { page: { total: 1 } },
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/vnd.card+json' },
+            },
+          );
+        }
+      }
+      return realFetch(input, init);
+    };
+
+    // The realm server serves index.html with these boundary markers, between
+    // which the host injects the card's prerendered <head>. The test harness
+    // index.html has none, so stand them in to observe the injection.
+    let headStart = document.createElement('meta');
+    headStart.setAttribute('data-boxel-head-start', '');
+    let headEnd = document.createElement('meta');
+    headEnd.setAttribute('data-boxel-head-end', '');
+    document.head.append(headStart, headEnd);
+
+    try {
+      await visit('/test/Pet/mango.json');
+
+      // The request is the head query: html-only fieldset, the `head`
+      // htmlQuery, scoped to the visited card.
+      assert.deepEqual(
+        capturedHeadQuery?.fields,
+        { 'search-entry': ['html'] },
+        'requests only the html branch',
+      );
+      assert.strictEqual(
+        capturedHeadQuery?.filter?.eq?.htmlQuery?.eq?.format,
+        'head',
+        'selects the head rendering',
+      );
+      assert.deepEqual(
+        capturedHeadQuery?.cardUrls,
+        [`${cardUrl}.json`],
+        'scoped to the visited card',
+      );
+
+      // og:title is emitted only by the prerendered card <head> (ember-page-title
+      // never does), so it uniquely marks the injected markup.
+      let ogTitle = document.head.querySelector('meta[property="og:title"]');
+      assert.ok(
+        ogTitle,
+        'the head markup from the search response is injected',
+      );
+      assert.strictEqual(
+        ogTitle?.getAttribute('content'),
+        'Mango',
+        'the injected head markup is the visited card head',
+      );
+
+      let hostModeService = getService('host-mode-service') as HostModeService;
+      assert.true(
+        hostModeService.headTemplateContainsTitle,
+        'the fetched head markup carries a title',
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+      for (let node = headStart.nextSibling; node && node !== headEnd; ) {
+        let next = node.nextSibling;
+        node.remove();
+        node = next;
+      }
+      headStart.remove();
+      headEnd.remove();
+    }
+  });
+
   test('visiting a non-existent card shows an error', async function (assert) {
     let store = getService('store') as StoreService;
     let originalGet = store.get.bind(store);
@@ -420,9 +553,10 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    await waitFor('[data-test-card-error]');
-    assert.dom('[data-test-card-error]').exists();
-    assert.dom('[data-test-card-error]').containsText('Card not found');
+    await waitFor('[data-test-host-mode-404]');
+    assert
+      .dom('[data-test-host-mode-404]')
+      .containsText('This page could not be found.');
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
@@ -430,6 +564,25 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-host-loading]').doesNotExist();
 
     store.get = originalGet;
+  });
+
+  test('visiting a card whose dependency is missing surfaces the error rather than a 404', async function (assert) {
+    await visit('/test/MissingDepCard/instance.json');
+
+    await waitFor('[data-test-card-error]');
+    // The card itself exists; one of its dependencies 404s. That is a
+    // legitimate error state, not a missing card, so the error is surfaced
+    // instead of the bare 404 placeholder.
+    assert
+      .dom('[data-test-host-mode-404]')
+      .doesNotExist('a missing dependency is not a missing card');
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}MissingDepCard/instance`,
+    );
   });
 
   test('visiting a card with a rendering error shows an error', async function (assert) {

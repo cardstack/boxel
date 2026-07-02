@@ -1,5 +1,5 @@
-import flatten from 'lodash/flatten';
-import flattenDeep from 'lodash/flattenDeep';
+import { flatten } from 'lodash-es';
+import { flattenDeep } from 'lodash-es';
 import {
   type CardResource,
   type JobInfo,
@@ -596,6 +596,23 @@ export class Batch {
           ...(errorEntry?.error.deps ?? []),
         ]),
       ];
+    }
+
+    // Canonicalize dependency URLs to their portable RRI prefix form (e.g.
+    // `@cardstack/base/foo`) before persisting. Index paths arrive here with
+    // base deps in mixed forms: the instance render path already unresolves to
+    // the prefix form, but the file-extract path records the virtual-alias URL
+    // form. Normalizing here keeps one canonical form on disk; dependency
+    // invalidation already searches both the real and prefix forms.
+    if (preparedEntry.deps) {
+      preparedEntry.deps = this.virtualNetwork.unresolveURLs(
+        preparedEntry.deps,
+      );
+    }
+    if (preparedEntry.last_known_good_deps) {
+      preparedEntry.last_known_good_deps = this.virtualNetwork.unresolveURLs(
+        preparedEntry.last_known_good_deps,
+      );
     }
 
     let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {

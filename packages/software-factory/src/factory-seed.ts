@@ -8,9 +8,18 @@
  * cards, then marks the seed issue as done.
  */
 
+import { posix } from 'node:path';
+
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import type { FactoryBrief } from './factory-brief.ts';
 
 import { logger } from './logger.ts';
+import {
+  inferIssueTrackerModuleUrl,
+  linkRelationshipToCard,
+  toRealmRelativePath,
+} from './realm-operations.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
 
 /**
@@ -103,6 +112,74 @@ export async function createSeedIssue(
 }
 
 // ---------------------------------------------------------------------------
+// Post-bootstrap project link
+// ---------------------------------------------------------------------------
+
+export interface LinkProjectToSeedIssueOptions {
+  client: BoxelCLIClient;
+  realmUrl: string;
+  workspaceDir: string;
+  /** From `inferDarkfactoryModuleUrl(realmUrl)`. */
+  darkfactoryModuleUrl: string;
+  /**
+   * How many times to retry the Project search when it comes back empty.
+   * The Project is synced to the realm fire-and-forget (no `waitForIndex`),
+   * so an empty result can just mean the indexer hasn't caught up. The
+   * post-loop backstop sets this so a fast run doesn't permanently leave the
+   * seed issue's project link unset; the in-loop hook leaves it at the
+   * default 0 — the backstop is its safety net.
+   */
+  searchRetries?: number;
+  /** Delay between empty-result retries. Defaults to `SEARCH_RETRY_DELAY_MS`. */
+  searchRetryDelayMs?: number;
+}
+
+/**
+ * Point the bootstrap seed issue's `project` relationship at the Project the
+ * bootstrap issue created, once it exists in the realm.
+ *
+ * The seed issue is written before the loop runs, when no Project exists yet,
+ * so it starts with no `project` link. After the bootstrap issue creates and
+ * syncs a Project, this finds it and patches the workspace seed issue in
+ * place. Returns `true` when it modified the issue so the caller can sync; a
+ * no-op (no Project indexed, the seed issue missing, or the link already
+ * correct) returns `false`.
+ */
+export async function linkProjectToSeedIssue(
+  options: LinkProjectToSeedIssueOptions,
+): Promise<boolean> {
+  let { client, realmUrl, workspaceDir, darkfactoryModuleUrl } = options;
+  let issueTrackerModuleUrl = inferIssueTrackerModuleUrl(darkfactoryModuleUrl);
+
+  return linkRelationshipToCard({
+    client,
+    realmUrl,
+    workspaceDir,
+    cardFile: SEED_ISSUE_FILE,
+    relationshipKey: 'project',
+    targetLabel: 'Project',
+    search: () =>
+      client.search(realmUrl, {
+        filter: { type: { module: issueTrackerModuleUrl, name: 'Project' } },
+        // One Project per bootstrapped realm; newest-first so a re-run that
+        // somehow produced more than one links the most recently created
+        // (the default first-id selection then takes the newest).
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
+      }),
+    // The `self` link is relative to the seed issue's directory, matching how
+    // the agent encodes implementation-issue project links (`../Projects/<slug>`).
+    buildLink: (id, realm) =>
+      posix.relative(
+        posix.dirname(SEED_ISSUE_PATH),
+        toRealmRelativePath(id, realm),
+      ),
+    log,
+    searchRetries: options.searchRetries,
+    searchRetryDelayMs: options.searchRetryDelayMs,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Document builder
 // ---------------------------------------------------------------------------
 
@@ -111,18 +188,59 @@ function buildSeedIssueDocument(
   darkfactoryModuleUrl: string,
 ) {
   let now = new Date().toISOString();
+  let adjust = Boolean(brief.sourceCardUrl);
 
-  let description = [
+  let briefHeader = [
     `## Brief`,
     ``,
     `**URL:** ${brief.sourceUrl}`,
     `**Title:** ${brief.title}`,
     `**Summary:** ${brief.contentSummary}`,
+    ...(adjust ? [`**Source card to adjust:** ${brief.sourceCardUrl}`] : []),
     ``,
     `### Full content`,
     ``,
     brief.content,
     ``,
+  ];
+
+  let { instructions, acceptanceCriteria, summary } = adjust
+    ? adjustSeedInstructions(brief)
+    : greenfieldSeedInstructions();
+
+  let description = [...briefHeader, ...instructions].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'BOOT-1',
+        summary,
+        description,
+        issueType: 'bootstrap',
+        status: 'backlog',
+        priority: 'critical',
+        order: 0,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+function greenfieldSeedInstructions(): {
+  instructions: string[];
+  acceptanceCriteria: string;
+  summary: string;
+} {
+  let instructions = [
     `## Instructions`,
     ``,
     `Read the brief above and create the following project artifacts in the workspace:`,
@@ -141,7 +259,7 @@ function buildSeedIssueDocument(
     `- \`blockedBy\` relationships to any prior issues it depends on`,
     ``,
     `Use the **\`Write\`** tool to create each \`.json\` file. When every artifact is on disk, call **\`signal_done\`** — the orchestrator marks this bootstrap issue done.`,
-  ].join('\n');
+  ];
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
@@ -156,26 +274,99 @@ function buildSeedIssueDocument(
   ].join('\n');
 
   return {
-    data: {
-      type: 'card' as const,
-      attributes: {
-        issueId: 'BOOT-1',
-        summary: 'Process brief and create project artifacts',
-        description,
-        issueType: 'bootstrap',
-        status: 'backlog',
-        priority: 'critical',
-        order: 0,
-        acceptanceCriteria,
-        createdAt: now,
-        updatedAt: now,
-      },
-      meta: {
-        adoptsFrom: {
-          module: darkfactoryModuleUrl,
-          name: 'Issue',
-        },
-      },
-    },
+    instructions,
+    acceptanceCriteria,
+    summary: 'Process brief and create project artifacts',
+  };
+}
+
+function adjustSeedInstructions(brief: FactoryBrief): {
+  instructions: string[];
+  acceptanceCriteria: string;
+  summary: string;
+} {
+  let instructions = [
+    `## Mode: ADJUST EXISTING CARD`,
+    ``,
+    `This brief carries a \`sourceCardUrl\`, so you are **adjusting an existing**`,
+    `card rather than building one from scratch. Follow the "Adjust flow"`,
+    `section of the \`software-factory-bootstrap\` skill. The steps:`,
+    ``,
+    `1. **Project artifacts** — create the \`Project\`, \`IssueTracker\`, and`,
+    `   \`Knowledge Articles\` exactly as in greenfield, from the brief above.`,
+    `2. **Seed the source card** — \`${brief.sourceCardUrl}\` — and its`,
+    `   same-realm dependency graph into the workspace with one command (run`,
+    `   from inside the workspace dir; read-only from the source realm):`,
+    `   \`\`\`bash`,
+    `   boxel realm ingest-card "${brief.sourceCardUrl}" .`,
+    `   \`\`\``,
+    `   It copies the card's module, every same-realm module it imports`,
+    `   (transitively, including type-only imports), its sample instances,`,
+    `   and its card-level Catalog Spec — preserving realm-relative paths.`,
+    `   Cross-realm imports (\`https://cardstack.com/base/...\`) and`,
+    `   component/function Specs are intentionally left out.`,
+    `   - **If the source card has no co-located test** (common for catalog`,
+    `     cards), write **characterization tests** that capture its current`,
+    `     behavior — field defaults, computed-field values, and key rendered`,
+    `     output. These tests are what make the baseline green and what the`,
+    `     adjustment must not regress; without them there is nothing to`,
+    `     protect.`,
+    `3. **Confirm a GREEN BASELINE** — after the seeded files are written,`,
+    `   run \`run_parse\`, \`run_evaluate\`, \`run_instantiate\`, and`,
+    `   \`run_tests\` against the seeded copy. The tools sync your workspace`,
+    `   to the realm before checking, and a run that finds **nothing to`,
+    `   check** (0 files / modules / instances / tests) comes back as an`,
+    `   error, not a pass — it means the seed hasn't landed on the realm;`,
+    `   re-run rather than treating it as green. All four must **pass with`,
+    `   real coverage before you create any adjustment Issue** (\`run_tests\``,
+    `   needs the co-located or characterization tests from step 2). If the`,
+    `   baseline is not green, fix the seeded copy first; if it cannot be`,
+    `   made green, \`request_clarification\` — do **not** proceed to`,
+    `   adjustments on a red baseline.`,
+    `4. **Provenance Knowledge Article** — record where the seed came from`,
+    `   (the \`sourceCardUrl\`, which files were copied) in a`,
+    `   \`Knowledge Articles/<slug>-source-provenance.json\`.`,
+    `5. **Adjustment Issues** — create one Issue per coherent adjustment the`,
+    `   brief describes, with **\`issueType\` \`adjustment\`** (not \`feature\`).`,
+    `   Each adjustment Issue's \`description\` must name:`,
+    `   - the workspace-relative **target file(s) to edit** (the seeded`,
+    `     card and any support files the delta touches),`,
+    `   - the **delta** — what changes, as a diff against the baseline, not`,
+    `     a full card spec,`,
+    `   - **acceptance** — the new expected behavior and its test`,
+    `     assertions, **plus** that the pre-existing baseline tests keep`,
+    `     passing (the delta must not regress the green baseline).`,
+    ``,
+    `Adjustments operate on the **seeded artifacts** — edit the existing`,
+    `module, tests, sample instances, and Spec in place. Do not create new`,
+    `modules, instances, or Specs alongside them unless the brief explicitly`,
+    `asks for a new card.`,
+    ``,
+    `Each adjustment Issue must have a \`project\` relationship, the relevant`,
+    `\`relatedKnowledge\` links (including the provenance article), and`,
+    `\`blockedBy\` links where one delta depends on another.`,
+    ``,
+    `Use the **\`Write\`** tool for every \`.json\` and copied file. When the`,
+    `baseline is green and all adjustment Issues are on disk, call`,
+    `**\`signal_done\`** — the orchestrator marks this bootstrap issue done.`,
+  ];
+
+  let acceptanceCriteria = [
+    '- [ ] Project card created with objective, scope, and success criteria from the brief',
+    '- [ ] IssueTracker card created and linked to the Project card',
+    '- [ ] Knowledge Articles for brief context and agent onboarding created',
+    '- [ ] Source card + its same-realm dependency graph copied into the workspace (module, imported modules, instances, Spec)',
+    '- [ ] Tests present on the seeded copy — the source card’s co-located tests, or characterization tests written here if it had none',
+    '- [ ] Green baseline confirmed: parse, evaluate, instantiate, and tests all pass on the seeded copy BEFORE any adjustment issue is created',
+    '- [ ] Source-provenance Knowledge Article created (sourceCardUrl + copied files)',
+    '- [ ] One `adjustment` issue per coherent delta, each naming target file(s), the delta, and acceptance (incl. baseline tests still pass)',
+    '- [ ] Adjustment issues have project and relatedKnowledge relationships, and blockedBy where appropriate',
+    '- [ ] This bootstrap issue marked as done',
+  ].join('\n');
+
+  return {
+    instructions,
+    acceptanceCriteria,
+    summary: 'Seed the source card and create adjustment issues',
   };
 }

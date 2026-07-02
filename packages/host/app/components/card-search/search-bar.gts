@@ -43,6 +43,7 @@ interface Signature {
     bottomTreatment?: BoxelInputBottomTreatments;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
     id?: string;
+    hidePickers?: boolean;
   };
   Blocks: {};
 }
@@ -66,19 +67,26 @@ export default class SearchBar extends Component<Signature> {
           height='18'
         />
       </div>
-      <div class='search-sheet__search-bar-picker'>
-        <RealmPicker
-          @filter={{@realmFilter}}
-          @destination={{@pickerDestination}}
-        />
-      </div>
-      <div class='search-sheet__search-bar-picker'>
-        <TypePicker
-          @filter={{@typeFilter}}
-          @destination={{@pickerDestination}}
-        />
-      </div>
-      <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>
+      {{#unless @hidePickers}}
+        <div class='search-sheet__search-bar-picker'>
+          <RealmPicker
+            @filter={{@realmFilter}}
+            @destination={{@pickerDestination}}
+          />
+        </div>
+        {{#unless @typeFilter.skipTypeFiltering}}
+          <div class='search-sheet__search-bar-picker'>
+            <TypePicker
+              @filter={{@typeFilter}}
+              @destination={{@pickerDestination}}
+            />
+          </div>
+        {{/unless}}
+        <div
+          class='search-sheet__search-bar-separator'
+          aria-hidden='true'
+        ></div>
+      {{/unless}}
       {{! template-lint-disable no-invalid-interactive }}
       <div
         class='search-sheet__search-bar-input-wrap'

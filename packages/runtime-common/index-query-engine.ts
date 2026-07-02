@@ -1,22 +1,16 @@
 import type * as JSONTypes from 'json-typescript';
-import flatten from 'lodash/flatten';
+import { flatten } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
-import type { ResolvedCodeRef } from './index.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import {
   type CardResource,
   type CodeRef,
   baseCardRef,
-  internalKeyFor,
+  internalKeysFor,
   isResolvedCodeRef,
-  baseRealm,
+  baseRealmRRI,
   getSerializer,
 } from './index.ts';
-import {
-  isValidPrerenderedHtmlFormat,
-  type PrerenderedHtmlFormat,
-} from './prerendered-html-format.ts';
-import type { DBSpecificExpression, Param } from './expression.ts';
+import { isValidPrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import {
   type Expression,
   type CardExpression,
@@ -68,14 +62,86 @@ import {
   type Definition,
   type FieldDefinition,
 } from './definitions.ts';
+import { matchSearchableRoutes, routesForField } from './searchable-routes.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
 } from './definition-lookup.ts';
-import { isScopedCSSRequest } from './scoped-css.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
+
+// A filter path resolves in the schema but crosses a `linksTo`/`linksToMany`
+// hop whose target is not in the search doc, so the query would silently match
+// nothing. Raised by the query compiler (see `walkFilterFieldPath`) and
+// kept distinct from the "nonexistent field" error so a forgotten `searchable`
+// annotation surfaces at the point of use as an actionable message rather than
+// as mysteriously-empty results. `reason` distinguishes a link that simply was
+// never made searchable (fixable by annotating it) from a query-backed
+// relationship, which is never in the doc at all and cannot be filtered
+// through.
+export class FilterRefersToNonsearchableFieldError extends Error {
+  type: CodeRef;
+  // The full filter path as written (e.g. `bestFriend.friends.name`).
+  path: string;
+  // The dotted path to the offending relationship hop (e.g. `bestFriend.friends`).
+  relationshipPath: string;
+  reason: 'not-searchable' | 'query-backed';
+
+  constructor(opts: {
+    type: CodeRef;
+    path: string;
+    relationshipPath: string;
+    reason: 'not-searchable' | 'query-backed';
+  }) {
+    super(buildNonsearchableFieldMessage(opts));
+    this.name = 'FilterRefersToNonsearchableFieldError';
+    this.type = opts.type;
+    this.path = opts.path;
+    this.relationshipPath = opts.relationshipPath;
+    this.reason = opts.reason;
+    // make sure instances of this Error subclass behave like instances of the subclass should
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isFilterRefersToNonsearchableFieldError(
+  error: unknown,
+): error is FilterRefersToNonsearchableFieldError {
+  return error instanceof FilterRefersToNonsearchableFieldError;
+}
+
+function buildNonsearchableFieldMessage(opts: {
+  type: CodeRef;
+  path: string;
+  relationshipPath: string;
+  reason: 'not-searchable' | 'query-backed';
+}): string {
+  let { type, path, relationshipPath, reason } = opts;
+  if (reason === 'query-backed') {
+    return (
+      `Your filter on ${stringify(type)} refers to "${path}", but the ` +
+      `"${relationshipPath}" relationship is query-backed and is never ` +
+      `included in the search doc (query-backed relationships can't be kept ` +
+      `current as matching cards change), so it cannot be filtered through.`
+    );
+  }
+  // `searchable` routes are seeded from the queried card's own fields, so the
+  // fix is always to extend the head field's annotation. For a single-hop path
+  // the head field IS the relationship (annotate it `searchable: true`); for a
+  // deeper hop the head field's annotation gains the remaining route.
+  let [headField, ...rest] = relationshipPath.split('.');
+  let hint =
+    rest.length === 0 ? `searchable: true` : `searchable: '${rest.join('.')}'`;
+  return (
+    `Your filter on ${stringify(type)} refers to "${path}", but the ` +
+    `"${relationshipPath}" relationship is not searchable, so its target is ` +
+    `not in the search doc and the filter would silently match nothing. To ` +
+    `query through it, make it searchable: add \`${hint}\` to the ` +
+    `"${headField}" field (combine multiple routes in an array if it already ` +
+    `has a searchable annotation).`
+  );
+}
 
 export interface IndexedFile {
   type: 'file';
@@ -142,39 +208,22 @@ interface InstanceError extends Partial<
 export type InstanceOrError = IndexedInstance | InstanceError;
 
 type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions &
-  PrerenderedCardOptions & { timings?: RequestTimings };
-
-interface PrerenderedCardOptions {
-  htmlFormat?: PrerenderedHtmlFormat;
-  renderType?: ResolvedCodeRef;
+export type QueryOptions = WIPOptions & {
   includeErrors?: true;
+  // Restrict the result set to this subset of card URLs (SQL `i.url IN (...)`).
   cardUrls?: string[];
-}
+  timings?: RequestTimings;
+};
 
-// Selects which columns the unified `search()` projects. `dataOnly` projects
-// the live serialization only (pristine_doc / error_doc); `render` projects the
-// format-specific HTML column plus the live serialization carried only on
-// no-HTML fallback rows.
-export type SearchProjection =
-  | { kind: 'dataOnly' }
-  | {
-      kind: 'render';
-      htmlFormat: PrerenderedHtmlFormat;
-      renderType?: ResolvedCodeRef;
-    };
+// Selects which columns `search()` projects. `dataOnly` projects
+// the live serialization only (pristine_doc / error_doc); `renderSet` projects
+// each row's full rendering set (every per-format HTML column, JSONB maps
+// whole) plus the live serialization on every row — the caller selects
+// renderings from the set (the htmlQuery evaluation).
+export type SearchProjection = { kind: 'dataOnly' } | { kind: 'renderSet' };
 
 export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
-}
-
-export interface PrerenderedCard {
-  url: string;
-  html: string | null;
-  cardType?: string;
-  iconHtml?: string;
-  usedRenderType?: ResolvedCodeRef;
-  isError?: true;
 }
 
 export interface QueryResultsMeta {
@@ -531,7 +580,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -539,7 +588,13 @@ export class IndexQueryEngine {
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('file')],
-        [tableValuedEach('types'), '=', param(typeKey)],
+        any(
+          typeKeys.map((typeKey) => [
+            tableValuedEach('types'),
+            '=',
+            param(typeKey),
+          ]),
+        ),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -554,7 +609,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -562,7 +617,13 @@ export class IndexQueryEngine {
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('instance')],
-        [tableValuedEach('types'), '=', param(typeKey)],
+        any(
+          typeKeys.map((typeKey) => [
+            tableValuedEach('types'),
+            '=',
+            param(typeKey),
+          ]),
+        ),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -723,35 +784,12 @@ export class IndexQueryEngine {
         'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
       ];
     } else {
-      let htmlColumnExpression = this.buildHtmlColumnExpression({
-        htmlFormat: projection.htmlFormat,
-        renderType: projection.renderType,
-      });
-      let usedRenderTypeColumnExpression =
-        this.buildUsedRenderTypeColumnExpression({
-          htmlFormat: projection.htmlFormat,
-          renderType: projection.renderType,
-        });
+      // The full rendering set: every per-format HTML column whole (the
+      // fitted/embedded JSONB maps keyed by render type, the scalar
+      // atom/head columns), plus the live serialization on every row. The
+      // caller enumerates candidate renderings and selects from the set.
       selectClauseExpression = [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
-        ...htmlColumnExpression,
-        ' as html,',
-        ...usedRenderTypeColumnExpression,
-        ' as used_render_type,',
-        // The adoption chain (most-derived first). An HTML-backed row ships an
-        // identity-only `card` with no live serialization, so its actual type
-        // — distinct from the ancestor it was rendered as — comes from here.
-        'ANY_VALUE(types) as types,',
-        'ANY_VALUE(deps) as deps,',
-        'ANY_VALUE(display_names) as display_names,',
-        'ANY_VALUE(icon_html) as icon_html,',
-        'ANY_VALUE(error_doc) as error_doc,',
-        // Carry the live serialization as a raw column. `_search` wraps this
-        // projection so the final `pristine_doc` keeps it only on rows whose
-        // `html` is NULL — the HTML expression is evaluated once (as `html`)
-        // and the NULL test references that computed column rather than
-        // recomputing the COALESCE/JSONB expression.
-        'ANY_VALUE(pristine_doc) as pristine_doc_fallback',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(fitted_html) as fitted_html, ANY_VALUE(embedded_html) as embedded_html, ANY_VALUE(atom_html) as atom_html, ANY_VALUE(head_html) as head_html, ANY_VALUE(types) as types, ANY_VALUE(deps) as deps, ANY_VALUE(display_names) as display_names, ANY_VALUE(icon_html) as icon_html, ANY_VALUE(error_doc) as error_doc, ANY_VALUE(pristine_doc) as pristine_doc',
       ];
     }
 
@@ -761,7 +799,6 @@ export class IndexQueryEngine {
       opts,
       selectClauseExpression,
       'instance',
-      projection.kind === 'render',
     )) as {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
@@ -922,171 +959,6 @@ export class IndexQueryEngine {
     };
   }
 
-  async searchPrerendered(
-    realmURL: URL,
-    { filter, sort, page }: Query,
-    opts: QueryOptions = { includeErrors: true },
-  ): Promise<{
-    prerenderedCards: PrerenderedCard[];
-    scopedCssUrls: string[];
-    meta: QueryResultsMeta;
-  }> {
-    if (!isValidPrerenderedHtmlFormat(opts.htmlFormat)) {
-      throw new Error(
-        `htmlFormat must be either 'embedded', 'fitted', 'atom', or 'head'`,
-      );
-    }
-
-    let { results, meta } = await this.search(
-      realmURL,
-      { filter, sort, page },
-      opts,
-      {
-        kind: 'render',
-        htmlFormat: opts.htmlFormat,
-        renderType: opts.renderType,
-      },
-    );
-
-    // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
-    // It would be more efficient to return scoped css urls found only in deps of the module we are filtering on (i.e. `ref`),
-    // but in case the module is from a foreign realm, this module will not be indexed in this realm's index.
-    // That's why we gather all scoped css urls from all instances in the search results and include them in the result.
-
-    let scopedCssUrls = new Set<string>(); // Use a set for deduplication
-
-    let prerenderedCards = results.map((card) => {
-      (card.deps ?? []).forEach((dep: string) => {
-        if (isScopedCSSRequest(dep)) {
-          scopedCssUrls.add(dep);
-        }
-      });
-
-      let usedRenderType: ResolvedCodeRef | undefined;
-      if (card.used_render_type) {
-        let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
-        if (moduleNameSeparatorIndex > -1) {
-          usedRenderType = {
-            module: card.used_render_type.substring(
-              0,
-              moduleNameSeparatorIndex,
-            ) as RealmResourceIdentifier,
-            name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
-          };
-        }
-      }
-
-      let displayNames = card.display_names as string[] | null;
-      return {
-        url: card.url!,
-        html: card.html ?? null,
-        cardType: displayNames?.[0] ?? undefined,
-        iconHtml: (card.icon_html as string | null) ?? undefined,
-        ...(usedRenderType ? { usedRenderType } : {}),
-        ...(card.has_error ? { isError: true as const } : {}),
-      };
-    });
-
-    return { prerenderedCards, scopedCssUrls: [...scopedCssUrls], meta };
-  }
-
-  private buildHtmlColumnExpression({
-    htmlFormat,
-    renderType,
-  }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
-    renderType?: ResolvedCodeRef;
-  }): (string | Param | DBSpecificExpression)[] {
-    let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-    if (!htmlFormat || htmlFormat === 'atom' || htmlFormat === 'head') {
-      return [`ANY_VALUE(${fieldName})`];
-    }
-
-    let htmlColumnExpression = [];
-    htmlColumnExpression.push('COALESCE(');
-    if (renderType) {
-      htmlColumnExpression.push(`ANY_VALUE(${fieldName}) ->> `);
-      htmlColumnExpression.push(
-        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
-      );
-      htmlColumnExpression.push(',');
-    }
-
-    htmlColumnExpression.push(
-      ...[
-        `(
-      CASE WHEN ANY_VALUE(${fieldName}) IS NOT NULL AND `,
-        dbExpression({
-          pg: `jsonb_typeof(ANY_VALUE(${fieldName})) = 'object'`,
-          sqlite: `json_type(ANY_VALUE(${fieldName})) = 'object'`,
-        }),
-        ` THEN ( SELECT value FROM `,
-        dbExpression({
-          pg: `jsonb_each_text(ANY_VALUE(${fieldName}))`,
-          sqlite: `json_each(ANY_VALUE(${fieldName}))`,
-        }),
-        ` WHERE key = (SELECT replace(ANY_VALUE( `,
-        dbExpression({
-          pg: `types[0]::text`,
-          sqlite: `json_extract(types, '$[0]')`,
-        }),
-        `), '"', ''))) ELSE NULL END), NULL)`,
-      ],
-    );
-
-    return htmlColumnExpression;
-  }
-
-  private buildUsedRenderTypeColumnExpression({
-    htmlFormat,
-    renderType,
-  }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
-    renderType?: ResolvedCodeRef;
-  }): (string | Param | DBSpecificExpression)[] {
-    let usedRenderTypeColumnExpression = [];
-    if (
-      htmlFormat &&
-      htmlFormat !== 'atom' &&
-      htmlFormat !== 'head' &&
-      renderType
-    ) {
-      usedRenderTypeColumnExpression.push(`CASE`);
-      usedRenderTypeColumnExpression.push(
-        `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
-      );
-      usedRenderTypeColumnExpression.push(
-        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
-      );
-      usedRenderTypeColumnExpression.push(
-        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined, this.#virtualNetwork)}'`,
-      );
-      usedRenderTypeColumnExpression.push(
-        ...[
-          `ELSE replace(ANY_VALUE(`,
-          dbExpression({
-            pg: `types[0]::text`,
-            sqlite: `json_extract(types, '$[0]')`,
-          }),
-          `), '"', '') END`,
-        ],
-      );
-    } else {
-      usedRenderTypeColumnExpression.push(
-        ...[
-          `replace(ANY_VALUE(`,
-          dbExpression({
-            pg: `types[0]::text`,
-            sqlite: `json_extract(types, '$[0]')`,
-          }),
-          `), '"', '')`,
-        ],
-      );
-    }
-
-    return usedRenderTypeColumnExpression;
-  }
-
   async fetchCardTypeSummary(realmURL: URL): Promise<RealmMetaValue> {
     // JOIN against realm_versions.current_version so we always pick the
     // realm_meta row that matches the realm's authoritative current
@@ -1159,11 +1031,78 @@ export class IndexQueryEngine {
 
   // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
-    return [
-      tableValuedEach('types'),
-      '=',
-      param(internalKeyFor(ref, undefined, this.#virtualNetwork)),
-    ];
+    // Match any equivalent spelling of the type key (RRI / real-URL /
+    // virtual-alias), so rows indexed before references were canonicalized to
+    // RRI still satisfy the filter without a reindex or DB migration.
+    return any(
+      internalKeysFor(ref, undefined, this.#virtualNetwork).map((typeKey) => [
+        tableValuedEach('types'),
+        '=',
+        param(typeKey),
+      ]),
+    );
+  }
+
+  // The card's primary `id` and a FileDef's `url` index in URL form, but a
+  // query may now arrive with a canonical-RRI (prefix) value. For filter paths
+  // whose leaf is `id`/`url`, a prefix-form value additionally matches its
+  // equivalent spellings — real-URL, RRI-prefix, and any virtual-alias — via
+  // the realm's VirtualNetwork. This mirrors how the `types` column tolerates
+  // mixed spellings (`internalKeysFor` / `equivalentURLForms`), so a reference
+  // filter matches the URL-indexed value without a reindex or DB migration.
+  //
+  // Only a *prefix-form* value (one that starts with a registered realm prefix)
+  // is expanded. These leaf names also occur on ordinary user-data fields (a
+  // contained `url` StringField, a FieldDef `id`) whose values are plain
+  // strings or URLs and whose `in` filter is an exact string comparison —
+  // those are matched exactly as given, gaining no extra normalized spellings,
+  // so exact semantics are preserved for non-reference fields.
+  private isReferenceFilterField(key: string): boolean {
+    let leaf = key.split('.').pop();
+    return leaf === 'id' || leaf === 'url';
+  }
+
+  private expandReferenceFilterValues(
+    key: string,
+    values: JSONTypes.Value[],
+  ): JSONTypes.Value[] {
+    if (!this.isReferenceFilterField(key)) {
+      return values;
+    }
+    let expanded: JSONTypes.Value[] = [];
+    let seen = new Set<string>();
+    for (let value of values) {
+      if (typeof value !== 'string') {
+        expanded.push(value);
+        continue;
+      }
+      // Match the value as given by default — this preserves exact `in`
+      // semantics for URL-form refs and for ordinary (non-reference) `id`/`url`
+      // user-data fields.
+      let forms: string[] = [value];
+      if (this.#virtualNetwork.isRegisteredPrefix(value)) {
+        try {
+          // A prefix-form RRI: resolve to its real URL (the server's VN owns
+          // the realm mappings), then enumerate equivalent spellings — same
+          // composition `internalKeysFor` uses for type keys — so it matches
+          // the URL-form indexed reference.
+          forms.push(
+            ...this.#virtualNetwork.equivalentURLForms(
+              this.#virtualNetwork.toURL(value).href,
+            ),
+          );
+        } catch {
+          // Unresolvable prefix — match the value as given.
+        }
+      }
+      for (let form of forms) {
+        if (!seen.has(form)) {
+          seen.add(form);
+          expanded.push(form);
+        }
+      }
+    }
+    return expanded;
   }
 
   private eqCondition(
@@ -1297,6 +1236,10 @@ export class IndexQueryEngine {
         }),
       ];
     }
+    // Note: the canonical-RRI tolerance (see `expandReferenceFilterValues`) is
+    // applied to `in` filters only. `eq` on a reference field keeps exact-match
+    // semantics so a singular `.id` eq is still served by the `@>` GIN
+    // containment path below; canonical-RRI reference matching uses `in`.
     let query = fieldQuery(key, onRef, false, 'filter');
     let v = fieldValue(key, [param(value)], onRef, 'filter');
     // At positive polarity a singular-path string `eq` can be served by the GIN
@@ -1336,7 +1279,10 @@ export class IndexQueryEngine {
       // Empty set matches nothing
       return ['false'];
     }
-    let nonNullValues = values.filter((v) => v !== null);
+    let nonNullValues = this.expandReferenceFilterValues(
+      key,
+      values.filter((v) => v !== null),
+    );
     let hasNull = values.some((v) => v === null);
 
     let conditions: CardExpression[] = [];
@@ -1527,12 +1473,16 @@ export class IndexQueryEngine {
         }
         return expression;
       },
+      undefined,
+      // This is a filter path: walk it with the card's `searchable` routes so
+      // a hop into a non-searchable relationship is rejected as we cross it.
+      seedSearchableRoutesFromDefinition(definition),
     );
     return await this.makeExpression(exp);
   }
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
-    let { path, type, useJsonBValue } = fieldQuery;
+    let { path, type, useJsonBValue, errorHint } = fieldQuery;
     let definition = await this.getDefinition(type);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
@@ -1604,6 +1554,11 @@ export class IndexQueryEngine {
           return expression;
         },
       },
+      // `fieldQuery` serves both filters and sorts; only gate filter paths on
+      // searchability (a sort key that isn't in the doc is out of scope here).
+      errorHint === 'filter'
+        ? seedSearchableRoutesFromDefinition(definition)
+        : undefined,
     );
     if (!rootPluralPath) {
       // Numeric fields (NumberField, BigIntegerField) are stored as JSON
@@ -1658,6 +1613,9 @@ export class IndexQueryEngine {
         }
         return [param(queryValue)];
       },
+      undefined,
+      // This is a filter path: validate searchability as the walk crosses it.
+      seedSearchableRoutesFromDefinition(definition),
     );
   }
 
@@ -1703,6 +1661,7 @@ export class IndexQueryEngine {
     expression: Expression,
     handleLeafField: FilterFieldHandler<Expression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+    searchableRoutes?: string[],
     pathTraveled?: string[],
   ): Promise<Expression>;
   private async walkFilterFieldPath(
@@ -1711,6 +1670,7 @@ export class IndexQueryEngine {
     expression: CardExpression,
     handleLeafField: FilterFieldHandler<CardExpression>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
+    searchableRoutes?: string[],
     pathTraveled?: string[],
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
@@ -1719,6 +1679,12 @@ export class IndexQueryEngine {
     expression: Expression,
     handleLeafField: FilterFieldHandler<any[]>,
     handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
+    // `searchable` routes for this card, supplied (and narrowed to the target's
+    // tails on each hop) only when walking a FILTER path — sort paths pass none,
+    // which disables the searchability check. Seeded by the caller from the
+    // queried card's annotations so the check uses the SAME route model the
+    // search-doc generator uses.
+    searchableRoutes?: string[],
     pathTraveled: string[] = [],
   ): Promise<any> {
     let pathSegments = path.split('.');
@@ -1728,6 +1694,50 @@ export class IndexQueryEngine {
       [...pathTraveled, currentSegment].join('.'),
     );
     let field = await getField(definition, currentPath, this.#definitionLookup);
+
+    // Validate searchability as we cross each relationship hop. A filter that
+    // continues past a `linksTo`/`linksToMany` whose target the search doc does
+    // not carry would match nothing silently, so raise a distinct, actionable
+    // error instead. `getField` above has already resolved this segment, so a
+    // genuinely nonexistent field surfaces as the "nonexistent field" error
+    // before we get here.
+    let interiorRoutes: string[] | undefined;
+    if (searchableRoutes !== undefined) {
+      let { matched, tails } = matchSearchableRoutes(
+        searchableRoutes,
+        currentSegment,
+      );
+      interiorRoutes = tails;
+      if (
+        !isLeaf &&
+        (field.type === 'linksTo' || field.type === 'linksToMany')
+      ) {
+        // A path stopping at the link's `id` reads only the always-present
+        // `{ id }` sentinel, so it needs no expansion.
+        let crossingToIdOnly =
+          pathSegments.length === 1 && pathSegments[0] === 'id';
+        if (field.query) {
+          // Query-backed relationships are never in the search doc at all (not
+          // even `{ id }`) — they can't be invalidated when matching cards
+          // change — so nothing can be filtered through them.
+          throw new FilterRefersToNonsearchableFieldError({
+            type: definition.codeRef,
+            path: [currentPath, ...pathSegments].join('.'),
+            relationshipPath: currentPath,
+            reason: 'query-backed',
+          });
+        }
+        if (!matched && !crossingToIdOnly) {
+          throw new FilterRefersToNonsearchableFieldError({
+            type: definition.codeRef,
+            path: [currentPath, ...pathSegments].join('.'),
+            relationshipPath: currentPath,
+            reason: 'not-searchable',
+          });
+        }
+      }
+    }
+
     // we use '[]' to denote plural fields as that has important ramifications
     // to how we compose our queries in the various handlers and ultimately in
     // SQL construction
@@ -1761,6 +1771,7 @@ export class IndexQueryEngine {
         await entranceHandler(definition, expression, traveled),
         handleLeafField,
         handleInteriorField,
+        interiorRoutes,
         traveled.split('.'),
       );
       expression = await exitHandler(definition, interiorExpression, traveled);
@@ -1793,6 +1804,22 @@ function isFieldPlural(field: FieldDefinition): boolean {
   return field.type === 'containsMany' || field.type === 'linksToMany';
 }
 
+// Seed the `searchable` route set from the queried card's own fields — the
+// loaderless mirror of `base/searchable.ts`'s `seedSearchableRoutes`, reading
+// `FieldDefinition.searchable` from the cached definition instead of the live
+// field descriptor.
+function seedSearchableRoutesFromDefinition(
+  definition: Pick<Definition, 'fields' | 'fieldDefs'>,
+): string[] {
+  let routes: string[] = [];
+  for (let [fieldName, defId] of Object.entries(definition.fields)) {
+    routes.push(
+      ...routesForField(fieldName, definition.fieldDefs[defId]?.searchable),
+    );
+  }
+  return routes;
+}
+
 async function getField(
   definition: Definition,
   pathTraveled: string,
@@ -1816,7 +1843,7 @@ async function getField(
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'StringField',
         },
       } as FieldDefinition;

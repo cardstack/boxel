@@ -60,7 +60,7 @@ describe('file lint (integration)', () => {
   });
 
   it('returns fixed output for source with formatting issues', async () => {
-    let source = `import{CardDef}from 'https://cardstack.com/base/card-api';
+    let source = `import{CardDef}from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
@@ -77,7 +77,7 @@ export class MyCard extends CardDef {
   });
 
   it('returns fixed output with proper single-quote formatting', async () => {
-    let source = `import { CardDef } from "https://cardstack.com/base/card-api";
+    let source = `import { CardDef } from "@cardstack/base/card-api";
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
@@ -88,11 +88,11 @@ export class MyCard extends CardDef {
     expect(result.fixed).toBe(true);
     expect(result.output).toBeDefined();
     // Prettier should convert double quotes to single quotes
-    expect(result.output).toContain("'https://cardstack.com/base/card-api'");
+    expect(result.output).toContain("'@cardstack/base/card-api'");
   });
 
   it('reports lint messages for unfixable issues', async () => {
-    let source = `import { CardDef } from 'https://cardstack.com/base/card-api';
+    let source = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 }
 <template>
@@ -118,7 +118,7 @@ export class MyCard extends CardDef {
 
   describe('--fix with --file (local file)', () => {
     it('writes fixed output back to a local file', async () => {
-      let unfixedSource = `import{CardDef}from 'https://cardstack.com/base/card-api';
+      let unfixedSource = `import{CardDef}from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
@@ -162,7 +162,7 @@ export class MyCard extends CardDef {
 
   describe('--fix without --file (realm file)', () => {
     it('writes fixed output back to the realm via write()', async () => {
-      let unfixedSource = `import{CardDef}from 'https://cardstack.com/base/card-api';
+      let unfixedSource = `import{CardDef}from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }

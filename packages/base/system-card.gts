@@ -72,10 +72,13 @@ export class SystemCard extends CardDef {
   @field defaultModelConfiguration = linksTo(ModelConfiguration, {
     description:
       'Preferred model configuration to use when no specific mode default exists',
+
+    searchable: true,
   });
 
   @field modelConfigurations = linksToMany(ModelConfiguration, {
     description: 'List of available model configurations for this system',
+    searchable: true,
   });
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {

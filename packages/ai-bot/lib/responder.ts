@@ -2,10 +2,10 @@ import { logger } from '@cardstack/runtime-common';
 import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
-import * as Sentry from '@sentry/node';
+import { errorReporter } from './sentry.ts';
 import type { OpenAIError } from 'openai/error';
-import throttle from 'lodash/throttle';
-import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
+import { throttle } from 'lodash-es';
+import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
@@ -65,6 +65,13 @@ export class Responder {
   responseState = new ResponseState();
 
   needsMessageSend = false;
+
+  // The event id of the bot message this turn streamed into. ai-bot relates the
+  // command-result events for its own readRealmFile calls back to it, so they
+  // pair with the requests carried on that message.
+  get responseEventId(): string | undefined {
+    return this.matrixResponsePublisher.originalResponseEventId;
+  }
 
   async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
@@ -188,7 +195,7 @@ export class Responder {
     if (this.responseState.isStreamingFinished) {
       return;
     }
-    Sentry.captureException(error, {
+    errorReporter.captureException(error, {
       extra: {
         roomId: this.matrixResponsePublisher.roomId,
         agentId: this.matrixResponsePublisher.agentId,

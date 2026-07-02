@@ -39,7 +39,7 @@ function cardDefinitionsOnly(relativePath: string): boolean {
   return included;
 }
 
-const sfSourceRealmDir = resolve(__dirname, '..', '..', 'realm');
+const sfSourceRealmDir = resolve(import.meta.dirname, '..', '..', 'realm');
 
 function parseCliArg(name: string): string | undefined {
   let prefix = `--${name}=`;

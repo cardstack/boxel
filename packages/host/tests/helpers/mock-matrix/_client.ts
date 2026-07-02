@@ -17,6 +17,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -98,6 +99,10 @@ export class MockClient implements ExtendedClient {
       return {
         realms: this.sdkOpts.activeRealms ?? [],
       } as unknown as K;
+    } else if (_eventType === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      return {
+        realmServers: this.sdkOpts.activeRealmServers ?? [],
+      } as unknown as K;
     } else if (_eventType === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
       return (this.sdkOpts.systemCardAccountData ?? null) as unknown as K;
     } else if (_eventType === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
@@ -140,11 +145,24 @@ export class MockClient implements ExtendedClient {
       }),
     );
 
+    // The real matrix initial sync re-emits every account-data key, not just
+    // the legacy realms list. Re-emit both so boot-path handlers see the same
+    // echoes they would in production — notably the `app.boxel.realm-servers`
+    // echo a lazy-migration boot triggers by writing that key just before
+    // startClient().
     this.emitEvent(
       new MatrixEvent({
         type: APP_BOXEL_REALMS_EVENT_TYPE,
         content: {
           realms: this.sdkOpts.activeRealms ?? [],
+        },
+      }),
+    );
+    this.emitEvent(
+      new MatrixEvent({
+        type: APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+        content: {
+          realmServers: this.sdkOpts.activeRealmServers ?? [],
         },
       }),
     );
@@ -230,6 +248,8 @@ export class MockClient implements ExtendedClient {
   ): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
+    } else if (type === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      this.sdkOpts.activeRealmServers = (data as any).realmServers;
     } else if (type === 'm.direct') {
       this.sdkOpts.directRooms = (data as any)[this.loggedInAs!];
     } else if (type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
@@ -420,6 +440,29 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
+    return Promise.resolve(
+      this.sdkOpts.loginFlowsResponse ?? {
+        flows: [{ type: 'm.login.password' }],
+      },
+    );
+  }
+
+  getSsoLoginUrl(
+    _redirectUrl: string,
+    _loginType?: string,
+    _idpId?: string,
+  ): string {
+    return this.sdkOpts.ssoLoginUrl ?? 'http://example.invalid/sso';
+  }
+
+  loginWithToken(token: string): Promise<MatrixSDK.LoginResponse> {
+    if (this.sdkOpts.loginWithTokenInterceptor) {
+      return this.sdkOpts.loginWithTokenInterceptor(token);
+    }
+    throw new Error('Method not implemented.');
+  }
+
   logout(_stopClient?: boolean | undefined): Promise<{}> {
     if (_stopClient) {
       this.stopClient();
@@ -498,6 +541,9 @@ export class MockClient implements ExtendedClient {
     let localEvent = new MatrixEvent(localEventData);
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
+    if (this.sdkOpts.sendEventInterceptor) {
+      await this.sdkOpts.sendEventInterceptor();
+    }
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
@@ -629,6 +675,7 @@ export class MockClient implements ExtendedClient {
   private eventHandlerType(type: string) {
     switch (type) {
       case APP_BOXEL_REALMS_EVENT_TYPE:
+      case APP_BOXEL_REALM_SERVERS_EVENT_TYPE:
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
       case 'm.direct':

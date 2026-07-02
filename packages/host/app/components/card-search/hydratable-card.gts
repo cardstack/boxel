@@ -1,30 +1,38 @@
 import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   CardContextName,
   GetCardContextName,
+  isCardInstance,
+  isFileDefInstance,
+  type ErrorEntry,
+  type Format,
+  type HydrationMode,
   type ResolvedCodeRef,
   type StoreReadType,
   type getCard,
 } from '@cardstack/runtime-common';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
-// How an HTML-backed search result becomes a live, running card. `none` stays
-// inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
-// swap the inert HTML for a live `<CardRenderer>`. The mode is a host-side UX
-// choice and never travels on the wire.
-export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
+import SearchResultError from './search-result-error';
+
+// `HydrationMode` is the card-facing contract (it rides the `@context`
+// search surface), so it lives in runtime-common; re-exported here because this
+// is where it's consumed and where call sites have long imported it.
+export type { HydrationMode };
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
 
@@ -49,16 +57,11 @@ const hydrationTrigger = modifier(
     if (mode === 'none') {
       return;
     }
-    // Hover mode treats pointer-hover and keyboard-focus synonymously, so a
-    // card hydrates the same way for both. `focusin` (which bubbles, unlike
-    // `focus`) also fires when focus lands on a descendant during keyboard
-    // navigation into the card.
-    let events =
-      mode === 'hover'
-        ? ['mouseenter', 'focusin']
-        : mode === 'touch'
-          ? ['touchstart']
-          : ['click'];
+    // `hover` treats pointer-hover and keyboard-focus synonymously, so a card
+    // hydrates the same way for both. `focusin` (which bubbles, unlike `focus`)
+    // also fires when focus lands on a descendant during keyboard navigation
+    // into the card.
+    let events = ['mouseenter', 'focusin'];
     let handler = () => onTrigger();
     events.forEach((event) => element.addEventListener(event, handler));
     return () =>
@@ -71,6 +74,9 @@ interface Signature {
   Args: {
     // The card/file identity URL, which is also its `links.self` GET target.
     cardId: string;
+    // The result's display name (realm-local path), surfaced by the host error
+    // component so an error tile identifies which result failed.
+    name?: string;
     // The inert prerendered HTML for an HTML-backed row. Absent for a full
     // live row, which carries no HTML and resolves to its live instance.
     component?: HTMLComponent;
@@ -80,10 +86,23 @@ interface Signature {
     // The resource type to resolve — `card` (default) or `file-meta`, so a
     // full live file-meta row renders its `FileDef` instead of nothing.
     type?: StoreReadType;
-    // An error rendering never hydrates.
+    // An error rendering never hydrates. When set and there's no inert HTML to
+    // show (no last-known-good rendering), the row resolves to the host error
+    // component (`SearchResultError`) — the terminal rung of the chain.
     isError?: boolean;
+    // The error doc surfaced by the host error component when this row falls
+    // through to it. Absent => the component shows a generic message.
+    errorDoc?: ErrorEntry;
     // The hydration gesture (defaults to `none`).
     mode?: HydrationMode;
+    // Whether this row registers with the operator-mode overlay (defaults to
+    // `true`). `false` applies the no-op tracker, so the row is never tracked
+    // and no overlay (chip / options menu / selection toggle) ever anchors to
+    // it — for a consumer that lays results out in its own UI.
+    overlays?: boolean;
+    // The format the live/hydrated card renders as, so it matches the
+    // prerendered HTML the query selected (defaults to `fitted`).
+    format?: Format;
   };
 }
 
@@ -92,6 +111,7 @@ export default class HydratableCard extends Component<Signature> {
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
+  @service declare private store: StoreService;
 
   // Flips true once a hydration gesture fires; `getCard` then fetches
   // `links.self`, deposits the instance in the Store, and tracks it live. A
@@ -123,8 +143,47 @@ export default class HydratableCard extends Component<Signature> {
     if (this.args.component == null) {
       return this.args.cardId;
     }
-    // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired.
-    return this.hydrated ? this.args.cardId : undefined;
+    // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired,
+    // or — in the SPA — as soon as the full instance is already resident in
+    // the Store (residency by any means: navigation, another surface, a full
+    // search result, an edit session). Residency never triggers a load, so an
+    // inert row whose instance is never made resident elsewhere stays inert.
+    if (this.hydrated) {
+      return this.args.cardId;
+    }
+    // `none` is an explicit author opt-out: the surface stays inert on purpose
+    // (e.g. a deliberately cheap prerendered list, or create-listing-modal's
+    // atom examples), so residency must not flip it to live. Residency only
+    // brings forward the hydration a gesture mode would have done anyway.
+    if (this.mode !== 'none' && !this.inPrerender && this.isResident) {
+      return this.args.cardId;
+    }
+    return undefined;
+  }
+
+  // Whether the full live instance for this row is already resident in the
+  // Store. A pure, reactive read: `store.peek` reads the Store's `TrackedMap`
+  // identity map, so this getter re-resolves when the instance lands (or
+  // drops) — there is no subscription and nothing to tear down. It never
+  // triggers a load, so a row whose instance is never made resident elsewhere
+  // stays inert. Only full instances enter the Store (a sparse `item` is never
+  // stored), so a resident hit is unambiguously a full instance; a stale error
+  // doc is not treated as resident.
+  private get isResident(): boolean {
+    let resident =
+      this.args.type === 'file-meta'
+        ? this.store.peek(this.args.cardId, { type: 'file-meta' })
+        : this.store.peek(this.args.cardId);
+    return isCardInstance(resident) || isFileDefInstance(resident);
+  }
+
+  // Residency-driven hydration is SPA-only. Inside a prerender render
+  // (`__boxelRenderContext`; an indexing render — `__boxelJobId` — especially)
+  // instances land in the Store constantly as a normal part of building the
+  // index, and a render must be deterministic and emit prerendered HTML — so
+  // residency must never flip a row to live there.
+  private get inPrerender(): boolean {
+    return Boolean((globalThis as any).__boxelRenderContext);
   }
 
   private get mode(): HydrationMode {
@@ -134,6 +193,10 @@ export default class HydratableCard extends Component<Signature> {
       return 'none';
     }
     return this.args.mode ?? 'none';
+  }
+
+  private get format(): Format {
+    return this.args.format ?? 'fitted';
   }
 
   // The resolved live instance — a `CardDef` or a `FileDef`. Short-circuits
@@ -161,18 +224,46 @@ export default class HydratableCard extends Component<Signature> {
   // any delegate-rendered card does), so the overlay re-anchors to the new
   // element with no extra wiring here. Guarded so reading the context while
   // this component is being destroyed can't throw.
-  private get trackElement(): CardComponentModifier {
+  // Reads the consumed card context, tolerating the owner-destroyed error that a
+  // teardown (realm refresh / unmount) can raise mid-render — returns undefined
+  // then, the same safe no-overlay fallback both consumers below want.
+  private get safeCardContext(): CardContext | undefined {
     if (isDestroying(this) || isDestroyed(this)) {
-      return noopCardModifier;
+      return undefined;
     }
     try {
-      return this.cardContext?.cardComponentModifier ?? noopCardModifier;
+      return this.cardContext;
     } catch (e) {
       if (e instanceof Error && e.message.includes(OWNER_DESTROYED_ERROR)) {
-        return noopCardModifier;
+        return undefined;
       }
       throw e;
     }
+  }
+
+  private get trackElement(): CardComponentModifier {
+    // Opted out of overlays — never register with the tracker, so no overlay
+    // can anchor to this row regardless of the surrounding context.
+    if (this.args.overlays === false) {
+      return noopCardModifier;
+    }
+    return this.safeCardContext?.cardComponentModifier ?? noopCardModifier;
+  }
+
+  // Re-provide the card context to the rendered subtree. Normally a pass-through
+  // of the consumed context, but when `overlays` is opted out it blanks
+  // `cardComponentModifier` to the no-op — the live `CardRenderer` registers
+  // itself through this context (not through `trackElement`, which only governs
+  // the inert element), so the opt-out must reach it here too, else a hydrated
+  // row would re-acquire an overlay.
+  @provide(CardContextName)
+  // @ts-ignore "providedCardContext" is declared but not used
+  private get providedCardContext(): CardContext | undefined {
+    let cardContext = this.safeCardContext;
+    if (this.args.overlays === false && cardContext) {
+      return { ...cardContext, cardComponentModifier: noopCardModifier };
+    }
+    return cardContext;
   }
 
   @action private hydrate() {
@@ -191,7 +282,7 @@ export default class HydratableCard extends Component<Signature> {
           needed. }}
       <CardRenderer
         @card={{this.liveCard}}
-        @format='fitted'
+        @format={{this.format}}
         @codeRef={{@renderType}}
         @displayContainer={{false}}
         data-hydration={{this.hydrationState}}
@@ -209,6 +300,16 @@ export default class HydratableCard extends Component<Signature> {
         }}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
+        ...attributes
+      />
+    {{else if @isError}}
+      {{! The terminal rung: an error result with no good html, no
+          last-known-good html, and no renderable live item. Inert and
+          non-hydratable — no gesture, no GET. }}
+      <SearchResultError
+        @cardId={{@cardId}}
+        @name={{@name}}
+        @error={{@errorDoc}}
         ...attributes
       />
     {{/if}}

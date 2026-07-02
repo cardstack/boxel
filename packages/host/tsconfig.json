@@ -28,7 +28,12 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "@cardstack/boxel-host/commands/*": ["app/commands/*"],
-      "https://cardstack.com/base/*": ["../base/*"],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "*": ["types/*"]
     },
@@ -38,6 +43,7 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../openrouter-realm/**/*",
+    "../test-realm-cards/contents/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

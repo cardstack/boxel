@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { Prerenderer } from '../prerender/prerenderer.ts';
 import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app.ts';
@@ -80,7 +81,7 @@ function buildFakeSuccessVisitResponse(): FakeVisitResponse {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('render diagnostics persistence — consolidated channel', function () {
     test('Prerenderer.decorateRenderErrorsWithTimings lifts outer RenderError.diagnostics onto response.meta and leaves the inner SerializedError clean', function (assert) {
       let response = buildFakeVisitResponseWithTimeoutError();
@@ -240,6 +241,46 @@ module(basename(__filename), function () {
         response.card?.diagnostics,
         undefined,
         'card success-path diagnostics cleared after lift',
+      );
+    });
+
+    test('module-prerender searchablePathIssues on response.meta.diagnostics survive the timing stamp', function (assert) {
+      // The module-prerender route records definition-build findings on
+      // meta.diagnostics before the Prerenderer stamps timings. The timing
+      // stamp must MERGE onto the existing diagnostics, not replace them —
+      // otherwise the findings are dropped on the prerender path and never
+      // reach `modules.diagnostics` via `flattenPrerenderMeta`.
+      let searchablePathIssues = [
+        {
+          codeRef: 'http://realm.example/article/Article',
+          fieldName: 'typo',
+          path: 'addresss',
+        },
+      ];
+      let response: FakeVisitResponse = {
+        meta: { diagnostics: { searchablePathIssues } },
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 4, renderMs: 8, waits: {} },
+        12,
+      );
+
+      let diagnostics = response.meta?.diagnostics;
+      assert.deepEqual(
+        diagnostics?.searchablePathIssues,
+        searchablePathIssues,
+        'searchablePathIssues preserved through the timing stamp',
+      );
+      assert.strictEqual(
+        diagnostics?.launchMs,
+        4,
+        'server timing merged alongside the preserved findings',
+      );
+      assert.strictEqual(
+        diagnostics?.totalElapsedMs,
+        12,
+        'totalElapsedMs merged alongside',
       );
     });
 

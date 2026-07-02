@@ -1,10 +1,18 @@
 import type { Command } from 'commander';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
+  unpublishRealm as unpublishRealmOperation,
+  RealmOperationError,
+} from '@cardstack/runtime-common/realm-operations';
+import { buildCliRealmClient } from '../../lib/realm-client.ts';
+import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
+import { deriveRealmServerUrl } from '../../lib/seed-auth.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import { cliLog } from '../../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 
@@ -17,6 +25,12 @@ export interface UnpublishOptions {
    */
   tolerateMissing?: boolean;
   profileManager?: ProfileManager;
+  /** Seed-mode admin auth — mints an owner-scoped realm-server token. */
+  realmSecretSeed?: string;
+  /** Realm-server origin for seed mode; defaults to the published URL origin. */
+  realmServerURL?: string;
+  /** Owner Matrix id for the seed-minted server token (required in seed mode). */
+  asUser?: string;
 }
 
 export interface UnpublishRealmResult {
@@ -39,81 +53,82 @@ export async function unpublishRealm(
   options: UnpublishOptions = {},
 ): Promise<UnpublishRealmResult> {
   let normalized = ensureTrailingSlash(publishedRealmURL);
-  let pm = options.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return {
-      publishedRealmURL: normalized,
-      unpublished: false,
-      error: NO_ACTIVE_PROFILE_ERROR,
-    };
+  let client: ReturnType<typeof buildCliRealmClient>;
+  if (options.realmSecretSeed) {
+    if (!options.asUser) {
+      return {
+        publishedRealmURL: normalized,
+        unpublished: false,
+        error:
+          'Seed-mode unpublish requires asUser (the realm owner Matrix id).',
+      };
+    }
+    client = buildCliRealmClient({
+      realmSecretSeed: options.realmSecretSeed,
+      realmServerURL:
+        options.realmServerURL ?? deriveRealmServerUrl(normalized),
+      asUser: options.asUser,
+    });
+  } else {
+    let pm = options.profileManager ?? getProfileManager();
+    if (!pm.getActiveProfile()) {
+      return {
+        publishedRealmURL: normalized,
+        unpublished: false,
+        error: NO_ACTIVE_PROFILE_ERROR,
+      };
+    }
+    client = buildCliRealmClient(pm);
   }
 
-  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-
-  let response: Response;
   try {
-    response = await pm.authedRealmServerFetch(
-      `${realmServerUrl}/_unpublish-realm`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ publishedRealmURL: normalized }),
-      },
-    );
+    await unpublishRealmOperation(client, {
+      publishedRealmURL: normalized,
+    });
+    return { publishedRealmURL: normalized, unpublished: true };
   } catch (err) {
+    if (err instanceof RealmOperationError) {
+      let body = err.body ?? '';
+      let looksLikeNotFound =
+        err.status === 404 || (err.status === 422 && /not found/i.test(body));
+
+      if (looksLikeNotFound) {
+        if (options.tolerateMissing) {
+          return {
+            publishedRealmURL: normalized,
+            unpublished: false,
+            notFound: true,
+          };
+        }
+        return {
+          publishedRealmURL: normalized,
+          unpublished: false,
+          notFound: true,
+          error: `Published realm ${normalized} is not currently published`,
+        };
+      }
+
+      return {
+        publishedRealmURL: normalized,
+        unpublished: false,
+        error: `Realm server returned ${err.status}: ${body.slice(0, 500)}`,
+      };
+    }
+
+    // A non-HTTP failure (e.g. the realm server was unreachable).
     return {
       publishedRealmURL: normalized,
       unpublished: false,
       error: `Failed to reach realm server: ${describeFetchError(err)}`,
     };
   }
-
-  if (response.ok) {
-    return { publishedRealmURL: normalized, unpublished: true };
-  }
-
-  let body = await safeReadResponseText(response);
-  let looksLikeNotFound =
-    response.status === 404 ||
-    (response.status === 422 && /not found/i.test(body));
-
-  if (looksLikeNotFound) {
-    if (options.tolerateMissing) {
-      return {
-        publishedRealmURL: normalized,
-        unpublished: false,
-        notFound: true,
-      };
-    }
-    return {
-      publishedRealmURL: normalized,
-      unpublished: false,
-      notFound: true,
-      error: `Published realm ${normalized} is not currently published`,
-    };
-  }
-
-  return {
-    publishedRealmURL: normalized,
-    unpublished: false,
-    error: `Realm server returned ${response.status}: ${body.slice(0, 500)}`,
-  };
-}
-
-async function safeReadResponseText(response: Response): Promise<string> {
-  try {
-    return await response.text();
-  } catch {
-    return '<no response body>';
-  }
 }
 
 interface UnpublishCliOptions {
   tolerateMissing?: boolean;
+  json?: boolean;
+  realmSecretSeed?: boolean;
+  asUser?: string;
 }
 
 export function registerUnpublishCommand(realm: Command): void {
@@ -125,10 +140,40 @@ export function registerUnpublishCommand(realm: Command): void {
       '--tolerate-missing',
       'Exit successfully when the realm is already unpublished',
     )
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
+    .option(
+      '--as-user <matrix-id>',
+      'Owner Matrix id to authorize as (required with --realm-secret-seed)',
+    )
+    .option('--json', 'Output the result as JSON')
     .action(async (publishedRealmURL: string, opts: UnpublishCliOptions) => {
+      let realmSecretSeed: string | undefined;
+      try {
+        realmSecretSeed = await resolveRealmSecretSeed(
+          opts.realmSecretSeed === true,
+        );
+      } catch (err) {
+        console.error(
+          `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(1);
+      }
       let result = await unpublishRealm(publishedRealmURL, {
         tolerateMissing: opts.tolerateMissing === true,
+        realmSecretSeed,
+        asUser: opts.asUser,
       });
+
+      if (opts.json) {
+        cliLog.output(JSON.stringify(result, null, 2));
+        if (result.error) {
+          process.exit(1);
+        }
+        return;
+      }
 
       if (result.error) {
         console.error(`${FG_RED}Error:${RESET} ${result.error}`);

@@ -13,7 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -62,7 +62,7 @@ module('Acceptance | markdown file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const markdownDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}markdown-file-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}markdown-file-def` as RealmResourceIdentifier,
     name: 'MarkdownDef',
   });
 
@@ -306,6 +306,24 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '',
             '::card[https://nonexistent.example/BlogPost/gone]',
           ].join('\n'),
+          'documents/notes.txt': 'These are project notes.',
+          'documents/spec.txt': 'Specification details live here.',
+          'bfm-file-test.md': [
+            '# BFM File Test',
+            '',
+            `Inline reference: :file[${testRealmURL}documents/notes.txt]`,
+            '',
+            `::file[${testRealmURL}documents/spec.txt]`,
+            '',
+            'End of document.',
+          ].join('\n'),
+          'bfm-file-fallback.md': [
+            '# File Fallback Test',
+            '',
+            ':file[https://nonexistent.example/missing.pdf]',
+            '',
+            '::file[https://nonexistent.example/gone.pdf]',
+          ].join('\n'),
           'mermaid-test.md': [
             '# Mermaid Test',
             '',
@@ -413,6 +431,104 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         'title',
         'https://nonexistent.example/BlogPost/gone',
         'block Pill title shows the raw URL',
+      );
+  });
+
+  test('renders inline file reference in atom format and block file reference in embedded format', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-test.md`,
+    });
+
+    await settled();
+
+    // documents/notes.txt resolves to a TextFileDef, whose atom/embedded views
+    // render its title — the file name without extension ('notes' / 'spec').
+    assert
+      .dom('[data-test-markdown-bfm-inline-file]')
+      .exists('inline file reference renders a resolved file slot');
+    assert
+      .dom('[data-test-markdown-bfm-inline-file] [data-test-text-atom]')
+      .containsText(
+        'notes',
+        'inline file slot renders the text file in atom format',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-block-file]')
+      .exists('block file reference renders a resolved file slot');
+    assert
+      .dom('[data-test-markdown-bfm-block-file] [data-test-text-embedded]')
+      .containsText(
+        'spec',
+        'block file slot renders the text file in embedded format',
+      );
+
+    assert
+      .dom('[data-boxel-bfm-inline-ref]')
+      .doesNotIncludeText(
+        `${testRealmURL}documents/notes.txt`,
+        'inline fallback path is hidden after the file resolves',
+      );
+  });
+
+  test('shows fallback for unresolvable file references', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-fallback.md`,
+    });
+
+    await settled();
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasText(
+        'missing.pdf',
+        'unresolvable inline file ref shows the file name',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/missing.pdf',
+        'inline file fallback title shows the raw URL',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasText('gone.pdf', 'unresolvable block file ref shows the file name');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/gone.pdf',
+        'block file fallback title shows the raw URL',
+      );
+  });
+
+  test('code mode shows overlays for markdown file references', async function (assert) {
+    // File slots are decorated with the same cardComponentModifier as cards
+    // (mirroring how CardsGrid decorates file rows), so the overlay system
+    // labels and acts on them too.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-test.md`,
+    });
+
+    await settled();
+
+    await triggerEvent('[data-test-markdown-bfm-block-file]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'block markdown file reference gets a hover overlay in code mode',
+      );
+
+    await triggerEvent('[data-test-markdown-bfm-inline-file]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'inline markdown file reference gets a hover overlay in code mode',
       );
   });
 

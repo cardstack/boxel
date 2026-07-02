@@ -5,25 +5,40 @@
 
 SCRIPTS_DIR="./scripts"
 
+# Serve a throwaway copy of the test realm fixtures so a running realm
+# server never writes into the repo's source tree.
+TEST_REALM_DIR=$(mktemp -d)
+cp -R ../test-realm-cards/contents/. "$TEST_REALM_DIR"/
+# Diagnostics: env-mode CI has been seeing the test realm-server's
+# from-scratch index finish with `files_completed=0` for both
+# `/test/` (this temp dir) and `/node-test/` (./tests/fixtures/realistic),
+# which means the realm-server's `_mtimes` endpoint is walking what
+# looks like an empty directory. Log file counts at this point so the
+# CI log makes it obvious whether the cp succeeded, whether the
+# checked-in fixtures directory is populated, and whether anything
+# wipes them between here and the realm-server boot.
+echo "[test-realms diag] TEST_REALM_DIR=$TEST_REALM_DIR file_count=$(ls -1A "$TEST_REALM_DIR" 2>/dev/null | wc -l | tr -d ' ')"
+echo "[test-realms diag] ../test-realm-cards/contents file_count=$(ls -1A ../test-realm-cards/contents 2>/dev/null | wc -l | tr -d ' ')"
+echo "[test-realms diag] ./tests/fixtures/realistic file_count=$(ls -1A ./tests/fixtures/realistic 2>/dev/null | wc -l | tr -d ' ')"
+
 # In environment mode, share the dev icons server; otherwise start our own
 if [ -z "$BOXEL_ENVIRONMENT" ]; then
   sh "$SCRIPTS_DIR/start-icons.sh" &
   ICONS_PID=$!
-  cleanup_icons_server() {
-    if [ -n "$ICONS_PID" ]; then
-      kill "$ICONS_PID" >/dev/null 2>&1 || true
-    fi
-  }
-  trap cleanup_icons_server EXIT
-  # INT/TERM additionally exit 0 — see mise-tasks/services/worker for why.
-  # Clearing EXIT inside the signal handler avoids running cleanup twice.
-  trap 'trap - EXIT; cleanup_icons_server; exit 0' INT TERM
-else
-  # Even without an icons server to clean up, swallow signal-induced 143s so
-  # the orchestrator's Ctrl-C doesn't surface as `ERROR: "start:test-realms"
-  # exited with 143`.
-  trap 'exit 0' INT TERM
 fi
+
+cleanup() {
+  rm -rf "$TEST_REALM_DIR"
+  if [ -n "$ICONS_PID" ]; then
+    kill "$ICONS_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+# INT/TERM additionally exit 0 so the orchestrator's Ctrl-C doesn't surface
+# as `ERROR: "start:test-realms" exited with 143` — see
+# mise-tasks/services/worker for why. Clearing EXIT inside the signal
+# handler avoids running cleanup twice.
+trap 'trap - EXIT; cleanup; exit 0' INT TERM
 
 if [ -n "$ENV_MODE" ]; then
   WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_TEST_MGR_URL}"
@@ -40,7 +55,7 @@ fi
 pnpm --dir=../skills-realm skills:setup
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
-  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  MATRIX_REGISTRATION_SHARED_SECRET=$(node "$SCRIPTS_DIR/matrix-registration-secret.ts")
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
@@ -53,8 +68,7 @@ NODE_ENV=test \
   GRAFANA_SECRET="shhh! it's a secret" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  ts-node \
-  --transpileOnly main \
+  node main.ts \
   --port="${TEST_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_TEST_ROOT}" \
@@ -69,7 +83,7 @@ NODE_ENV=test \
   --fromUrl="${REALM_TEST_URL}/node-test/" \
   --toUrl="${REALM_TEST_URL}/node-test/" \
   \
-  --path='../host/tests/cards' \
+  --path="$TEST_REALM_DIR" \
   --username='test_realm' \
   --fromUrl="${REALM_TEST_URL}/test/" \
   --toUrl="${REALM_TEST_URL}/test/" \

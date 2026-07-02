@@ -264,7 +264,7 @@ export class SkillSet extends SkillPlus {
     },
   });
 
-  @field relatedSkills = containsMany(SkillReference);
+  @field relatedSkills = containsMany(SkillReference, { searchable: ['skill', 'skill.cardInfo.theme'] });
 
   @field frontMatter = contains(MarkdownField, {
     // Editable front matter

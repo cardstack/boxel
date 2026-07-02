@@ -55,6 +55,14 @@ export class MockUtils {
     return this.testState.opts?.systemCardAccountData;
   };
 
+  getActiveRealms = () => {
+    return this.testState.opts?.activeRealms ?? [];
+  };
+
+  getActiveRealmServers = () => {
+    return this.testState.opts?.activeRealmServers ?? [];
+  };
+
   getRealmEventMessagesSince = (roomId: string, since: number) => {
     return this.testState
       .sdk!.serverState.getRoomEvents(roomId)
@@ -106,6 +114,17 @@ export class MockUtils {
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
   };
+  setLoginFlows = (response: { flows: MatrixSDK.LoginFlow[] }) => {
+    this.testState.opts!.loginFlowsResponse = response;
+  };
+  setSsoLoginUrl = (url: string) => {
+    this.testState.opts!.ssoLoginUrl = url;
+  };
+  setLoginWithTokenInterceptor = (
+    fn: ((token: string) => Promise<MatrixSDK.LoginResponse>) | undefined,
+  ) => {
+    this.testState.opts!.loginWithTokenInterceptor = fn;
+  };
   createAndJoinRoom = ({
     sender,
     name,
@@ -130,6 +149,9 @@ export class MockUtils {
   };
   setUploadContentInterceptor = (fn: (() => Promise<void>) | undefined) => {
     this.testState.opts!.uploadContentInterceptor = fn;
+  };
+  setSendEventInterceptor = (fn: (() => Promise<void>) | undefined) => {
+    this.testState.opts!.sendEventInterceptor = fn;
   };
 
   setRoomState = (

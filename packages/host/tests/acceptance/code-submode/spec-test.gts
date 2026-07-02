@@ -10,7 +10,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Deferred, rri } from '@cardstack/runtime-common';
+import { baseRealmRRI, Deferred, rri } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -334,7 +334,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -368,7 +368,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -386,7 +386,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -405,7 +405,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -436,7 +436,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -536,7 +536,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -556,7 +556,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -576,7 +576,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -596,7 +596,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -616,7 +616,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -652,7 +652,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -686,7 +686,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -977,14 +977,12 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-links-to-many="linkedExamples"]').exists();
     await click('[data-test-add-new]');
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
       .containsText('Person');
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
+    assert.dom('[data-test-item-button]').exists({ count: 2 });
+    assert.dom(`[data-test-item-button="${testRealmURL}Person/1"]`).exists();
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/1"]`)
-      .exists();
-    assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Person/fadhlan"]`)
       .exists();
   });
 

@@ -1,13 +1,22 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
+import { dropTask } from 'ember-concurrency';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
-import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
+import { add, eq } from '@cardstack/boxel-ui/helpers';
+import {
+  IconGlobe,
+  Lock,
+  StarFilled,
+  TriangleRight,
+} from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { ri } from '@cardstack/runtime-common';
@@ -18,6 +27,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import ArchivedWorkspace from './archived-workspace';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -38,6 +48,43 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+
+  // Archived realms are tucked away below the fold and collapsed by default —
+  // they're rarely needed, so the section stays out of the way and the list
+  // isn't fetched until the owner opens the disclosure.
+  @tracked private isArchivedExpanded = false;
+
+  private get archivedRealms() {
+    return this.realmServer.archivedRealms;
+  }
+
+  // Show the archived count once we've loaded the list (or already have entries
+  // from an archive action this session). Before the first load we don't know
+  // the count, so the row shows just "Archived".
+  private get showArchivedCount() {
+    return (
+      Boolean(this.loadArchivedRealmsTask.lastSuccessful) ||
+      this.archivedRealms.length > 0
+    );
+  }
+
+  private loadArchivedRealmsTask = dropTask(async () => {
+    await this.realmServer.fetchArchivedRealms();
+  });
+
+  @action private toggleArchived() {
+    this.isArchivedExpanded = !this.isArchivedExpanded;
+    // Lazy-load on first expand. Retry if a prior attempt failed (no
+    // lastSuccessful); the service caches a successful fetch so re-expanding
+    // after success is a no-op.
+    if (
+      this.isArchivedExpanded &&
+      !this.loadArchivedRealmsTask.lastSuccessful &&
+      !this.loadArchivedRealmsTask.isRunning
+    ) {
+      this.loadArchivedRealmsTask.perform();
+    }
+  }
 
   private sortOptions: SortOption[] = [
     { label: 'View All', icon: Shapes, value: 'default' },
@@ -135,8 +182,180 @@ export default class WorkspaceChooser extends Component<Signature> {
     return null;
   }
 
+  // The keyboard-selected tile, identified by its position in the flat,
+  // DOM-ordered sequence of selectable tiles. The sequence spans, in render
+  // order: Favorites, Your Workspaces, the "New Workspace" tile, then Catalogs.
+  @tracked private selectedIndex = 0;
+
+  private get favoritesCount() {
+    return this.favoriteRealmIdentifiers.length;
+  }
+
+  private get userWorkspacesCount() {
+    return this.filteredUserRealmIdentifiers.length;
+  }
+
+  // The "New Workspace" tile is hidden only when the hosted-only filter empties
+  // the Your Workspaces section.
+  private get isAddWorkspaceShown() {
+    return !this.userWorkspacesEmptyMessage;
+  }
+
+  private get renderedCatalogCount() {
+    if (!this.displayCatalogWorkspaces || this.catalogEmptyMessage) {
+      return 0;
+    }
+    return this.filteredCatalogRealmIdentifiers.length;
+  }
+
+  // navIndex of the first tile in each section. The "New Workspace" tile sits
+  // between Your Workspaces and Catalogs.
+  private get userWorkspacesNavBase() {
+    return this.favoritesCount;
+  }
+
+  private get addWorkspaceNavIndex() {
+    return this.favoritesCount + this.userWorkspacesCount;
+  }
+
+  private get catalogNavBase() {
+    return this.addWorkspaceNavIndex + (this.isAddWorkspaceShown ? 1 : 0);
+  }
+
+  private get selectableCount() {
+    return this.catalogNavBase + this.renderedCatalogCount;
+  }
+
+  // `selectedIndex` can fall out of range when the selectable set shrinks
+  // without a keypress (e.g. switching to the Hosted Only filter hides the
+  // user section and "New Workspace" tile). Clamping on read keeps a tile
+  // selected so focus/Enter/arrow navigation keep working. Used everywhere the
+  // selection is consumed — rendering, lookups, and as the base for movement.
+  private get currentIndex() {
+    let count = this.selectableCount;
+    if (count === 0) {
+      return 0;
+    }
+    return Math.min(Math.max(this.selectedIndex, 0), count - 1);
+  }
+
+  // Keep the selection in sync with focus, so tabbing onto a tile selects it.
+  @action private onFocusIn(event: Event) {
+    let tile = (event.target as HTMLElement).closest('[data-nav-index]');
+    if (!tile) {
+      return;
+    }
+    let index = Number((tile as HTMLElement).dataset.navIndex);
+    if (!Number.isNaN(index) && index !== this.selectedIndex) {
+      this.selectedIndex = index;
+    }
+  }
+
+  @action private onKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    let container = kbEvent.currentTarget as HTMLElement;
+    let count = this.selectableCount;
+    if (count === 0) {
+      return;
+    }
+    // Only handle keys that originate from a selectable tile. Other controls
+    // inside the chooser (a card's favorite/options/host buttons) handle their
+    // own keys, so we must not intercept (and preventDefault) their events.
+    if (!(kbEvent.target as HTMLElement).closest('[data-nav-index]')) {
+      return;
+    }
+    switch (kbEvent.key) {
+      // Left/Right step linearly through the sequence.
+      case 'ArrowRight':
+        event.preventDefault();
+        this.selectedIndex = Math.min(this.currentIndex + 1, count - 1);
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.selectedIndex = Math.max(this.currentIndex - 1, 0);
+        break;
+      // Up/Down move by visual row in the wrapped flex layout.
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveVertically(container, 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveVertically(container, -1);
+        break;
+      case 'Enter': {
+        event.preventDefault();
+        // Stop this keystroke from reaching ember-keyboard's document-level
+        // listener. Activating the "New Workspace" tile mounts a modal whose
+        // Create button has a global `{{on-key 'Enter'}}`; without this, the
+        // same Enter would bubble on to that listener and submit the form the
+        // instant it opens.
+        event.stopPropagation();
+        let selected = container.querySelector(
+          `[data-nav-index='${this.currentIndex}']`,
+        );
+        if (selected instanceof HTMLElement) {
+          // Activates the focused tile — opening the workspace, or the
+          // "New Workspace" modal. preventDefault above suppresses the focused
+          // button's native Enter-to-click so it fires only once.
+          selected.click();
+        }
+        break;
+      }
+    }
+  }
+
+  // From the selected tile, find the nearest row in the given direction and
+  // pick the tile whose horizontal center is closest to the current one.
+  private moveVertically(container: HTMLElement, direction: 1 | -1) {
+    let tiles = [...container.querySelectorAll('[data-nav-index]')].map(
+      (element) => ({
+        index: Number((element as HTMLElement).dataset.navIndex),
+        rect: element.getBoundingClientRect(),
+      }),
+    );
+    let current = tiles.find((tile) => tile.index === this.currentIndex);
+    if (!current) {
+      return;
+    }
+    let currentCenterX = current.rect.left + current.rect.width / 2;
+    let candidates = tiles.filter((tile) =>
+      direction === 1
+        ? tile.rect.top > current.rect.top + 1
+        : tile.rect.top < current.rect.top - 1,
+    );
+    if (candidates.length === 0) {
+      return;
+    }
+    // The nearest row is the one whose top is closest to the current tile in
+    // the travel direction; tiles in that row share (near-)identical tops.
+    let targetRowTop =
+      direction === 1
+        ? Math.min(...candidates.map((tile) => tile.rect.top))
+        : Math.max(...candidates.map((tile) => tile.rect.top));
+    let rowTiles = candidates.filter(
+      (tile) => Math.abs(tile.rect.top - targetRowTop) <= 1,
+    );
+    let nearest = rowTiles.reduce((closest, tile) => {
+      let closestDx = Math.abs(
+        closest.rect.left + closest.rect.width / 2 - currentCenterX,
+      );
+      let tileDx = Math.abs(
+        tile.rect.left + tile.rect.width / 2 - currentCenterX,
+      );
+      return tileDx < closestDx ? tile : closest;
+    });
+    this.selectedIndex = nearest.index;
+  }
+
   <template>
-    <div class='workspace-chooser' data-test-workspace-chooser>
+    {{! template-lint-disable no-invalid-interactive }}
+    <div
+      class='workspace-chooser'
+      data-test-workspace-chooser
+      {{on 'keydown' this.onKeydown}}
+      {{on 'focusin' this.onFocusIn}}
+    >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}
           <div class='sort-controls'>
@@ -170,8 +389,12 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.favoritesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-favorites-list>
-                {{#each this.favoriteRealmIdentifiers as |realmIdentifier|}}
-                  <Workspace @realmIdentifier={{realmIdentifier}} />
+                {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
+                  <Workspace
+                    @realmIdentifier={{realmIdentifier}}
+                    @navIndex={{i}}
+                    @isSelected={{eq this.currentIndex i}}
+                  />
                 {{/each}}
               </div>
             {{/if}}
@@ -188,16 +411,26 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.userWorkspacesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-workspace-list>
-                {{#each this.filteredUserRealmIdentifiers as |realmIdentifier|}}
-                  <Workspace
-                    @realmIdentifier={{realmIdentifier}}
-                    @showMenu={{true}}
-                  />
+                {{#each
+                  this.filteredUserRealmIdentifiers
+                  as |realmIdentifier i|
+                }}
+                  {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @showMenu={{true}}
+                      @navIndex={{navIndex}}
+                      @isSelected={{eq this.currentIndex navIndex}}
+                    />
+                  {{/let}}
                 {{/each}}
                 {{#if this.matrixService.isInitializingNewUser}}
                   <WorkspaceLoadingIndicator />
                 {{/if}}
-                <AddWorkspace />
+                <AddWorkspace
+                  @navIndex={{this.addWorkspaceNavIndex}}
+                  @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
+                />
               </div>
             {{/if}}
           </div>
@@ -216,14 +449,58 @@ export default class WorkspaceChooser extends Component<Signature> {
                 <div class='workspace-list' data-test-catalog-list>
                   {{#each
                     this.filteredCatalogRealmIdentifiers
-                    as |realmIdentifier|
+                    as |realmIdentifier i|
                   }}
-                    <Workspace @realmIdentifier={{realmIdentifier}} />
+                    {{#let (add this.catalogNavBase i) as |navIndex|}}
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @navIndex={{navIndex}}
+                        @isSelected={{eq this.currentIndex navIndex}}
+                      />
+                    {{/let}}
                   {{/each}}
                 </div>
               {{/if}}
             </div>
           {{/if}}
+          <div class='workspace-section' data-test-archived-section>
+            <button
+              type='button'
+              class='section-header section-header--toggle
+                {{if this.isArchivedExpanded "is-expanded"}}'
+              aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
+              data-test-archived-toggle
+              {{on 'click' this.toggleArchived}}
+            >
+              <TriangleRight
+                width='12'
+                height='12'
+                class='section-disclosure-icon'
+              />
+              <ArchiveIcon width='20' height='20' class='section-header-icon' />
+              <span class='workspace-chooser__title'>Archived</span>
+              {{#if this.showArchivedCount}}
+                <span
+                  class='section-count'
+                >{{this.archivedRealms.length}}</span>
+              {{/if}}
+            </button>
+            {{#if this.isArchivedExpanded}}
+              {{#if this.loadArchivedRealmsTask.isRunning}}
+                <WorkspaceLoadingIndicator />
+              {{else if this.archivedRealms.length}}
+                <div class='workspace-list' data-test-archived-list>
+                  {{#each this.archivedRealms as |archivedRealm|}}
+                    <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
+                  {{/each}}
+                </div>
+              {{else}}
+                <span class='section-empty' data-test-archived-empty>
+                  No archived workspaces
+                </span>
+              {{/if}}
+            {{/if}}
+          </div>
         </div>
       </div>
     </div>
@@ -286,6 +563,28 @@ export default class WorkspaceChooser extends Component<Signature> {
         --icon-color: var(--boxel-teal);
         color: var(--boxel-teal);
         flex-shrink: 0;
+      }
+      .section-header--toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        width: fit-content;
+        text-align: left;
+      }
+      .section-disclosure-icon {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
+        flex-shrink: 0;
+        transition: transform 0.15s ease;
+      }
+      .section-header--toggle.is-expanded .section-disclosure-icon {
+        transform: rotate(90deg);
+      }
+      .section-count {
+        color: var(--boxel-400);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
       }
       .workspace-chooser__title {
         color: var(--boxel-light);

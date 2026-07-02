@@ -1,22 +1,17 @@
-import QUnit, { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
-import {
-  copySync,
-  ensureDirSync,
-  existsSync,
-  readFileSync,
-  readJSONSync,
-  removeSync,
-  writeFileSync,
-} from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, ensureDirSync, readFileSync, readJSONSync } = fsExtra;
 import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  baseRealmRRI,
   baseRRI,
   CachingDefinitionLookup,
   SupportedMimeType,
@@ -72,7 +67,7 @@ import type {
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
@@ -292,7 +287,7 @@ module(basename(__filename), function () {
       let json = response.body;
       assert.strictEqual(json.data.type, 'file-meta');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}markdown-file-def`,
+        module: `${baseRealmRRI}markdown-file-def`,
         name: 'MarkdownDef',
       });
 
@@ -346,494 +341,6 @@ module(basename(__filename), function () {
         'no-store, no-cache, must-revalidate',
         'cache control header is set correctly',
       );
-    });
-
-    module('realm config patch', function (hooks) {
-      let realmConfigPath: string;
-      let initialConfig: any;
-
-      hooks.beforeEach(function () {
-        realmConfigPath = join(
-          dir.name,
-          'realm_server_1',
-          'test',
-          'realm.json',
-        );
-        initialConfig = existsSync(realmConfigPath)
-          ? readJSONSync(realmConfigPath)
-          : undefined;
-      });
-
-      test('non-owner cannot patch realm config', async function (assert) {
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'carol', ['read', 'write'])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { backgroundURL: 'new-bg' },
-            },
-          });
-
-        assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card was not modified',
-          );
-        }
-      });
-
-      test('realm-owner can patch allowed realm config property', async function (assert) {
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { backgroundURL: 'new-bg' },
-            },
-          });
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          response.body,
-          {
-            data: {
-              id: testRealmHref,
-              type: 'realm-config',
-              attributes: {
-                ...testRealmInfo,
-                backgroundURL: 'new-bg',
-              },
-            },
-          },
-          'response includes updated realm info',
-        );
-        // backgroundURL is owned by the RealmConfig card, not the sidecar.
-        let cardPath = join(dir.name, 'realm_server_1', 'test', 'realm.json');
-        let cardDoc = readJSONSync(cardPath);
-        assert.strictEqual(
-          cardDoc.data.attributes.backgroundURL,
-          'new-bg',
-          'realm.json card contains the updated backgroundURL',
-        );
-      });
-
-      test('can clear card-owned URL fields by patching null', async function (assert) {
-        let auth = `Bearer ${createJWT(testRealm, 'user', [
-          'read',
-          'write',
-          'realm-owner',
-        ])}`;
-
-        // First set non-null values so we have something to clear.
-        let setResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set('Authorization', auth)
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: {
-                backgroundURL: 'http://example.com/bg.jpg',
-                iconURL: 'http://example.com/icon.png',
-              },
-            },
-          });
-        assert.strictEqual(setResponse.status, 200, 'set HTTP 200 status');
-        assert.strictEqual(
-          setResponse.body.data.attributes.backgroundURL,
-          'http://example.com/bg.jpg',
-          'backgroundURL set in overlay',
-        );
-        assert.strictEqual(
-          setResponse.body.data.attributes.iconURL,
-          'http://example.com/icon.png',
-          'iconURL set in overlay',
-        );
-
-        // Now clear them.
-        let clearResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set('Authorization', auth)
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { backgroundURL: null, iconURL: null },
-            },
-          });
-        assert.strictEqual(clearResponse.status, 200, 'clear HTTP 200 status');
-        assert.strictEqual(
-          clearResponse.body.data.attributes.backgroundURL,
-          null,
-          'backgroundURL is null after patching null',
-        );
-        assert.strictEqual(
-          clearResponse.body.data.attributes.iconURL,
-          null,
-          'iconURL is null after patching null',
-        );
-      });
-
-      test('allows any property except showAsCatalog', async function (assert) {
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { publishable: true },
-            },
-          });
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.true(
-          response.body.data.attributes.publishable,
-          'response includes publishable: true (sourced from realm_metadata)',
-        );
-        // publishable lives in realm_metadata now, not the sidecar.
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card is untouched by a publishable PATCH',
-          );
-        }
-
-        let showAsCatalogResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { showAsCatalog: true },
-            },
-          });
-
-        assert.strictEqual(
-          showAsCatalogResponse.status,
-          400,
-          'HTTP 400 status when attempting to set showAsCatalog',
-        );
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card remains unchanged after disallowed property',
-          );
-        }
-      });
-
-      test('card responses reflect updated realm config without re-indexing', async function (assert) {
-        // Fetch a card before updating realm config
-        let cardResponse = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(cardResponse.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          cardResponse.body.data.meta.realmInfo,
-          testRealmInfo,
-          'card has original realmInfo before config change',
-        );
-
-        // Update the realm config
-        let patchResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { name: 'Updated Realm Name' },
-            },
-          });
-        assert.strictEqual(patchResponse.status, 200, 'config patch succeeded');
-
-        // Fetch the same card again — realmInfo should reflect the new config
-        // without needing to re-index
-        let updatedCardResponse = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(updatedCardResponse.status, 200, 'HTTP 200 status');
-        assert.strictEqual(
-          updatedCardResponse.body.data.meta.realmInfo.name,
-          'Updated Realm Name',
-          'card realmInfo reflects updated realm name without re-indexing',
-        );
-      });
-
-      test('card ETag invalidates after realm config change so old If-None-Match does not 304 stale realmInfo', async function (assert) {
-        // Capture the pre-PATCH ETag.
-        let initialResponse = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(initialResponse.status, 200, 'initial GET succeeds');
-        let initialEtag = initialResponse.headers['etag'];
-        assert.ok(initialEtag, 'initial response carries an ETag');
-
-        // Change the realm name — this nulls the cached realmInfo without
-        // touching boxel_index, so a naive `indexed_at`-only ETag would
-        // still match and 304 with stale `meta.realmInfo`. The fix folds
-        // a hash of the realmInfo into the ETag base.
-        let patchResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { name: 'Etag Invalidation Test Realm' },
-            },
-          });
-        assert.strictEqual(patchResponse.status, 200, 'config patch succeeded');
-
-        // Replay the GET with the OLD ETag. It must NOT 304: the assembled
-        // body now has a different `meta.realmInfo.name`, so the validator
-        // has to recognize that as a content change.
-        let revalidationResponse = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json')
-          .set('If-None-Match', initialEtag);
-        assert.strictEqual(
-          revalidationResponse.status,
-          200,
-          'old ETag does not match after /_config PATCH; server returns full 200',
-        );
-        assert.notStrictEqual(
-          revalidationResponse.headers['etag'],
-          initialEtag,
-          'fresh response carries a different ETag',
-        );
-        assert.strictEqual(
-          revalidationResponse.body.data.meta.realmInfo.name,
-          'Etag Invalidation Test Realm',
-          'fresh response reflects the post-PATCH realm name',
-        );
-      });
-
-      test('returns bad request for invalid json body', async function (assert) {
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set('Content-Type', 'application/json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send('{"data":');
-
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        assert.ok(
-          response.body.errors?.[0]?.message?.startsWith(
-            'The request body was not json',
-          ),
-          'error message indicates malformed json',
-        );
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card remains unchanged after invalid request',
-          );
-        } else {
-          assert.false(
-            existsSync(realmConfigPath),
-            'realm.json card is not created on invalid request',
-          );
-        }
-      });
-
-      test('returns bad request when request structure is missing data or attributes', async function (assert) {
-        let missingDataResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({});
-
-        assert.strictEqual(
-          missingDataResponse.status,
-          400,
-          'HTTP 400 status for missing data',
-        );
-
-        let missingAttributesResponse = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({ data: { type: 'realm-config' } });
-
-        assert.strictEqual(
-          missingAttributesResponse.status,
-          400,
-          'HTTP 400 status for missing attributes',
-        );
-
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card remains unchanged after malformed requests',
-          );
-        } else {
-          assert.false(
-            existsSync(realmConfigPath),
-            'realm.json card is not created when payloads are malformed',
-          );
-        }
-      });
-
-      test('returns bad request when property name is empty', async function (assert) {
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { '': 'value' },
-            },
-          });
-
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        assert.strictEqual(
-          response.body.errors?.[0]?.message,
-          'Property names cannot be empty',
-          'error message indicates empty property name is not allowed',
-        );
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            'realm.json card remains unchanged after empty property name',
-          );
-        } else {
-          assert.false(
-            existsSync(realmConfigPath),
-            'realm.json card is not created when property name is empty',
-          );
-        }
-      });
-
-      test('returns error when the existing RealmConfig card cannot be parsed', async function (assert) {
-        let invalidContent = '{ "data": { "type": "card" ';
-        writeFileSync(realmConfigPath, invalidContent);
-
-        try {
-          // `name` is a card-owned field, so a PATCH that targets it
-          // reaches the card-read/parse path in patchRealmConfig. A
-          // malformed realm.json at this point surfaces a 500 with the
-          // "Unable to parse existing realm config card" message.
-          let response = await request
-            .patch('/_config')
-            .set('Accept', SupportedMimeType.JSON)
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'user', [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
-            )
-            .send({
-              data: {
-                type: 'realm-config',
-                attributes: { name: 'Patched Name' },
-              },
-            });
-
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          assert.ok(
-            response.body.errors?.[0]?.message?.startsWith(
-              'Unable to parse existing realm config card:',
-            ),
-            'error message indicates parsing failure',
-          );
-          assert.strictEqual(
-            readFileSync(realmConfigPath, 'utf8'),
-            invalidContent,
-            'realm.json card remains unchanged when existing file is invalid',
-          );
-        } finally {
-          if (initialConfig) {
-            writeFileSync(
-              realmConfigPath,
-              JSON.stringify(initialConfig, null, 2) + '\\n',
-            );
-          } else {
-            removeSync(realmConfigPath);
-          }
-        }
-      });
     });
 
     test('serves module requests through read-through cache', async function (assert) {
@@ -2008,7 +1515,7 @@ module(basename(__filename), function () {
     let testRealm: Realm;
 
     let virtualNetwork = createVirtualNetwork();
-    const basePath = resolve(join(__dirname, '..', '..', 'base'));
+    const basePath = resolve(join(import.meta.dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
       'realm.json': readJSONSync(join(fixtureDir('realistic'), 'realm.json')),
       'person.gts': readFileSync(
@@ -2072,6 +1579,10 @@ module(basename(__filename), function () {
           testCreatePrerenderAuth,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+        virtualNetwork.addRealmMapping(
+          '@cardstack/base/',
+          localBaseRealmURL.href,
+        );
 
         ({ realm: base } = await createRealm({
           definitionLookup,

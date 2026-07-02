@@ -25,6 +25,7 @@ import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 import type {
   Permissions,
   JWTPayload,
+  RealmClient,
   RealmIdentifier,
   RealmPermissions,
   RealmResourceIdentifier,
@@ -32,6 +33,7 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
+  fetchPublishabilityReport,
   logger,
   ri,
   rri,
@@ -39,6 +41,7 @@ import {
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
+import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -123,8 +126,6 @@ export interface RealmPrivateDependencyReport {
   violations: PublishabilityViolation[];
   warningTypes?: PublishabilityWarningType[];
 }
-
-type RealmInfoProperty = 'backgroundURL' | 'iconURL';
 
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
@@ -222,6 +223,26 @@ class RealmResource {
     return undefined;
   }
 
+  // Adapts this resource's Ember-side auth/config into the portable
+  // `RealmClient` the shared realm operations consume. The only operation that
+  // uses this client (`fetchPublishabilityReport`) hits the per-realm
+  // `_publishability` endpoint, so `authedFetch` always goes through the
+  // network's per-realm token middleware. (Realm-server endpoints — published
+  // realms live under the same origin, so a URL prefix can't distinguish them —
+  // are wrapped via `RealmServerService` instead.)
+  private get realmClient(): RealmClient {
+    let userId = this.claims?.user;
+    return {
+      realmServerURL: ensureTrailingSlash(this.realmServer.url.href),
+      config: {
+        spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        siteDomain: ENV.publishedRealmBoxelSiteDomain,
+      },
+      matrixUsername: userId ? getMatrixUsername(userId) : undefined,
+      authedFetch: (url, init) => this.network.authedFetch(url, init),
+    };
+  }
+
   get canRead() {
     return !!this.isPublic || !!this.claims?.permissions?.includes('read');
   }
@@ -288,6 +309,22 @@ class RealmResource {
               if (this.indexingWaiterToken) {
                 indexingWaiter.endAsync(this.indexingWaiterToken);
                 this.indexingWaiterToken = null;
+              }
+              // Renaming a realm edits its RealmConfig card (realm.json),
+              // which surfaces as an incremental re-index that invalidates the
+              // config card. Refresh realm info then, so the workspace chooser
+              // label and index card title update without a reload. Other
+              // re-indexes (full/copy, or incremental of unrelated cards) are
+              // deliberately left alone — refetching on those would, among
+              // other things, clobber client-managed publish state. Instance
+              // invalidations carry the card id without `.json`, so the
+              // RealmConfig card at `<realm>/realm.json` appears as
+              // `<realm>/realm`.
+              if (
+                data.indexType === 'incremental' &&
+                data.invalidations.includes(`${this.realmURL}realm`)
+              ) {
+                this.refreshInfo();
               }
               break;
             default:
@@ -363,102 +400,101 @@ class RealmResource {
       if (this.info) {
         return;
       }
-      let headers: Record<string, string> = {
-        Accept: SupportedMimeType.RealmInfo,
-        ...(this.auth.type === 'logged-in'
-          ? { Authorization: `Bearer ${this.token}` }
-          : {}),
-      };
-      let response: Response;
-      try {
-        response = await this.network.authedFetch(`${this.realmURL}_info`, {
-          method: 'QUERY',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ realms: [this.realmURL] }),
-        });
-      } catch (error) {
-        if (isTesting()) {
-          console.warn(
-            `[realm-service] realm info fetch failed ${JSON.stringify({
-              realmURL: this.realmURL,
-              error: String(error),
-            })}`,
-          );
-        }
-        throw error;
-      }
-      if (response.status !== 200) {
-        let responseText = await response.text();
-        if (isTesting()) {
-          console.warn(
-            `[realm-service] realm info fetch bad status ${JSON.stringify({
-              realmURL: this.realmURL,
-              status: response.status,
-              responseText,
-            })}`,
-          );
-        }
-        throw new Error(
-          `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
-        );
-      }
-      let json = await waitForPromise(response.json());
-      let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
-      let info: RealmInfo = {
-        url: realmData.id,
-        ...realmData.attributes,
-      };
-      let isPublic = Boolean(
-        response.headers.get('x-boxel-realm-public-readable') ||
-        response.headers.get('x-boxel-realms-public-readable'),
-      );
+      let { info, isPublic } = await this.fetchInfoFromServer();
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
       this.fetchingInfo = undefined;
     }
   });
 
-  async setRealmInfoProperty(
-    property: RealmInfoProperty,
-    value: string | null,
-  ): Promise<void> {
-    await this.loginTask.perform();
+  // Fetches the realm's current `_info` from the realm server. Used both for
+  // the initial load (fetchInfoTask) and to refresh an already-loaded info
+  // when the realm re-indexes (refreshInfo), e.g. after the realm is renamed.
+  private async fetchInfoFromServer(): Promise<{
+    info: RealmInfo;
+    isPublic: boolean;
+  }> {
     let headers: Record<string, string> = {
-      Accept: SupportedMimeType.JSON,
-      Authorization: `Bearer ${this.token}`,
+      Accept: SupportedMimeType.RealmInfo,
+      ...(this.auth.type === 'logged-in'
+        ? { Authorization: `Bearer ${this.token}` }
+        : {}),
     };
-    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: 'realm-config',
-          id: this.url,
-          attributes: { [property]: value },
+    let response: Response;
+    try {
+      response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        method: 'QUERY',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
         },
-      }),
-    });
-
+        body: JSON.stringify({ realms: [this.realmURL] }),
+      });
+    } catch (error) {
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] realm info fetch failed ${JSON.stringify({
+            realmURL: this.realmURL,
+            error: String(error),
+          })}`,
+        );
+      }
+      throw error;
+    }
     if (response.status !== 200) {
+      let responseText = await response.text();
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] realm info fetch bad status ${JSON.stringify({
+            realmURL: this.realmURL,
+            status: response.status,
+            responseText,
+          })}`,
+        );
+      }
       throw new Error(
-        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
+        `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
       );
     }
     let json = await waitForPromise(response.json());
+    let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
+    let info: RealmInfo = {
+      url: realmData.id,
+      ...realmData.attributes,
+    };
     let isPublic = Boolean(
-      response.headers.get('x-boxel-realm-public-readable'),
+      response.headers.get('x-boxel-realm-public-readable') ||
+      response.headers.get('x-boxel-realms-public-readable'),
     );
-    let updatedInfo = new TrackedObject({
-      url: json.data.id,
-      ...json.data.attributes,
-      isIndexing: this.info?.isIndexing ?? false,
-      isPublic,
-    }) as EnhancedRealmInfo;
-    this.info = updatedInfo;
+    return { info, isPublic };
   }
+
+  // Re-fetches realm info after a re-index and mutates the existing tracked
+  // `info` object in place so consumers (workspace chooser label, index card
+  // title) reactively pick up changes such as a renamed realm. Mutating in
+  // place — rather than replacing the object — keeps the reference stable for
+  // `@cached` getters that hold onto it.
+  private refreshInfo() {
+    return this.refreshInfoTask.perform();
+  }
+
+  private refreshInfoTask = restartableTask(async () => {
+    if (!this.info) {
+      // Nothing loaded yet; the initial fetchInfo will pick up current values.
+      await this.fetchInfo();
+      return;
+    }
+    let { info, isPublic } = await this.fetchInfoFromServer();
+    // `_info` always returns the full RealmInfo attribute set (unset fields
+    // come back as explicit `null`), so assigning onto the existing object
+    // can't strand a stale key. Preserve client-managed publish state:
+    // publish()/unpublish() own `lastPublishedAt`, and `_info` may not yet
+    // reflect a just-published realm, so a rename refresh must not clobber it.
+    Object.assign(this.info, info, {
+      isPublic,
+      lastPublishedAt: this.info.lastPublishedAt,
+    });
+  });
 
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
@@ -495,43 +531,15 @@ class RealmResource {
   });
 
   async fetchPrivateDependencyReport(): Promise<RealmPrivateDependencyReport> {
+    // Ensure the realm token is minted before the operation's authedFetch
+    // routes the `_publishability` request through the per-realm token
+    // middleware.
     await this.loginTask.perform();
-    let headers: Record<string, string> = {
-      Accept: SupportedMimeType.JSONAPI,
-      Authorization: `Bearer ${this.token}`,
-    };
-    let response = await this.network.authedFetch(
-      `${this.realmURL}_publishability`,
-      {
-        headers,
-      },
+    return waitForPromise(
+      fetchPublishabilityReport(this.realmClient, {
+        realmURL: this.realmURL,
+      }),
     );
-
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to check private dependencies for ${this.realmURL}: ${response.status}`,
-      );
-    }
-
-    let json = (await waitForPromise(response.json())) as {
-      data: {
-        attributes: {
-          publishable: boolean;
-          realmURL: string;
-          violations: PublishabilityViolation[];
-          warningTypes?: PublishabilityWarningType[];
-        };
-      };
-    };
-
-    let attributes = json.data.attributes;
-
-    return {
-      publishable: attributes.publishable,
-      realmURL: attributes.realmURL,
-      violations: attributes.violations ?? [],
-      warningTypes: attributes.warningTypes ?? [],
-    };
   }
 
   async setRealmPermission(
@@ -619,7 +627,13 @@ class RealmResource {
         this._publishingRealms.push(url);
 
         try {
-          const result = await this.realmServer.publishRealm(this.url, url);
+          let result = await this.realmServer.publishRealm(this.url, url);
+          // `_publish-realm` returns 202 before the published realm is
+          // indexed. Keep the "Publishing…" state until the realm passes its
+          // readiness check so "Open Site" only enables once the page is
+          // actually viewable. Poll the URL the server actually published to —
+          // a server-side domain override can make that differ from `url`.
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
@@ -634,8 +648,8 @@ class RealmResource {
         let lastPublishedAt = results.reduce(
           (acc, result) => {
             if (result.status === 'fulfilled' && result.value) {
-              acc[result.value.data.attributes.publishedRealmURL] =
-                result.value.data.attributes.lastPublishedAt;
+              acc[result.value.publishedRealmURL] =
+                result.value.lastPublishedAt;
             }
             return acc;
           },
@@ -726,6 +740,20 @@ export default class RealmService extends Service {
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
   private bulkInfoPromise: Promise<void> | undefined;
+  // realmOf runs once per instance added to the store, so its per-call costs
+  // multiply by instance count during large renders. RealmPaths is a pure
+  // function of the realm URL string (cache entries never go stale), and a
+  // resolved id→realm answer stays valid as long as that realm is still
+  // known — validated against `realms` on every hit, so realm removal and
+  // resetState can't serve a stale answer.
+  private realmPathsCache = new Map<string, RealmPaths>();
+  private realmOfCache = new Map<string, string>();
+  // The authorization middleware reads `token()` on every fetch, and a single
+  // render can issue hundreds — each one landing in `restoreSessionsFromStorage`
+  // for any realm it hasn't resolved yet. We memoize on the raw storage string
+  // so an unchanged blob is never re-parsed or re-walked; a later write (a newly
+  // seeded realm session) changes the string and re-runs the walk.
+  private lastRestoredSessionsString: string | null = null;
 
   @tracked private identifyRealmTracker = 0;
 
@@ -745,6 +773,9 @@ export default class RealmService extends Service {
     this.reauthentications.clear();
     this.bulkInfoPromise = undefined;
     this.identifyRealmTracker++;
+    this.realmPathsCache.clear();
+    this.realmOfCache.clear();
+    this.lastRestoredSessionsString = null;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -824,10 +855,18 @@ export default class RealmService extends Service {
   }
 
   restoreSessionsFromStorage(): void {
-    let tokens = SessionStorage.getAll();
-    if (!tokens) {
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
+    if (sessionsString === this.lastRestoredSessionsString) {
       return;
     }
+    if (!sessionsString) {
+      this.lastRestoredSessionsString = sessionsString;
+      return;
+    }
+    let tokens = JSON.parse(sessionsString) as Record<string, string>;
+    // Record the memo only after a successful parse, so a malformed blob can't
+    // poison it and suppress a later retry.
+    this.lastRestoredSessionsString = sessionsString;
     for (let [realmURL, token] of Object.entries(tokens)) {
       let resource = this.getOrCreateRealmResource(realmURL, token);
       if (token && resource.token !== token) {
@@ -842,7 +881,11 @@ export default class RealmService extends Service {
     }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
-      this.identifyRealm.perform(url);
+      this.identifyRealm
+        .perform(url)
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'identify', error),
+        );
 
       this.identifyRealmTracker;
 
@@ -860,7 +903,11 @@ export default class RealmService extends Service {
     }
 
     if (!resource.info) {
-      resource.fetchInfo();
+      resource
+        .fetchInfo()
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+        );
       return {
         name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
@@ -876,6 +923,40 @@ export default class RealmService extends Service {
       return resource.info;
     }
   };
+
+  // `info()` returns a placeholder synchronously and kicks off a background
+  // load — a realm-identifying HEAD, or an `_info` fetch — to fill in the real
+  // values on a later render. Those loads are best-effort: they can reject when
+  // the realm isn't reachable (a transient network failure, or — in tests — an
+  // in-process realm whose VirtualNetwork handler isn't mounted yet, so the
+  // request escapes to the network and rejects with `TypeError: Failed to
+  // fetch`). Since nothing awaits them, an unhandled rejection would surface as
+  // a global error and fail whatever happens to be running, so it is swallowed
+  // here; the placeholder stays and a later render retries. Cancellations
+  // (component unmount / teardown) are expected and stay silent.
+  private swallowBackgroundInfoError(
+    url: string,
+    op: 'identify' | 'fetchInfo',
+    error: unknown,
+  ) {
+    if (didCancel(error)) {
+      return;
+    }
+    log.warn(`background realm-info ${op} failed for ${url}: ${error}`);
+    // The `fetchInfo` path already surfaces a test-time `[realm-service] realm
+    // info fetch …` warning from fetchInfoFromServer(); only the identify HEAD
+    // has no such diagnostic, so scope the extra test-time warning to it rather
+    // than logging the `fetchInfo` failure twice.
+    if (isTesting() && op === 'identify') {
+      console.warn(
+        `[realm-service] background realm-info load failed ${JSON.stringify({
+          realmURL: url,
+          op,
+          error: String(error),
+        })}`,
+      );
+    }
+  }
 
   async allUsersPermissions(url: string) {
     if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
@@ -965,11 +1046,27 @@ export default class RealmService extends Service {
 
   realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
     let id = input instanceof URL ? rri(input.href) : input;
+    let cached = this.realmOfCache.get(id);
+    if (cached !== undefined) {
+      if (this.realms.has(cached)) {
+        return ri(cached);
+      }
+      // The answer pointed at a realm that is no longer known — evict so a
+      // stale id doesn't pay validation + full scan on every call.
+      this.realmOfCache.delete(id);
+    }
     for (const realm of this.realms.keys()) {
-      if (new RealmPaths(new URL(realm)).inRealm(id)) {
+      let paths = this.realmPathsCache.get(realm);
+      if (!paths) {
+        paths = new RealmPaths(new URL(realm));
+        this.realmPathsCache.set(realm, paths);
+      }
+      if (paths.inRealm(id)) {
+        this.realmOfCache.set(id, realm);
         return ri(realm);
       }
     }
+    // Misses are not cached: a realm learned later may claim this id.
     return undefined;
   }
 
@@ -1261,8 +1358,22 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
+    // `this.realms` is keyed by the user-facing realm URL (typically a
+    // virtual alias like `https://cardstack.com/base/`). Callers may
+    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
+    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
+    // match the same realm. Normalize both sides via
+    // `virtualNetwork.unresolveURL` (chases through any registered
+    // virtual → real URL mapping and unifies to the realm-prefix RRI
+    // form) so the comparison is form-agnostic.
+    let vn = this.network.virtualNetwork;
+    let normalizedUrl = vn.unresolveURL(url);
     for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
+        return value;
+      }
+      let normalizedKey = vn.unresolveURL(key);
+      if (normalizedUrl.startsWith(normalizedKey)) {
         return value;
       }
     }

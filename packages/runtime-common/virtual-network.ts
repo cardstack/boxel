@@ -25,6 +25,15 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
+  // membership checks) resolve the same identifiers over and over and only
+  // ever need the href STRING, yet toURL pays a native `new URL()` per call —
+  // in large renders that constructor shows up as a top self-time frame, and
+  // the discarded URL objects feed GC pressure. Caching the resolved href
+  // turns every repeat into a Map lookup with zero allocation. Resolution is
+  // a pure function of the realm mappings, so entries stay valid until a
+  // mapping is added or removed (both clear the cache).
+  private toURLHrefCache = new Map<string, string>();
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
@@ -84,6 +93,7 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
+    this.toURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -100,6 +110,7 @@ export class VirtualNetwork {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     this.realmMappings.delete(normalizedId);
     this.importMap.delete(normalizedId);
+    this.toURLHrefCache.clear();
   }
 
   knownRealms(): RealmIdentifier[] {
@@ -121,9 +132,17 @@ export class VirtualNetwork {
   }
 
   /**
-   * Convert a resolved URL back to its registered prefix form when one
-   * matches, e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
-   * URLs that don't match any registered prefix are returned as-is.
+   * Convert a URL back to its registered prefix form when one matches,
+   * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   *
+   * If the input doesn't directly match any realm-prefix target, and the
+   * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
+   * `https://cardstack.com/base/X` → `http://localhost:4201/base/X`) and
+   * retry the realm-prefix match. This bridges the gap when a realm
+   * prefix is registered against the resolved URL but the caller hands
+   * us the unresolved virtual URL.
+   *
+   * Inputs that match no prefix and no URL mapping are returned as-is.
    */
   unresolveURL(url: string): RealmResourceIdentifier {
     for (let [prefix, target] of this.realmMappings) {
@@ -131,7 +150,58 @@ export class VirtualNetwork {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
       }
     }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      let resolved: string | undefined;
+      try {
+        resolved = this.resolveURLMapping(url, 'virtual-to-real');
+      } catch {
+        resolved = undefined;
+      }
+      if (resolved && resolved !== url) {
+        for (let [prefix, target] of this.realmMappings) {
+          if (resolved.startsWith(target)) {
+            return (prefix +
+              resolved.slice(target.length)) as RealmResourceIdentifier;
+          }
+        }
+      }
+    }
     return url as RealmResourceIdentifier;
+  }
+
+  /**
+   * Canonicalize a set of identifiers to RRI form, deduped. Distinct
+   * spellings of the same module (a real URL and its virtual alias) collapse
+   * to one RRI, so the result is uniqued — callers consume these as sets
+   * (dependency lists, etc.) and would otherwise carry duplicates.
+   */
+  unresolveURLs(urls: string[]): RealmResourceIdentifier[] {
+    return [
+      ...new Set(urls.map((url) => this.unresolveURL(url))),
+    ] as RealmResourceIdentifier[];
+  }
+
+  /**
+   * All known spellings of a (resolved) URL: the URL itself, its RRI-prefix
+   * form, and any registered virtual-alias form. Lets callers match index
+   * data persisted before references were canonicalized to RRI — which may
+   * hold the virtual-alias or real-URL spelling of a key — against the
+   * RRI-form key produced today. Returns just the input for URLs that belong
+   * to no registered realm, so normal realms are unaffected.
+   */
+  equivalentURLForms(url: string): string[] {
+    let forms = new Set<string>([url]);
+    forms.add(this.unresolveURL(url));
+    let virtual: string | undefined;
+    try {
+      virtual = this.resolveURLMapping(url, 'real-to-virtual');
+    } catch {
+      virtual = undefined;
+    }
+    if (virtual) {
+      forms.add(virtual);
+    }
+    return [...forms];
   }
 
   /**
@@ -184,6 +254,24 @@ export class VirtualNetwork {
     }
     // Not a registered prefix; parse as a plain URL.
     return new URL(rri);
+  }
+
+  /**
+   * `toURL().href` without constructing a URL object on repeats. Same
+   * resolution and same throw-on-unresolvable behavior as `toURL`, but
+   * memoized — for callers that only need the href string this turns the
+   * per-call native URL construction into a Map lookup. Failures are not
+   * cached, so an identifier that becomes resolvable after a mapping is
+   * registered resolves normally.
+   */
+  toURLHref(rri: string): string {
+    let cached = this.toURLHrefCache.get(rri);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let href = this.toURL(rri).href;
+    this.toURLHrefCache.set(rri, href);
+    return href;
   }
 
   /**
@@ -468,7 +556,27 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
-function shouldRetryFetch(url: URL) {
+export function shouldRetryFetch(url: URL): boolean {
+  // Env-mode services live at `<service>.<slug>.localhost` and are
+  // reached through a local Traefik. The realm-server worker fetches
+  // its own realm's `_mtimes` via this hostname on boot, and if Traefik
+  // hasn't picked up the dynamic route file yet the first attempt fails
+  // with ECONNRESET. Without a retry, that single failure rejects the
+  // from-scratch-index job and leaves the realm mounted but unindexed.
+  // Gate on `BOXEL_ENVIRONMENT` rather than the `__environment === 'test'`
+  // global below: worker processes don't set that global (only `main.ts`
+  // does), and the standard-mode realm-server tests do set it — those
+  // tests POST to `testuser.localhost:4445` and rely on no-retry
+  // behavior for their publish/unpublish flows, so we must scope this
+  // retry to env-mode runs only.
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.BOXEL_ENVIRONMENT &&
+    url.hostname.endsWith('.localhost')
+  ) {
+    return true;
+  }
+
   if ((globalThis as any).__environment !== 'test') {
     return false;
   }
@@ -478,6 +586,22 @@ function shouldRetryFetch(url: URL) {
   }
 
   if (retryableLocalHosts.has(url.hostname)) {
+    return true;
+  }
+
+  // The env-mode service stack (including env-mode CI) serves the base realm
+  // at a `*.localhost` host (e.g. https://realm-server.ci.localhost/base/...)
+  // rather than the virtual https://cardstack.com/base/ URL that
+  // `baseRealm.inRealm` recognizes above. The env-mode `.localhost` branch at
+  // the top of this function only fires in node/worker processes — it reads
+  // `process.env.BOXEL_ENVIRONMENT`, which a browser host test can't see — so
+  // without this clause a transient base-realm fetch-vanish in the browser
+  // escapes unretried. Match base artifacts by their `/base/` path so sibling
+  // realms on the same host (e.g. /testuser/personal/) keep no-retry behavior.
+  if (
+    url.hostname.endsWith('.localhost') &&
+    (url.pathname === '/base' || url.pathname.startsWith('/base/'))
+  ) {
     return true;
   }
 

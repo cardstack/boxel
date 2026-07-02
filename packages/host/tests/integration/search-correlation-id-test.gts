@@ -34,7 +34,7 @@ import { setupRenderingTest } from '../helpers/setup';
 //
 // The host test exercises the *real* code on both ends: the SPA's
 // `loggingCorrelationIdHeader()` stamps the header, and the realm-server-mock hands it
-// to the real `searchRealms`, which emits the line. Only the prerender
+// to the real `searchEntryRealms`, which emits the line. Only the prerender
 // context flag is simulated (the host normally sets it inside a prerender
 // tab).
 

@@ -11,9 +11,11 @@ import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
 import {
+  CardContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
@@ -22,15 +24,23 @@ import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/c
 import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/focus-pill/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import MiniCardChooserUsage from '@cardstack/host/components/card-chooser/mini/usage';
+import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
+import SearchResults from '@cardstack/host/components/card-search/search-results';
+import MiniFileChooserUsage from '@cardstack/host/components/file-chooser/mini/usage';
+import MarkdownEmbedPreviewPaneUsage from '@cardstack/host/components/markdown-embed-chooser/pane-usage';
+import MarkdownEmbedPreviewUsage from '@cardstack/host/components/markdown-embed-chooser/preview/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type { CardContext } from 'https://cardstack.com/base/card-api';
+
 import formatComponentName from '../helpers/format-component-name';
 
+import type CommandService from '../services/command-service';
 import type StoreService from '../services/store';
 import type { ComponentLike } from '@glint/template';
 
@@ -45,12 +55,13 @@ interface HostFreestyleSignature {
 
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   @service declare private store: StoreService;
+  @service declare private commandService: CommandService;
   formatComponentName = formatComponentName;
 
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)
@@ -65,6 +76,21 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
     return getCardCollection;
   }
 
+  // CardRenderer (used by the markdown-embed preview usages) consumes the full
+  // CardContext; provide it here so previewed cards/files actually render.
+  @provide(CardContextName)
+  // @ts-ignore "cardContext" is declared but not used
+  private get cardContext(): CardContext {
+    return {
+      getCard: this.getCard,
+      getCards: this.store.getSearchResource.bind(this.store),
+      getCardCollection,
+      store: this.store,
+      commandContext: this.commandService.commandContext,
+      searchResultsComponent: SearchResults,
+    };
+  }
+
   get usageComponents() {
     return [
       ['AiAssistant::ApplyButton', AiAssistantApplyButtonUsage],
@@ -74,6 +100,10 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       ['AiAssistant::Message', AiAssistantMessageUsage],
       ['AiAssistant::PillMenu', PillMenuUsage],
       ['AiAssistant::SkillMenu', AiAssistantSkillMenuUsage],
+      ['MiniCardChooser', MiniCardChooserUsage],
+      ['MiniFileChooser', MiniFileChooserUsage],
+      ['MarkdownEmbedChooser::Preview', MarkdownEmbedPreviewUsage],
+      ['MarkdownEmbedChooser::Pane', MarkdownEmbedPreviewPaneUsage],
       ['SearchSheet', SearchSheetUsage],
     ].map(([name, c]) => {
       return {
@@ -105,7 +135,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       </FreestyleSection>
     </FreestyleGuide>
 
-    <CardCatalogModal />
+    <CardChooserModal />
   </template>
 }
 

@@ -1,5 +1,6 @@
 import { baseRealm, baseFileRef } from './constants.ts';
-import type { ResolvedCodeRef } from './code-ref.ts';
+import { canonicalModuleKey } from './code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -38,6 +39,43 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     name: 'FileDef',
   },
 };
+
+// Whether a code ref targets a file-meta (FileDef) type: the base FileDef ref
+// or one of the known extension-specific subtypes. Used to dispatch a search to
+// the file-meta candidate pool from the query alone — without depending on the
+// server having returned a row to sniff — so an empty-but-complete file-meta
+// search still reconciles locally hydrated FileDefs.
+//
+// The query carries refs in prefix form (e.g. `@cardstack/base/markdown-file-def`)
+// while `FILEDEF_CODE_REF_BY_EXTENSION` is built in full-URL form, so the module
+// strings are compared by their canonical key rather than verbatim — otherwise
+// a subtype ref (`MarkdownDef`, `PngDef`, …) would miss and the file-meta search
+// would skip local reconciliation.
+export function isFileDefCodeRef(
+  ref: CodeRef | undefined,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (
+    !ref ||
+    !('module' in ref) ||
+    typeof ref.module !== 'string' ||
+    typeof ref.name !== 'string'
+  ) {
+    return false;
+  }
+  let refKey = canonicalModuleKey(ref.module, virtualNetwork);
+  let matchesModule = (candidate: string) =>
+    refKey === canonicalModuleKey(candidate, virtualNetwork);
+  if (matchesModule(baseFileRef.module) && ref.name === baseFileRef.name) {
+    return true;
+  }
+  for (let subtype of Object.values(FILEDEF_CODE_REF_BY_EXTENSION)) {
+    if (matchesModule(subtype.module) && ref.name === subtype.name) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function resolveFileDefCodeRef(
   fileURL: URL,

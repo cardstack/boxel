@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -95,7 +96,7 @@ async function readIndexSnapshot(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
     function () {

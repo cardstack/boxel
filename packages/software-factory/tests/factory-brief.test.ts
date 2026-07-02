@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
@@ -12,12 +13,15 @@ import {
 } from '../src/factory-brief.ts';
 
 const stickyNoteFixture = JSON.parse(
-  readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),
+  readFileSync(
+    resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
+    'utf8',
+  ),
 ) as unknown;
 const darkfactoryIssueFixture = JSON.parse(
   readFileSync(
     resolve(
-      __dirname,
+      import.meta.dirname,
       '../test-fixtures/darkfactory-adopter/Issues/issue-001.json',
     ),
     'utf8',
@@ -37,6 +41,48 @@ module('factory-brief', function () {
       'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
     );
     assert.deepEqual(brief.tags, ['documents-content', 'sticky', 'note']);
+  });
+
+  test('normalizeFactoryBrief reads sourceCardUrl when present (adjust flow)', function (assert) {
+    let sourceUrl =
+      'https://briefs.example.test/software-factory/Wiki/adjust-sticky-note';
+    let brief = normalizeFactoryBrief(
+      {
+        data: {
+          attributes: {
+            content: 'Add a pinned flag to the sticky note.',
+            sourceCardUrl:
+              'https://localhost:4201/experiments/StickyNote/note-1',
+          },
+        },
+      },
+      sourceUrl,
+    );
+
+    assert.strictEqual(
+      brief.sourceCardUrl,
+      'https://localhost:4201/experiments/StickyNote/note-1',
+    );
+  });
+
+  test('normalizeFactoryBrief leaves sourceCardUrl undefined for greenfield briefs', function (assert) {
+    let sourceUrl =
+      'https://briefs.example.test/software-factory/Wiki/greenfield';
+    let absent = normalizeFactoryBrief(
+      { data: { attributes: { content: 'Build a fresh card.' } } },
+      sourceUrl,
+    );
+    let blank = normalizeFactoryBrief(
+      {
+        data: {
+          attributes: { content: 'Build a fresh card.', sourceCardUrl: '  ' },
+        },
+      },
+      sourceUrl,
+    );
+
+    assert.strictEqual(absent.sourceCardUrl, undefined);
+    assert.strictEqual(blank.sourceCardUrl, undefined);
   });
 
   test('normalizeFactoryBrief falls back when card fields are missing', function (assert) {

@@ -40,6 +40,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
+    virtualNetwork.addRealmMapping('@cardstack/base/', resolvedBaseRealmURL);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
@@ -68,6 +69,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
       isNonPresentLink: cardApi.isNonPresentLink,
       getCardMeta: cardApi.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: cardApi.primitive,
+      virtualNetwork,
     };
 
     let {
@@ -362,6 +364,33 @@ module('Unit | instance-filter-matcher', function (hooks) {
     assert.strictEqual(match(mango, { type: fancyPersonRef }), 'match');
     assert.strictEqual(match(paper, { type: personRef }), 'no-match');
     assert.strictEqual(match(paper, { type: catRef }), 'match');
+  });
+
+  test('a type gate tolerates equivalent module spellings', function (assert) {
+    let { mango } = cards;
+    // The instance's class is identified under the realm's real URL. Express
+    // the filter's type ref under an equivalent virtual-alias spelling: an
+    // exact-string comparison misses it, so the gate would wrongly reject a
+    // server-returned card. The server tolerates this via `internalKeyFor`;
+    // the client matcher must resolve both spellings before comparing.
+    api.virtualNetwork.addURLMapping(
+      new URL('https://virtual-alias.example/test/'),
+      new URL(testRealmURL),
+    );
+    let aliasedPersonRef: CodeRef = {
+      module: rri('https://virtual-alias.example/test/person'),
+      name: 'Person',
+    };
+    assert.strictEqual(
+      match(mango, { type: aliasedPersonRef }),
+      'match',
+      'pure type filter matches across spellings',
+    );
+    assert.strictEqual(
+      match(mango, { on: aliasedPersonRef, eq: { name: 'Mango' } }),
+      'match',
+      'on-gate matches across spellings',
+    );
   });
 
   test('an on-scoped predicate gates by type', function (assert) {

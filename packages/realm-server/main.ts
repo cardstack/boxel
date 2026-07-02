@@ -112,6 +112,12 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
+// Shared secret authenticating ai-bot's delegation requests (CS-11552).
+// Optional: when unset, the /_delegate-session endpoint responds 503 and mints
+// nothing, so the pull-model feature stays inert until the secret is
+// provisioned (and rotated, CS-11567) alongside ai-bot.
+const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
 // their account_data on their behalf (synapse admin tokens can read but
@@ -307,6 +313,17 @@ for (let i = 0; i < fromUrls.length; i++) {
     let fromURL = new URL(from);
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Register
+    // the realm-prefix mapping too so unresolveURL on either form
+    // canonicalises to the same RRI form. This matters for cross-process
+    // cache keys (e.g. host prerender writes definitions cache keyed by
+    // internalKeyFor; realm-server reads back with the same VN). Without
+    // this, the realm-server would see only the URL mapping for base and
+    // the host's RRI-form keys would never match.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
@@ -361,6 +378,45 @@ const smokeTestHostApp = async () => {
     }
   }
   throw lastError ?? new Error('host app smoke test timed out');
+};
+
+// Report the host-shell token this realm server is serving to the prerender
+// manager. The manager echoes it on heartbeat responses so prerender servers
+// recycle their browsers when it changes — i.e. when a deploy ships a new
+// host bundle. Runs at boot (after the smoke test confirmed the shell is
+// reachable): a deploy restarts this process, so a new bundle is reported
+// here and picked up by the prerender fleet. Best-effort — a missing or
+// unreachable manager must never block realm-server boot.
+const reportHostShellToManager = async () => {
+  try {
+    let html = await getIndexHTML();
+    let { createHash } = await import('crypto');
+    let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    // Report to the manager URL the realm server already uses (prerendererUrl);
+    // PRERENDER_MANAGER_URL is only set on the prerender-server tasks.
+    let managerURL = prerendererUrl.replace(/\/$/, '');
+    let response = await fetch(`${managerURL}/host-shell`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify({ data: { attributes: { hash } } }),
+    });
+    if (response.ok) {
+      console.log(
+        `Reported host shell token ${hash} to prerender manager at ${managerURL}`,
+      );
+    } else {
+      console.warn(
+        `Prerender manager rejected host shell report: ${response.status}`,
+      );
+    }
+  } catch (e: any) {
+    console.warn(
+      `Failed to report host shell token to prerender manager: ${e?.message ?? e}`,
+    );
+  }
 };
 
 (async () => {
@@ -576,6 +632,7 @@ const smokeTestHostApp = async () => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     dbAdapter,
     queue,
     searchCache,
@@ -594,6 +651,7 @@ const smokeTestHostApp = async () => {
       ? getRegistrationSecret
       : undefined,
     prerenderer,
+    reportHostShell: reportHostShellToManager,
   });
 
   let httpServer = server.listen(port);
@@ -734,6 +792,16 @@ const smokeTestHostApp = async () => {
   // HTTP listener accepts traffic. Non-pinned realms (source, published)
   // wait for first-request mount via reconciler.lookupOrMount().
   await server.start();
+
+  // Now that the HTTP listener is accepting traffic and serving the new host
+  // shell, tell the prerender manager which shell we're serving so the fleet
+  // recycles after a host redeploy. Reporting earlier (before the listener is
+  // live) races a rolling deploy: the manager could echo the new token while
+  // the load balancer still routes to the old task, so a prerender would
+  // recycle against the old shell, record the new token, and stop retrying.
+  // The post-deployment hook reports again once the service is fully stable.
+  // Fire-and-forget — a missing/unreachable manager must never affect serving.
+  void reportHostShellToManager();
 
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,

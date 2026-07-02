@@ -24,6 +24,11 @@ export const VIEW_OPTIONS: ViewOption[] = [
   { id: 'strip', icon: StripViewIcon },
 ];
 
+// 'mini' is an internal-only view id that opt-in consumers (e.g.
+// MiniCardChooser) request via @variant='mini'. It is deliberately
+// not in VIEW_OPTIONS so the user-facing view picker stays grid/strip.
+export type SectionViewOption = 'grid' | 'strip' | 'mini';
+
 /** Initial display limit for sections when not focused */
 export const SECTION_DISPLAY_LIMIT_UNFOCUSED = 5;
 

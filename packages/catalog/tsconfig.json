@@ -25,7 +25,13 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
+      "lodash": ["node_modules/@types/lodash-es"],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "@cardstack/catalog/*": ["contents/*"],
       "@cardstack/host/*": ["../host/app/*"],
       "@cardstack/host/tests/*": ["../host/tests/*"],

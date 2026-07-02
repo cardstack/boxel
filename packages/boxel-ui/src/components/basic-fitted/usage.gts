@@ -1,23 +1,18 @@
 import Captions from '@cardstack/boxel-icons/captions';
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import {
-  type FittedFormatSpec,
-  cn,
-  FITTED_FORMATS,
-  gt,
-  gte,
-} from '../../helpers.ts';
+import { FITTED_FORMATS } from '../../helpers.ts';
 import type { Icon } from '../../icons.ts';
 import CardContainer from '../card-container/index.gts';
+import {
+  type Spec,
+  FittedUsagePreview,
+} from '../fitted-card/usage-preview.gts';
 import BasicFitted from './index.gts';
-
-type Spec = Partial<FittedFormatSpec> & { height: number; width: number };
 
 const OTHER_SIZES: Spec[] = [
   { width: 226, height: 226 },
@@ -35,107 +30,6 @@ const OTHER_SIZES: Spec[] = [
   { width: 226, height: 58 },
   { width: 300, height: 115 },
 ];
-
-const calcRatio = ({ width, height }: Spec) => (width / height).toFixed(2);
-
-interface FittedItemContainerSignature {
-  Args: { spec: Spec };
-  Blocks: { default: [] };
-}
-
-const FittedItemContainer: TemplateOnlyComponent<FittedItemContainerSignature> =
-  <template>
-    <div
-      class={{cn
-        'item'
-        wide=(gt @spec.width 300)
-        full-width=(gte @spec.width 400)
-      }}
-    >
-      <div class='desc'>
-        <h4>{{@spec.title}} {{@spec.width}}px &times; {{@spec.height}}px</h4>
-        Aspect Ratio
-        {{calcRatio @spec}}
-      </div>
-
-      {{yield}}
-    </div>
-    <style scoped>
-      .card {
-        container-name: fitted-card;
-        container-type: size;
-        overflow: hidden;
-      }
-      .wide {
-        grid-column: span 2;
-      }
-      .full-width {
-        grid-column: -1 / 1;
-      }
-      .item {
-        position: relative;
-        padding-top: 50px;
-        padding-inline: var(--boxel-sp);
-        padding-bottom: var(--boxel-sp);
-        background-color: color-mix(
-          in oklab,
-          var(--background, var(--boxel-light)) 90%,
-          var(--foreground, var(--boxel-dark))
-        );
-      }
-      .desc {
-        position: absolute;
-        top: 0;
-        right: 0;
-        padding: var(--boxel-sp-4xs);
-        background-color: var(--boxel-light);
-        border-left: var(--boxel-border-card);
-        border-right: var(--boxel-border-card);
-        border-bottom: var(--boxel-border-card);
-        color: var(--muted-foreground, var(--boxel-450));
-        font: var(--boxel-font-xs);
-      }
-      h4 {
-        margin: 0;
-        font-weight: 500;
-      }
-    </style>
-  </template>;
-
-interface PreviewTemplateSignature {
-  Args: { specs: { items: Spec[]; title: string }[] };
-  Blocks: { default: [spec: Spec] };
-}
-
-const FittedUsagePreview: TemplateOnlyComponent<PreviewTemplateSignature> =
-  <template>
-    <div class='scroller' tabindex='0'>
-      <h3>Standard Fitted Sizes</h3>
-      {{#each @specs as |specGroup|}}
-        <h3>{{specGroup.title}}</h3>
-        {{#each specGroup.items as |spec|}}
-          <FittedItemContainer @spec={{spec}}>
-            {{yield spec}}
-          </FittedItemContainer>
-        {{/each}}
-      {{/each}}
-    </div>
-    <style scoped>
-      .scroller {
-        max-height: 40vh;
-        overflow-y: scroll;
-        border: 1px solid var(--border, var(--boxel-200));
-        padding: 10px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: var(--boxel-sp-xs);
-      }
-      h3 {
-        grid-column: -1 / 1;
-        font-weight: 500;
-      }
-    </style>
-  </template>;
 
 export default class BasicFittedUsage extends Component {
   @tracked primary: string =

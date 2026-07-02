@@ -1,8 +1,12 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
 
@@ -79,7 +83,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('skipQueryBackedExpansion', function (hooks) {
     let realm: Realm;
 
@@ -143,7 +147,8 @@ module(basename(__filename), function () {
     });
 
     test('searchCards respects skipQueryBackedExpansion', async function (assert) {
-      let doc = await realm.realmIndexQueryEngine.searchCards(
+      let doc = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
         {
           filter: {
             type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
@@ -180,7 +185,8 @@ module(basename(__filename), function () {
     });
 
     test('searchCards with omitIncluded skips loadLinks: pristine rows, no query-field umbrella, no included[]', async function (assert) {
-      let doc = await realm.realmIndexQueryEngine.searchCards(
+      let doc = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
         {
           filter: {
             type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },
@@ -232,7 +238,8 @@ module(basename(__filename), function () {
     });
 
     test('omitIncluded is prerender-scoped: default search still ships a compound included[]', async function (assert) {
-      let doc = await realm.realmIndexQueryEngine.searchCards(
+      let doc = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
         {
           filter: {
             type: { module: rri(`${testRealm}consumer`), name: 'Consumer' },

@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
@@ -24,10 +25,11 @@ import {
   waitUntil,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -351,7 +353,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -368,7 +370,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/brand-guide'),
+                  module: rri('@cardstack/base/brand-guide'),
                   name: 'default',
                 },
               },
@@ -1345,6 +1347,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
       let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
       let dir: DirResult;
@@ -1363,7 +1368,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer } = await runTestRealmServer({
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
             fileSystem: {},
@@ -1442,7 +1447,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: '@cardstack/base/brand-guide',
                       name: 'default',
                     },
                   },
@@ -1474,7 +1479,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: '@cardstack/base/card-api',
                       name: 'CardDef',
                     },
                   },
@@ -1513,6 +1518,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           if (publishResponse.status !== 202) {
             throw new Error(
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+
+          // `_publish-realm` returns 202 before indexing finishes. Drive a
+          // reconcile pass to mount the published realm, then hit its readiness
+          // check, which awaits start() + any in-flight index — so this blocks
+          // until the swapped files are indexed and the assertions below query
+          // indexed content.
+          await testRealmServer.testingOnlyReconcile();
+          let readinessResponse = await request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
+          if (readinessResponse.status !== 200) {
+            throw new Error(
+              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
             );
           }
         },

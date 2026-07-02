@@ -21,7 +21,7 @@ import {
 import perform from 'ember-concurrency/helpers/perform';
 import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
-import max from 'lodash/max';
+import { max } from 'lodash-es';
 
 import pluralize from 'pluralize';
 
@@ -55,6 +55,7 @@ import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-consta
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import ENV from '@cardstack/host/config/environment';
+import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -276,6 +277,7 @@ export default class Room extends Component<Signature> {
                 @onSend={{this.sendMessage}}
                 @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
+                @isSending={{this.isSending}}
                 data-test-message-field={{@roomId}}
               />
               {{#if this.aiAssistantPanelService.isFocusPillVisible}}
@@ -295,6 +297,7 @@ export default class Room extends Component<Signature> {
                     class='skill-menu'
                     @skills={{this.sortedSkills}}
                     @onChooseCard={{perform this.attachSkillTask}}
+                    @onChooseSkillMarkdown={{perform this.attachSkillTask}}
                     @onUpdateSkillIsActive={{perform
                       this.updateSkillIsActiveTask
                     }}
@@ -612,6 +615,10 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    // Replay any persisted optimistic sends from a prior tab/session before
+    // matrix-js-sdk's /sync delivers real echoes — entries left in 'not_sent'
+    // surface the retry alert; matched real echoes reconcile via the cgi bridge.
+    this.matrixService.ensurePendingSendsHydrated(this.args.roomId);
     registerDestructor(this, () => {
       this.cleanupScrollState();
       this.getConversationScrollability = undefined;
@@ -1599,33 +1606,68 @@ export default class Room extends Component<Signature> {
       keepInputAndAttachments = false,
     ) => {
       this.unknownMessageSendError = undefined;
-      let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
-      let cardsToSend =
-        this.matrixService.getCardsToSend(this.args.roomId) ?? undefined;
-      let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
-      let filesToSend =
-        this.matrixService.getFilesToSend(this.args.roomId) ?? undefined;
-      let filesToSendCopy = filesToSend ? [...filesToSend] : undefined;
-      const shouldClearDraft = !keepInputAndAttachments;
+      const isRetry = keepInputAndAttachments;
+      const roomId = this.args.roomId;
 
-      // We copy the draft and attachments into local variables before clearing them
-      // (unless we're intentionally preserving the user's current draft for a retry).
-      // Clearing immediately empties the input so the user sees that their message is “in flight”.
-      // If the send fails, we restore those saved values in the catch block so nothing is lost.
-      if (shouldClearDraft) {
-        this.matrixService.setMessageToSend(this.args.roomId, undefined);
-        this.matrixService.setCardsToSend(this.args.roomId, undefined);
-        this.matrixService.setFilesToSend(this.args.roomId, undefined);
+      // Snapshot the click-time inputs and render an optimistic bubble before
+      // any awaited work. The pre-send pipeline (skill / command / card / file
+      // serialization + upload) can take seconds; without this snapshot the
+      // user sees an empty transcript while the pipeline runs.
+      let snapshotBody = message ?? '';
+      let snapshotCardIds: string[] = [];
+      if (cardsOrIds) {
+        if (typeof cardsOrIds[0] === 'string') {
+          snapshotCardIds = (cardsOrIds as string[]).slice();
+        } else {
+          snapshotCardIds = (cardsOrIds as CardDef[])
+            .map((c) => c.id as unknown as string)
+            .filter((id) => Boolean(id));
+        }
+      }
+      let snapshotFiles = files ?? [];
+
+      if (!isRetry) {
+        let originServerTs = await this.matrixService.addOptimisticEvent(
+          roomId,
+          {
+            body: snapshotBody,
+            clientGeneratedId,
+            attachedCardIds: snapshotCardIds,
+            attachedFiles: snapshotFiles.map((f) => f.serialize()),
+          },
+        );
+        // Persist before clearing the draft so a tab close mid-pipeline still
+        // restores the bubble on reload. Share the synthetic event's ts so
+        // hydration reconstructs an identical origin_server_ts — otherwise
+        // MessageBuilder.updateMessage may early-return when the real echo
+        // arrives with an earlier ts.
+        this.matrixService.persistOptimisticSend(roomId, {
+          clientGeneratedId,
+          body: snapshotBody,
+          attachedCardIds: snapshotCardIds,
+          attachedFiles: snapshotFiles.map((f) => f.serialize()),
+          createdAt: originServerTs,
+        });
+
+        this.matrixService.setMessageToSend(roomId, undefined);
+        this.matrixService.setCardsToSend(roomId, undefined);
+        this.matrixService.setFilesToSend(roomId, undefined);
         this._fileUploadStates.clear();
+      } else {
+        // Retry — flip the existing bubble back to 'sending' and clear any
+        // prior error so the alert / Retry button hides while the pipeline runs.
+        this.matrixService.patchPendingSend(roomId, clientGeneratedId, {
+          status: 'sending',
+        });
       }
 
-      let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds() || []),
-        ...this.autoAttachedCardIds,
-      ]) as Set<RealmResourceIdentifier>;
-      let context =
-        await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
+        let openCardIds = new Set([
+          ...(this.operatorModeStateService.getOpenCardIds() || []),
+          ...this.autoAttachedCardIds,
+        ]) as Set<RealmResourceIdentifier>;
+        let context =
+          await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
@@ -1657,7 +1699,7 @@ export default class Room extends Component<Signature> {
         }
 
         await this.matrixService.sendMessage(
-          this.args.roomId,
+          roomId,
           message,
           cards,
           files,
@@ -1666,24 +1708,32 @@ export default class Room extends Component<Signature> {
         );
       } catch (e) {
         console.error(e);
+
+        // Inverse delivery race: client.sendEvent may have already handed the
+        // event to matrix (status === 'sent') before a downstream throw escaped
+        // into this catch. Flipping the bubble to 'not_sent' in that case
+        // would briefly contradict the server's view. Consult the SDK's own
+        // EventStatus first; only stamp 'not_sent' when matrix agrees the send
+        // didn't land.
+        let matrixStatus = this.matrixService.findPendingMatrixEventStatus(
+          roomId,
+          clientGeneratedId,
+        );
+        if (matrixStatus === 'sent') {
+          console.warn(
+            `sendMessage threw after matrix accepted clientGeneratedId=${clientGeneratedId}; ` +
+              'leaving bubble in sending state for reconciliation.',
+          );
+          return;
+        }
+
         this.unknownMessageSendError =
           'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.';
 
-        if (shouldClearDraft) {
-          this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
-          this.matrixService.setCardsToSend(
-            this.args.roomId,
-            cardsToSendCopy && cardsToSendCopy.length > 0
-              ? cardsToSendCopy
-              : undefined,
-          );
-          this.matrixService.setFilesToSend(
-            this.args.roomId,
-            filesToSendCopy && filesToSendCopy.length > 0
-              ? filesToSendCopy
-              : undefined,
-          );
-        }
+        this.matrixService.patchPendingSend(roomId, clientGeneratedId, {
+          status: 'not_sent',
+          errorMessage: 'Failed to send',
+        });
       }
     },
   );
@@ -1717,6 +1767,10 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  private get isSending() {
+    return this.doSendMessage.isRunning;
+  }
+
   private get canSend() {
     return (
       !this.doSendMessage.isRunning &&
@@ -1729,7 +1783,16 @@ export default class Room extends Component<Signature> {
       ) &&
       !this.hasFileUploadIssues &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m)) &&
+      // Block input only on a *failed* prior send. `doSendMessage` is an
+      // enqueueTask, so concurrent sends are already serialized; a healthy
+      // 'sending' bubble awaiting the matrix echo doesn't need a second
+      // guard. A 'not_sent' bubble does need attention before the next send,
+      // matching the retry-alert UX.
+      !this.messages.some(
+        (m) =>
+          m.author.userId === this.matrixService.userId &&
+          m.status === 'not_sent',
+      ) &&
       !this.matrixService.isLoadingTimeline &&
       !this.aiAssistantPanelService.isPreparingSession
     );
@@ -1799,13 +1862,25 @@ export default class Room extends Component<Signature> {
     if (!lastMessage || !lastMessage.commands) {
       return [];
     }
+    let roomResource = this.matrixService.roomResources.get(this.args.roomId);
+    let activeMode = roomResource?.getActiveLLMModeForMessage(
+      lastMessage.eventId,
+    );
+    let isOwnedByCurrentAgent =
+      lastMessage.agentId === this.matrixService.agentId;
     return lastMessage.commands.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&
         !this.commandService.currentlyExecutingCommandRequestIds.has(
           command.id!,
         ) &&
-        !this.commandService.executedCommandRequestIds.has(command.id!),
+        !this.commandService.executedCommandRequestIds.has(command.id!) &&
+        // Commands destined for auto-execution must not surface the manual
+        // Accept All / Cancel bar, even during the ~100ms debounce before
+        // command-service flips `acceptingAllRoomIds`. Without this filter,
+        // the bar paints and then yanks itself once auto-execution starts,
+        // which is the CS-11647 glitch.
+        !isAutoExecutableCommand(command, activeMode, isOwnedByCurrentAgent),
     );
   }
 
@@ -1817,10 +1892,20 @@ export default class Room extends Component<Signature> {
   }
 
   private get generatingResults() {
-    return (
-      this.messages[this.messages.length - 1] &&
-      !this.messages[this.messages.length - 1].isStreamingFinished
-    );
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage) {
+      return false;
+    }
+    // The banner means "the AI is generating a reply". Only consider the bot's
+    // streaming state — user messages don't carry `isStreamingFinished` on the
+    // wire, so they read as not-streamed-yet even after they've landed. With
+    // the optimistic bubble appearing at click-time, the user's message is the
+    // last message for a longer window than before; without this author gate
+    // the banner shows on the user's own pending bubble.
+    if (lastMessage.author.userId !== this.matrixService.aiBotUserId) {
+      return false;
+    }
+    return !lastMessage.isStreamingFinished;
   }
 
   @cached

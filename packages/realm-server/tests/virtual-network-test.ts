@@ -1,10 +1,11 @@
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import '../setup-logger.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('virtual-network', function () {
     test('will respond with real (not virtual) url when handler makes a redirect', async function (assert) {
       let virtualNetwork = new VirtualNetwork();
@@ -84,6 +85,40 @@ module(basename(__filename), function () {
           'real-to-virtual',
         )?.href,
         'http://localhost:4205/test/hassan/personal/_readiness-check',
+      );
+    });
+
+    test('toURLHref resolves like toURL and tracks mapping changes', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        virtualNetwork.toURL('@cardstack/skills/Skill/foo').href,
+        'prefix-form resolves identically to toURL().href',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('https://example.com/a?b=c#d'),
+        'https://example.com/a?b=c#d',
+        'URL-form normalizes identically to toURL().href',
+      );
+      // Cached entries must not outlive the mappings they were derived from.
+      virtualNetwork.removeRealmMapping('@cardstack/skills/');
+      assert.throws(
+        () => virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        'a cached resolution is dropped when its mapping is removed',
+      );
+      // A failed resolution must not be negatively cached.
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      assert.strictEqual(
+        virtualNetwork.toURLHref('@cardstack/skills/Skill/foo'),
+        'https://localhost:4201/skills/Skill/foo',
+        'resolution recovers after the mapping is re-registered',
       );
     });
 

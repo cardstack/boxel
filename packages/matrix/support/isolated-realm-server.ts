@@ -2,7 +2,8 @@ import { spawn, type ChildProcess } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
-import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, copySync, readFileSync } = fsExtra;
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from './synapse/index.ts';
@@ -22,14 +23,16 @@ setGracefulCleanup();
 // `writable` patch, and the hand-rolled `proxyAsset` forwarder).
 
 const testRealmCards = resolve(
-  join(__dirname, '..', '..', 'host', 'tests', 'cards'),
+  join(import.meta.dirname, '..', '..', 'test-realm-cards', 'contents'),
 );
-const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
+const realmServerDir = resolve(
+  join(import.meta.dirname, '..', '..', 'realm-server'),
+);
 const skillsRealmDir = resolve(
-  join(__dirname, '..', '..', 'skills-realm', 'contents'),
+  join(import.meta.dirname, '..', '..', 'skills-realm', 'contents'),
 );
-const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
-const matrixDir = resolve(join(__dirname, '..'));
+const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
+const matrixDir = resolve(join(import.meta.dirname, '..'));
 export const appURL = 'https://localhost:4205/test';
 
 const DEFAULT_PRERENDER_PORT = 4231;
@@ -288,13 +291,9 @@ export async function startPrerenderServer(
     PRERENDER_PAGE_POOL_MIN: process.env.PRERENDER_PAGE_POOL_MIN ?? '4',
     PRERENDER_PAGE_POOL_MAX: process.env.PRERENDER_PAGE_POOL_MAX ?? '8',
   };
-  let prerenderArgs = [
-    '--transpileOnly',
-    'prerender/prerender-server',
-    `--port=${port}`,
-  ];
+  let prerenderArgs = ['prerender/prerender-server.ts', `--port=${port}`];
 
-  let child = spawn('ts-node', prerenderArgs, {
+  let child = spawn('node', prerenderArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe'],
     env,
@@ -405,8 +404,7 @@ export async function startServer({
   process.env.LOW_CREDIT_THRESHOLD = '2000';
 
   let workerArgs = [
-    `--transpileOnly`,
-    'worker-manager',
+    'worker-manager.ts',
     `--port=${workerManagerPort}`,
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
@@ -424,7 +422,7 @@ export async function startServer({
     `--toUrl='https://localhost:4205/base/'`,
   ]);
 
-  let workerManager = spawn('ts-node', workerArgs, {
+  let workerManager = spawn('node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
@@ -515,8 +513,7 @@ export async function startServer({
   }
 
   let serverArgs = [
-    `--transpileOnly`,
-    'main',
+    'main.ts',
     `--port=4205`,
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
@@ -544,7 +541,7 @@ export async function startServer({
 
   console.log(`realm server database: ${testDBName}`);
 
-  realmServer = spawn('ts-node', serverArgs, {
+  realmServer = spawn('node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
@@ -689,7 +686,7 @@ export async function startServer({
 
   // /_catalog-realms only surfaces realms with show_as_catalog = true.
   // Matrix tests treat the test fixture realm and the skills realm as
-  // catalogs (workspace chooser, card-catalog modal); opt them in here
+  // catalogs (workspace chooser, card-chooser modal); opt them in here
   // so the harness doesn't depend on a sidecar value that the
   // metadata backfill trims on first boot.
   await server.executeSQL(

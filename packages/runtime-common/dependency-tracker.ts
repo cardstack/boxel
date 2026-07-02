@@ -171,6 +171,28 @@ export class RuntimeDependencyTracker {
     Set<string>
   >();
 
+  // Walk-level dedup for module-graph traversals (see shouldTrackModuleGraph).
+  // Keyed by value — every context dimension that affects how a node is
+  // recorded — so it collapses repeats that the identity-keyed
+  // #trackedByContext cannot: explicit contexts (exempt from identity dedup)
+  // and fresh merged contexts built by each withContext scope. Cleared in
+  // reset() alongside #nodes so a cleared node map never inherits a stale
+  // "already walked" marker that would drop real dependencies.
+  #trackedModuleGraphs = new Set<string>();
+
+  // Per-relationship-target dedup. A linksTo/linksToMany getter calls the
+  // relationship-dependency walk (instance/file dep + the linked type's module
+  // graph) on EVERY read, and a dense graph re-reads the same targets
+  // combinatorially — so the per-call guard work (prototype/identity lookups
+  // ahead of #trackedModuleGraphs, and the explicit-context branch of #track,
+  // which is exempt from identity dedup and re-records every time) dominates
+  // aggregate renders. This probe collapses every repeat to one Set lookup.
+  // Keyed by value (everything #track/#recordNode derive from a context, plus
+  // the target id) so a skipped repeat is a provable no-op, the same as
+  // #trackedModuleGraphs. Cleared in reset() alongside #nodes so a cleared node
+  // map never inherits a stale marker that would drop a real dependency.
+  #trackedRelationships = new Set<string>();
+
   startSession({
     sessionKey,
     rootURL,
@@ -198,6 +220,89 @@ export class RuntimeDependencyTracker {
     this.#contextStack = [];
     this.#normalizeCache.clear();
     this.#trackedByContext = new WeakMap();
+    this.#trackedModuleGraphs.clear();
+    this.#trackedRelationships.clear();
+  }
+
+  // A module-graph walk (tracking a module plus its transitive consumed
+  // modules) records an identical node set every time it repeats under an
+  // equivalent context, so the walk only needs to run once per session — but
+  // the walks repeat heavily: every linksTo/linksToMany getter invocation
+  // re-walks the linked type's graph once PER ELEMENT, multiplying render cost
+  // by the graph size. Deduping inside #track can't help; by then the
+  // composite-key build + hash (the actual cost) is already paid. This probe
+  // lets callers skip the whole walk for the price of one Set lookup.
+  //
+  // Returns true exactly once per (scope, root module, recording-relevant
+  // context) per session; the caller must then perform the full walk. The key
+  // folds in contextLabel, consumer, and consumerKind — everything #track
+  // derives from a context when recording — so a skipped repeat is a provable
+  // no-op. `scope` namespaces call sites whose walks record different node
+  // sets (e.g. one excludes shimmed modules), keeping a probe at one site from
+  // suppressing a non-identical walk at another.
+  //
+  // Returns false while inactive: nothing records when inactive, so the walk
+  // would be pure waste, and nothing is marked so the walk still runs in a
+  // later active session.
+  shouldTrackModuleGraph(
+    scope: string,
+    rootModule: string,
+    explicitContext?: RuntimeDependencyTrackingContext,
+  ): boolean {
+    if (!this.#isActive) {
+      return false;
+    }
+    let context = explicitContext ?? this.#currentContext();
+    // consumerKind only influences recording when a consumer is present, and
+    // then it defaults to 'instance' (mirroring #normalizeConsumer) — fold the
+    // same resolution into the key so an omitted consumerKind dedups against
+    // an explicit 'instance'.
+    let consumerKind = context.consumer
+      ? (context.consumerKind ?? 'instance')
+      : '';
+    let key = [
+      scope,
+      contextLabel(context),
+      context.consumer ?? '',
+      consumerKind,
+      rootModule,
+    ].join(CACHE_KEY_SEPARATOR);
+    if (this.#trackedModuleGraphs.has(key)) {
+      return false;
+    }
+    this.#trackedModuleGraphs.add(key);
+    return true;
+  }
+
+  // Sibling of shouldTrackModuleGraph for the whole relationship-dependency walk
+  // (instance/file dep + module graph) keyed on the target id. Returns true
+  // exactly once per (recording-relevant context, id) per session; the caller
+  // then performs the walk. A given id resolves to one resource, so its kind
+  // (instance vs file) is fixed and need not be in the key. Returns false while
+  // inactive — nothing records, so the walk would be pure waste and nothing is
+  // marked, so it still runs in a later active session.
+  shouldTrackRelationship(
+    id: string,
+    explicitContext?: RuntimeDependencyTrackingContext,
+  ): boolean {
+    if (!this.#isActive) {
+      return false;
+    }
+    let context = explicitContext ?? this.#currentContext();
+    let consumerKind = context.consumer
+      ? (context.consumerKind ?? 'instance')
+      : '';
+    let key = [
+      contextLabel(context),
+      context.consumer ?? '',
+      consumerKind,
+      id,
+    ].join(CACHE_KEY_SEPARATOR);
+    if (this.#trackedRelationships.has(key)) {
+      return false;
+    }
+    this.#trackedRelationships.add(key);
+    return true;
   }
 
   withContext<T>(context: RuntimeDependencyTrackingContext, cb: () => T): T {
@@ -464,6 +569,21 @@ export function trackRuntimeModuleDependency(
   context?: RuntimeDependencyTrackingContext,
 ): void {
   getTracker().trackModule(url, context);
+}
+
+export function shouldTrackRuntimeModuleGraph(
+  scope: string,
+  rootModule: string,
+  context?: RuntimeDependencyTrackingContext,
+): boolean {
+  return getTracker().shouldTrackModuleGraph(scope, rootModule, context);
+}
+
+export function shouldTrackRuntimeRelationship(
+  id: string,
+  context?: RuntimeDependencyTrackingContext,
+): boolean {
+  return getTracker().shouldTrackRelationship(id, context);
 }
 
 export function trackRuntimeInstanceDependency(

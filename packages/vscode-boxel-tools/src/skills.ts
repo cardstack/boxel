@@ -378,23 +378,29 @@ export class SkillList extends vscode.TreeItem {
       headers['Authorization'] = jwt;
     }
 
+    // `_search` speaks the search-entry wire grammar: entry membership is
+    // addressed through `item.` (the card serialization), so the type anchor
+    // is `item.on` and sort keys carry the `item.` prefix. Request the
+    // data-only fieldset (`fields[search-entry]=item`) — skill discovery never
+    // renders HTML, so each entry carries only its full `item` serialization.
     const searchUrl = new URL('./_search', this.realmUrl);
     const query = {
       sort: [
         {
-          by: 'title',
-          on: {
-            module: 'https://cardstack.com/base/card-api',
+          by: 'item.title',
+          'item.on': {
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
       ],
       filter: {
-        type: {
-          module: 'https://cardstack.com/base/skill',
+        'item.on': {
+          module: '@cardstack/base/skill',
           name: 'Skill',
         },
       },
+      fields: { 'search-entry': ['item'] },
     };
     const response = await fetch(searchUrl, {
       method: 'QUERY',
@@ -416,12 +422,31 @@ export class SkillList extends vscode.TreeItem {
     const data: any = await response.json();
     console.log('Skill search data:', data);
 
-    this.skills = data.data.map((skill: any) => {
-      return new Skill(
-        skill.attributes.title,
-        skill.attributes.instructions,
-        skill.id,
+    // The `item` serializations live in `included`; each `search-entry` in
+    // `data` links one through its `item` relationship. Resolve them in result
+    // order — these are the Skill card resources we read title/instructions
+    // off of.
+    const itemsByIdentity = new Map<string, any>();
+    for (const resource of data.included ?? []) {
+      if (resource.type === 'card' || resource.type === 'file-meta') {
+        itemsByIdentity.set(`${resource.type}\u0000${resource.id}`, resource);
+      }
+    }
+    this.skills = (data.data ?? [])
+      .map((entry: any) => {
+        const ref = entry.relationships?.item?.data;
+        return ref
+          ? itemsByIdentity.get(`${ref.type}\u0000${ref.id}`)
+          : undefined;
+      })
+      .filter((item: any) => Boolean(item))
+      .map(
+        (item: any) =>
+          new Skill(
+            item.attributes.title,
+            item.attributes.instructions,
+            item.id,
+          ),
       );
-    });
   }
 }

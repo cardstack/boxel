@@ -40,11 +40,16 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
-  get cardErrorMessage() {
-    if (this.cardError?.status === 404) {
-      return 'Card not found.';
-    }
-    return undefined;
+  // A routing rule pointing at a card that no longer exists, or a direct
+  // visit to a missing card, resolves to a 404. Rather than surfacing the
+  // raw card-error/debug treatment on a public page, render a friendly
+  // not-found placeholder so one dangling reference degrades gracefully
+  // instead of taking the page down. A card that exists but is in an error
+  // state — e.g. because one of its dependencies is missing — does not get
+  // this treatment: the store reports it with its real (non-404) status, so
+  // its error is surfaced instead of a bare 404.
+  get isNotFound() {
+    return this.cardError?.status === 404;
   }
 
   get isLoading() {
@@ -121,11 +126,14 @@ export default class HostModeCard extends Component<Signature> {
       ...attributes
     >
       {{#if this.cardError}}
-        <CardError
-          @error={{this.cardError}}
-          @hideHeader={{true}}
-          @message={{this.cardErrorMessage}}
-        />
+        {{#if this.isNotFound}}
+          <div class='not-found' data-test-host-mode-404>
+            <p class='not-found-code'>404</p>
+            <p class='not-found-message'>This page could not be found.</p>
+          </div>
+        {{else}}
+          <CardError @error={{this.cardError}} @hideHeader={{true}} />
+        {{/if}}
       {{else if this.card}}
         <CardRenderer
           class='card'
@@ -172,6 +180,29 @@ export default class HostModeCard extends Component<Signature> {
         min-height: 16rem;
         text-align: center;
         gap: var(--boxel-sp);
+      }
+
+      .not-found {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 16rem;
+        height: 100%;
+        text-align: center;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .not-found-code {
+        margin: 0;
+        font: 700 var(--boxel-font-xl);
+        line-height: 1;
+      }
+
+      .not-found-message {
+        margin: 0;
+        color: var(--boxel-450);
+        font: var(--boxel-font);
       }
 
       .non-publishable-message {

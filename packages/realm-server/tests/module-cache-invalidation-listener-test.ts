@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -118,7 +119,7 @@ function waitFor<T>(
   });
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('parseModuleCacheInvalidationPayload', function () {
     test('parses a module payload carrying a single URL', function (assert) {
       assert.deepEqual(
@@ -139,21 +140,21 @@ module(basename(__filename), function () {
 
     test('parses a module payload carrying many URLs', function (assert) {
       const urls = [
-        'https://cardstack.com/base/card-api.gts',
-        'https://cardstack.com/base/string.gts',
-        'https://cardstack.com/base/number.gts',
+        '@cardstack/base/card-api.gts',
+        '@cardstack/base/string.gts',
+        '@cardstack/base/number.gts',
       ];
       assert.deepEqual(
         parseModuleCacheInvalidationPayload(
           JSON.stringify({
             k: 'module',
-            r: 'https://cardstack.com/base/',
+            r: '@cardstack/base/',
             m: urls,
           }),
         ),
         {
           kind: 'module',
-          resolvedRealmURL: 'https://cardstack.com/base/',
+          resolvedRealmURL: '@cardstack/base/',
           moduleURLs: urls,
         },
       );

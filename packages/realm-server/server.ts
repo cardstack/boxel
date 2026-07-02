@@ -14,7 +14,8 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   ecsMetadata,
@@ -49,6 +50,53 @@ const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 // HTTP/1.1. BOXEL_ENVIRONMENT is the local Traefik-in-front mode, not the
 // production mechanism.
 const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
+
+// HTTP/2 PING keepalive tuning. The h2 transport between Chrome and this
+// server can wedge: the session stops carrying frames entirely — the server's
+// PINGs go unanswered (PONG is handled by the peer's network stack, not JS,
+// so a missing pong means no frames are flowing at all) while the browser
+// still has a fetch awaiting its response. That fetch never rejects, so the
+// client-side retry in runtime-common's virtual-network (which only retries
+// rejections) never fires and a host test hangs until its 60s timeout. The
+// keepalive turns the silent wedge into a recoverable error: every session is
+// pinged on an interval, and one that misses enough consecutive pongs is torn
+// down, RSTing its streams so the hung fetch rejects and retries on a fresh
+// session.
+//
+// Budget: worst-case detection is maxMissedPings × (interval + pongTimeout) +
+// grace = 3 × 10s + 3s = 33s, leaving the released fetch room to retry and
+// complete inside a 60s host-test timeout. Three consecutive misses (~30s of
+// silence) cannot be produced by a transient event-loop stall — a single
+// delayed pong scores at most one miss before the next successful ping resets
+// the counter — while a genuinely wedged session never pongs again, so the
+// discrimination is clean. A false teardown would only cost the peer a
+// reconnect, never a wrong result.
+const HTTP2_KEEPALIVE_INTERVAL_MS = 5000;
+const HTTP2_KEEPALIVE_PONG_TIMEOUT_MS = 5000;
+const HTTP2_KEEPALIVE_MAX_MISSED_PINGS = 3;
+// After a graceful close (GOAWAY) a wedged transport won't deliver anything,
+// so force the session down to actually RST the browser's hung fetch.
+const HTTP2_KEEPALIVE_GRACE_MS = 3000;
+const HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS = 15000;
+// How long after the force-destroy to check whether the session actually
+// emitted 'close'. A transport-wedged session can swallow `session.destroy()`
+// — no 'close' fires, the session lingers, and its streams never RST — so this
+// confirm window records whether the forced teardown reached the peer or the
+// wedge is unreachable from the server.
+const HTTP2_KEEPALIVE_POST_DESTROY_CONFIRM_MS = 2000;
+
+// Per-session liveness recorded by the PING keepalive and read by the h2
+// diagnostics, so diagnostic dumps can say whether the underlying session was
+// still answering pings (transport alive, stream wedged) or had gone silent
+// (whole session wedged). The id correlates [h2-keepalive] lines with the
+// [h2-diag] session #N lines.
+interface SessionLiveness {
+  id: number;
+  lastPingAt: number | undefined;
+  lastPongAt: number | undefined;
+  lastRttMs: number | undefined;
+  consecutiveMisses: number;
+}
 
 export type RealmHttpServer =
   | http.Server
@@ -254,10 +302,252 @@ function buildHttp2SecureServer(
       `Unable to construct HTTPS/h2 server (malformed cert?): ${(e as Error).message}`,
     );
   }
+  // Always on (the fix, not a diagnostic): tear down wedged h2 sessions so a
+  // hung browser fetch rejects (and retries) instead of hanging until a test
+  // timeout. Returns the shared liveness map the diagnostics read.
+  let liveness = installHttp2Keepalive(tlsServer, log);
   if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
-    installHttp2Diagnostics(tlsServer, log);
+    installHttp2Diagnostics(tlsServer, log, liveness);
   }
   return tlsServer;
+}
+
+// Wire the HTTP/2 PING keepalive onto every session the secure server
+// accepts — see the HTTP2_KEEPALIVE_* constants for the rationale. Returns
+// the liveness map so the diagnostics can report each session's ping health.
+function installHttp2Keepalive(
+  tlsServer: http2.Http2SecureServer,
+  log: ReturnType<typeof logger>,
+): WeakMap<http2.Http2Session, SessionLiveness> {
+  let liveness = new WeakMap<http2.Http2Session, SessionLiveness>();
+  let nextSessionId = 0;
+  tlsServer.on('session', (session) => {
+    liveness.set(session, {
+      id: nextSessionId++,
+      lastPingAt: undefined,
+      lastPongAt: undefined,
+      lastRttMs: undefined,
+      consecutiveMisses: 0,
+    });
+    // Belt-and-suspenders: TCP keepalive surfaces a dead peer at the socket
+    // layer even if the h2 PING path is somehow starved. Best-effort.
+    try {
+      session.socket?.setKeepAlive?.(
+        true,
+        HTTP2_KEEPALIVE_TCP_INITIAL_DELAY_MS,
+      );
+    } catch {
+      // some socket states reject setKeepAlive; ignore
+    }
+    startSessionKeepalive(session, log, {}, liveness);
+  });
+  return liveness;
+}
+
+interface KeepaliveOptions {
+  intervalMs?: number;
+  pongTimeoutMs?: number;
+  maxMissedPings?: number;
+  graceMsBeforeDestroy?: number;
+  postDestroyConfirmMs?: number;
+}
+
+// Ping a single h2 session on an interval; if it misses `maxMissedPings`
+// consecutive pings (no PONG within `pongTimeoutMs`, or the PING frame can't
+// even be queued), the session is wedged — close it (GOAWAY) and force it
+// down after a grace period so its streams RST and the browser's pending
+// fetch rejects. Returns a stop() for teardown/testing. Exported for unit
+// tests, which drive it with a fake session and short timers.
+export function startSessionKeepalive(
+  session: http2.Http2Session,
+  log: ReturnType<typeof logger>,
+  options: KeepaliveOptions = {},
+  liveness?: WeakMap<http2.Http2Session, SessionLiveness>,
+): () => void {
+  let intervalMs = options.intervalMs ?? HTTP2_KEEPALIVE_INTERVAL_MS;
+  let pongTimeoutMs = options.pongTimeoutMs ?? HTTP2_KEEPALIVE_PONG_TIMEOUT_MS;
+  let maxMissedPings =
+    options.maxMissedPings ?? HTTP2_KEEPALIVE_MAX_MISSED_PINGS;
+  let graceMsBeforeDestroy =
+    options.graceMsBeforeDestroy ?? HTTP2_KEEPALIVE_GRACE_MS;
+  let postDestroyConfirmMs =
+    options.postDestroyConfirmMs ?? HTTP2_KEEPALIVE_POST_DESTROY_CONFIRM_MS;
+
+  let stopped = false;
+  let misses = 0;
+  let nextTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function record(patch: Partial<SessionLiveness>) {
+    if (!liveness) {
+      return;
+    }
+    let prev = liveness.get(session) ?? {
+      id: -1,
+      lastPingAt: undefined,
+      lastPongAt: undefined,
+      lastRttMs: undefined,
+      consecutiveMisses: 0,
+    };
+    liveness.set(session, { ...prev, ...patch });
+  }
+
+  function sessionLabel() {
+    let id = liveness?.get(session)?.id;
+    return id != null && id >= 0 ? `#${id}` : '<untracked>';
+  }
+
+  function stop() {
+    stopped = true;
+    if (nextTimer) {
+      clearTimeout(nextTimer);
+      nextTimer = undefined;
+    }
+  }
+
+  function scheduleNext() {
+    if (stopped) {
+      return;
+    }
+    nextTimer = setTimeout(sendPing, intervalMs);
+    nextTimer.unref?.();
+  }
+
+  function onMiss(reason: string) {
+    misses++;
+    record({ consecutiveMisses: misses });
+    if (misses < maxMissedPings) {
+      scheduleNext();
+      return;
+    }
+    let lastPongAt = liveness?.get(session)?.lastPongAt;
+    let pongAge = lastPongAt != null ? `${Date.now() - lastPongAt}ms` : 'never';
+    log.warn(
+      `[h2-keepalive] session ${sessionLabel()} unresponsive ` +
+        `(${misses} missed pings, ${reason}, last pong ${pongAge} ago) — ` +
+        `closing to release wedged streams`,
+    );
+    stop();
+    try {
+      session.close();
+    } catch {
+      // already closing/closed
+    }
+    let hard = setTimeout(() => {
+      if (session.destroyed) {
+        return;
+      }
+      // Record the socket-level state that characterizes the wedge. Reads go
+      // through the guarded Http2Session.socket proxy, which permits property
+      // gets but throws ERR_HTTP2_NO_SOCKET_MANIPULATION on mutators — so this
+      // can observe the socket but cannot tear it down directly; session
+      // teardown is `session.destroy()`'s job (it targets the socket itself).
+      let socket = session.socket as net.Socket | undefined;
+      let socketState = socket
+        ? `socket(destroyed=${socket.destroyed} writable=${socket.writable} ` +
+          `writableLength=${socket.writableLength} ` +
+          `bytesRead=${socket.bytesRead} bytesWritten=${socket.bytesWritten})`
+        : 'socket=<none>';
+      log.warn(
+        `[h2-keepalive] session ${sessionLabel()} still up after ` +
+          `${graceMsBeforeDestroy}ms grace — force-destroying; ${socketState}`,
+      );
+      let destroyAt = Date.now();
+      let closeFired = false;
+      session.once('close', () => {
+        closeFired = true;
+        log.warn(
+          `[h2-keepalive] session ${sessionLabel()} closed ` +
+            `${Date.now() - destroyAt}ms after force-destroy`,
+        );
+      });
+      try {
+        session.destroy();
+      } catch {
+        // already destroyed
+      }
+      // Whether destroy() actually releases the peer is the open question. If
+      // 'close' never fires, the streams never RST and the browser's fetch
+      // never rejects — no server-side teardown reached the wedged transport,
+      // which is the signal that distinguishes a fixable server-side issue
+      // from a hang only the client can recover from.
+      let confirm = setTimeout(() => {
+        if (!closeFired) {
+          log.warn(
+            `[h2-keepalive] session ${sessionLabel()} STILL not closed ` +
+              `${postDestroyConfirmMs}ms after force-destroy ` +
+              `(destroyed=${session.destroyed} ` +
+              `socketDestroyed=${session.socket?.destroyed ?? '<none>'}) — ` +
+              `transport-level wedge unreachable from the server`,
+          );
+        }
+      }, postDestroyConfirmMs);
+      confirm.unref?.();
+    }, graceMsBeforeDestroy);
+    hard.unref?.();
+  }
+
+  function sendPing() {
+    if (stopped || session.destroyed || session.closed) {
+      stop();
+      return;
+    }
+    let settled = false;
+    let pongTimer: ReturnType<typeof setTimeout> | undefined;
+    function finish(then: () => void) {
+      // `stopped` covers a ping still in flight when the session closes or
+      // errors: its late pong callback / pong timeout must not record a miss
+      // or tear down a session that already ended normally.
+      if (settled || stopped) {
+        return;
+      }
+      settled = true;
+      if (pongTimer) {
+        clearTimeout(pongTimer);
+      }
+      then();
+    }
+
+    record({ lastPingAt: Date.now() });
+    let queued: boolean;
+    try {
+      // ping() returns false when the frame couldn't be queued; the callback
+      // fires on PONG (or with an error if the session dies first).
+      queued =
+        session.ping((err: Error | null, duration: number) => {
+          finish(() => {
+            if (err) {
+              onMiss(`ping errored: ${err.message}`);
+              return;
+            }
+            misses = 0;
+            record({
+              lastPongAt: Date.now(),
+              lastRttMs: Math.round(duration),
+              consecutiveMisses: 0,
+            });
+            scheduleNext();
+          });
+        }) !== false;
+    } catch (e) {
+      finish(() => onMiss(`ping threw: ${(e as Error).message}`));
+      return;
+    }
+
+    if (!queued) {
+      finish(() => onMiss('ping frame could not be queued'));
+      return;
+    }
+
+    pongTimer = setTimeout(() => {
+      finish(() => onMiss(`no pong within ${pongTimeoutMs}ms`));
+    }, pongTimeoutMs);
+    pongTimer.unref?.();
+  }
+
+  session.once('close', stop);
+  session.once('error', stop);
+  scheduleNext();
+  return stop;
 }
 
 // Node's http2 secure server — like net/tls servers, and unlike
@@ -324,11 +614,15 @@ function withForcedConnectionClose(
 //     queueing requests it never sends? (live/peak vs maxConcurrentStreams)
 //   - is the connection flow-control-deadlocked? (session windows + outbound
 //     queue, sampled continuously rather than only per stalled stream)
-//   - is the transport even alive during the hang? (a passive PING round-trip
-//     per session — observe only, never tear anything down)
+//   - is the transport even alive during the hang? (each session's PING
+//     liveness, read from the keepalive's shared map — a recent pong means
+//     the transport is alive and only a stream is stuck; a stale/never pong
+//     with rising misses means the whole session went silent and the
+//     keepalive is about to tear it down)
 function installHttp2Diagnostics(
   tlsServer: http2.Http2SecureServer,
   log: ReturnType<typeof logger>,
+  liveness: WeakMap<http2.Http2Session, SessionLiveness>,
 ) {
   const STALL_THRESHOLD_MS = 8000;
   const SWEEP_INTERVAL_MS = 5000;
@@ -346,10 +640,6 @@ function installHttp2Diagnostics(
   interface SessionRec {
     id: number;
     peakStreams: number;
-    lastPingAt?: number;
-    lastPongAt?: number;
-    lastRttMs?: number;
-    pingInFlight: boolean;
   }
 
   let nextId = 0;
@@ -359,15 +649,16 @@ function installHttp2Diagnostics(
 
   tlsServer.on('session', (session) => {
     let srec: SessionRec = {
-      id: nextSessionId++,
+      // The keepalive's session listener is registered first, so its liveness
+      // record already exists — reuse its id so [h2-diag] and [h2-keepalive]
+      // lines correlate.
+      id: liveness.get(session)?.id ?? nextSessionId++,
       peakStreams: 0,
-      pingInFlight: false,
     };
     sessions.set(session, srec);
     log.info(
       `[h2-diag] session #${srec.id} opened (live sessions=${sessions.size})`,
     );
-    probeSession(session, srec);
     session.on('close', () => {
       sessions.delete(session);
       log.info(
@@ -454,37 +745,6 @@ function installHttp2Diagnostics(
     rec.res = res;
   });
 
-  // Passive liveness probe — send one PING and record its round-trip. Observe
-  // only; never tears the session down (that distinguishes this from a
-  // keepalive). Run once on session open so the first sweep already has a
-  // reading, then again each sweep.
-  function probeSession(
-    session: http2.ServerHttp2Session,
-    srec: SessionRec,
-  ): void {
-    if (srec.pingInFlight || session.destroyed || session.closed) {
-      return;
-    }
-    srec.pingInFlight = true;
-    srec.lastPingAt = Date.now();
-    let sent = false;
-    try {
-      sent =
-        session.ping((err: Error | null, duration: number) => {
-          srec.pingInFlight = false;
-          if (!err) {
-            srec.lastPongAt = Date.now();
-            srec.lastRttMs = Math.round(duration);
-          }
-        }) !== false;
-    } catch {
-      srec.pingInFlight = false;
-    }
-    if (!sent) {
-      srec.pingInFlight = false;
-    }
-  }
-
   let timer = setInterval(() => {
     let now = Date.now();
     for (let [stream, rec] of open) {
@@ -509,6 +769,13 @@ function installHttp2Diagnostics(
           }
         }
       }
+      // PING liveness disambiguates the wedge: a recent pong (low pongAge,
+      // missedPings=0) means the transport is alive and only this stream is
+      // stuck; a stale/never pongAge with rising missedPings means the whole
+      // session has gone silent and the keepalive is about to tear it down.
+      let live = session ? liveness.get(session) : undefined;
+      let stalledPongAge =
+        live?.lastPongAt != null ? `${now - live.lastPongAt}ms` : 'never';
       log.warn(
         `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
           `sawRequest=${rec.sawRequest} ` +
@@ -524,6 +791,8 @@ function installHttp2Diagnostics(
           `effectiveRecvData=${ss?.effectiveRecvDataLength} ` +
           `remoteWindow=${ss?.remoteWindowSize} ` +
           `liveStreamsThisSession=${liveThisSession} liveStreamsTotal=${open.size}) ` +
+          `keepalive(pingRtt=${live?.lastRttMs ?? 'n/a'}ms pongAge=${stalledPongAge} ` +
+          `missedPings=${live?.consecutiveMisses ?? 0}) ` +
           `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
           `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
       );
@@ -534,6 +803,19 @@ function installHttp2Diagnostics(
     // server stream exists, connection-level flow-control stall, dead transport).
     let healthyPongs = 0;
     for (let [session, srec] of sessions) {
+      // A force-destroyed session that never emitted 'close' (the keepalive
+      // logs this transport-wedge case) is only ever removed on the 'close'
+      // event — so without this it would linger here for minutes, inflating
+      // liveSessions and re-reporting a dead connection every sweep. Once we
+      // can see it's destroyed, drop it so the counts reflect reality.
+      if (session.destroyed) {
+        sessions.delete(session);
+        log.warn(
+          `[h2-diag] session #${srec.id} destroyed without 'close' — ` +
+            `dropping from live set (live sessions=${sessions.size})`,
+        );
+        continue;
+      }
       let inFlight: { rec: TrackedStream; age: number }[] = [];
       for (let [stream, rec] of open) {
         if (stream.session === session) {
@@ -543,14 +825,19 @@ function installHttp2Diagnostics(
       if (inFlight.length > srec.peakStreams) {
         srec.peakStreams = inFlight.length;
       }
-      let pongAge = srec.lastPongAt != null ? now - srec.lastPongAt : undefined;
-      let pongHealthy = pongAge != null && pongAge < SWEEP_INTERVAL_MS * 2;
+      let live = liveness.get(session);
+      let pongAge =
+        live?.lastPongAt != null ? now - live.lastPongAt : undefined;
+      // The keepalive pings every HTTP2_KEEPALIVE_INTERVAL_MS, so a healthy
+      // session's last pong is at most one interval (plus rtt) old.
+      let pongHealthy =
+        pongAge != null && pongAge < HTTP2_KEEPALIVE_INTERVAL_MS * 2;
       if (pongHealthy) {
         healthyPongs++;
       }
       // Log a per-session line only when it's doing work or its last ping went
       // unanswered; idle, healthy sessions are covered by the roll-up below.
-      let pongOverdue = srec.lastPingAt != null && !pongHealthy;
+      let pongOverdue = live?.lastPingAt != null && !pongHealthy;
       if (inFlight.length > 0 || pongOverdue) {
         let ss = session.state;
         let shown = inFlight.slice(0, 12);
@@ -570,12 +857,12 @@ function installHttp2Diagnostics(
             `remote=${ss?.remoteWindowSize} ` +
             `recvData=${ss?.effectiveRecvDataLength} ` +
             `outQ=${ss?.outboundQueueSize}) ` +
-            `ping(rtt=${srec.lastRttMs ?? 'n/a'}ms ` +
-            `pongAge=${pongAge != null ? `${pongAge}ms` : 'never'}) ` +
+            `ping(rtt=${live?.lastRttMs ?? 'n/a'}ms ` +
+            `pongAge=${pongAge != null ? `${pongAge}ms` : 'never'} ` +
+            `missed=${live?.consecutiveMisses ?? 0}) ` +
             `inFlight=[${list}${more}]`,
         );
       }
-      probeSession(session, srec);
     }
     // Greppable roll-up: a client hang showing `openStreams=0 pingHealthy=N/N`
     // means the request never reached the server (it's wedged client-side or in
@@ -645,6 +932,7 @@ export class RealmServer {
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
   private grafanaSecret: string;
+  private aiBotDelegationSecret: string | undefined;
 
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
@@ -668,6 +956,7 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
@@ -681,6 +970,7 @@ export class RealmServer {
     realmServerSecretSeed,
     realmSecretSeed,
     grafanaSecret,
+    aiBotDelegationSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -693,6 +983,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    reportHostShell,
     searchCache,
   }: {
     serverURL: URL;
@@ -703,6 +994,7 @@ export class RealmServer {
     realmServerSecretSeed: string;
     realmSecretSeed: string;
     grafanaSecret: string;
+    aiBotDelegationSecret?: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -719,6 +1011,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Reports the current host-shell token to the prerender manager. main.ts
+    // wires this so the post-deployment hook can re-report once the service is
+    // stable (the boot-time report fires as soon as this server starts serving).
+    reportHostShell?: () => Promise<void>;
     // Optional so test harnesses that construct a RealmServer directly get a
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
@@ -743,6 +1039,7 @@ export class RealmServer {
     this.matrixClient = matrixClient;
 
     this.realmSecretSeed = realmSecretSeed;
+    this.aiBotDelegationSecret = aiBotDelegationSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
@@ -763,6 +1060,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
@@ -808,8 +1106,10 @@ export class RealmServer {
           // prerender tab, or any in-DevTools fetch) get a response
           // whose `headers.get('ETag')` is `null` even though the
           // server emitted one — making the entire revalidation
-          // protocol invisible to JS.
-          exposeHeaders: 'ETag',
+          // protocol invisible to JS. Location/Retry-After are likewise
+          // non-safelisted; expose them so a cross-origin client can read
+          // the async-publish status monitor target off the 202 response.
+          exposeHeaders: 'ETag, Location, Retry-After',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
@@ -851,6 +1151,7 @@ export class RealmServer {
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
+          aiBotDelegationSecret: this.aiBotDelegationSecret,
           virtualNetwork: this.virtualNetwork,
           serveHostApp,
           serveIndex,
@@ -865,6 +1166,7 @@ export class RealmServer {
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
         }),

@@ -2,6 +2,11 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
+import {
+  linkBoardToRealmIndex,
+  writeRealmDashboardCard,
+  type LinkBoardToRealmIndexOptions,
+} from './factory-realm-index.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
 import {
   parseAgentFlag,
@@ -14,7 +19,12 @@ import {
   runFactoryIssueLoop,
   type IssueLoopWiringConfig,
 } from './factory-issue-loop-wiring.ts';
-import { createSeedIssue, type SeedIssueResult } from './factory-seed.ts';
+import {
+  createSeedIssue,
+  linkProjectToSeedIssue,
+  type LinkProjectToSeedIssueOptions,
+  type SeedIssueResult,
+} from './factory-seed.ts';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
@@ -32,6 +42,11 @@ import {
 } from './workspace-fs.ts';
 
 let log = logger('factory-entrypoint');
+
+// Retries the post-loop backstop spends polling the realm index for the
+// bootstrap board/Project before giving up. At the default ~1s delay this
+// covers a few seconds of indexer lag after a fire-and-forget board sync.
+const BOOTSTRAP_LINK_SEARCH_RETRIES = 5;
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
@@ -141,6 +156,30 @@ export interface RunFactoryEntrypointDependencies {
     realmUrl: string,
     workspaceDir: string,
   ) => Promise<void>;
+  /**
+   * Write the realm's index page. Defaults to
+   * `writeRealmDashboardCard`, which makes a freshly-created realm open
+   * to the `RealmDashboard` dashboard. Tests stub this out.
+   */
+  writeRealmIndex?: (workspaceDir: string, realmUrl: string) => Promise<void>;
+  /**
+   * Link the realm index's `board` relationship to the IssueTracker the
+   * bootstrap issue created. Defaults to `linkBoardToRealmIndex`. Returns
+   * `true` when it modified the index so the entrypoint syncs. Tests stub
+   * this out.
+   */
+  linkRealmIndexBoard?: (
+    options: LinkBoardToRealmIndexOptions,
+  ) => Promise<boolean>;
+  /**
+   * Link the bootstrap seed issue's `project` relationship to the Project the
+   * bootstrap issue created. Defaults to `linkProjectToSeedIssue`. Returns
+   * `true` when it modified the seed issue so the entrypoint syncs. Tests stub
+   * this out.
+   */
+  linkBootstrapIssueProject?: (
+    options: LinkProjectToSeedIssueOptions,
+  ) => Promise<boolean>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 
@@ -338,6 +377,15 @@ export async function runFactoryEntrypoint(
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
 
+  // For a realm the factory just created, replace the default CardsGrid
+  // index page with a RealmDashboard instance so the realm opens to the
+  // factory dashboard. A pre-existing realm keeps its current index page.
+  if (targetRealm.createdRealm) {
+    let writeRealmIndex =
+      dependencies?.writeRealmIndex ?? writeRealmDashboardCard;
+    await writeRealmIndex(workspaceDir, targetRealm.url);
+  }
+
   // Create the seed issue locally
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(brief, {
     darkfactoryModuleUrl,
@@ -353,6 +401,44 @@ export async function runFactoryEntrypoint(
   let syncWorkspaceToRealm =
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
+
+  // Wire the artifacts the bootstrap issue creates into the realm. The
+  // bootstrap agent makes an IssueTracker board and a Project; the index card
+  // and seed issue were both written before those existed, so they start with
+  // no `board` / `project` link. These find the board/Project and patch
+  // `index.json` and the seed issue in place. Each reports whether it changed
+  // its card; sync once if either did. Idempotent — a no-op once the links
+  // are set or while nothing is indexed. Only freshly-created realms get a
+  // RealmDashboard page, so callers gate this on `createdRealm`.
+  let linkBoard = dependencies?.linkRealmIndexBoard ?? linkBoardToRealmIndex;
+  let linkSeedProject =
+    dependencies?.linkBootstrapIssueProject ?? linkProjectToSeedIssue;
+  let wireBootstrapArtifacts = async ({ waitForIndex = true } = {}) => {
+    // The board/Project are pushed to the realm fire-and-forget (no
+    // waitForIndex), so a search right after can race the indexer. Both the
+    // in-loop hook and the post-loop backstop therefore retry on an empty
+    // result: the hook is the only wiring a run that stalls or is interrupted
+    // before the backstop ever gets, so it can't afford to lose that race.
+    let searchRetries = waitForIndex ? BOOTSTRAP_LINK_SEARCH_RETRIES : 0;
+    let linkArgs = {
+      client,
+      realmUrl: targetRealm.url,
+      workspaceDir,
+      darkfactoryModuleUrl,
+      searchRetries,
+    };
+    // The two links patch independent files (index.json vs the seed issue)
+    // and share no state, so run them concurrently. When the realm has
+    // neither card yet, each search otherwise burns its full retry budget in
+    // turn; overlapping them halves the worst-case wait.
+    let [boardLinked, projectLinked] = await Promise.all([
+      linkBoard(linkArgs),
+      linkSeedProject(linkArgs),
+    ]);
+    if (boardLinked || projectLinked) {
+      await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
+    }
+  };
 
   let summary = buildFactoryEntrypointSummary(
     options,
@@ -376,6 +462,14 @@ export async function runFactoryEntrypoint(
     debug: options.debug,
     retryBlocked: options.retryBlocked,
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
+    // Wire the board and the seed issue's project the moment the bootstrap
+    // issue finishes, rather than after the whole loop returns — so a run
+    // whose later issues stall or get interrupted still ends up with the
+    // dashboard and seed issue wired up. The post-loop call below is an
+    // idempotent backstop for runs that complete normally.
+    onBootstrapComplete: targetRealm.createdRealm
+      ? wireBootstrapArtifacts
+      : undefined,
   });
 
   summary.issueLoop = {
@@ -388,6 +482,23 @@ export async function runFactoryEntrypoint(
       toolCallCount: ir.toolCallLog.length,
     })),
   };
+
+  // Backstop after the loop returns. The bootstrap-complete hook above is the
+  // primary trigger (it fires even when the loop never reaches here), but this
+  // re-wires idempotently for runs that complete normally, covering the case
+  // where the hook exhausted its retry budget before the index caught up. A
+  // no-op when the board and project are already linked. Best-effort, like the
+  // hook: a wiring failure here must not turn an otherwise-successful run into
+  // a failure.
+  if (targetRealm.createdRealm) {
+    try {
+      await wireBootstrapArtifacts({ waitForIndex: true });
+    } catch (err) {
+      log.warn(
+        `wireBootstrapArtifacts backstop failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   let succeeded = loopResult.outcome === 'all_issues_done';
   summary.result = {

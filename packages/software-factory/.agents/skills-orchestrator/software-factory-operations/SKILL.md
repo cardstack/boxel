@@ -208,14 +208,19 @@ pipeline (which persists `TestRun` / `LintResult` / `ParseResult` /
 `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling
 any of these mid-turn is optional.
 
-**Side effect to know about:** the realm-touching validators
-(`run_evaluate`, `run_instantiate`, `run_tests`) sync your workspace to
-the realm before invoking the prerenderer, so they push whatever you've
-just written. That's the same write the orchestrator's between-iteration
-sync would have done — it's not destructive, but it does mean calling
-these tools is the moment your local writes hit the realm. The lighter
-validators (`run_lint`, `run_parse`) run entirely in-process and don't
-touch the realm.
+**Side effect to know about:** every `run_*` validator syncs your
+workspace to the realm before checking, so calling one pushes whatever
+you've just written. That's the same write the orchestrator's
+between-iteration sync would have done — it's not destructive, but it
+does mean calling these tools is the moment your local writes hit the
+realm.
+
+**Zero coverage is never green:** a whole-realm `run_*` call that finds
+nothing to check (0 files / modules / instances / tests) returns
+`status: "error"`, not a pass — it means the realm doesn't contain the
+files you meant to validate (sync hasn't landed, or they were never
+written). Re-run once the files are on the realm; never count such a
+result toward a green baseline or a done Issue.
 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel`
   rules) and return an in-memory `RunLintResult` with `status`,
@@ -242,7 +247,13 @@ durationMs, testFiles, failures, errorMessage? }`. Use it when you
   `parseableFiles` entries are always returned in the `.json` / `.gts`
   / `.gjs` / `.ts` form, so you can feed any of them straight back into
   `path`. Prefer the single-file form right after writing or editing one
-  file.
+  file — **but know its limit**: the file is type-checked in isolation,
+  so a file that imports same-realm siblings (e.g. a component that
+  `import type`s its card module) can report cross-file resolution
+  errors a whole-realm run does not. Whole-realm `run_parse` is the
+  source of truth; when a single-file run fails only on imports of
+  files you know exist, re-run without `path` instead of chasing the
+  errors.
 - `run_evaluate({ path? })` — Evaluate ESM modules (`.gts` / `.gjs` /
   `.ts` / `.js`) in the target realm via the prerenderer sandbox and
   return a `RunEvaluateResult` (status, module counts, per-failure
@@ -319,6 +330,42 @@ cardName, error, stackTrace? }`). Without `path`, searches the realm
    `signal_done()` again.
 9. **Record progress** by appending to the issue's `comments` array
    (Read + Edit the issue JSON). Never modify the issue's `description`.
+
+## Adjustment issues (adjust flow)
+
+When the issue you picked up has `issueType: adjustment`, you are
+**editing an existing, already-seeded card** — not creating one from
+scratch. The bootstrap step seeded the source card and its same-realm
+dependency graph into the workspace and confirmed a green baseline
+before this issue existed, so the files named in the issue's
+description are **already present**.
+
+How adjustment work differs from a greenfield `feature` issue:
+
+- **Read the seeded files first.** The issue description names the
+  target file(s). `Read` each one (and grep for siblings) before
+  touching anything — you are modifying working code, not authoring a
+  blank slate.
+- **Apply only the delta.** Use `Edit` for surgical changes to the
+  seeded `.gts` / `.json`. Don't rewrite the card; change exactly what
+  the delta calls for.
+- **Guard the baseline.** The pre-existing tests are part of the
+  contract. Extend `.test.gts` with assertions for the new behavior,
+  but the **existing tests must still pass** — `run_tests` covers both.
+  A delta that breaks a baseline test is not done; fix it or
+  `request_clarification`.
+- **Operate on the seeded artifacts — never create parallel ones.** The
+  delta is applied by editing the existing seeded files: the card module,
+  its tests, its sample instances, and its Spec. If the delta adds or
+  renames a field, update the **existing** sample instances to reflect it
+  (so they demonstrate the new behavior) and keep the Spec's
+  `linkedExamples` pointing at them — `run_instantiate` and `run_parse`
+  must stay green. Do **not** add a new instance, module, or Spec to
+  showcase a change; a new card (or instance) is created only when the
+  issue explicitly calls for one.
+- **Then the standard loop applies unchanged** — self-validate with the
+  `run_*` tools, `signal_done`, fix on feedback, record progress in
+  `comments`. Same validators, same invariants.
 
 ## Target Realm Artifact Structure
 

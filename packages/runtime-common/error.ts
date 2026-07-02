@@ -36,6 +36,18 @@ export interface SerializedError {
   diagnostics?: Record<string, unknown>;
 }
 
+// A persisted error document: the `SerializedError` plus the index metadata
+// that rode with the row that failed. Stored in the `error_doc` column and
+// carried on the wire by anything that stands in for a card/module/file that
+// failed to render or index.
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
+}
+
 // Postgres `jsonb` containers store child offsets in 28 bits, so a
 // single jsonb array's elements must total < 256 MiB — a format-level
 // constraint baked into jsonb, not a column setting we can raise.
@@ -625,6 +637,30 @@ export function coerceErrorMessage(err: unknown, placeholder: string): string {
     }
   }
   return placeholder;
+}
+
+// Render an unknown error as a single log-safe string. Passing an Error (or any
+// object) as a console argument serializes to "[object Object]" in
+// text-captured console output (e.g. CI test logs), and `JSON.stringify` of an
+// Error yields "{}" because its `message`/`stack` are non-enumerable — both
+// drop the stack, which is the detail that localizes a transient failure.
+// Prefer the stack for Errors, a JSON dump for plain / JSON:API error objects,
+// and fall back to `coerceErrorMessage` for everything else.
+export function stringifyErrorForLog(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? `${err.name}: ${err.message}`;
+  }
+  if (err != null && typeof err === 'object') {
+    try {
+      let json = JSON.stringify(err);
+      if (json && json !== '{}') {
+        return json;
+      }
+    } catch {
+      // not serializable (e.g. circular references) — fall through
+    }
+  }
+  return coerceErrorMessage(err, '(no error detail available)');
 }
 
 export function responseWithError(

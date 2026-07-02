@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type {
   RealmPermissions,
@@ -26,7 +27,7 @@ import {
   baseCardRef,
   trimExecutableExtension,
   rri,
-  baseRealm,
+  baseRealmRRI,
   baseRRI,
   executableExtensions,
 } from '@cardstack/runtime-common';
@@ -226,7 +227,7 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
   return { pool, contextsCreated, contextsClosed };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('prerender - mutating tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;
@@ -2100,36 +2101,16 @@ module(basename(__filename), function () {
             `isolated html includes hero mini cards from query and nested query loads: ${isolatedHTML}`,
           );
 
-          let staff = result.response.searchDoc?.staff as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(staff),
-            'searchDoc includes query field results',
-          );
-
-          let bob = staff?.find((entry) => entry?.name === 'Bob');
-          assert.ok(bob, 'searchDoc includes Bob from query results');
+          // Query-backed relationships are never captured in the search doc:
+          // they can't be invalidated when their matching cards change, so an
+          // indexed copy would go stale. The search doc is generated from the
+          // field definitions, so a card's custom queryableValue does not inject
+          // them either. The query field's results still render (asserted above)
+          // and the host re-resolves them at view time.
           assert.strictEqual(
-            bob?.manager?.name,
-            'Alice',
-            'searchDoc includes loaded manager relationship',
-          );
-
-          let bobReports = bob?.reports as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(bobReports),
-            'searchDoc includes nested query results',
-          );
-          let hasEveWithManager = bobReports?.some(
-            (report) =>
-              report?.name === 'Eve' && report?.manager?.name === 'Bob',
-          );
-          assert.true(
-            Boolean(hasEveWithManager),
-            'searchDoc includes nested loaded relationships',
+            result.response.searchDoc?.staff,
+            undefined,
+            'query-backed field is not captured in the search doc',
           );
         } finally {
           await realmServerPatch.restore();
@@ -2414,7 +2395,7 @@ module(basename(__filename), function () {
           'search doc includes name',
         );
         assert.ok(
-          result.response.deps.includes(`${baseRealm.url}card-api`),
+          result.response.deps.includes(`${baseRealmRRI}card-api`),
           'deps include base card-api module (where FileDef is defined)',
         );
         assert.notOk(
@@ -2657,148 +2638,79 @@ module(basename(__filename), function () {
               [testUserId]: ['read', 'write', 'realm-owner'],
             },
             fileSystem: {
-              'prerendered-search-live.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              'card-search.gts': `
+              import { CardDef, Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 
-              export class LiveSearchResult extends CardDef {
-                static displayName = 'Live Search Result';
-                @field cardTitle = contains(StringField);
-
+              export class CardSearchResult extends CardDef {
+                static displayName = 'Card Search Result';
+                @field label = contains(StringField);
                 static fitted = class extends Component<typeof this> {
                   <template>
-                    <div class="live-search-css-sentinel" data-test-live-card-value>{{@model.cardTitle}}</div>
+                    <div class="card-search-result-sentinel" data-test-card-result-value>{{@model.label}}</div>
                     <style scoped>
-                      .live-search-css-sentinel {
-                        border-top: 4px solid rgb(1, 2, 3);
-                      }
+                      .card-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
                     </style>
                   </template>
                 };
-
                 static embedded = this.fitted;
                 static isolated = this.fitted;
               }
 
-              export class LiveSearchInner extends CardDef {
-                static displayName = 'Live Search Inner';
+              export class CardSearchInner extends CardDef {
+                static displayName = 'Card Search Inner';
                 static isolated = class extends Component<typeof this> {
-                  get realmHref() {
-                    let id = this.args.model?.id;
-                    if (!id) {
-                      return '';
-                    }
-                    return new URL('.', id).href;
-                  }
-
                   get query() {
                     return {
                       filter: {
-                        type: {
-                          module: new URL('./prerendered-search-live', import.meta.url).href,
-                          name: 'LiveSearchResult',
+                        'item.on': {
+                          module: new URL('./card-search', import.meta.url).href,
+                          name: 'CardSearchResult',
                         },
                       },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
+                      realms: [new URL('./', import.meta.url).href],
                     };
                   }
 
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
                   <template>
-                    <div data-test-live-search-host-ran>Host ran</div>
-                    <div data-test-live-search-realm>{{this.realmHref}}</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='fitted'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:loading>
-                          <div data-test-live-search-loading>Loading...</div>
-                        </:loading>
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                        <:meta as |meta|>
-                          <div data-test-live-search-total>{{meta.page.total}}</div>
-                        </:meta>
-                      </@context.prerenderedCardSearchComponent>
+                    <div data-test-card-search-host-ran>host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-live-search-component-missing>missing</div>
+                      <div data-test-card-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
-
-              export class LiveSearchHost extends CardDef {
-                static displayName = 'Live Search Host';
-                @field child = linksTo(() => LiveSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
             `,
-              'live-search-host.json': {
+              'card-search-inner.json': {
                 data: {
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-search-inner',
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchHost',
+                      module: rri('./card-search'),
+                      name: 'CardSearchInner',
                     },
                   },
                 },
               },
-              'live-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-search-result-1.json': {
+              'card-search-result-1.json': {
                 data: {
                   attributes: {
-                    cardTitle: 'LIVE_RESULT_VALUE',
+                    label: 'CARD_RESULT_VALUE',
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchResult',
+                      module: rri('./card-search'),
+                      name: 'CardSearchResult',
                     },
                   },
                 },
               },
-              'live-file-search-card.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              'file-search.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               import { rri } from '@cardstack/runtime-common';
 
-              export class LiveFileSearchInner extends CardDef {
-                static displayName = 'Live File Search Inner';
+              export class FileSearchInner extends CardDef {
+                static displayName = 'File Search Inner';
                 static isolated = class extends Component<typeof this> {
                   get realmHref() {
                     let id = this.args.model?.id;
@@ -2811,94 +2723,37 @@ module(basename(__filename), function () {
                   get query() {
                     return {
                       filter: {
-                        on: {
-                          module: rri('https://cardstack.com/base/card-api'),
+                        'item.on': {
+                          module: rri('@cardstack/base/card-api'),
                           name: 'FileDef',
                         },
-                        eq: {
-                          url: \`\${this.realmHref}live-file.live\`,
-                        },
                       },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
+                      realms: [new URL('./', import.meta.url).href],
                     };
                   }
 
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
                   <template>
-                    <div data-test-live-file-search-host-ran>File Host ran</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='embedded'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-file-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                      </@context.prerenderedCardSearchComponent>
+                    <div data-test-file-search-host-ran>File Host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-live-file-search-component-missing>missing</div>
+                      <div data-test-file-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
-
-              export class LiveFileSearchHost extends CardDef {
-                static displayName = 'Live File Search Host';
-                @field cardTitle = contains(StringField);
-                @field child = linksTo(() => LiveFileSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
             `,
-              'live-file-search-host.json': {
+              'file-search-inner.json': {
                 data: {
-                  attributes: {
-                    cardTitle: 'Live File Search Host',
-                  },
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-file-search-inner',
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchHost',
+                      module: rri('./file-search'),
+                      name: 'FileSearchInner',
                     },
                   },
                 },
               },
-              'live-file-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-file.live': 'LIVE_FILE_VALUE',
+              'hello.md': '# Hello from FileDef content',
             },
           },
         ],
@@ -2910,25 +2765,27 @@ module(basename(__filename), function () {
         },
       });
 
-      test('card prerendered search uses live rendered CardDef HTML and keeps unique CSS', async function (assert) {
-        const cardURL = `${realmURL}live-search-host`;
+      test('search prerenders the live rendered result, beating stale indexed HTML and keeping its unique scoped CSS', async function (assert) {
+        const cardURL = `${realmURL}card-search-inner`;
         const sentinel = 'SENTINEL_STALE_CARD_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
-        let searchRequestObserverPatch = installSearchRequestObserverPatch();
 
         try {
           let indexedRows = await dbAdapter.execute(
             `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
-            { bind: [`${realmURL}%live-search%`] },
+            { bind: [`${realmURL}%card-search%`] },
           );
           assert.ok(
             indexedRows.length > 0,
-            `expected indexed rows for live-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+            `expected indexed rows for card-search fixtures, got: ${JSON.stringify(indexedRows)}`,
           );
 
+          // Plant a stale indexed rendering for the result so a live win is
+          // observable: the prerendered search must re-render the result from
+          // its card+source, not echo this indexed HTML.
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-search-result-1`,
+            `${realmURL}card-search-result-1`,
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
@@ -2944,45 +2801,50 @@ module(basename(__filename), function () {
           let isolatedHTML = cleanWhiteSpace(
             result.response.isolatedHTML ?? '',
           );
-          let searchRequests = searchRequestObserverPatch.getRequests();
-          assert.ok(
-            searchRequests.length > 0,
-            `observed federated search requests: ${JSON.stringify(searchRequests)}`,
-          );
 
           assert.ok(
-            isolatedHTML.includes('LIVE_RESULT_VALUE'),
-            `isolated html includes live card value: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `isolated html includes the live result value: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale indexed sentinel: ${isolatedHTML}`,
+            `isolated html does not include the stale indexed sentinel: ${isolatedHTML}`,
           );
           assert.ok(
-            isolatedHTML.includes('live-search-css-sentinel'),
-            `isolated html includes unique live card css class: ${isolatedHTML}`,
+            isolatedHTML.includes('card-search-result-sentinel'),
+            `isolated html includes the result's unique css class: ${isolatedHTML}`,
           );
           assert.ok(
-            /live-search-css-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+            /card-search-result-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
               isolatedHTML,
             ),
-            `isolated html keeps scoped css marker on live result: ${isolatedHTML}`,
+            `isolated html keeps the scoped css marker on the live result: ${isolatedHTML}`,
           );
         } finally {
-          searchRequestObserverPatch.restore();
           await realmServerPatch.restore();
         }
       });
 
-      test('card prerendered search uses live rendered FileDef HTML', async function (assert) {
-        const cardURL = `${realmURL}live-file-search-host`;
+      test('search prerenders a FileDef result and renders live over stale indexed HTML', async function (assert) {
+        const cardURL = `${realmURL}file-search-inner`;
         const sentinel = 'SENTINEL_STALE_FILE_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
         try {
+          // Diagnostic: confirm the file is indexed so an empty result set
+          // localizes to the prerender search path, not a missing index row.
+          let fileRows = await dbAdapter.execute(
+            `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
+            { bind: [`${realmURL}%hello.md%`] },
+          );
+          assert.ok(
+            fileRows.length > 0,
+            `expected an indexed row for hello.md, got: ${JSON.stringify(fileRows)}`,
+          );
+
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-file.live`,
+            `${realmURL}hello.md`,
             `<article data-test-stale-file-html>${sentinel}</article>`,
           );
 
@@ -2999,17 +2861,61 @@ module(basename(__filename), function () {
             result.response.isolatedHTML ?? '',
           );
 
+          // The per-result wrapper is `data-test-search-result={{entry.id}}`, so
+          // the file's URL appearing proves a file entry was surfaced (and not
+          // the empty result list a dropped file would leave).
           assert.ok(
-            isolatedHTML.includes('live-file.live'),
-            `isolated html includes live FileDef fallback value: ${isolatedHTML}`,
+            isolatedHTML.includes('hello.md'),
+            `isolated html surfaces the FileDef result identity: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale file sentinel: ${isolatedHTML}`,
+            `isolated html does not include the stale file sentinel: ${isolatedHTML}`,
+          );
+        } finally {
+          await realmServerPatch.restore();
+        }
+      });
+
+      test('a card rendering the @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
+        // The search resource registers its in-flight fetch with the render
+        // store's readiness signal, so the /render settle loop waits for results
+        // before HTML capture. Without that wiring the search resolves only
+        // after capture and the prerendered html shows an empty result list —
+        // the bug this test guards. Driven through the real prerenderer (the
+        // host test harness can't cover the /render route).
+        const cardURL = `${realmURL}card-search-inner`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+
+        try {
+          let result = await prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(
+            result.response.error,
+            `prerender succeeds: ${JSON.stringify(result.response.error)}`,
+          );
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+
+          assert.ok(
+            isolatedHTML.includes('data-test-card-search-host-ran'),
+            `the host template ran: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes('data-test-card-search-component-missing'),
+            'the searchResultsComponent is provided in the render context',
           );
           assert.ok(
-            isolatedHTML.includes('data-test-live-file-search-card'),
-            `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `prerendered html includes the search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();
@@ -3832,7 +3738,7 @@ module(basename(__filename), function () {
               import { Person } from '${realmURL1}person';
               export class Cat extends CardDef {
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
+                @field owner = linksTo(Person, { searchable: true });
                 static displayName = "Cat";
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
@@ -3843,9 +3749,9 @@ module(basename(__filename), function () {
               export class Dog extends CardDef {
                 static displayName = "Dog";
                 @field name = contains(StringField);
-                @field owner = linksTo(Person, { isUsed: true });
+                @field owner = linksTo(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owner is intentionally not in isolated template; searchable: true pulls it into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3856,9 +3762,9 @@ module(basename(__filename), function () {
               export class DogMany extends CardDef {
                 static displayName = "Dog Many";
                 @field name = contains(StringField);
-                @field owners = linksToMany(Person, { isUsed: true });
+                @field owners = linksToMany(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owners is intentionally not in isolated template; searchable: true pulls them into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3868,16 +3774,17 @@ module(basename(__filename), function () {
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
-                @field primaryOwner = linksTo(Person, { isUsed: true });
-                @field caretakers = linksToMany(Person, { isUsed: true });
+                @field primaryOwner = linksTo(Person);
+                @field caretakers = linksToMany(Person);
               }
 
               export class DogProfile extends CardDef {
                 static displayName = "Dog Profile";
                 @field name = contains(StringField);
-                @field profile = contains(DogProfileField);
+                @field profile = contains(DogProfileField, { searchable: ['primaryOwner', 'caretakers'] });
                 static isolated = class extends Component<typeof this> {
-                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // profile is intentionally not in isolated template; the contained field's
+                  // searchable routes pull its primaryOwner / caretakers links into the search doc
                   <template>{{@model.name}}</template>
                 }
               }
@@ -3894,9 +3801,9 @@ module(basename(__filename), function () {
               export class NonIsolatedLinks extends CardDef {
                 static displayName = 'Non Isolated Links';
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
-                @field owners = linksToMany(Person);
-                @field profile = contains(RelationshipField);
+                @field owner = linksTo(Person, { searchable: true });
+                @field owners = linksToMany(Person, { searchable: true });
+                @field profile = contains(RelationshipField, { searchable: ['lead', 'members'] });
 
                 static isolated = class extends Component<typeof this> {
                   <template><div data-test-isolated-name>{{@model.name}}</div></template>
@@ -4060,7 +3967,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('https://cardstack.com/base/brand-guide'),
+                      module: rri('@cardstack/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -4329,9 +4236,7 @@ module(basename(__filename), function () {
         test('parent embedded HTML', function (assert) {
           assert.ok(
             /data-test-card-thumbnail-placeholder/.test(
-              result.embeddedHTML![
-                'https://cardstack.com/base/card-api/CardDef'
-              ],
+              result.embeddedHTML!['@cardstack/base/card-api/CardDef'],
             ),
             `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
           );
@@ -4407,7 +4312,7 @@ module(basename(__filename), function () {
           assert.ok(
             result.deps?.find((d) =>
               d.match(
-                /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+                /^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
               ),
             ),
             `glimmer scoped css from ${baseCardRef.module} is a dep`,
@@ -4417,7 +4322,7 @@ module(basename(__filename), function () {
         test('types', function (assert) {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
-            'https://cardstack.com/base/card-api/CardDef',
+            '@cardstack/base/card-api/CardDef',
           ]);
         });
 
@@ -4427,7 +4332,7 @@ module(basename(__filename), function () {
           assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
         });
 
-        test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        test('searchable field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4448,11 +4353,11 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.owner.name,
             'Hassan',
-            'linked field is included in search doc via isUsed=true',
+            'linked field is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        test('searchable linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4473,16 +4378,16 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.owners?.[0]?.name,
             'Hassan',
-            'first linked record is included in search doc via isUsed=true',
+            'first linked record is included in search doc via searchable: true',
           );
           assert.strictEqual(
             response.searchDoc?.owners?.[1]?.name,
             'Mango',
-            'second linked record is included in search doc via isUsed=true',
+            'second linked record is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        test('searchable compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4503,11 +4408,11 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.primaryOwner?.name,
             'Hassan',
-            'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+            'nested linksTo relationship is included in search doc via searchable route on the contained field',
           );
         });
 
-        test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        test('searchable compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4528,12 +4433,12 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[0]?.name,
             'Hassan',
-            'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'first nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[1]?.name,
             'Mango',
-            'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'second nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
         });
 

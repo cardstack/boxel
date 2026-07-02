@@ -6,7 +6,12 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseRealmRRI,
+  rri,
+  searchEntryWireQueryFromQuery,
+} from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -43,6 +48,7 @@ import {
   field,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -81,7 +87,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -117,7 +123,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -154,7 +160,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -179,7 +185,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -225,7 +231,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/pet',
+            module: `${testModuleRealm}pet`,
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -259,7 +265,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -292,13 +298,13 @@ module('Integration | realm', function (hooks) {
             relationships: {
               owner: {
                 links: {
-                  self: `https://localhost:4202/test/hassan`,
+                  self: `${testModuleRealm}hassan`,
                 },
               },
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -329,12 +335,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(
       json.data.relationships.owner.links.self,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'owner self link points to other realm',
     );
     assert.strictEqual(
       json.data.relationships.owner.data.id,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'owner data id points to other realm',
     );
     assert.strictEqual(
@@ -357,7 +363,7 @@ module('Integration | realm', function (hooks) {
     let hassan = included[0];
     assert.strictEqual(
       hassan.id,
-      'https://localhost:4202/test/hassan',
+      `${testModuleRealm}hassan`,
       'included hassan id',
     );
     assert.strictEqual(
@@ -375,7 +381,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -408,8 +414,11 @@ module('Integration | realm', function (hooks) {
           method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify(
+            searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+          ),
         }),
       );
       let json = await response.json();
@@ -444,7 +453,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -520,7 +529,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -556,7 +565,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -628,7 +637,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -658,7 +667,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/pet',
+                  module: `${testModuleRealm}pet`,
                   name: 'Pet',
                 },
               },
@@ -700,7 +709,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/pet',
+            module: `${testModuleRealm}pet`,
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -734,7 +743,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -771,7 +780,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://localhost:4202/test/pet',
+              module: `${testModuleRealm}pet`,
               name: 'Pet',
             },
           },
@@ -861,7 +870,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -886,7 +895,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/person',
+                  module: `${testModuleRealm}person`,
                   name: 'Person',
                 },
               },
@@ -943,7 +952,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -978,10 +987,10 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.searchCards({
+    let { data: cards } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
-          module: rri(`https://localhost:4202/test/person`),
+          module: rri(`${testModuleRealm}person`),
           name: 'Person',
         },
         eq: { firstName: 'Van Gogh' },
@@ -1008,7 +1017,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/booking',
+                module: `${testModuleRealm}booking`,
                 name: 'Booking',
               },
             },
@@ -1039,7 +1048,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://localhost:4202/test/booking',
+                  module: `${testModuleRealm}booking`,
                   name: 'Booking',
                 },
               },
@@ -1086,7 +1095,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://localhost:4202/test/booking',
+            module: `${testModuleRealm}booking`,
             name: 'Booking',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1148,7 +1157,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1161,7 +1170,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1173,7 +1182,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1191,7 +1200,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1220,7 +1229,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1354,7 +1363,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `https://localhost:4202/test/pet-person`,
+              module: `${testModuleRealm}pet-person`,
               name: 'PetPerson',
             },
           },
@@ -1375,7 +1384,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1388,7 +1397,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1400,7 +1409,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1418,7 +1427,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1445,7 +1454,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1496,7 +1505,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1518,7 +1527,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1531,7 +1540,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1546,7 +1555,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1573,7 +1582,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1612,7 +1621,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1749,7 +1758,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1762,7 +1771,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1780,7 +1789,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1801,7 +1810,7 @@ module('Integration | realm', function (hooks) {
               relationships: { pets: { links: { self: null } } },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1835,7 +1844,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1857,7 +1866,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -1869,7 +1878,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1881,7 +1890,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -1899,7 +1908,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -1926,7 +1935,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -1967,7 +1976,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -1989,7 +1998,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2002,7 +2011,7 @@ module('Integration | realm', function (hooks) {
             relationships: { owner: { links: { self: null } } },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet`,
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2014,7 +2023,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2026,7 +2035,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2044,7 +2053,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/pet-person`,
+                module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
               },
             },
@@ -2073,7 +2082,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `https://localhost:4202/test/pet-person`,
+                  module: `${testModuleRealm}pet-person`,
                   name: 'PetPerson',
                 },
               },
@@ -2113,7 +2122,7 @@ module('Integration | realm', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `https://localhost:4202/test/pet-person`,
+          module: `${testModuleRealm}pet-person`,
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
@@ -2137,7 +2146,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2152,7 +2161,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2175,7 +2184,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2686,7 +2695,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2696,7 +2705,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2707,7 +2716,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.searchCards({});
+    let { data: cards } = await searchCardsForTest(queryEngine, {});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2758,7 +2767,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.searchCards({})).data;
+    cards = (await searchCardsForTest(queryEngine, {})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -2996,7 +3005,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3010,8 +3019,11 @@ module('Integration | realm', function (hooks) {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+        ),
       }),
     );
     let json = await response.json();
@@ -3099,28 +3111,39 @@ module('Integration | realm', function (hooks) {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          sort: [
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery(
             {
-              by: 'id',
-              on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+              sort: [
+                {
+                  by: 'id',
+                  on: {
+                    module: rri(`${baseRealmRRI}card-api`),
+                    name: 'CardDef',
+                  },
+                },
+              ],
             },
-          ],
-        }),
+            { fields: ['item'] },
+          ),
+        ),
       }),
     );
     let json = await response.json();
-    delete json.included?.[0].meta.lastModified;
-    delete json.included?.[0].meta.resourceCreatedAt;
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    let resources = json.data as any[];
-    assert.strictEqual(resources.length, 3, 'returns 3 cards');
+    // `/_search` returns `search-entry` resources in `data` (each just an
+    // id + refs); the full card resources — the matched results themselves and
+    // their `loadLinks`-expanded relationship targets — travel in `included`.
+    let entries = json.data as any[];
+    assert.strictEqual(entries.length, 3, 'returns 3 search entries');
     assert.strictEqual(json.meta.page.total, 3, 'meta page total is 3');
 
-    let mango = resources.find((r) => r.id === `${testRealmURL}dir/mango`);
+    let included = (json.included ?? []) as any[];
+    let mango = included.find((r) => r.id === `${testRealmURL}dir/mango`);
     assert.ok(mango, 'mango is in results');
     assert.strictEqual(mango.attributes.firstName, 'Mango', 'mango name');
     assert.strictEqual(
@@ -3144,7 +3167,7 @@ module('Integration | realm', function (hooks) {
       'mango createdAt',
     );
 
-    let mariko = resources.find((r) => r.id === `${testRealmURL}dir/mariko`);
+    let mariko = included.find((r) => r.id === `${testRealmURL}dir/mariko`);
     assert.ok(mariko, 'mariko is in results');
     assert.strictEqual(
       mariko.attributes.fullName,
@@ -3162,7 +3185,7 @@ module('Integration | realm', function (hooks) {
       'mariko createdAt',
     );
 
-    let vanGogh = resources.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
+    let vanGogh = included.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
     assert.ok(vanGogh, 'vanGogh is in results');
     assert.strictEqual(
       vanGogh.relationships.owner.links.self,
@@ -3185,9 +3208,8 @@ module('Integration | realm', function (hooks) {
       'vanGogh createdAt',
     );
 
-    let included = (json.included ?? []) as any[];
     let hassan = included.find((r) => r.id === `${testModuleRealm}hassan`);
-    assert.ok(hassan, 'hassan is included');
+    assert.ok(hassan, 'hassan (cross-realm linksTo target) is included');
     assert.strictEqual(
       hassan.relationships['cardInfo.theme'].links.self,
       null,
@@ -3303,7 +3325,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3546,7 +3568,7 @@ posts/ignore-me.gts
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'FieldDef',
               },
             },

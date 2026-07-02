@@ -12,7 +12,7 @@
     "@glimmer/tracking": "^1.0.4",
     "@glint/template": "catalog:",
     "@types/flat": "catalog:",
-    "@types/lodash": "catalog:",
+    "@types/lodash-es": "catalog:",
     "awesome-phonenumber": "catalog:",
     "concurrently": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
@@ -24,15 +24,18 @@
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
     "@floating-ui/dom": "catalog:",
-    "tracked-built-ins": "catalog:"
+    "tracked-built-ins": "catalog:",
+    "yaml": "catalog:"
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
-    "ember-source": "catalog:"
+    "ember-source": "catalog:",
+    "lodash-es": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:no-isused-option": "node scripts/check-no-isused-option.mjs"
   }
 }

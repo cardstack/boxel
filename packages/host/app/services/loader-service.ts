@@ -17,9 +17,8 @@ import {
 
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { clearKnownFileMetaUrls } from '@cardstack/host/components/prerendered-card-search';
-
 import config from '@cardstack/host/config/environment';
+import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';

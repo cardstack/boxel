@@ -9,12 +9,20 @@ import {
   param,
 } from '@cardstack/runtime-common';
 import { createHash } from 'crypto';
-import migrate from 'node-pg-migrate';
+import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config.ts';
-import migrationNameFixes from './scripts/migration-name-fixes.js';
+import migrationNameFixes from './scripts/migration-name-fixes.cjs';
+
+// node-pg-migrate is CJS and exposes the runner as its default export. Under
+// native ESM the default import binds the module's namespace object, so the
+// callable lives on `.default`; the package's types declare the default as the
+// runner, so cast to its call signature.
+const migrate = ((nodePgMigrate as any).default ?? nodePgMigrate) as (
+  options: RunnerOption,
+) => Promise<unknown>;
 
 // Hash a realm URL to a stable signed int64 (as a string, because JS numbers
 // can't represent the full int64 range). Used as a pg advisory lock key:
@@ -658,8 +666,11 @@ export class PgAdapter implements DBAdapter {
             port: config.port,
           },
           count: Infinity,
-          dir: join(__dirname, 'migrations'),
-          ignorePattern: '.*\\.eslintrc\\.js',
+          dir: join(import.meta.dirname, 'migrations'),
+          // Ignore the eslint config and the `package.json` that pins this dir
+          // to `type:commonjs` (the CJS migration files use `exports.up`); both
+          // sit in the migrations dir but aren't migrations.
+          ignorePattern: '.*\\.eslintrc\\.js|package\\.json',
           log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
         await this.fixupEnvironmentModePermissions(config);

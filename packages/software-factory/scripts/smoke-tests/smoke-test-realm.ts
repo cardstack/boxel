@@ -67,14 +67,15 @@ const HELLO_SPEC_CARD = {
     },
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
   },
 };
 
-const HELLO_TEST_GTS = `import { module, test } from 'qunit';
+const HELLO_TEST_GTS = `import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { getService } from '@universal-ember/test-support';
@@ -96,7 +97,8 @@ export function runTests() {
 }
 `;
 
-const HELLO_FAILING_TEST_GTS = `import { module, test } from 'qunit';
+const HELLO_FAILING_TEST_GTS = `import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { getService } from '@universal-ember/test-support';

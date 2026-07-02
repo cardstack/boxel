@@ -138,7 +138,7 @@ module('Integration | card-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -568,7 +568,7 @@ module('Integration | card-delete', function (hooks) {
   test('can delete a card that is a selected item', async function (assert) {
     setCardInOperatorModeState(
       [`${testRealmURL}index`],
-      [`https://localhost:4202/test/`],
+      [`${testModuleRealm}index`],
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {

@@ -24,6 +24,7 @@ export interface Config {
   loggedInAs?: string;
   displayName?: string;
   activeRealms?: string[];
+  activeRealmServers?: string[];
   realmPermissions?: Record<string, string[]>;
   expiresInSec?: number;
   autostart?: boolean;
@@ -31,7 +32,13 @@ export interface Config {
   directRooms?: string[];
   systemCardAccountData?: { id?: string };
   uploadContentInterceptor?: () => Promise<void>;
+  sendEventInterceptor?: () => Promise<void>;
   workspaceFavorites?: string[];
+  loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
+  ssoLoginUrl?: string;
+  loginWithTokenInterceptor?: (
+    token: string,
+  ) => Promise<import('matrix-js-sdk').LoginResponse>;
 }
 
 export function setupMockMatrix(

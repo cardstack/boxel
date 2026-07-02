@@ -39,6 +39,7 @@ export {
   parseJsonFile,
   validateCardDocumentStructure,
 } from '../parse-execution.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 export type { SpecExampleInfo } from '../parse-execution.ts';
 export type { ParseErrorData };
 
@@ -49,6 +50,8 @@ export type { ParseErrorData };
 export interface ParseValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   parseResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Source files are
@@ -224,6 +227,7 @@ export class ParseValidationStep implements ValidationStepRunner {
         workspaceDir: this.config.workspaceDir,
         readFileFn: this.config.readFileFn,
         runGlintCheckFn: this.config.runGlintCheckFn,
+        cache: this.config.cache,
       },
       gtsFiles,
       jsonExampleUrls,

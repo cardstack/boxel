@@ -1,52 +1,10 @@
 'use strict';
 
-// Selectors for TypeScript syntax that Node cannot run via
-// `--experimental-strip-types`, which only handles "erasable" TS —
-// syntax that vanishes once type annotations are stripped. New code
-// must avoid these so it can run under Node natively, without ts-node.
-const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
-  {
-    selector: 'TSEnumDeclaration',
-    message:
-      'TypeScript `enum` is not erasable and requires compilation. Use a `const` object with `as const` (or a union of string literals) instead.',
-  },
-  {
-    selector: 'TSImportEqualsDeclaration',
-    message:
-      '`import =` syntax requires TypeScript compilation. Use standard ES module `import` instead.',
-  },
-  {
-    selector: 'TSExportAssignment',
-    message:
-      '`export =` syntax requires TypeScript compilation. Use a standard ES module `export default` (or named exports) instead.',
-  },
-  {
-    selector: 'Decorator',
-    message:
-      "Decorators are not erasable and require compilation, so they break under Node's native `--experimental-strip-types`. Avoid decorators here (e.g. replace `@Memoize()` with a manual cache).",
-  },
-  {
-    // Non-ambient `namespace`/`module` blocks emit runtime code. Ambient
-    // declarations (`declare module`, `declare global`, `declare namespace`)
-    // are type-only and erasable, so they are exempt via `:not([declare=true])`.
-    selector: 'TSModuleDeclaration:not([declare=true])',
-    message:
-      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable. Use standard ES modules instead.',
-  },
-];
-
-const DATA_TEST_SELECTORS = [
-  {
-    selector: 'Literal[value=/\\[data-test-/]',
-    message:
-      '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/\\[data-test-/]',
-    message:
-      '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-  },
-];
+const {
+  NO_COMPILATION_REQUIRED_TS_SELECTORS,
+  CJS_GLOBALS_IN_ESM,
+} = require('./eslint/erasable-syntax-selectors.cjs');
+const { DATA_TEST_SELECTORS } = require('./eslint/data-test-selectors.cjs');
 
 module.exports = {
   root: true,
@@ -84,8 +42,8 @@ module.exports = {
       'error',
       { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
     ],
-    // Keep new code "erasable" so it can run under Node's
-    // `--experimental-strip-types` without ts-node.
+    // Keep new code "erasable" so Node can run it via
+    // `--experimental-strip-types` (type-only syntax that vanishes when stripped).
     '@typescript-eslint/parameter-properties': [
       'error',
       { prefer: 'class-property' },
@@ -93,6 +51,20 @@ module.exports = {
     'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
   },
   overrides: [
+    {
+      // Scoped to the root file only (`./`), so it does not cascade to
+      // package-level configs.
+      files: ['./.eslintrc.js'],
+      parserOptions: {
+        sourceType: 'script',
+      },
+      env: {
+        node: true,
+      },
+      rules: {
+        '@typescript-eslint/no-var-requires': 'off',
+      },
+    },
     {
       // Disallow data-test-* CSS selectors in app code across all packages.
       // ember-test-selectors strips these attributes in production, so selectors
@@ -104,6 +76,18 @@ module.exports = {
           ...NO_COMPILATION_REQUIRED_TS_SELECTORS,
           ...DATA_TEST_SELECTORS,
         ],
+      },
+    },
+    {
+      // Ban the CommonJS-only `__dirname`/`__filename` globals in TS source under
+      // `src/` and `scripts/` — the surface that runs or gets imported as native
+      // ESM, where they are `undefined`. Bundle-only modules opt out per-line.
+      // Packages with their own `root: true` ESLint config don't inherit this and
+      // must re-declare it; among the native-ESM (`type: module`) packages only
+      // `ai-bot` is `root: true`, and it does (see its `.eslintrc.cjs`).
+      files: ['**/src/**/*.{ts,mts}', '**/scripts/**/*.{ts,mts}'],
+      rules: {
+        'no-restricted-globals': ['error', ...CJS_GLOBALS_IN_ESM],
       },
     },
   ],

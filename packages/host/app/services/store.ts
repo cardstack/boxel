@@ -7,15 +7,15 @@ import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
-
 import { isTesting } from '@embroider/macros';
+import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
-import cloneDeep from 'lodash/cloneDeep';
-import isEqual from 'lodash/isEqual';
-import merge from 'lodash/merge';
+import { cloneDeep } from 'lodash-es';
+import { isEqual } from 'lodash-es';
+import { merge, mergeWith } from 'lodash-es';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -29,8 +29,10 @@ import {
   isFileMetaResource,
   isSingleCardDocument,
   isSingleFileMetaDocument,
-  isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
+  isSparseItemResource,
   resolveFileDefCodeRef,
+  searchEntryWireQueryFromQuery,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
   Deferred,
@@ -43,14 +45,16 @@ import {
   rri,
   logger,
   formattedError,
+  stringifyErrorForLog,
   isJsonContentType,
   SupportedMimeType,
   RealmPaths,
+  type CardAPIForMatching,
+  clearReplacedArrayFieldMeta,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
   type Query,
-  type DataQuery,
   type QueryResultsMeta,
   type RuntimeDependencyTrackingContext,
   type PatchData,
@@ -71,7 +75,8 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
-  type LinkableCollectionDocument,
+  type SearchEntryResults,
+  type SearchEntryWireQuery,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -96,10 +101,6 @@ import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
-import {
-  getSearchData,
-  type SearchDataResource,
-} from '../resources/search-data';
 
 import { FileDefAttributesExtractor } from '../utils/file-def-attributes-extractor';
 import {
@@ -139,7 +140,7 @@ const storeLogger = logger('store');
 //    `__boxelJobId` on each visit — a priority of 0 is meaningful
 //    (the originating job is system-initiated background indexing)
 //    and must be preserved, not upgraded. Sub-`prerenderModule`
-//    calls fired by `_federated-search` for a `lookupDefinition`
+//    calls fired by the federated search for a `lookupDefinition`
 //    cache miss inherit this priority so they don't outrun the
 //    parent. If `__boxelJobPriority` is missing here (older
 //    render-runner build, test fixture, etc.) treat as 0 — the
@@ -224,9 +225,17 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
+  private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
+  // Bumped whenever a hydrated card instance's fields change (edit / save).
+  // Adds and deletes are already observable through the tracked identity map
+  // (see `allCardInstances`); this signal covers the in-place mutations that
+  // leave the map's membership unchanged, so a reactive consumer like the
+  // client-side search filter recomputes on edits too — not only on the
+  // server search re-running.
+  @tracked private _instanceMutationVersion = 0;
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
@@ -239,13 +248,11 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
-  // calls during a prerender. Mirrors
-  // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
-  // `__boxelRenderContext` so live user searches stay uncoalesced —
-  // write-then-read freshness story unchanged outside prerender.
-  // Entries self-clear on `.finally()` via identity check.
-  private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
-    new Map();
+  // calls during a prerender. Gated on `__boxelRenderContext` so live
+  // user searches stay uncoalesced — write-then-read freshness story
+  // unchanged outside prerender. Entries self-clear on `.finally()` via
+  // identity check.
+  private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
   // Resolved-doc cache for same-realm `_federated-search` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
@@ -267,7 +274,7 @@ export default class StoreService extends Service implements StoreInterface {
   // `job-scoped-search-cache.ts` for the server-side prior art on
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
-  private searchCache: Map<string, LinkableCollectionDocument> = new Map();
+  private searchCache: Map<string, SearchEntryResults> = new Map();
   // The jobId the `searchCache` entries belong to. When a request
   // arrives carrying a different `__boxelJobId` we drop the cache
   // before serving — belt-and-braces beside `resetState()` and the
@@ -323,6 +330,7 @@ export default class StoreService extends Service implements StoreInterface {
   resetState() {
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
+    this.cardInvalidationSubscribers = new Map();
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
@@ -396,6 +404,65 @@ export default class StoreService extends Service implements StoreInterface {
     this.reestablishReferences.perform();
   }
 
+  // Notify-on-delete for callers that hold a card by direct JS reference rather
+  // than by linksTo. `consumersOf` only walks linksTo refs, so a direct holder
+  // (e.g. MatrixService's `_systemCard`) would otherwise stay pinned to a
+  // now-evicted instance until the next reload. Subscribers fire from both
+  // delete paths — `delete()` (in-tab UI) and the `reloadTask` 404 branch
+  // (matrix-auth-room invalidation for cross-tab / cross-machine deletes).
+  subscribeToCardInvalidation(id: string, cb: () => void): () => void {
+    let normalizedId = asURL(id, this.network.virtualNetwork);
+    let subscribers = this.cardInvalidationSubscribers.get(normalizedId);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.cardInvalidationSubscribers.set(normalizedId, subscribers);
+    }
+    subscribers.add(cb);
+    return () => {
+      let current = this.cardInvalidationSubscribers.get(normalizedId);
+      if (!current) {
+        return;
+      }
+      current.delete(cb);
+      if (current.size === 0) {
+        this.cardInvalidationSubscribers.delete(normalizedId);
+      }
+    };
+  }
+
+  private notifyCardInvalidationSubscribers(id: string) {
+    let normalizedId = asURL(id, this.network.virtualNetwork);
+    let subscribers = this.cardInvalidationSubscribers.get(normalizedId);
+    if (!subscribers) {
+      return;
+    }
+    // Snapshot to tolerate unsubscribe-from-callback without skipping siblings.
+    // Subscribers may be async — catch rejections that escape the synchronous
+    // try/catch so a failure in one handler does not become an unhandled
+    // promise rejection or starve sibling handlers.
+    for (let cb of [...subscribers]) {
+      try {
+        let maybePromise = cb() as unknown;
+        if (
+          maybePromise &&
+          typeof (maybePromise as PromiseLike<unknown>).then === 'function'
+        ) {
+          (maybePromise as Promise<unknown>).catch((err) =>
+            console.error(
+              `card invalidation subscriber for ${normalizedId} rejected`,
+              err,
+            ),
+          );
+        }
+      } catch (err) {
+        console.error(
+          `card invalidation subscriber for ${normalizedId} threw`,
+          err,
+        );
+      }
+    }
+  }
+
   dropReference(id: string | undefined) {
     if (!id) {
       return;
@@ -435,7 +502,7 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    if (isLocalId(id, this.network.virtualNetwork)) {
+    if (isLocalId(id)) {
       let instanceOrError = this.peek(id);
       if (instanceOrError) {
         let realmURL = isCardInstance(instanceOrError)
@@ -695,6 +762,45 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.getCardInstanceOrError<T & CardDef>(id);
   }
 
+  // All hydrated (non-error) card instances currently in the Store. The result
+  // is the candidate set for the client-side search filter; reading it inside
+  // an autotracked computation re-runs when an instance is added or removed.
+  allCardInstances(): CardDef[] {
+    return this.store.allCardInstances();
+  }
+
+  // The file-meta counterpart of `allCardInstances`, so a file-meta search
+  // gets the same client-side candidate set as a card search.
+  allFileMetaInstances(): FileDef[] {
+    return this.store.allFileMetaInstances();
+  }
+
+  // Tracked counter bumped on every in-place field edit/save of a hydrated
+  // card. Reading it inside an autotracked computation makes that computation
+  // recompute when any Store card mutates — used by the client-side search
+  // filter to re-derive its result set without a server round-trip. Adds and
+  // removes are already covered by the tracked identity map behind
+  // `allCardInstances`.
+  get instanceMutationVersion(): number {
+    return this._instanceMutationVersion;
+  }
+
+  // The slice of the card-api module the client-side filter matcher and sort
+  // comparator need (see runtime-common's instance-filter-matcher). Loaded
+  // through the same loader-scoped cache the rest of the Store uses.
+  async getMatchAPI(): Promise<CardAPIForMatching> {
+    let api = await this.cardService.getAPI();
+    return {
+      getQueryableValue: api.getQueryableValue,
+      formatQueryValue: api.formatQueryValue,
+      peekAtField: api.peekAtField,
+      isNonPresentLink: api.isNonPresentLink,
+      getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
+      primitive: api.primitive,
+      virtualNetwork: this.network.virtualNetwork,
+    };
+  }
+
   // peekError will always return the current server state regarding errors for this id
   peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
   peekError(
@@ -777,9 +883,7 @@ export default class StoreService extends Service implements StoreInterface {
     fileDef: FileDef,
   ): Promise<SingleFileMetaDocument> {
     let api = await this.cardService.getAPI();
-    return api.serializeFileDef(fileDef, {
-      virtualNetwork: this.network.virtualNetwork,
-    }) as SingleFileMetaDocument;
+    return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
   async delete(id: string): Promise<void> {
@@ -809,6 +913,11 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     await this.cardService.fetchJSON(id, { method: 'DELETE' });
+    // Notify direct-reference holders (e.g. MatrixService's `_systemCard`)
+    // only AFTER the server DELETE completes — these subscribers typically
+    // re-evaluate by calling `store.get(id)`, which is cache-first and would
+    // otherwise refetch the still-extant file and miss the deletion.
+    this.notifyCardInvalidationSubscribers(id);
   }
 
   async patch<T extends CardDef = CardDef>(
@@ -860,7 +969,12 @@ export default class StoreService extends Service implements StoreInterface {
       omitQueryFields: true,
     });
     if (patch.attributes) {
-      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
+      doc.data.attributes = mergeWith(
+        doc.data.attributes,
+        patch.attributes,
+        (_dest, src) => (Array.isArray(src) ? src : undefined),
+      );
+      clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(
@@ -911,21 +1025,12 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(
-    query: DataQuery,
-    realms?: string[],
-  ): Promise<(CardResource<Saved> | FileMetaResource)[]>;
-  async search(
-    query: DataQuery,
-    realms: string[] | undefined,
-    opts: {
-      includeMeta: true;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<{
-    resources: (CardResource<Saved> | FileMetaResource)[];
-    meta: QueryResultsMeta;
-  }>;
+  // Instances only: the query runs against the search requesting full
+  // `item` serializations, the results hydrate into the store, and the caller
+  // gets instances back. For the raw search-entry wire format (HTML
+  // renderings, field-limited serializations, the document itself) use
+  // `searchEntries` — that surface lives on this service only, never on the
+  // `Store` interface cards receive.
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
@@ -945,35 +1050,17 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta?: boolean;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
     },
-  ): Promise<
-    | T[]
-    | (CardResource<Saved> | FileMetaResource)[]
-    | { instances: T[]; meta: QueryResultsMeta }
-    | {
-        resources: (CardResource<Saved> | FileMetaResource)[];
-        meta: QueryResultsMeta;
-      }
-  > {
-    let normalizedRealms = (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
-      .filter(Boolean);
-    let searchRealms =
-      normalizedRealms.length > 0
-        ? normalizedRealms
-        : this.realmServer.availableRealmIdentifiers;
+  ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
+    if ('asData' in query && query.asData) {
+      throw new Error(
+        `store.search returns instances only — use store.searchEntries for the raw search-entry wire format`,
+      );
+    }
+    let searchRealms = this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
-      if (query.asData) {
-        return opts?.includeMeta
-          ? { resources: [], meta: { page: { total: 0 } } }
-          : [];
-      }
       return opts?.includeMeta
         ? { instances: [], meta: { page: { total: 0 } } }
         : [];
-    }
-    if (query.asData) {
-      let result = await this.fetchSearchData(query, searchRealms);
-      return opts?.includeMeta ? result : result.resources;
     }
     let result = await this.fetchAndHydrateSearchResults<T>(
       query,
@@ -981,6 +1068,50 @@ export default class StoreService extends Service implements StoreInterface {
       opts?.dependencyTrackingContext,
     );
     return opts?.includeMeta ? result : result.instances;
+  }
+
+  // The raw wire format: heterogeneous `search-entry` resources with the
+  // `html` / `item` branches the query's `fields[search-entry]` selects.
+  // Nothing is hydrated into the store.
+  async searchEntries(
+    query: SearchEntryWireQuery,
+    realms?: string[],
+  ): Promise<SearchEntryResults> {
+    let searchRealms = this.normalizeSearchRealms(realms);
+    if (searchRealms.length === 0) {
+      return { data: [], meta: { page: { total: 0 } } };
+    }
+    return await this.fetchSearchEntryDoc(query, searchRealms);
+  }
+
+  // Selective inflate for a `<SearchResults>` consumer of `searchEntries`:
+  // deposit one full `item` serialization into the store so a by-URL read (or
+  // the hydration GET) resolves it without a round-trip. A sparse `item` (one
+  // carrying `meta.sparseFields`) is never deposited — it would misrepresent
+  // the instance and could clobber a correctly-loaded full one — so the call
+  // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
+  // which stands in for a card that failed to render and is not a real
+  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // depositing is skipped when the instance is already resident.
+  async inflateSearchEntryItem(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<void> {
+    // Read `meta.error` before the guard: `isSparseItemResource`'s negative
+    // narrowing would otherwise reduce `resource` to `never` in the second
+    // operand.
+    if (resource.meta.error != null || isSparseItemResource(resource)) {
+      return;
+    }
+    await this.addResourceFromSearchData(resource);
+  }
+
+  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+    let normalizedRealms = (realms ?? [])
+      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .filter(Boolean);
+    return normalizedRealms.length > 0
+      ? normalizedRealms
+      : this.realmServer.availableRealmIdentifiers;
   }
 
   private async fetchAndHydrateSearchResults<
@@ -992,10 +1123,13 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms);
 
-    // Hydrate each result into the store
+    // Hydrate each result into the store. The data-only search-entry doc
+    // carries one full `item` (`card`/`file-meta`) serialization per entry in
+    // `included`, reached through the entry's `item` relationship.
+    let items = this.itemResourcesFromSearchEntries(collectionDoc);
     let instances = (
       await Promise.all(
-        collectionDoc.data.map(async (resource) => {
+        items.map(async (resource) => {
           try {
             return await this.addResourceFromSearchData<T>(
               resource,
@@ -1015,21 +1149,11 @@ export default class StoreService extends Service implements StoreInterface {
     return { instances, meta: collectionDoc.meta };
   }
 
-  private async fetchSearchData(
-    query: Query,
-    realms: string[],
-  ): Promise<{
-    resources: (CardResource<Saved> | FileMetaResource)[];
-    meta: QueryResultsMeta;
-  }> {
-    let doc = await this.fetchSearchDoc(query, realms);
-    return { resources: doc.data, meta: doc.meta };
-  }
-
-  // Shared HTTP+JSON path for both `fetchSearchData` (raw resources for
-  // data-only callers) and `fetchAndHydrateSearchResults` (instances
-  // hydrated into the store). Sits between `store.search` and
-  // `_federated-search`.
+  // The instances path's resolved-document layer: the `Query` runs against
+  // the search requesting full `item` serializations, and the resulting
+  // search-entry document (one `item` per entry in `included`) is what the
+  // hydration pipeline and the caches below consume.
+  // Sits between `store.search` and `_federated-search`.
   //
   // Two layers of dedup, both prerender-gated:
   //
@@ -1048,7 +1172,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
     let jobId = inPrerender
       ? ((globalThis as any).__boxelJobId as string | undefined)
@@ -1093,7 +1217,7 @@ export default class StoreService extends Service implements StoreInterface {
     let inflightKey = inPrerender
       ? searchInFlightKey(realms, query)
       : undefined;
-    let doc: LinkableCollectionDocument;
+    let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
       let existing = this.inflightSearch.get(inflightKey);
       if (existing) {
@@ -1105,8 +1229,7 @@ export default class StoreService extends Service implements StoreInterface {
             // `clearInFlightSearch()` could in principle have removed
             // (and a later caller re-set) this slot while we were
             // in-flight. Only clean up if the map still points at *this*
-            // pending promise. Mirrors
-            // `RealmIndexQueryEngine.searchCards` server-side.
+            // pending promise.
             if (this.inflightSearch.get(inflightKey) === pending) {
               this.inflightSearch.delete(inflightKey);
             }
@@ -1137,7 +1260,43 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDocUncoalesced(
     query: Query,
     realms: string[],
-  ): Promise<LinkableCollectionDocument> {
+  ): Promise<SearchEntryResults> {
+    return await this.fetchSearchEntryDoc(
+      searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
+      realms,
+    );
+  }
+
+  // Extract the per-entry `item` (`card`/`file-meta`) serializations from a
+  // data-only search-entry document, in entry order: each entry's `item`
+  // relationship names a `(type, id)` resolved against `included`.
+  private itemResourcesFromSearchEntries(
+    doc: SearchEntryResults,
+  ): (CardResource<Saved> | FileMetaResource)[] {
+    let byKey = new Map<string, CardResource<Saved> | FileMetaResource>();
+    for (let included of doc.included ?? []) {
+      if (included.type === 'card' || included.type === 'file-meta') {
+        byKey.set(`${included.type}:${included.id}`, included);
+      }
+    }
+    let items: (CardResource<Saved> | FileMetaResource)[] = [];
+    for (let entry of doc.data) {
+      let ref = entry.relationships.item?.data;
+      if (!ref) {
+        continue;
+      }
+      let item = byKey.get(`${ref.type}:${ref.id}`);
+      if (item) {
+        items.push(item);
+      }
+    }
+    return items;
+  }
+
+  private async fetchSearchEntryDoc(
+    query: SearchEntryWireQuery,
+    realms: string[],
+  ): Promise<SearchEntryResults> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -1171,9 +1330,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isLinkableCollectionDocument(json)) {
+    if (!isSearchEntryCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a valid collection document:
+        `The realm search response was not a valid search-entry collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
@@ -1210,24 +1369,6 @@ export default class StoreService extends Service implements StoreInterface {
       ...opts,
       storeService: this,
     }) as unknown as SearchResource<T>;
-  }
-
-  getSearchDataResource(
-    parent: object,
-    getQuery: () => DataQuery | undefined,
-    getRealms?: () => string[] | undefined,
-    opts?: { isLive?: boolean },
-  ): SearchDataResource {
-    if (this.isRenderStore && opts) {
-      opts.isLive = false;
-    }
-    return getSearchData(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      opts,
-    ) as unknown as SearchDataResource;
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
@@ -1419,7 +1560,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // if there are no more subscribers to this realm then unsubscribe from realm
-    let realmHref = !isLocalId(id, this.network.virtualNetwork)
+    let realmHref = !isLocalId(id)
       ? [...this.subscriptions.keys()].find((realmURL) =>
           id.startsWith(realmURL),
         )
@@ -1433,7 +1574,7 @@ export default class StoreService extends Service implements StoreInterface {
       subscription &&
       ![...this.referenceCount.entries()].find(
         ([referenceId, count]) =>
-          !isLocalId(referenceId, this.network.virtualNetwork) &&
+          !isLocalId(referenceId) &&
           count > 0 &&
           referenceId.startsWith(realmHref),
       )
@@ -1569,6 +1710,27 @@ export default class StoreService extends Service implements StoreInterface {
         );
       }
     }
+
+    // A realm's name/icon is injected into every card's `meta.realmInfo` at
+    // request time, but changing it (by editing the RealmConfig card at
+    // realm.json) only invalidates the config card itself — not the cards that
+    // display it. The realm index card (CardsGrid) renders the realm name as
+    // its title, so reload it when the config card is re-indexed to refresh
+    // that title without a browser reload. Scoped to the config card so we
+    // don't reload on every unrelated card edit. Instance invalidations carry
+    // the card id without `.json`, so the RealmConfig card at
+    // `<realm>/realm.json` appears here as `<realm>/realm`.
+    let realmConfigCardId = `${event.realmURL}realm`;
+    if (invalidations.includes(realmConfigCardId)) {
+      let indexCardId = `${event.realmURL}index`;
+      let indexCard = this.peek(indexCardId);
+      if (indexCard && isCardInstance(indexCard)) {
+        realmEventsLogger.debug(
+          `reloading index card ${indexCardId} because the realm config card was re-indexed`,
+        );
+        this.reloadTask.perform(indexCard);
+      }
+    }
   };
 
   private loadInstanceTask = task(
@@ -1598,7 +1760,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (referenceCount === 0) {
         continue;
       }
-      if (isLocalId(id, this.network.virtualNetwork)) {
+      if (isLocalId(id)) {
         let remoteIdsForLocal = this.store.getRemoteIds(id);
         if (remoteIdsForLocal.length === 0) {
           let error = this.store.getCardError(id);
@@ -1660,6 +1822,10 @@ export default class StoreService extends Service implements StoreInterface {
         for (let consumer of consumers) {
           api.notifyLinksToTargetDeleted(consumer, instance.id);
         }
+        // Notify direct-reference holders after the local eviction so their
+        // re-evaluation does not return the cached pre-delete instance.
+        // (The server is already gone — we got here from a 404 reload.)
+        this.notifyCardInvalidationSubscribers(instance.id);
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);
@@ -1685,6 +1851,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     if (isCardInstance(instance)) {
+      this._instanceMutationVersion++;
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
       this.doAutoSave(instance);
@@ -1745,31 +1912,6 @@ export default class StoreService extends Service implements StoreInterface {
       throw new Error('resource must have an id');
     }
 
-    // An identity-only result (HTML-backed) carries no live attributes — they
-    // are withheld on the wire and fetched on demand at hydration. Never
-    // deposit it: an attribute-less stub would misrepresent the instance. But
-    // if the instance is already fully loaded, return that resident instance —
-    // it stays represented in the results and a hydrated row keeps its live
-    // presentation rather than being dropped (and is still never clobbered). A
-    // not-yet-loaded identity-only row is skipped and renders from its HTML.
-    //
-    // The resident lookup is type-aware: a file row peeks (and type-checks) as
-    // a `FileDef`, a card row as a `CardDef`. Without this, an already-loaded
-    // file whose row comes back identity-only would peek against the card type,
-    // fail `isCardInstance`, and drop to HTML — losing its live presentation.
-    if (resource.meta?.identityOnly === true) {
-      if (isFileMetaResource(resource)) {
-        let existingInstance = this.peek(resource.id, { type: 'file-meta' });
-        return existingInstance && isFileDefInstance(existingInstance)
-          ? (existingInstance as T)
-          : undefined;
-      }
-      let existingInstance = this.peek(resource.id);
-      return existingInstance && isCardInstance(existingInstance)
-        ? (existingInstance as T)
-        : undefined;
-    }
-
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
       let existingInstance = this.peek(resource.id, { type: 'file-meta' });
@@ -1802,6 +1944,14 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
     if (!isCardInstance(instanceOrError)) {
+      return;
+    }
+    if (this.renderContextBlocksPersistence()) {
+      // Persistence is blocked in this context, so the change subscription that
+      // drives autosave can never produce a save. Skipping it avoids the
+      // per-instance subscribe/unsubscribe churn — and the `getFields`
+      // dependency-graph walk each one triggers — for every instance a render
+      // loads.
       return;
     }
     let instance = instanceOrError;
@@ -1885,7 +2035,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -2019,11 +2169,11 @@ export default class StoreService extends Service implements StoreInterface {
         status === 404 &&
         isSystemCardDefault
       );
-      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${stringifyErrorForLog(error)}`;
       if (shouldLogAsError) {
-        storeLogger.error(message, error);
+        storeLogger.error(message);
       } else {
-        storeLogger.debug(message, error);
+        storeLogger.debug(message);
       }
       return cardError;
     } finally {
@@ -2064,7 +2214,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T | CardErrorJSONAPI;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
       let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
@@ -2222,10 +2372,7 @@ export default class StoreService extends Service implements StoreInterface {
         } finally {
           autoSaveState.isSaving = false;
           this.calculateLastSavedMsg(autoSaveState);
-          if (
-            isLocalId(queueName, this.network.virtualNetwork) &&
-            instance.id
-          ) {
+          if (isLocalId(queueName) && instance.id) {
             this.autoSaveStates.set(instance.id, autoSaveState);
           }
         }
@@ -2417,11 +2564,7 @@ export default class StoreService extends Service implements StoreInterface {
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
         let remoteId = cardError.meta?.remoteId;
-        if (
-          remoteId &&
-          (!cardError.id ||
-            isLocalId(cardError.id, this.network.virtualNetwork))
-        ) {
+        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
           this.store.addCardInstanceOrError(remoteId, cardError);
         }
         return cardError;
@@ -2568,22 +2711,38 @@ function processCardError(
   url: string | undefined,
   error: any,
 ): CardErrorsJSONAPI {
+  let httpStatus = typeof error?.status === 'number' ? error.status : undefined;
+  let errorResponse: CardErrorsJSONAPI;
   try {
-    let errorResponse = JSON.parse(error.responseText);
-    return formattedError(url, error, errorResponse.errors?.[0]);
+    let parsed = JSON.parse(error.responseText);
+    errorResponse = formattedError(url, error, parsed.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return formattedError(url, error, {
+        errorResponse = formattedError(url, error, {
           status: 404,
           title: 'Card Not Found',
           message: `The card ${url} does not exist`,
         });
+        break;
       default:
-        return formattedError(url, error, undefined);
+        errorResponse = formattedError(url, error, undefined);
     }
   }
+  // The realm server responds with an HTTP 404 only when the card document
+  // itself is missing. A card that exists but can't be served — e.g. because a
+  // module it imports is missing — comes back as a 5xx whose JSON:API body
+  // still carries the dependency's propagated 404. Trust the HTTP status as
+  // the authoritative not-found signal so a broken dependency surfaces as the
+  // error it is rather than masquerading as a missing card.
+  if (httpStatus != null && httpStatus !== 404) {
+    let cardError = errorResponse.errors[0];
+    if (cardError?.status === 404) {
+      cardError.status = httpStatus;
+    }
+  }
+  return errorResponse;
 }
 
 function needsServerStateMerge(
@@ -2629,8 +2788,12 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN.
-  return isLocalId(id, vn) ? id : vn.toURL(id).href;
+  // Locals stay as-is; remotes resolve through the VN to a normalized URL.
+  // Keying stays in URL form so it matches gc-card-store, which keys instances
+  // by their (URL-form) data.id. Flipping the store's canonical key to RRI is
+  // deferred — it needs gc-card-store keyed the same way and the URL
+  // normalization `toURL` provides here (see CS-11730).
+  return isLocalId(id) ? id : vn.toURL(id).href;
 }
 
 function isSystemCardDefaultId(

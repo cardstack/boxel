@@ -22,6 +22,7 @@ import { createLintResult, completeLintResult } from '../lint-result-cards.ts';
 import { logger } from '../logger.ts';
 
 import type { ValidationStepRunner } from './validation-pipeline.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 let log = logger('lint-validation-step');
 
@@ -32,6 +33,8 @@ let log = logger('lint-validation-step');
 export interface LintValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   lintResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. Source files are
@@ -200,6 +203,7 @@ export class LintValidationStep implements ValidationStepRunner {
         workspaceDir: this.config.workspaceDir,
         lintFileFn: this.config.lintFileFn,
         readFileFn: this.config.readFileFn,
+        cache: this.config.cache,
       },
       lintableFiles,
     );

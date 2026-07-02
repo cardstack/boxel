@@ -127,8 +127,8 @@ export class Person extends CardDef {
   @field isCool = contains(BooleanField);
   @field isHuman = contains(BooleanField);
   @field address = contains(AddressField);
-  @field pet = linksTo(Pet);
-  @field trips = contains(Trips);
+  @field pet = linksTo(Pet, { searchable: true });
+  @field trips = contains(Trips, { searchable: 'countriesVisited' });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');

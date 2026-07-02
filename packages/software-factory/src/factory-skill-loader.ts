@@ -14,7 +14,7 @@ const log = logger('factory-skill-loader');
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 /**
  * The SDK orchestrator and the new interactive Claude Code path each get
@@ -82,15 +82,6 @@ const GTS_KEYWORDS = [
   'ember',
   'CardDef',
   'FieldDef',
-];
-
-/** Keywords that indicate factory workflow / delivery issues. */
-const FACTORY_WORKFLOW_KEYWORDS = [
-  'factory',
-  'delivery',
-  'workflow',
-  'pipeline',
-  'orchestrat',
 ];
 
 /**
@@ -211,9 +202,13 @@ export class DefaultSkillResolver implements SkillResolver {
       skills.push('ember-best-practices');
     }
 
-    if (matchesAnyKeyword(issueText, FACTORY_WORKFLOW_KEYWORDS)) {
-      skills.push('software-factory-operations');
-    }
+    // Every non-bootstrap issue is a factory delivery issue (write/edit
+    // cards, run the validators, record progress), so always load the
+    // operations skill. It used to be gated on keywords in the issue text,
+    // which silently dropped the edit-in-place / guard-the-baseline guidance
+    // for sparse, human-authored issues (e.g. a one-line "Modernize the
+    // look" adjustment added via the board UI).
+    skills.push('software-factory-operations');
 
     // Check for additional skills from knowledge articles on the project
     // and from related knowledge on the issue itself.

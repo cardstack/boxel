@@ -4,13 +4,12 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
-  Saved,
 } from './resource-types.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { SerializedError } from './error.ts';
+import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -58,6 +57,52 @@ export interface BrokenLinkSummary {
   kind: 'error' | 'not-found';
 }
 
+// A `searchable` annotation path that didn't resolve against the definition
+// graph when the module's definitions were built. Recorded on the module
+// render's `meta.diagnostics` and persisted to `modules.diagnostics` so a typo
+// / removed field / un-routable segment is visible to authors instead of
+// silently making nothing searchable. Definition build is decoupled in time
+// from the edit, so these are logged, never thrown; the path is simply not
+// followed. Omitted entirely when every annotation in the module resolves.
+export interface SearchablePathDiagnostic {
+  // The card/field def whose field carried the annotation, as the
+  // `internalKeyFor` CodeRef string (a module exports several defs, so the
+  // owning def is named to pinpoint the source).
+  codeRef: string;
+  // The immediate field holding the `searchable` annotation.
+  fieldName: string;
+  // The dotted `searchable` path that failed to resolve.
+  path: string;
+}
+
+// A failure to parse a markdown file's leading YAML frontmatter block,
+// recorded as a finding on the (still successful) index entry. The file
+// indexes fine — `extractAttributes` falls back to treating the whole file
+// as body when the frontmatter won't parse — so without this the failure is
+// invisible and any frontmatter-declared behavior (e.g. a skill's `commands`)
+// silently disappears. Surfaced on `diagnostics.frontmatterParseError` so the
+// `/_indexing-errors` surface can flag it the way it flags `brokenLinks`,
+// letting authors see and fix the YAML rather than wonder where their
+// commands went.
+export interface FrontmatterParseError {
+  // The YAML parser's error message.
+  message: string;
+  // 1-based line within the frontmatter block where the parse failed, when
+  // the parser reports a position. Omitted otherwise.
+  line?: number;
+  // 1-based column within that line, when reported.
+  column?: number;
+}
+
+// Global symbol channel used by file-def `extractAttributes` implementations
+// to route a `FrontmatterParseError` back to the host file extractor without
+// it leaking into the flat `search_doc`. Producer and consumer must agree on
+// the exact string key — exported here so callers share one source of truth
+// and a typo can't silently break the handoff.
+export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-parse-error',
+);
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -84,6 +129,11 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Unresolvable `searchable` annotation paths found while building the
+  // module's definitions, persisted to `modules.diagnostics`. Populated by the
+  // module-prerender route's definition-build validation, not a card render.
+  // Omitted entirely when every annotation in the module resolves.
+  searchablePathIssues?: SearchablePathDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -125,13 +175,9 @@ export interface RenderResponse extends PrerenderMeta {
   error?: RenderError;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
-  error: SerializedError;
-  types?: string[];
-  searchData?: Record<string, any>;
-  cardType?: string;
-}
+// `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
+// re-exported here so barrel consumers reach it unchanged.
+export type { ErrorEntry } from './error.ts';
 
 // CS-10872: attached to timeout-class RenderErrors so the persisted
 // error document tells operators *where* the time went. All fields
@@ -341,6 +387,11 @@ export interface FileExtractResponse {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // Set when the file's leading YAML frontmatter block was present but
+  // wouldn't parse. The extract still succeeds (`status: 'ready'`, body-only);
+  // the file indexer merges this onto `diagnostics.frontmatterParseError` so
+  // the failure surfaces via `/_indexing-errors` instead of vanishing.
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 export interface FileRenderResponse {
@@ -437,6 +488,12 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Frontmatter YAML that wouldn't parse during file extraction. The row
+  // still indexes (body-only); this is the only indexed signal that the
+  // file's frontmatter — and anything it declared — was dropped. Merged in
+  // by the file indexer from the extract response. Absent when the
+  // frontmatter parsed (or there was none).
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
@@ -642,6 +699,7 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  stringifyErrorForLog,
   sanitizeForJsonb,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
@@ -682,22 +740,21 @@ export interface RealmCards {
   cards: CardDef[];
 }
 
-export interface RealmPrerenderedCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  prerenderedCards: PrerenderedCard[];
-}
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
-import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query.ts';
+import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './paths.ts';
+export * from './realm-client.ts';
+export * from './realm-operations.ts';
+export * from './published-realm-url.ts';
 export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
@@ -712,6 +769,7 @@ export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
 export * from './expression.ts';
+export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
@@ -734,7 +792,8 @@ export * from './prerender-headers.ts';
 export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
-export * from './unified-search.ts';
+export * from './search-resource-helpers.ts';
+export * from './search-entry.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -785,6 +844,7 @@ export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response.ts';
 
 export * from './db-queries/db-types.ts';
+export * from './db-queries/realm-metadata-queries.ts';
 export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/user-queries.ts';
@@ -822,9 +882,9 @@ export type {
   SingleFileMetaDocument,
   CardCollectionDocument,
   FileMetaCollectionDocument,
-  LinkableCollectionDocument,
-  UnifiedSearchCollectionDocument,
-  UnifiedSearchIncludedResource,
+  SearchEntryCollectionDocument,
+  SearchEntryIncludedResource,
+  SearchEntryResults,
 } from './document-types.ts';
 export type {
   CardResource,
@@ -844,7 +904,7 @@ export {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
-  isLinkableCollectionDocument,
+  isSearchEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -866,10 +926,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmInfo } from './realm.ts';
-import type {
-  PrerenderedCard,
-  QueryResultsMeta,
-} from './index-query-engine.ts';
+import type { QueryResultsMeta } from './index-query-engine.ts';
 
 export interface MatrixCardError {
   id?: string;
@@ -916,7 +973,7 @@ interface CardChooserOpts {
 
 export interface CardChooser {
   chooseCard(
-    query: CardCatalogQuery,
+    query: CardChooserQuery,
     opts?: CardChooserOpts & { multiSelect?: boolean },
   ): Promise<undefined | string | string[]>;
 }
@@ -925,25 +982,28 @@ export interface FileChooser {
   chooseFile<T>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
+    // narrowing the chooser beyond the file type.
+    fileFieldFilter?: Record<string, unknown>;
   }): Promise<undefined | T>;
 }
 
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts: CardChooserOpts & {
     multiSelect: true;
     preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | string[]>;
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts?: CardChooserOpts & {
     multiSelect?: false;
     preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | string>;
 export async function chooseCard(
-  query: CardCatalogQuery,
+  query: CardChooserQuery,
   opts?: CardChooserOpts & {
     multiSelect?: boolean;
     preselectedCardTypeQuery?: Query;
@@ -963,6 +1023,7 @@ export async function chooseCard(
 export async function chooseFile<T extends FileDef>(opts?: {
   fileType?: CodeRef;
   fileTypeName?: string;
+  fileFieldFilter?: Record<string, unknown>;
 }): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
@@ -1018,18 +1079,6 @@ export type getCards<T extends CardDef = CardDef> = (
 {
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
-  isLoading: boolean;
-  meta: QueryResultsMeta;
-};
-
-// Duck type of the SearchDataResource
-export type getSearchData = (
-  parent: object,
-  getQuery: () => DataQuery | undefined,
-  getRealms?: () => string[] | undefined,
-  opts?: { isLive?: boolean },
-) => {
-  resources: (CardResource<Saved> | FileMetaResource)[];
   isLoading: boolean;
   meta: QueryResultsMeta;
 };
@@ -1096,7 +1145,7 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export type CardCatalogQuery = Query & {
+export type CardChooserQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
 };
 
@@ -1200,6 +1249,36 @@ export function internalKeyFor(
   }
 }
 
+// Like `internalKeyFor`, but returns every equivalent spelling of the key —
+// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
+// a single stored `types` value against a key; index rows written before
+// references were canonicalized to RRI may hold the alias or real-URL form,
+// so matching all spellings keeps base-typed cards/files findable until the
+// persisted data is migrated or reindexed.
+export function internalKeysFor(
+  ref: CodeRef,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  if (!('type' in ref)) {
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
+    let module: string = trimExecutableExtension(rri(resolved));
+    return virtualNetwork
+      .equivalentURLForms(module)
+      .map((form) => `${form}/${ref.name}`);
+  }
+  switch (ref.type) {
+    case 'ancestorOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/ancestor`,
+      );
+    case 'fieldOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/fields/${ref.field}`,
+      );
+  }
+}
+
 export function codeRefFromInternalKey(
   internalKey: string | null | undefined,
 ): ResolvedCodeRef | undefined {
@@ -1249,9 +1328,7 @@ export async function apiFor(
   let loader =
     Loader.getLoaderFor(cardOrFieldOrClass) ??
     loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>(
-    'https://cardstack.com/base/card-api',
-  );
+  let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
   if (!api) {
     throw new Error(`could not load card API`);
   }
@@ -1291,15 +1368,20 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
-  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
+// A local id is a client-minted token for an instance that has not yet been
+// saved to a realm — it is neither a URL nor a prefix-form RRI. Both remote
+// forms are syntactically distinguishable (URLs start with `http`, prefix-form
+// RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
+// canonical RRI by the time they reach here.
+export function isLocalId(id: string) {
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {
   return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
-export * from './prerendered-card-search.ts';
+export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,
