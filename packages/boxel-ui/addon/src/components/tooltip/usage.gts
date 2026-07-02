@@ -12,27 +12,15 @@ import {
 
 import { cssVar } from '../../helpers.ts';
 import BoxelButton from '../button/index.gts';
-import BoxelTooltip from './index.gts';
+import BoxelTooltip, { type ThemeVariant, TOOLTIP_VARIANTS } from './index.gts';
 
 export default class TooltipUsage extends Component {
-  tooltipVariants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
-  tooltipVariantDefault:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
+  tooltipVariants = TOOLTIP_VARIANTS;
+  tooltipVariantDefault?: ThemeVariant;
 
   @tracked placement: MiddlewareState['placement'] = 'bottom';
   @tracked offset = 6;
-  @tracked variant:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
+  @tracked variant?: ThemeVariant;
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare tooltipBackgroundColor: CSSVariableInfo;

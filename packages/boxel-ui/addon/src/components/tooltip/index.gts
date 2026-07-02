@@ -11,11 +11,22 @@ import { Velcro } from 'ember-velcro';
 
 import cn from '../../helpers/cn.ts';
 
+export const TOOLTIP_VARIANTS = [
+  'default',
+  'main',
+  'primary',
+  'secondary',
+  'accent',
+  'muted',
+  'destructive',
+] as const;
+export type ThemeVariant = (typeof TOOLTIP_VARIANTS)[number];
+
 interface Signature {
   Args: {
     offset?: number;
     placement?: MiddlewareState['placement'];
-    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
+    variant?: ThemeVariant;
   };
   Blocks: {
     content: [];
@@ -71,11 +82,15 @@ export default class Tooltip extends Component<Signature> {
     const themeVars = [
       '--background',
       '--foreground',
+      '--popover',
+      '--popover-foreground',
       '--border',
       '--primary',
       '--primary-foreground',
       '--secondary',
       '--secondary-foreground',
+      '--accent',
+      '--accent-foreground',
       '--muted',
       '--muted-foreground',
       '--destructive',
@@ -185,19 +200,10 @@ export default class Tooltip extends Component<Signature> {
       }
 
       .tooltip {
-        --tooltip-background-color: var(
-          --boxel-tooltip-background-color,
-          var(--background, rgb(0 0 0 / 80%))
-        );
-        --tooltip-text-color: var(
-          --boxel-tooltip-text-color,
-          var(--foreground, var(--boxel-light))
-        );
         --tooltip-border-color: var(
           --boxel-tooltip-border-color,
-          var(--border, var(--boxel-light-500))
+          var(--boxel-light-35)
         );
-
         background-color: var(--tooltip-background-color);
         box-shadow: 0 0 0 1px var(--tooltip-border-color);
         color: var(--tooltip-text-color);
@@ -220,75 +226,77 @@ export default class Tooltip extends Component<Signature> {
       .variant-default {
         --tooltip-background-color: var(
           --boxel-tooltip-background-color,
-          var(--background, rgb(0 0 0 / 80%))
+          var(--boxel-dark-80)
         );
         --tooltip-text-color: var(
           --boxel-tooltip-text-color,
-          var(--foreground, var(--boxel-light))
+          var(--boxel-light)
         );
-        --tooltip-border-color: var(
-          --boxel-tooltip-border-color,
-          var(--border, var(--boxel-light-500))
+      }
+
+      .variant-main {
+        --tooltip-background-color: var(
+          --boxel-tooltip-background-color,
+          var(--popover, var(--background))
+        );
+        --tooltip-text-color: var(
+          --boxel-tooltip-text-color,
+          var(--popover-foreground, var(--foreground))
         );
       }
 
       .variant-primary {
         --tooltip-background-color: var(
           --boxel-tooltip-background-color,
-          var(--primary, var(--boxel-600))
+          var(--primary)
         );
         --tooltip-text-color: var(
           --boxel-tooltip-text-color,
-          var(--primary-foreground, var(--boxel-light))
-        );
-        --tooltip-border-color: var(
-          --boxel-tooltip-border-color,
-          var(--primary, var(--boxel-600))
+          var(--primary-foreground)
         );
       }
 
       .variant-secondary {
         --tooltip-background-color: var(
           --boxel-tooltip-background-color,
-          var(--secondary, var(--boxel-400))
+          var(--secondary)
         );
         --tooltip-text-color: var(
           --boxel-tooltip-text-color,
-          var(--secondary-foreground, var(--boxel-dark))
+          var(--secondary-foreground)
         );
-        --tooltip-border-color: var(
-          --boxel-tooltip-border-color,
-          var(--secondary, var(--boxel-400))
+      }
+
+      .variant-accent {
+        --tooltip-background-color: var(
+          --boxel-tooltip-background-color,
+          var(--accent)
+        );
+        --tooltip-text-color: var(
+          --boxel-tooltip-text-color,
+          var(--accent-foreground)
         );
       }
 
       .variant-muted {
         --tooltip-background-color: var(
           --boxel-tooltip-background-color,
-          var(--muted, var(--boxel-200))
+          var(--muted)
         );
         --tooltip-text-color: var(
           --boxel-tooltip-text-color,
-          var(--muted-foreground, var(--boxel-dark))
-        );
-        --tooltip-border-color: var(
-          --boxel-tooltip-border-color,
-          var(--muted, var(--boxel-200))
+          var(--muted-foreground)
         );
       }
 
       .variant-destructive {
         --tooltip-background-color: var(
           --boxel-tooltip-background-color,
-          var(--destructive, var(--boxel-600))
+          var(--destructive)
         );
         --tooltip-text-color: var(
           --boxel-tooltip-text-color,
-          var(--destructive-foreground, var(--boxel-light))
-        );
-        --tooltip-border-color: var(
-          --boxel-tooltip-border-color,
-          var(--destructive, var(--boxel-600))
+          var(--destructive-foreground)
         );
       }
 
