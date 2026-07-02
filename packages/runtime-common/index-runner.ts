@@ -8,6 +8,7 @@ import {
   logger,
   hasCardExtension,
   hasExecutableExtension,
+  isCardResource,
   SupportedMimeType,
   jobIdentity,
   Deferred,
@@ -577,13 +578,43 @@ export class IndexRunner {
             }),
           );
       error.message = message;
-      let entry: FileErrorIndexEntry = {
+      let fileEntry: FileErrorIndexEntry = {
         type: 'file-error',
         error,
       };
-      await this.batch.updateEntry(url, entry);
+      await this.batch.updateEntry(url, fileEntry);
       this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
       this.stats.fileErrors++;
+      // `Batch.invalidate()` already tombstoned every type this URL
+      // previously had in the index — for an existing card that's both
+      // `instance` and `file`. Overwriting only the `file` tombstone
+      // above would let batch.done() promote the untouched `instance`
+      // tombstone, silently removing a previously-good card from search
+      // over a transient error. Re-parse the file ourselves (the throw
+      // above lost visitFileForIndexingFused's internal determination)
+      // and write a matching instance-error row when it's a card, so
+      // the last-known-good instance survives the same as the in-band
+      // render-error path.
+      if (url.href.endsWith('.json')) {
+        try {
+          let fileRef = await this.#reader.readFile(url);
+          let resource = fileRef?.content
+            ? (JSON.parse(fileRef.content)?.data as unknown)
+            : undefined;
+          if (resource && isCardResource(resource)) {
+            let instanceEntry: InstanceErrorIndexEntry = {
+              type: 'instance-error',
+              error,
+            };
+            await this.batch.updateEntry(url, instanceEntry);
+            this.stats.instanceErrors++;
+          }
+        } catch (parseErr) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+          );
+        }
+      }
     }
   }
 
