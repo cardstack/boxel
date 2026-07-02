@@ -1,7 +1,8 @@
 import { FittedCard } from '@cardstack/boxel-ui/components';
 import { render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | Component | fitted-card', function (hooks) {
   setupRenderingTest(hooks);
