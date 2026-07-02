@@ -1234,16 +1234,6 @@ export function internalKeyFor(
   virtualNetwork: VirtualNetwork,
 ): string {
   if (!('type' in ref)) {
-    // A scoped RRI (@scope/realm/...) for a realm with no registered mapping
-    // is already the canonical module key — use it as-is. Routing it through
-    // resolveURL would require a mapping (which a caller's VN may lack, e.g.
-    // an index writer keying a base ref) and now throws for unknown prefixes.
-    if (
-      ref.module.startsWith('@') &&
-      !virtualNetwork.isRegisteredPrefix(ref.module)
-    ) {
-      return `${trimExecutableExtension(rri(ref.module))}/${ref.name}`;
-    }
     let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
     let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
@@ -1271,14 +1261,6 @@ export function internalKeysFor(
   virtualNetwork: VirtualNetwork,
 ): string[] {
   if (!('type' in ref)) {
-    // See internalKeyFor: an unregistered scoped RRI is already canonical and
-    // has no other equivalent spelling, so key it directly without resolving.
-    if (
-      ref.module.startsWith('@') &&
-      !virtualNetwork.isRegisteredPrefix(ref.module)
-    ) {
-      return [`${trimExecutableExtension(rri(ref.module))}/${ref.name}`];
-    }
     let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
     let module: string = trimExecutableExtension(rri(resolved));
     return virtualNetwork
