@@ -6,7 +6,36 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Interception is opt-in per module. `unregister()` does not evict an already
+// active worker from a still-loaded page, so once a module registers this SW it
+// keeps controlling the QUnit runner into later modules. If it kept intercepting
+// there, those modules (which never installed a `test-realm-fetch` responder)
+// would get a 503 for every test-realm fetch and cascade. Gating on `active`
+// lets a module turn interception on for its own tests and off on teardown, so a
+// lingering worker passes requests straight through — behaving exactly as if no
+// SW were installed, which is the state non-intercepting modules expect.
+//
+// Default off so a cold-started/terminated-and-restarted worker (which loses
+// this in-memory flag) fails safe toward passthrough rather than resurrecting
+// the leak; the owning module re-asserts `active` in its beforeEach.
+let active = false;
+
+self.addEventListener('message', (event) => {
+  let data = event.data;
+  if (!data || data.type !== 'test-realm-sw-set-active') {
+    return;
+  }
+  active = Boolean(data.active);
+  let port = event.ports && event.ports[0];
+  if (port) {
+    port.postMessage({ ok: true, active });
+  }
+});
+
 self.addEventListener('fetch', (event) => {
+  if (!active) {
+    return;
+  }
   if (!event.request.url.startsWith('http://test-realm/')) {
     return;
   }
