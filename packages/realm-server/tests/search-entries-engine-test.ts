@@ -767,6 +767,41 @@ module(basename(import.meta.filename), function () {
       assert.true(normalizedHtml(html).includes('Embedded Card Person: Jane'));
     });
 
+    test('an atom + CardDef renderType matches the ancestor-level prerendered atom of a card that overrides its own template', async function (assert) {
+      // FancyPerson overrides `embedded` (a custom subclass template). atom is
+      // now rendered across the ancestor chain, so `atom + renderType: CardDef`
+      // matches the CardDef-level atom candidate served from the index — the
+      // crux the mini card chooser relies on to render uniform atom pills
+      // instead of each card's own template. Before atom became ancestor-aware
+      // (scalar at the native type only) this query matched no prerendered
+      // candidate.
+      let janeId = `${realmHref}jane`;
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        fancyQuery({
+          every: [
+            { eq: { format: 'atom' } },
+            {
+              eq: {
+                renderType: { module: baseRRI('card-api'), name: 'CardDef' },
+              },
+            },
+          ],
+        }),
+      );
+      let ids = htmlIdsOf(entryFor(doc, janeId)!)!;
+      assert.strictEqual(ids.length, 1, 'exactly one atom rendering matches');
+      let html = htmlIn(doc, ids[0])!;
+      assert.strictEqual(
+        html.attributes.renderType?.name,
+        'CardDef',
+        'the matched atom rendering is the CardDef-level candidate',
+      );
+      assert.true(
+        normalizedHtml(html).includes('atom-default-template'),
+        'the CardDef-level atom uses the default atom template, not a subclass template',
+      );
+    });
+
     test('no renderType predicate → only the native rendering is in play', async function (assert) {
       let janeId = `${realmHref}jane`;
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(

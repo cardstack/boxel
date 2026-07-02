@@ -328,7 +328,7 @@ export default class CardPrerender extends Component {
         let cardError: RenderError | undefined;
         let isolatedHTML: string | null = null;
         let headHTML: string | null = null;
-        let atomHTML: string | null = null;
+        let atomHTML: Record<string, string> | null = null;
         let iconHTML: string | null = null;
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
@@ -357,12 +357,6 @@ export default class CardPrerender extends Component {
             0,
             subsequentRenderOptions,
           );
-          atomHTML = await this.renderHTML.perform(
-            url,
-            'atom',
-            0,
-            subsequentRenderOptions,
-          );
           iconHTML = await this.renderIcon.perform(
             url,
             subsequentRenderOptions,
@@ -383,6 +377,12 @@ export default class CardPrerender extends Component {
             fittedHTML = await this.renderAncestors.perform(
               url,
               'fitted',
+              meta.types,
+              subsequentRenderOptions,
+            );
+            atomHTML = await this.renderAncestors.perform(
+              url,
+              'atom',
               meta.types,
               subsequentRenderOptions,
             );
@@ -481,7 +481,7 @@ export default class CardPrerender extends Component {
           let fileError: RenderError | undefined;
           let isolatedHTML: string | null = null;
           let headHTML: string | null = null;
-          let atomHTML: string | null = null;
+          let atomHTML: Record<string, string> | null = null;
           let iconHTML: string | null = null;
           let embeddedHTML: Record<string, string> | null = null;
           let fittedHTML: Record<string, string> | null = null;
@@ -499,12 +499,6 @@ export default class CardPrerender extends Component {
             headHTML = await this.renderHTML.perform(
               url,
               'head',
-              0,
-              subsequentRenderOptions,
-            );
-            atomHTML = await this.renderHTML.perform(
-              url,
-              'atom',
               0,
               subsequentRenderOptions,
             );
@@ -528,6 +522,12 @@ export default class CardPrerender extends Component {
               fittedHTML = await this.renderAncestors.perform(
                 url,
                 'fitted',
+                effectiveTypes,
+                subsequentRenderOptions,
+              );
+              atomHTML = await this.renderAncestors.perform(
+                url,
+                'atom',
                 effectiveTypes,
                 subsequentRenderOptions,
               );
@@ -654,7 +654,7 @@ export default class CardPrerender extends Component {
   private renderAncestors = enqueueTask(
     async (
       url: string,
-      format: 'embedded' | 'fitted',
+      format: 'embedded' | 'fitted' | 'atom',
       types: string[],
       renderOptions?: RenderRouteOptions,
     ) => {

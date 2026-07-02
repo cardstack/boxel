@@ -384,7 +384,7 @@ export async function rewriteClonedRealmServerUrls(
                types = replace(types::text, $1, $2)::jsonb,
                isolated_html = replace(isolated_html, $1, $2),
                embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
-               atom_html = replace(atom_html, $1, $2),
+               atom_html = replace(atom_html::text, $1, $2)::jsonb,
                fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
                display_names = replace(display_names::text, $1, $2)::jsonb,
                icon_html = replace(icon_html, $1, $2),

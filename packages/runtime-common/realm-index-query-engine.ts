@@ -2002,15 +2002,15 @@ function collectIconId(
 
 // One candidate rendering of a row, with its markup: a (format, renderType)
 // point in the rendering set the renderSet projection selects. The
-// fitted/embedded JSONB maps contribute one candidate per render-type key;
-// the scalar atom/head columns contribute one candidate at the row's own
+// fitted/embedded/atom JSONB maps contribute one candidate per render-type
+// key; the scalar head column contributes one candidate at the row's own
 // native type.
 type RowRendering = RenderingCandidate & { html: string };
 
 function enumerateRowRenderings(row: {
   fitted_html?: Record<string, string> | null;
   embedded_html?: Record<string, string> | null;
-  atom_html?: string | null;
+  atom_html?: Record<string, string> | null;
   head_html?: string | null;
   types?: string[] | null;
 }): RowRendering[] {
@@ -2018,6 +2018,7 @@ function enumerateRowRenderings(row: {
   for (let [format, byType] of [
     ['fitted', row.fitted_html],
     ['embedded', row.embedded_html],
+    ['atom', row.atom_html],
   ] as const) {
     for (let [renderTypeKey, html] of Object.entries(byType ?? {})) {
       if (html != null) {
@@ -2026,13 +2027,6 @@ function enumerateRowRenderings(row: {
     }
   }
   let nativeKey = row.types?.[0];
-  if (row.atom_html != null) {
-    candidates.push({
-      format: 'atom',
-      ...(nativeKey ? { renderTypeKey: nativeKey } : {}),
-      html: row.atom_html,
-    });
-  }
   if (row.head_html != null) {
     candidates.push({
       format: 'head',
@@ -2043,7 +2037,7 @@ function enumerateRowRenderings(row: {
   return candidates;
 }
 
-// The file counterpart: a file renders natively, so its fitted/embedded
+// The file counterpart: a file renders natively, so its fitted/embedded/atom
 // candidates come from its own type's entry and no candidate carries a
 // renderTypeKey (a renderType predicate in the htmlQuery never matches a
 // file rendering).
@@ -2053,14 +2047,12 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   for (let [format, byType] of [
     ['fitted', file.fittedHtml],
     ['embedded', file.embeddedHtml],
+    ['atom', file.atomHtml],
   ] as const) {
     let html = nativeKey != null ? byType?.[nativeKey] : undefined;
     if (html != null) {
       candidates.push({ format, html });
     }
-  }
-  if (file.atomHtml != null) {
-    candidates.push({ format: 'atom', html: file.atomHtml });
   }
   if (file.headHtml != null) {
     candidates.push({ format: 'head', html: file.headHtml });

@@ -167,7 +167,7 @@ export interface PrerenderTypes {
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
   headHTML: string | null;
-  atomHTML: string | null;
+  atomHTML: Record<string, string> | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;
@@ -397,7 +397,7 @@ export interface FileExtractResponse {
 export interface FileRenderResponse {
   isolatedHTML: string | null;
   headHTML: string | null;
-  atomHTML: string | null;
+  atomHTML: Record<string, string> | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;

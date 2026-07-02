@@ -38,6 +38,7 @@ import {
 } from '../../helpers';
 import {
   CardDef,
+  Component,
   StringField,
   contains,
   field,
@@ -128,6 +129,21 @@ module('Integration | mini-card-chooser', function (hooks) {
       static displayName = 'Movie';
       @field title = contains(StringField);
     }
+    // Overrides `fitted` with a distinctive marker so the atom-rendering test
+    // can prove the mini chooser rows use the uniform CardDef atom pill, not
+    // this card's own fitted template.
+    class Gadget extends CardDef {
+      static displayName = 'Gadget';
+      @field title = contains(StringField);
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div class='custom-gadget-fitted' data-test-custom-gadget-fitted>
+            Custom Gadget Fitted:
+            <@fields.title />
+          </div>
+        </template>
+      };
+    }
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -135,9 +151,11 @@ module('Integration | mini-card-chooser', function (hooks) {
       contents: {
         'book.gts': { Book },
         'movie.gts': { Movie },
+        'gadget.gts': { Gadget },
         'books/mango.json': new Book({ title: 'Mango' }),
         'books/vincent.json': new Book({ title: 'Vincent' }),
         'movies/casablanca.json': new Movie({ title: 'Casablanca' }),
+        'gadgets/atomizer.json': new Gadget({ title: 'Atomizer' }),
       },
     });
     await getService('realm').login(testRealmURL);
@@ -371,5 +389,59 @@ module('Integration | mini-card-chooser', function (hooks) {
         `[data-test-mini-card-chooser] [data-test-item-button="${casablanca}"]`,
       )
       .doesNotExist('Movie-type cards are excluded by a Book baseFilter');
+  });
+
+  test('rows render the uniform CardDef atom pill, not each card’s own template', async function (assert) {
+    const gadget = `${testRealmURL}gadgets/atomizer`;
+
+    const selections: string[] = [];
+    const onSelect = (url: string) => selections.push(url);
+
+    await render(
+      <template>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser @onSelect={{onSelect}} />
+          </HostContextProvider>
+        </DesignRatioContainer>
+      </template>,
+    );
+
+    await waitFor('[data-test-mini-card-chooser] [data-test-search-field]');
+    await fillIn(
+      '[data-test-mini-card-chooser] [data-test-search-field]',
+      'Atomizer',
+    );
+    await waitFor(
+      `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"]`,
+      { timeout: 5000 },
+    );
+
+    // The row renders the default atom pill (served from the ancestor-aware
+    // atom index at renderType CardDef)…
+    assert
+      .dom(
+        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] .atom-default-template`,
+      )
+      .exists('the row renders the uniform CardDef atom pill');
+    // …and not the Gadget's own fitted template.
+    assert
+      .dom(
+        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] [data-test-custom-gadget-fitted]`,
+      )
+      .doesNotExist(
+        'the card’s own fitted template does not leak into the row',
+      );
+
+    // Selection still works from an atom row.
+    await click(
+      `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"]`,
+    );
+    await waitUntil(() => selections.length > 0);
+    assert.deepEqual(
+      selections,
+      [gadget],
+      'clicking an atom row fires onSelect with the canonical URL',
+    );
   });
 });

@@ -27,7 +27,7 @@ export interface BoxelIndexTable {
   embedded_html: Record<string, string> | null;
   fitted_html: Record<string, string> | null;
   isolated_html: string | null;
-  atom_html: string | null;
+  atom_html: Record<string, string> | null;
   icon_html: string | null;
   markdown: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
@@ -110,6 +110,7 @@ export const coerceTypes = Object.freeze({
   search_doc: 'JSON',
   embedded_html: 'JSON',
   fitted_html: 'JSON',
+  atom_html: 'JSON',
   display_names: 'JSON',
   is_deleted: 'BOOLEAN',
   has_error: 'BOOLEAN',

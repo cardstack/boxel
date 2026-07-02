@@ -33,7 +33,6 @@
    is_deleted BOOLEAN,
    last_modified,
    embedded_html BLOB,
-   atom_html TEXT,
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
@@ -43,6 +42,7 @@
    last_known_good_deps BLOB,
    markdown TEXT,
    diagnostics BLOB,
+   atom_html BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -63,7 +63,6 @@
    is_deleted BOOLEAN,
    last_modified,
    embedded_html BLOB,
-   atom_html TEXT,
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
@@ -73,6 +72,7 @@
    markdown TEXT,
    diagnostics BLOB,
    job_id INTEGER,
+   atom_html BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

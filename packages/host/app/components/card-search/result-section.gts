@@ -418,6 +418,7 @@ export default class ResultSection extends Component<Signature> {
         >
           <ResultTile
             @card={{this.urlSection.card}}
+            @format={{if this.isMini 'atom' 'fitted'}}
             @isSelected={{this.isCardSelected this.urlSection.card.id}}
             @multiSelect={{@multiSelect}}
             @showSelectedCheckmark={{this.isMini}}
@@ -503,6 +504,7 @@ export default class ResultSection extends Component<Signature> {
               <:default>
                 <ResultTile
                   @card={{card}}
+                  @format={{if this.isMini 'atom' 'fitted'}}
                   @isSelected={{this.isCardSelected card.id}}
                   @multiSelect={{@multiSelect}}
                   @showSelectedCheckmark={{this.isMini}}

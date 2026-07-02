@@ -26,7 +26,7 @@ import {
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
@@ -50,6 +50,10 @@ interface Signature {
     // A live card resolved by URL paste (`getCard`), rendered with a
     // `CardRenderer` so it matches the prerendered tiles around it.
     card?: CardDef;
+    // The format the `@card` fallback tile renders in, so it matches the
+    // prerendered rows around it. Defaults to `fitted`; the mini chooser passes
+    // `atom` so a pasted/live card shows the same uniform pill as its results.
+    format?: Format;
     // The "Create New <Type>" affordance for a realm the user can write to.
     newCard?: NewCardArgs;
     isSelected: boolean;
@@ -277,7 +281,7 @@ export default class SearchResultTile extends Component<Signature> {
       {{else if @card}}
         <CardRenderer
           @card={{@card}}
-          @format='fitted'
+          @format={{if @format @format 'fitted'}}
           @codeRef={{defaultResultsCardRef}}
           @displayContainer={{false}}
           data-test-search-result={{removeFileExtension this.resolvedItemId}}

@@ -1928,13 +1928,34 @@ module(`Integration | realm indexing`, function (hooks) {
     let { atomHtml } =
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
 
+    let cardDefRefURL = internalKeyFor(
+      baseCardRef,
+      undefined,
+      getService('network').virtualNetwork,
+    );
+    // atom is now rendered across the ancestor chain (per-ancestor map), like
+    // fitted/embedded: Person's own atom template at the Person key, the
+    // default atom template at the CardDef key.
+    assert.deepEqual(
+      [...Object.keys(atomHtml!)].sort(),
+      [`${testRealmURL}person/Person`, cardDefRefURL].sort(),
+      'atom class hierarchy is correct',
+    );
     assert.strictEqual(
-      cleanWhiteSpace(stripScopedCSSAttributes(atomHtml!)),
+      cleanWhiteSpace(
+        stripScopedCSSAttributes(atomHtml![`${testRealmURL}person/Person`]),
+      ),
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
-      'atom html is correct',
+      'Person atom html is correct',
+    );
+    assert.true(
+      cleanWhiteSpace(
+        stripScopedCSSAttributes(atomHtml![cardDefRefURL]),
+      ).includes('atom-default-template'),
+      'CardDef atom html uses the default atom template',
     );
     assert.false(
-      atomHtml!.includes('id="ember'),
+      Object.values(atomHtml!).join('').includes('id="ember'),
       `atom HTML does not include ember ID's`,
     );
   });
