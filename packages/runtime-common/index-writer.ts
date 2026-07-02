@@ -47,7 +47,7 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type RealmVersionsTable,
+  type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
@@ -73,9 +73,9 @@ export class IndexWriter {
 
   async isNewIndex(realm: URL): Promise<boolean> {
     let [row] = (await this.#query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
       param(realm.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     return !row;
   }
 }
@@ -193,7 +193,7 @@ export class Batch {
   #currentInvalidationId: string;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
-  declare private realmVersion: number;
+  declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
@@ -221,7 +221,7 @@ export class Batch {
   }
 
   private async setupBatch(): Promise<void> {
-    await this.setNextRealmVersion();
+    await this.setNextGeneration();
     await this.loadResumedRows();
   }
 
@@ -368,7 +368,7 @@ export class Batch {
       this.#invalidations.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
-      entry.realm_version = this.realmVersion;
+      entry.generation = this.generation;
       entry.job_id = this.jobInfo?.jobId ?? null;
       entry.file_alias = copyURL(entry.file_alias);
       entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
@@ -573,7 +573,7 @@ export class Batch {
     let preparedEntry = {
       url: href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
-      realm_version: this.realmVersion,
+      generation: this.generation,
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),
@@ -671,7 +671,7 @@ export class Batch {
       indexed_at: _remove1,
       last_modified: _remove2,
       resource_created_at: _remove3,
-      realm_version: _remove4,
+      generation: _remove4,
       job_id: _remove5,
       ...productionVersion
     } = entry;
@@ -725,7 +725,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
-        realm_version: this.realmVersion,
+        generation: this.generation,
         value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
@@ -789,12 +789,12 @@ export class Batch {
   private async applyBatchUpdates() {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
-      current_version: this.realmVersion,
-    } as RealmVersionsTable);
+      current_generation: this.generation,
+    } as RealmGenerationsTable);
     await this.#query([
       ...upsert(
-        'realm_versions',
-        'realm_versions_pkey',
+        'realm_generations',
+        'realm_generations_pkey',
         nameExpressions,
         valueExpressions,
       ),
@@ -831,46 +831,46 @@ export class Batch {
 
   private async pruneObsoleteEntries() {
     // Delete every realm_meta row for this realm except the one we just
-    // wrote. The previous predicate (`realm_version < this.realmVersion`)
-    // only swept rows from incremental indexing where versions march
-    // forward. A from-scratch reindex resets the version to a low number,
-    // leaving older high-version rows orphaned forever — those legacy rows
+    // wrote. The previous predicate (`generation < this.generation`)
+    // only swept rows from incremental indexing where generations march
+    // forward. A from-scratch reindex resets the generation to a low number,
+    // leaving older high-generation rows orphaned forever — those legacy rows
     // then poisoned `_types` reads when the SELECT picked the wrong one.
     // Cleaning by `!=` covers both directions safely; the unique key on
-    // (realm_url, realm_version) guarantees we never accidentally keep
+    // (realm_url, generation) guarantees we never accidentally keep
     // two current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['realm_version !=', param(this.realmVersion)],
+        ['generation !=', param(this.generation)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
   }
 
-  private async setNextRealmVersion() {
+  private async setNextGeneration() {
     let [row] = (await this.#query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
       param(this.realmURL.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     if (!row) {
       let { nameExpressions, valueExpressions } = asExpressions({
         realm_url: this.realmURL.href,
-        current_version: 0,
-      } as RealmVersionsTable);
+        current_generation: 0,
+      } as RealmGenerationsTable);
       // Make the batch updates live
       await this.#query([
         ...upsert(
-          'realm_versions',
-          'realm_versions_pkey',
+          'realm_generations',
+          'realm_generations_pkey',
           nameExpressions,
           valueExpressions,
         ),
       ]);
-      this.realmVersion = 1;
+      this.generation = 1;
     } else {
-      this.realmVersion = row.current_version + 1;
+      this.generation = row.current_generation + 1;
     }
   }
 
@@ -895,7 +895,7 @@ export class Batch {
     let existingTypes = await this.existingIndexTypes(toTombstone);
     // `has_error` and `error_doc` are listed (with explicit false / null
     // values per row) so the upsert's ON CONFLICT SET clause clears them.
-    // The primary key is `(url, realm_url, type)` — no `realm_version` —
+    // The primary key is `(url, realm_url, type)` — no `generation` —
     // so a tombstone always collides with the prior row, and any column
     // NOT in this list keeps its previous value. Without these two,
     // a row that ever held `has_error = true` would carry that flag
@@ -906,7 +906,7 @@ export class Batch {
       'url',
       'file_alias',
       'type',
-      'realm_version',
+      'generation',
       'realm_url',
       'is_deleted',
       'has_error',
@@ -935,7 +935,7 @@ export class Batch {
           id,
           trimExecutableExtension(rri(id)),
           type,
-          this.realmVersion,
+          this.generation,
           this.realmURL.href,
           true, // is_deleted
           false, // has_error — explicit clear so stale error state from
@@ -999,7 +999,7 @@ export class Batch {
       `SELECT DISTINCT url FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['realm_version =', param(this.realmVersion)],
+        ['generation =', param(this.generation)],
         any([
           ['url =', param(seedURL.href)],
           ['file_alias =', param(seedURL.href)],

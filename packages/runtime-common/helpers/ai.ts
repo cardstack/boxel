@@ -291,10 +291,10 @@ export async function basicMappings(loader: Loader) {
         properties: {
           number: { type: 'integer', description: '0-based page number.' },
           size: { type: 'integer', description: 'Number of items per page.' },
-          realmVersion: {
+          generation: {
             type: 'integer',
             description:
-              'Optional. Specifies the realm version for consistent pagination if data can change.',
+              'Optional. Specifies the realm generation for consistent pagination if data can change.',
           },
         },
         required: ['number', 'size'],

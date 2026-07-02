@@ -697,7 +697,7 @@ export type SearchEntryWireFilter = {
 export interface SearchEntryWireQuery {
   filter?: SearchEntryWireFilter;
   sort?: SearchEntryWireSortExpression[];
-  page?: { number?: number; size: number; realmVersion?: number };
+  page?: { number?: number; size: number; generation?: number };
   fields?: { 'search-entry': string[] };
   cardUrls?: string[];
   realms?: string[];
