@@ -12,9 +12,10 @@ const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // not a blank line: a paragraph break ends the span (per CommonMark). Without
 // the blank-line guard a stray lone backtick pairs lazily across blank lines
 // with a later fence, producing a spurious code region that swallows real
-// directives.
+// directives. The `\r?` on each newline makes the paragraph-break guard fire
+// on CRLF line endings too, not just LF.
 const INLINE_CODE_RE = new RegExp(
-  '(`+)((?:(?!\\n[ \\t]*\\n)[\\s\\S])*?)\\1',
+  '(`+)((?:(?!\\r?\\n[ \\t]*\\r?\\n)[\\s\\S])*?)\\1',
   'g',
 );
 

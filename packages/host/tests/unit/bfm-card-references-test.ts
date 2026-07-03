@@ -1327,6 +1327,30 @@ module('Unit | bfm-card-references', function () {
       );
     });
 
+    test('the lone-backtick guard also holds for CRLF line endings', function (assert) {
+      // Same scenario as above but with Windows CRLF (`\r\n`) breaks. The
+      // paragraph-break guard must recognize `\r\n\r\n` as a blank line, or the
+      // lone backtick pairs across it with the later fence and swallows the
+      // intervening directives.
+      let markdown = [
+        '- Keyboard shortcuts (Mod-`)',
+        '',
+        'Inline card reference: :card[./friend-1]',
+        '',
+        '::card[./jane-doe]',
+        '',
+        '```typescript',
+        ':card[./inside-fence]',
+        '```',
+      ].join('\r\n');
+      let ranges = extractBfmRefRanges(markdown);
+      assert.deepEqual(
+        ranges.map((r) => r.url),
+        ['./friend-1', './jane-doe'],
+        'CRLF blank lines end the code span just like LF; both real refs surface',
+      );
+    });
+
     test('emits one range per site (no deduplication)', function (assert) {
       let markdown = ':card[./mango] then :card[./mango]';
       let ranges = extractBfmRefRanges(markdown);

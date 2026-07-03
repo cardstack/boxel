@@ -297,11 +297,11 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     );
   });
 
+  // A stray lone backtick (here in `Mod-\``) must not pair — across a blank
+  // line — with the backtick fence below: that would form a spurious
+  // inline-code region hiding every directive in between, leaving their
+  // toolbar stuck on "+". The caret in each embed must show the Edit pencil.
   test('caret inside a directive after a lone backtick still swaps to Edit', async function (assert) {
-    // A stray lone backtick (here in `Mod-\``) must not pair — across a blank
-    // line — with the backtick fence below: that would form a spurious
-    // inline-code region hiding every directive in between, leaving their
-    // toolbar stuck on "+". The caret in each embed must show the Edit pencil.
     let harness = new ContentHarness();
     let content = [
       '- Keyboard shortcuts (Mod-`)',
