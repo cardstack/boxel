@@ -171,7 +171,7 @@ module(
       let person = await brokenPet();
 
       let serialized = serializeCard(person, {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       });
 
@@ -196,7 +196,7 @@ module(
       );
 
       let opts = {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       } as const;
       assert.deepEqual(
@@ -211,7 +211,7 @@ module(
       let person = await brokenPet();
 
       let serialized = serializeCard(person, {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       });
 
@@ -249,7 +249,7 @@ module(
       );
 
       let serialized = serializeCard(person, {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       });
 
@@ -286,7 +286,7 @@ module(
       });
 
       let opts = {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       } as const;
       let brokenSlot = serializeCard(broken, opts).data.relationships?.[
@@ -316,7 +316,7 @@ module(
       await waitUntil(() => isLinkNotFound(bucketEntry(author, 'publisher')));
 
       let serialized = serializeCard(person, {
-        includeUnrenderedFields: true,
+        includeNotSearchableFields: true,
         useAbsoluteURL: true,
       });
       assert.deepEqual(

@@ -185,18 +185,6 @@ module(basename(import.meta.filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
               },
-              relationships: {
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
-              },
               meta: {
                 adoptsFrom: {
                   module: rri(`./person`),
@@ -988,18 +976,6 @@ module(basename(import.meta.filename), function () {
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
-              relationships: {
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
-              },
               links: {
                 self: `${testRealmHref}person-1`,
               },
@@ -1358,6 +1334,104 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('an explicitly-null relationship and an absent relationship diverge in the source but not in the served card+json', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          // `Friend.friend` (linksTo) and `Friend.friends` (linksToMany) are
+          // both non-searchable. Author `friend` explicitly null and leave
+          // `friends` absent, so the two states can be compared at each layer.
+          // `friend` is even rendered in the isolated template — proving the
+          // served doc keys off the searchable/set status of the link, not off
+          // what a template happened to render.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          let incrementalEventContent = await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              type: 'Friend',
+              timeout: 5000,
+            },
+          );
+          let id = incrementalEventContent.invalidations[0].split('/').pop()!;
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+
+          // The written source is the one representation that keeps the two
+          // states distinct: it persists the card's relationships as authored,
+          // so the explicitly-null `friend` survives as `{ self: null }` while
+          // the never-authored `friends` is simply absent.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+          let source = readJSONSync(cardFile) as LooseSingleCardDocument;
+          assert.deepEqual(
+            source.data.relationships,
+            { friend: { links: { self: null } } },
+            'source keeps the explicitly-null friend link and omits the absent friends link',
+          );
+
+          // The served card+json is the indexed pristine doc, which keeps a
+          // link only when it is set or reachable via a searchable path.
+          // `friend` is neither (explicitly null, non-searchable) and `friends`
+          // was never set, so both collapse to absent — the null-vs-absent
+          // distinction does not survive into the served doc.
+          let getResponse = await request
+            .get(`/Friend/${id}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.status,
+            200,
+            `HTTP 200 status: ${getResponse.text}`,
+          );
+          let served = getResponse.body as SingleCardDocument;
+          assert.strictEqual(
+            served.data.relationships?.friend,
+            undefined,
+            'served card+json omits the explicitly-null friend link',
+          );
+          assert.strictEqual(
+            served.data.relationships?.friends,
+            undefined,
+            'served card+json omits the absent friends link',
+          );
+        });
+
         test('creates card instances when it encounters "lid" in the request', async function (assert) {
           let response = await request
             .post('/')
@@ -1623,16 +1697,6 @@ module(basename(import.meta.filename), function () {
                     id: `${testRealmHref}Friend/local-id-1`,
                   },
                 },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -1686,21 +1750,6 @@ module(basename(import.meta.filename), function () {
                         type: 'card',
                       },
                     },
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1719,23 +1768,6 @@ module(basename(import.meta.filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('https://localhost:4202/node-test/friend'),
@@ -1752,23 +1784,6 @@ module(basename(import.meta.filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1825,21 +1840,6 @@ module(basename(import.meta.filename), function () {
                     type: 'card',
                   },
                 },
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -1874,23 +1874,6 @@ module(basename(import.meta.filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('https://localhost:4202/node-test/friend'),
@@ -1907,23 +1890,6 @@ module(basename(import.meta.filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1961,23 +1927,6 @@ module(basename(import.meta.filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -2018,23 +1967,6 @@ module(basename(import.meta.filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -2127,8 +2059,14 @@ module(basename(import.meta.filename), function () {
                     firstName: 'Hassan',
                   },
                   relationships: {
+                    // The written source records the explicitly-nulled cross-
+                    // realm `friend` link — the write path persists the card's
+                    // own relationships as authored. (This is distinct from the
+                    // served card+json, which omits unset non-searchable links.)
                     friend: {
-                      links: { self: null },
+                      links: {
+                        self: null,
+                      },
                     },
                   },
                   meta: {
@@ -2237,23 +2175,6 @@ module(basename(import.meta.filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
                 cardInfo,
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -2428,18 +2349,6 @@ module(basename(import.meta.filename), function () {
                 attributes: {
                   firstName: 'Van Gogh',
                   cardInfo,
-                },
-                relationships: {
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -2753,10 +2662,10 @@ module(basename(import.meta.filename), function () {
             'Recovered',
             'card file updated from error state',
           );
-          assert.deepEqual(
+          assert.strictEqual(
             card.data.relationships?.['cardInfo.theme'],
-            { links: { self: null } },
-            'relationships from pristine doc are preserved',
+            undefined,
+            'the unset, non-searchable base-card link is not persisted (not in a searchable path and never set)',
           );
         });
 
@@ -2957,16 +2866,6 @@ module(basename(import.meta.filename), function () {
                         self: './Friend/local-id-1',
                       },
                     },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3113,16 +3012,6 @@ module(basename(import.meta.filename), function () {
                     id: `${testRealmHref}Friend/local-id-1`,
                   },
                 },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -3176,21 +3065,6 @@ module(basename(import.meta.filename), function () {
                         type: 'card',
                       },
                     },
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3209,23 +3083,6 @@ module(basename(import.meta.filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('./friend'),
@@ -3242,23 +3099,6 @@ module(basename(import.meta.filename), function () {
                     cardTitle: 'Boris',
                     cardDescription: null,
                     cardThumbnailURL: null,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3315,21 +3155,6 @@ module(basename(import.meta.filename), function () {
                     type: 'card',
                   },
                 },
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -3364,23 +3189,6 @@ module(basename(import.meta.filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('../friend'),
@@ -3397,23 +3205,6 @@ module(basename(import.meta.filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3451,23 +3242,6 @@ module(basename(import.meta.filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -3508,23 +3282,6 @@ module(basename(import.meta.filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -3640,16 +3397,6 @@ module(basename(import.meta.filename), function () {
                         self: './FriendWithUsedLink/local-id-1',
                       },
                     },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3730,16 +3477,6 @@ module(basename(import.meta.filename), function () {
                     id: `${testRealmHref}FriendWithUsedLink/local-id-1`,
                   },
                 },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -3775,23 +3512,6 @@ module(basename(import.meta.filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3830,23 +3550,6 @@ module(basename(import.meta.filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
                 cardInfo,
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -3940,16 +3643,6 @@ module(basename(import.meta.filename), function () {
                   relationships: {
                     friend: {
                       links: { self: './jade' },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
                     },
                   },
                   meta: {

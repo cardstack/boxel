@@ -5,6 +5,7 @@ import {
   isFieldInstance,
   localId,
   primitive,
+  routesForField,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type {
@@ -350,13 +351,14 @@ export function getFieldOverrides<T extends BaseDef>(
 // per serialize, per searchDoc, per getDeps/findInstances recursion — and
 // `computeFields` walks the prototype chain and resolves every field on each
 // call. The result is determined by the prototype chain plus, for an instance,
-// its polymorphic field overrides (and, with `usedLinksToFieldsOnly`, its
-// populated field set). A read-only render only ever GROWS those, so their
-// sizes are a sound validity token: an unchanged token means an identical
-// result. Gated to the render context so the live app — where instances mutate
-// freely (same-size override swaps, field clears) — is never served a memoized
-// map. Keyed on the instance/class via a WeakMap so entries fall away with
-// their subjects; the token guards reuse across passes.
+// its polymorphic field overrides and — under `usedLinksToFieldsOnly` — the set
+// of links it has populated: a non-searchable link is kept only once set, so it
+// joins the map as the data bucket grows. A read-only render only ever GROWS
+// both, so their sizes are a sound validity token: an unchanged token means an
+// identical result. Gated to the render context so the live app — where
+// instances mutate freely (same-size override swaps, field clears) — is never
+// served a memoized map. Keyed on the instance/class via a WeakMap so entries
+// fall away with their subjects; the token guards reuse across passes.
 const renderFieldsCache = new WeakMap<
   object,
   Map<
@@ -380,8 +382,12 @@ function renderFieldsCacheToken(
   }
   let overrideSize = fieldOverrides.get(subject as BaseDef)?.size ?? 0;
   if (!usedLinksToFieldsOnly) {
+    // The full field map lists every declared field, so it depends only on the
+    // prototype chain and polymorphic overrides — not on what the instance set.
     return `o${overrideSize}`;
   }
+  // A non-searchable link is kept only once populated, so the map also depends
+  // on the instance's set-link count; the data bucket's size tracks it.
   let usedSize = deserializedData.get(subject as BaseDef)?.size ?? 0;
   return `o${overrideSize}:u${usedSize}`;
 }
@@ -432,11 +438,11 @@ function computeFields(
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
-  let usedFields: string[] = [];
+  let instance: BaseDef | undefined;
   if (isCardOrField(cardInstanceOrClass)) {
     // this is a card instance
+    instance = cardInstanceOrClass;
     obj = Reflect.getPrototypeOf(cardInstanceOrClass);
-    usedFields = getUsedFields(cardInstanceOrClass);
   } else {
     // this is a card class
     obj = (cardInstanceOrClass as typeof BaseDef).prototype;
@@ -460,9 +466,17 @@ function computeFields(
         maybeField.computeVia ||
         !['contains', 'containsMany'].includes(maybeField.fieldType)
       ) {
+        // `usedLinksToFieldsOnly` keeps only the link fields that are "used".
+        // Used means the field is reachable via a `searchable` path — a
+        // property of the field definition, so it is the same whether a
+        // template rendered the link or not — OR the instance has actually set
+        // the link (a set relationship is real card data and must serialize
+        // even when not searchable). A non-searchable, unset link is dropped
+        // (callers wanting every link pass `includeNotSearchableFields`);
+        // contained fields are always kept.
         if (
           opts?.usedLinksToFieldsOnly &&
-          !usedFields.includes(maybeFieldName) &&
+          !isFieldUsed(instance, maybeFieldName, maybeField) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
           return [];
@@ -483,10 +497,54 @@ function computeFields(
   return fields;
 }
 
-function getUsedFields(instance: BaseDef): string[] {
-  // getDataBucket always returns a Map (it creates one if absent), so the spread
-  // is safe without optional chaining.
-  return [...getDataBucket(instance).keys()];
+// Whether a link field is "used" for `usedLinksToFieldsOnly` serialization:
+// it participates in a `searchable` path, or the instance has actually set the
+// link. Contained fields never reach here (they are always kept).
+function isFieldUsed(
+  instance: BaseDef | undefined,
+  fieldName: string,
+  field: Field<BaseDefConstructor>,
+): boolean {
+  if (isFieldSearchable(fieldName, field)) {
+    return true;
+  }
+  // A class carries no instance data, so searchable membership is the only
+  // signal — a schema-level field map lists exactly the searchable links.
+  if (!instance) {
+    return false;
+  }
+  return isSetLinkValue(getDataBucket(instance).get(fieldName));
+}
+
+// A link field participates in a `searchable` path when its own annotation
+// makes the self link searchable, or a dotted path routed from it names a
+// deeper link (which still pulls the self link's target in). `routesForField`
+// is the single source of that determination, shared with the search-doc
+// generator so inclusion never drifts between the two.
+function isFieldSearchable(
+  fieldName: string,
+  field: Field<BaseDefConstructor>,
+): boolean {
+  return routesForField(fieldName, field.searchable).length > 0;
+}
+
+// Whether a data-bucket value represents a link the instance actually set.
+// A set link's bucket entry is a materialized value — a not-loaded / error /
+// not-found sentinel (all carry a reference), a link-target card (which may be
+// a still-unsaved card created in the same request, e.g. a `lid` POST), or a
+// non-empty array of those for `linksToMany`. `null` (the `linksToMany`
+// empty value) and an empty array are unset. This is only consulted for the
+// serialization paths that never read an unset `linksTo` through the field
+// getter, so the fresh `emptyValue` card such a read would leave behind never
+// reaches the bucket here.
+function isSetLinkValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return isNonPresentLink(value) || isCardOrField(value);
 }
 
 export function isArrayOfCardOrField(

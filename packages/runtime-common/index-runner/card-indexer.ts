@@ -35,11 +35,11 @@ export interface CardIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Render result from the fused visit's cardRender pass. Always supplied
-  // by the fused indexer.
+  // Merged card result from the file's index + prerender-html visits.
+  // Always supplied by the visit-file indexer.
   precomputedRenderResult: RenderResponse;
-  // Timing / diagnostic payload attached to the fused-visit
-  // response; persisted onto `boxel_index.diagnostics`.
+  // Timing / diagnostic payload attached to the visit
+  // responses; persisted onto `boxel_index.diagnostics`.
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
   virtualNetwork: VirtualNetwork;

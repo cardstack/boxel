@@ -118,9 +118,6 @@ module('Integration | realm', function (hooks) {
           cardThumbnailURL: null,
           cardTitle: 'Untitled Card',
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: '@cardstack/base/card-api',
@@ -155,9 +152,6 @@ module('Integration | realm', function (hooks) {
               cardDescription: null,
               cardThumbnailURL: null,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}person`,
@@ -181,7 +175,6 @@ module('Integration | realm', function (hooks) {
                   self: `${testRealmURL}dir/owner`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -227,7 +220,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -259,9 +251,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -705,7 +694,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -737,9 +725,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -947,9 +932,6 @@ module('Integration | realm', function (hooks) {
               lastName: 'Abdel-Rahman',
               cardInfo,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}person`,
@@ -1090,9 +1072,6 @@ module('Integration | realm', function (hooks) {
           cardThumbnailURL: null,
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: `${testModuleRealm}booking`,
@@ -1130,9 +1109,6 @@ module('Integration | realm', function (hooks) {
             sponsors: ['Burton'],
             posts: [],
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1269,7 +1245,6 @@ module('Integration | realm', function (hooks) {
               type: 'card',
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1300,9 +1275,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             cardInfo,
           },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
-          },
           meta: {
             adoptsFrom: {
               module: `${testModuleRealm}person`,
@@ -1326,10 +1298,6 @@ module('Integration | realm', function (hooks) {
             cardDescription: null,
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1359,7 +1327,6 @@ module('Integration | realm', function (hooks) {
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1501,7 +1468,6 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1550,9 +1516,6 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
-            relationships: {
-              pets: { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
@@ -1616,8 +1579,6 @@ module('Integration | realm', function (hooks) {
           links: { self: `./dir/van-gogh` },
           data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
-        friend: { links: { self: null } },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1727,17 +1688,11 @@ module('Integration | realm', function (hooks) {
         links: { self: `./2` },
         data: { id: `${testRealmURL}2`, type: 'card' },
       },
-      'cardInfo.theme': { links: { self: null } },
     });
     assert.deepEqual(
       JSON.parse((adapter.files.contents['1.json'] as any).content).data
         .relationships,
       {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
         'inners.0.other': {
           links: {
             self: './2',
@@ -1836,11 +1791,6 @@ module('Integration | realm', function (hooks) {
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
         cardInfo,
-      },
-      relationships: {
-        pets: { links: { self: null } },
-        friend: { links: { self: null } },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1972,7 +1922,6 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -2073,9 +2022,6 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               relationships: {
-                pets: {
-                  links: { self: null },
-                },
                 friend: {
                   links: { self: `${testRealmURL}dir/different-friend` },
                 },
@@ -2108,9 +2054,6 @@ module('Integration | realm', function (hooks) {
         cardInfo,
       },
       relationships: {
-        pets: {
-          links: { self: null },
-        },
         friend: {
           links: { self: `./dir/different-friend` },
           data: {
@@ -2118,7 +2061,6 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -2249,7 +2191,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/mariko`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2281,9 +2222,6 @@ module('Integration | realm', function (hooks) {
             posts: null,
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2322,7 +2260,6 @@ module('Integration | realm', function (hooks) {
                 self: `./mariko`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2439,9 +2376,6 @@ module('Integration | realm', function (hooks) {
           cardTitle: 'Untitled Card',
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: `../driver`,
@@ -2483,9 +2417,6 @@ module('Integration | realm', function (hooks) {
               year: '2024',
             },
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {

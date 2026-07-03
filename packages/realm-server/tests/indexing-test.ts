@@ -775,19 +775,14 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           hassan.doc.data.relationships,
           {
+            // Only `pet` appears: it is the sole searchable link. The base-card
+            // `cardInfo.theme` / `cardInfo.cardThumbnail` links carry no
+            // `searchable` annotation, so they are not "used" and drop from the
+            // pristine doc (they still appear in the search doc, which
+            // enumerates every declared field).
             pet: {
               links: {
                 self: './ringo',
-              },
-            },
-            'cardInfo.cardThumbnail': {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
               },
             },
           },

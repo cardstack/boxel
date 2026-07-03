@@ -7,6 +7,7 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
@@ -686,6 +687,16 @@ export function buildPrerenderApp(options: {
           : {};
       let fileData = attrs.fileData;
       let types = attrs.types;
+      let rawVisitType = attrs.visitType;
+      let visitType: PrerenderVisitType | undefined =
+        rawVisitType === 'index' || rawVisitType === 'prerender-html'
+          ? rawVisitType
+          : undefined;
+      let cardTypes = Array.isArray(attrs.cardTypes)
+        ? (attrs.cardTypes as unknown[]).filter(
+            (t): t is string => typeof t === 'string',
+          )
+        : undefined;
 
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -703,6 +714,12 @@ export function buildPrerenderApp(options: {
         .filter(({ value }) => !isNonEmptyString(value))
         .map(({ name }) => name);
 
+      // A visitType value the server doesn't recognize would silently run
+      // the fused visit; reject instead so a caller skew is loud.
+      if (rawVisitType != null && visitType === undefined) {
+        missing.push(`visitType ('index' or 'prerender-html')`);
+      }
+
       // At least one pass must be requested
       if (
         !renderOptions.fileExtract &&
@@ -716,9 +733,17 @@ export function buildPrerenderApp(options: {
       // the composite can chain the extract's resource into render. When
       // fileExtract isn't requested AND fileData isn't supplied, reject —
       // the host route model hook requires fileData to populate its model.
-      if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
+      // A prerender-html visit never runs the extract, so for it fileData
+      // is required outright.
+      if (
+        renderOptions.fileRender &&
+        !fileData &&
+        (!renderOptions.fileExtract || visitType === 'prerender-html')
+      ) {
         missing.push(
-          'fileData (required when fileRender pass is requested without fileExtract)',
+          visitType === 'prerender-html'
+            ? 'fileData (required when a prerender-html visit requests fileRender)'
+            : 'fileData (required when fileRender pass is requested without fileExtract)',
         );
       }
       // Chaining fileExtract → fileRender also needs fileDefCodeRef so the
@@ -737,7 +762,7 @@ export function buildPrerenderApp(options: {
 
       let priority = parsePriority(attrs);
       log.debug(
-        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} visitType=${visitType ?? 'fused'} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -782,9 +807,11 @@ export function buildPrerenderApp(options: {
           realm,
           url,
           auth,
+          ...(visitType ? { visitType } : {}),
           renderOptions,
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
+          ...(cardTypes?.length ? { cardTypes } : {}),
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
