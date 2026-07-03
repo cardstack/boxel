@@ -16,12 +16,13 @@ import type { Deferred } from './deferred.ts';
 //   | 0        | system-initiated prerender-html    |
 //
 // The prerender-html tiers sit one notch below their initiator tier so
-// that a pool can serve an initiator's plain jobs without also taking
-// on its (orders-of-magnitude slower) HTML rendering work: a pool
-// floored at `systemInitiatedPriority` runs all indexing but never
-// system prerender-html, so background rendering cannot starve
-// indexing; a pool floored at `userInitiatedPrerenderHtmlPriority`
-// serves user-initiated work exclusively, HTML rendering included.
+// a pool's floor can take in an initiator's plain jobs with or without
+// its (orders-of-magnitude slower) HTML rendering work. Two pools
+// exist: the high-priority pool floors at
+// `userInitiatedPrerenderHtmlPriority`, serving all user-initiated
+// work — prerender-html included — and never system-tier jobs; the
+// all-priority pool floors at `systemInitiatedPrerenderHtmlPriority`
+// and serves everything.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
 export const systemInitiatedPriority = 1;

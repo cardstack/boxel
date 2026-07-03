@@ -42,7 +42,6 @@ writeSync(
 import {
   logger,
   userInitiatedPrerenderHtmlPriority,
-  systemInitiatedPriority,
   systemInitiatedPrerenderHtmlPriority,
   query as _query,
   param,
@@ -124,7 +123,6 @@ let {
   matrixURL,
   allPriorityCount = 1,
   highPriorityCount = 0,
-  indexPriorityCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -141,11 +139,6 @@ let {
     highPriorityCount: {
       description:
         'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
-      type: 'number',
-    },
-    indexPriorityCount: {
-      description:
-        'The number of workers that service every job except system-initiated prerender-html, so background rendering cannot starve indexing (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -226,7 +219,6 @@ if (port != null) {
       result = {
         ...result,
         highPriorityWorkers: highPriorityCount,
-        indexPriorityWorkers: indexPriorityCount,
         allPriorityWorkers: allPriorityCount,
       };
     }
@@ -647,10 +639,7 @@ let adapter: PgAdapter;
     `starting ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
-    )}, ${indexPriorityCount} index-priority ${pluralize(
-      'worker',
-      indexPriorityCount,
-    )}, and ${allPriorityCount} all-priority ${pluralize(
+    )} and ${allPriorityCount} all-priority ${pluralize(
       'worker',
       allPriorityCount,
     )}`,
@@ -668,16 +657,12 @@ let adapter: PgAdapter;
   eventSink.setAdapter(adapter);
 
   // Each pool's minimum priority is a dequeue floor: its workers only
-  // claim jobs at or above it. The floors sit one notch below the
-  // initiator tier they guard so each pool also serves that initiator's
-  // prerender-html jobs — except the index-priority pool, whose floor
-  // deliberately excludes system-initiated prerender-html so background
-  // rendering cannot starve indexing.
+  // claim jobs at or above it. The high-priority pool floors at the
+  // user-initiated prerender-html tier so it serves all user-initiated
+  // work — prerender-html included — and never system-tier jobs; the
+  // all-priority pool floors at the lowest tier and serves everything.
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
-  }
-  for (let i = 0; i < indexPriorityCount; i++) {
-    await startWorker(systemInitiatedPriority, urlMappings);
   }
   for (let i = 0; i < allPriorityCount; i++) {
     await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
