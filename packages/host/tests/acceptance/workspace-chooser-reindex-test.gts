@@ -213,5 +213,16 @@ module('Acceptance | workspace-chooser re-index', function (hooks) {
       realmService.info(ownedRealmURL).isIndexing,
       'the indexing animation is restored after a failed Re-index',
     );
+
+    // The error does not auto-dismiss; it stays until the user clears it.
+    await settled();
+    assert
+      .dom('[data-test-reindex-error]')
+      .exists('the error persists until it is dismissed');
+
+    await click('[data-test-reindex-error-dismiss]');
+    assert
+      .dom('[data-test-reindex-error]')
+      .doesNotExist('dismissing the banner removes the error');
   });
 });

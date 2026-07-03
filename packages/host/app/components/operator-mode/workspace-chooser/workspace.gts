@@ -28,6 +28,7 @@ import {
   Group,
   IconGlobe,
   IconTrash,
+  IconX,
   Lock,
   Star,
   StarFilled,
@@ -76,6 +77,20 @@ export default class Workspace extends Component<Signature> {
         {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
+        {{#if this.reindexError}}
+          <div class='reindex-error' role='alert' data-test-reindex-error>
+            <span class='reindex-error__message'>{{this.reindexError}}</span>
+            <button
+              type='button'
+              class='reindex-error__dismiss'
+              aria-label='Dismiss error'
+              data-test-reindex-error-dismiss
+              {{on 'click' this.clearReindexError}}
+            >
+              <IconX width='11' height='11' />
+            </button>
+          </div>
+        {{/if}}
         <ItemContainer
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
@@ -186,11 +201,6 @@ export default class Workspace extends Component<Signature> {
             <span class='visibility-label'>{{this.visibility}}</span>
           </span>
         </div>
-        {{#if this.reindexError}}
-          <p class='reindex-error' data-test-reindex-error>
-            {{this.reindexError}}
-          </p>
-        {{/if}}
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
@@ -495,12 +505,42 @@ export default class Workspace extends Component<Signature> {
         max-width: var(--boxel-xxs-container);
       }
       .reindex-error {
-        max-width: var(--boxel-xxs-container);
-        margin: var(--boxel-sp-5xs) 0 0;
-        color: var(--boxel-danger);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: var(--boxel-xxs-container);
+        box-sizing: border-box;
+        z-index: 21;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
         font: 600 var(--boxel-font-xs);
-        text-align: center;
+      }
+      .reindex-error__message {
+        flex: 1;
         overflow-wrap: anywhere;
+      }
+      .reindex-error__dismiss {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 2px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        --icon-color: currentColor;
+        cursor: pointer;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .reindex-error__dismiss:hover {
+        background: rgba(255 255 255 / 25%);
       }
       .info > span {
         text-overflow: ellipsis;
@@ -1071,7 +1111,6 @@ export default class Workspace extends Component<Signature> {
   @tracked private archiveError: string | undefined;
   @tracked private isHostDropdownOpen = false;
   @tracked private reindexError: string | undefined;
-  private reindexErrorTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(...args: [any, any]) {
     super(...args);
@@ -1357,20 +1396,13 @@ export default class Workspace extends Component<Signature> {
     try {
       await this.realm.fullReindex(this.args.realmIdentifier);
     } catch (error: any) {
+      // The error stays put until the user dismisses it or retries the
+      // reindex, so a failed pass never disappears before it's noticed.
       this.reindexError = String(error?.message ?? error);
-      // Auto-dismiss after a few seconds. A plain setTimeout (not an
-      // ember-concurrency timeout) so it does not keep test `settled()` waiting.
-      this.reindexErrorTimer = setTimeout(() => {
-        this.reindexError = undefined;
-      }, 5000);
     }
   });
 
-  private clearReindexError() {
-    if (this.reindexErrorTimer) {
-      clearTimeout(this.reindexErrorTimer);
-      this.reindexErrorTimer = undefined;
-    }
+  @action private clearReindexError() {
     this.reindexError = undefined;
   }
 
