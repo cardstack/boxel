@@ -71,8 +71,9 @@ export function sanitizeConsumingRealmHeader(
 // originating job's priority instead of silently dropping to the
 // lowest tier.
 //
-// Same scale as worker-job priority — `systemInitiatedPriority` up to
-// `userInitiatedPriority` — small non-negative integers.
+// Same scale as worker-job priority — `systemInitiatedPrerenderHtmlPriority`
+// (the lowest tier) up to `userInitiatedPriority` — small non-negative
+// integers.
 export const X_BOXEL_JOB_PRIORITY_HEADER = 'x-boxel-job-priority';
 
 // Sanitize the inbound job-priority header value. The producer side

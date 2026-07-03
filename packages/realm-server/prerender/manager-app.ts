@@ -1055,8 +1055,8 @@ export function buildPrerenderManagerApp(options?: {
       // Priority comes from the worker job (stamped onto the request
       // attributes by the wire-format threading). Pass through to
       // scoreCandidate so a high-priority request prefers servers
-      // without higher-priority pending work. Defaults to 0 (system
-      // priority) when absent for back-compat with older callers /
+      // without higher-priority pending work. Defaults to the lowest
+      // tier (0) when absent for back-compat with older callers /
       // direct curl. Only accept non-negative safe integers — priority
       // buckets are integer-keyed, and floats / negatives / values
       // beyond 2^53 would produce misleading routing comparisons.
