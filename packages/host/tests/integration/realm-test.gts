@@ -141,6 +141,64 @@ module('Integration | realm', function (hooks) {
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
 
+  test('realm serves instance ids in canonical RRI form for a prefix-mapped realm', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'dir/empty.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Without a realm-prefix mapping, instance ids are served in URL form.
+    let urlResponse = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/empty`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    let urlDoc = await urlResponse.json();
+    assert.strictEqual(
+      urlDoc.data.id,
+      `${testRealmURL}dir/empty`,
+      'an unmapped realm serves the instance id in URL form',
+    );
+
+    // Registering a realm-prefix mapping makes the same GET serve the id (and
+    // links.self) in canonical RRI (prefix) form. The unresolve happens at
+    // serve time in getCard, so the mapping need not be present at index time.
+    getService('network').virtualNetwork.addRealmMapping(
+      '@test-prefix/',
+      testRealmURL,
+    );
+
+    let rriResponse = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/empty`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    let rriDoc = await rriResponse.json();
+    assert.strictEqual(
+      rriDoc.data.id,
+      '@test-prefix/dir/empty',
+      'a prefix-mapped realm serves the instance id in canonical RRI form',
+    );
+    assert.strictEqual(
+      rriDoc.data.links.self,
+      '@test-prefix/dir/empty',
+      'links.self is served in canonical RRI form too',
+    );
+  });
+
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
