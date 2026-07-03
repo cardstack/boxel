@@ -2110,6 +2110,16 @@ export class Realm {
     return statuses.length > 0 ? Math.min(...statuses) : 400;
   }
 
+  // Atomic operation hrefs may arrive in canonical RRI (prefix) form, since
+  // that is the form this realm now serves instance ids in. Resolve those to a
+  // real URL before doing path math; plain URL / relative hrefs pass through
+  // unchanged (they are not registered prefixes).
+  #resolveAtomicHref(href: string): string {
+    return this.#virtualNetwork.isRegisteredPrefix(href)
+      ? this.#virtualNetwork.toURL(href).href
+      : href;
+  }
+
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<AtomicPayloadValidationError[]> {
@@ -2125,7 +2135,9 @@ export class Realm {
 
         let localPath: LocalPath;
         try {
-          localPath = this.paths.local(new URL(operation.href, this.paths.url));
+          localPath = this.paths.local(
+            new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+          );
         } catch (error: any) {
           errors.push({
             title: 'Invalid atomic:operations format',
@@ -2270,7 +2282,9 @@ export class Realm {
       for (let operation of operations) {
         let resource = operation.data;
         let href = operation.href;
-        let localPath = this.paths.local(new URL(href, this.paths.url));
+        let localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(href), this.paths.url),
+        );
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           return createResponse({
