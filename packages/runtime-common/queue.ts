@@ -1,8 +1,31 @@
 import type { PgPrimitive } from './index.ts';
 import type { Deferred } from './deferred.ts';
 
-export const systemInitiatedPriority = 0;
+// Job priority is a worker-reservation floor, not an ordering: a worker
+// dequeues only jobs whose priority is at or above its configured
+// minimum, oldest-first among those. A higher number therefore reserves
+// a job to more (and to more-dedicated) worker pools.
+//
+// The tiers:
+//
+//   | priority | job                                |
+//   | -------- | ---------------------------------- |
+//   | 10       | any user-initiated job             |
+//   | 9        | user-initiated prerender-html      |
+//   | 1        | any system-initiated job           |
+//   | 0        | system-initiated prerender-html    |
+//
+// The prerender-html tiers sit one notch below their initiator tier so
+// that a pool can serve an initiator's plain jobs without also taking
+// on its (orders-of-magnitude slower) HTML rendering work: a pool
+// floored at `systemInitiatedPriority` runs all indexing but never
+// system prerender-html, so background rendering cannot starve
+// indexing; a pool floored at `userInitiatedPrerenderHtmlPriority`
+// serves user-initiated work exclusively, HTML rendering included.
 export const userInitiatedPriority = 10;
+export const userInitiatedPrerenderHtmlPriority = 9;
+export const systemInitiatedPriority = 1;
+export const systemInitiatedPrerenderHtmlPriority = 0;
 
 export interface QueueRunner {
   start: () => Promise<void>;
@@ -97,7 +120,9 @@ export function getQueueJobCoalesceHandler(jobType: string) {
 export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
   return {
     ...args,
-    priority: args.priority ?? 0,
+    // A publish that doesn't state a priority is background work, so it
+    // takes the system-initiated tier.
+    priority: args.priority ?? systemInitiatedPriority,
   };
 }
 

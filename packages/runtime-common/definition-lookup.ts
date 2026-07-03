@@ -296,8 +296,9 @@ export interface PopulateCoordinator {
 
 // Public option shape for definition lookup calls. `priority` is forwarded to
 // the prerender server when a cache miss requires a sub-prerender — same
-// numeric scale as worker-job priority (0 = system-initiated background,
-// 10 = userInitiatedPriority). Callers in the indexer thread their job
+// numeric scale as worker-job priority (`systemInitiatedPriority` for
+// background work, `userInitiatedPriority` for user-driven work). Callers in
+// the indexer thread their job
 // priority through here so user-initiated reindex work doesn't silently
 // downgrade to background priority for its module sub-renders.
 export interface DefinitionLookupOptions {

@@ -55,9 +55,9 @@ export interface JobInfo extends JSONTypes.Object {
   jobId: number;
   reservationId: number;
   // Priority of the job this handler is running for, threaded from
-  // the queue row. `0` is the system default; user-initiated jobs use
-  // `10`. Forwarded into the prerenderer call chain so the prerender
-  // server can route by priority. Required because
+  // the queue row (the tier constants live in `queue.ts`). Forwarded
+  // into the prerenderer call chain so the prerender server can route
+  // by priority. Required because
   // `JSONTypes.Object`'s index signature doesn't accept `undefined`;
   // the queue layer always supplies the value from the row, and tests
   // / non-job callers that mint a synthetic JobInfo can pass

@@ -41,8 +41,9 @@ writeSync(
 
 import {
   logger,
-  userInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
   systemInitiatedPriority,
+  systemInitiatedPrerenderHtmlPriority,
   query as _query,
   param,
   separatedByCommas,
@@ -123,6 +124,7 @@ let {
   matrixURL,
   allPriorityCount = 1,
   highPriorityCount = 0,
+  indexPriorityCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -138,7 +140,12 @@ let {
     },
     highPriorityCount: {
       description:
-        'The number of workers that service high priority jobs (user initiated) to start (default 0)',
+        'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
+      type: 'number',
+    },
+    indexPriorityCount: {
+      description:
+        'The number of workers that service every job except system-initiated prerender-html, so background rendering cannot starve indexing (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -219,6 +226,7 @@ if (port != null) {
       result = {
         ...result,
         highPriorityWorkers: highPriorityCount,
+        indexPriorityWorkers: indexPriorityCount,
         allPriorityWorkers: allPriorityCount,
       };
     }
@@ -639,7 +647,10 @@ let adapter: PgAdapter;
     `starting ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
-    )} and ${allPriorityCount} all-priority ${pluralize(
+    )}, ${indexPriorityCount} index-priority ${pluralize(
+      'worker',
+      indexPriorityCount,
+    )}, and ${allPriorityCount} all-priority ${pluralize(
       'worker',
       allPriorityCount,
     )}`,
@@ -656,11 +667,20 @@ let adapter: PgAdapter;
   // is set.
   eventSink.setAdapter(adapter);
 
+  // Each pool's minimum priority is a dequeue floor: its workers only
+  // claim jobs at or above it. The floors sit one notch below the
+  // initiator tier they guard so each pool also serves that initiator's
+  // prerender-html jobs — except the index-priority pool, whose floor
+  // deliberately excludes system-initiated prerender-html so background
+  // rendering cannot starve indexing.
   for (let i = 0; i < highPriorityCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings);
+    await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
+  }
+  for (let i = 0; i < indexPriorityCount; i++) {
+    await startWorker(systemInitiatedPriority, urlMappings);
   }
   for (let i = 0; i < allPriorityCount; i++) {
-    await startWorker(systemInitiatedPriority, urlMappings);
+    await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
   }
   isReady = true;
   log.info('All workers have been started');

@@ -68,10 +68,11 @@ export function sanitizeConsumingRealmHeader(
 // wrapper → realm-server's `handle-search`. The realm-server forwards
 // it into `LookupContext.priority` so any sub-`prerenderModule` fired
 // by `CachingDefinitionLookup` for a missed definition inherits the
-// originating job's priority instead of silently dropping to 0.
+// originating job's priority instead of silently dropping to the
+// lowest tier.
 //
-// Same scale as worker-job priority — 0 = system-initiated, 10 =
-// userInitiatedPriority — small non-negative integers.
+// Same scale as worker-job priority — `systemInitiatedPriority` up to
+// `userInitiatedPriority` — small non-negative integers.
 export const X_BOXEL_JOB_PRIORITY_HEADER = 'x-boxel-job-priority';
 
 // Sanitize the inbound job-priority header value. The producer side

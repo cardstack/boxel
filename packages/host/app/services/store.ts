@@ -137,22 +137,22 @@ const storeLogger = logger('store');
 //
 // 1. Inside a prerender tab: forward the worker job's priority as-is.
 //    The render-runner injects `__boxelJobPriority` alongside
-//    `__boxelJobId` on each visit — a priority of 0 is meaningful
-//    (the originating job is system-initiated background indexing)
+//    `__boxelJobId` on each visit — a low priority is meaningful
+//    (the originating job is system-initiated background work)
 //    and must be preserved, not upgraded. Sub-`prerenderModule`
 //    calls fired by the federated search for a `lookupDefinition`
 //    cache miss inherit this priority so they don't outrun the
 //    parent. If `__boxelJobPriority` is missing here (older
 //    render-runner build, test fixture, etc.) treat as 0 — the
-//    safe default for prerender-context work.
+//    lowest tier, the safe default for prerender-context work.
 //
 // 2. Outside a prerender tab (the host SPA in a real user's browser):
-//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    stamp `userInitiatedPriority`. User clicks driving a
 //    search are by definition user-initiated work and should outrank
 //    background indexing on the realm-server's PagePool. Without
 //    this, a user search whose definition lookup misses the modules
-//    cache would fire its sub-prerender at priority 0 and queue
-//    behind concurrent indexing fan-out.
+//    cache would fire its sub-prerender at background priority and
+//    queue behind concurrent indexing fan-out.
 //
 // External (non-host) HTTP callers — anything that doesn't run in
 // the host SPA's JS runtime — bypass this helper entirely and set
