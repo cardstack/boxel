@@ -2005,7 +2005,7 @@ module('Integration | Store', function (hooks) {
     });
   }
 
-  // A search-entry that carries only an `html` rendering — no `item`.
+  // An entry that carries only an `html` rendering — no `item`.
   function htmlOnlyEntryDoc(id: string, opts?: { isFileMeta?: boolean }) {
     let htmlId = opts?.isFileMeta
       ? `${id}#fitted`
@@ -2013,7 +2013,7 @@ module('Integration | Store', function (hooks) {
     return {
       data: [
         {
-          type: 'search-entry',
+          type: 'entry',
           id,
           relationships: {
             html: { data: [{ type: 'html', id: htmlId }] },

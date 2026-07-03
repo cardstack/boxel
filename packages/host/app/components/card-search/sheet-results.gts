@@ -95,7 +95,7 @@ interface Signature {
   Blocks: {};
 }
 
-// Lays the heterogeneous `search-entry` stream from `<SearchResults>` out into
+// Lays the heterogeneous `entry` stream from `<SearchResults>` out into
 // the search sheet's realm / recents / URL-paste sections, with the header,
 // multiselect, the Adorn treatment, pagination, and the result count expressed
 // here at the call site over the yielded entries. Every derivation is a getter

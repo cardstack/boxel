@@ -322,9 +322,9 @@ export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let searchURL = new URL('./_search', baseHref);
   searchURL.searchParams.set('realms', baseHref);
   // A query-backed field resolves to linked instances, so it asks the
-  // search-entry engine for a data-only projection: each entry carries its
+  // entry engine for a data-only projection: each entry carries its
   // full `item` (`card`/`file-meta`) serialization, no prerendered HTML.
-  searchURL.searchParams.set('fields[search-entry]', 'item');
+  searchURL.searchParams.set('fields[entry]', 'item');
   let normalizedQuery = normalizeQueryForSignature(query);
   searchURL.searchParams.set('query', buildQueryParamValue(normalizedQuery));
   return searchURL.href;

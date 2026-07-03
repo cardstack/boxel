@@ -882,8 +882,8 @@ export type {
   SingleFileMetaDocument,
   CardCollectionDocument,
   FileMetaCollectionDocument,
-  SearchEntryCollectionDocument,
-  SearchEntryIncludedResource,
+  EntryCollectionDocument,
+  EntryIncludedResource,
   SearchEntryResults,
 } from './document-types.ts';
 export type {
@@ -904,7 +904,7 @@ export {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {

@@ -112,7 +112,7 @@ function environmentPortOffset(): number {
 
 /** Return a test port, shifted by a per-environment offset when needed. */
 // Test-only: fetch the card/file-meta serializations matching a card-rooted
-// `Query` through the search-entry engine, returning them in the
+// `Query` through the entry engine, returning them in the
 // `{ data, meta }` collection shape index assertions read. Requests the
 // data-only fieldset (one full `item` per entry).
 export async function searchCardsForTest(
@@ -133,7 +133,7 @@ export async function searchCardsForTest(
   // The top-level result items (one per entry, by the entry's `item` rel) land
   // in `data`; every other linked card/file-meta resource is sideloaded in
   // `included` — the legacy collection shape these assertions read.
-  // Key by the full `(type, id)` the search-entry `item` relationship carries,
+  // Key by the full `(type, id)` the entry `item` relationship carries,
   // not `id` alone — matches the wire contract (and the store's resolver).
   let itemKeys = new Set<string>();
   for (let entry of doc.data) {

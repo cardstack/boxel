@@ -1,7 +1,7 @@
 import type { ComponentLike } from '@glint/template';
 
 import type { ResolvedCodeRef } from './code-ref.ts';
-import type { SearchEntryCollectionDocument } from './document-types.ts';
+import type { EntryCollectionDocument } from './document-types.ts';
 import type { ErrorEntry } from './error.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
@@ -71,13 +71,13 @@ export interface RenderableSearchEntryLike {
 export interface SearchResultsYield {
   entries: RenderableSearchEntryLike[];
   isLoading: boolean;
-  meta: SearchEntryCollectionDocument['meta'];
+  meta: EntryCollectionDocument['meta'];
   errors: ErrorEntry[] | undefined;
 }
 
 // The card-facing contract for the search component the host provides on
 // `@context` (`@context.searchResultsComponent`). It consumes the heterogeneous
-// `search-entry` stream for a `search-entry`-rooted query and renders it
+// `entry` stream for an `entry`-rooted query and renders it
 // transparently — prerendered HTML inert (hydrated lazily) or the live
 // serialization. Used with a block it yields a `results` object
 // (`entries` / `isLoading` / `meta` / `errors`); used without one it renders
@@ -85,7 +85,7 @@ export interface SearchResultsYield {
 export interface SearchResultsComponentSignature {
   Element: HTMLElement;
   Args: {
-    // The `search-entry`-rooted query. Re-issued live on invalidation;
+    // The `entry`-rooted query. Re-issued live on invalidation;
     // changing it re-runs the search. Undefined → idle (no results).
     query: SearchEntryWireQuery | undefined;
     // The hydration gesture for HTML-backed rows — a host-UX choice, never on

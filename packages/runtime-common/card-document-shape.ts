@@ -31,7 +31,7 @@ import type {
   Meta,
   Relationship,
   Saved,
-  SearchEntryResource,
+  EntryResource,
 } from './resource-types.ts';
 import type {
   CardCollectionDocument,
@@ -47,7 +47,7 @@ import type {
 const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
 const CssResourceType: CssResource['type'] = 'css';
-const SearchEntryResourceType: SearchEntryResource['type'] = 'search-entry';
+const EntryResourceType: EntryResource['type'] = 'entry';
 const HtmlResourceType: HtmlResource['type'] = 'html';
 const IconResourceType: IconResource['type'] = 'icon';
 
@@ -326,13 +326,11 @@ export function isIconResource(resource: any): resource is IconResource {
   );
 }
 
-export function isSearchEntryResource(
-  resource: any,
-): resource is SearchEntryResource {
+export function isEntryResource(resource: any): resource is EntryResource {
   if (typeof resource !== 'object' || resource == null) {
     return false;
   }
-  if (resource.type !== SearchEntryResourceType) {
+  if (resource.type !== EntryResourceType) {
     return false;
   }
   if (typeof resource.id !== 'string') {

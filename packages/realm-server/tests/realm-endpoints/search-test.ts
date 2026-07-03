@@ -159,10 +159,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('fields[search-entry]=item: full serializations, htmlQuery inert', async function (assert) {
+    test('fields[entry]=item: full serializations, htmlQuery inert', async function (assert) {
       let response = await postSearch({
         filter: personFilter({ htmlQuery: { eq: { format: 'embedded' } } }),
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       assert.strictEqual(response.status, 200);
       let json = response.body;
@@ -187,10 +187,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+    test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['item.firstName'] },
+        fields: { entry: ['item.firstName'] },
       });
       assert.strictEqual(response.status, 200);
       let item = response.body.included.find(
@@ -201,10 +201,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(item.meta.sparseFields, ['firstName']);
     });
 
-    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+    test('fields[entry]=html,item: both branches on every entry', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['html', 'item'] },
+        fields: { entry: ['html', 'item'] },
       });
       assert.strictEqual(response.status, 200);
       let entry = response.body.data.find(
@@ -234,7 +234,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // a pinned html branch keeps membership visible with an empty array
       let pinned = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['html'] },
+        fields: { entry: ['html'] },
       });
       let pinnedJane = pinned.body.data.find(
         (e: { id: string }) => e.id === janeId,

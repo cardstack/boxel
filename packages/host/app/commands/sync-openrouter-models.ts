@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import {
   SupportedMimeType,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   rri,
   searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
@@ -339,8 +339,8 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     let slugs = new Set<string>();
     try {
       // Listing existing cards only needs each one's id, so ask the
-      // search-entry engine for a data-only projection
-      // (`fields[search-entry]=item`): every entry carries its `item`
+      // entry engine for a data-only projection
+      // (`fields[entry]=item`): every entry carries its `item`
       // serialization, no prerendered HTML.
       let wireQuery = searchEntryWireQueryFromQuery(
         {
@@ -367,9 +367,9 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
 
       if (response.ok) {
         let result = await response.json();
-        if (isSearchEntryCollectionDocument(result)) {
+        if (isEntryCollectionDocument(result)) {
           for (let entry of result.data) {
-            // A `search-entry` resource's id is the card URL.
+            // An `entry` resource's id is the card URL.
             let id = entry.id ?? '';
             // Extract slug from URL: .../OpenRouterModel/slug-name or .../OpenRouterModel/slug-name.json
             let match = id.match(/OpenRouterModel\/([^/]+)$/);
@@ -382,7 +382,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
             }
           }
         } else {
-          // A 200 that isn't a search-entry document is unexpected for
+          // A 200 that isn't an entry document is unexpected for
           // /_search; surface it rather than silently treating every model
           // as new (same best-effort fallback as the catch below).
           console.warn(

@@ -174,7 +174,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         .send(body);
     }
 
-    test('QUERY /_federated-search federates search-entry results across realms', async function (assert) {
+    test('QUERY /_federated-search federates entry results across realms', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
         realms: [testRealm.url, secondaryRealm.url],
@@ -329,7 +329,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       let differentFields = await post({
         ...baseBody,
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       assert.notStrictEqual(
         differentFields.headers['etag'],
@@ -352,7 +352,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       // an inert htmlQuery (fieldset without html) does not key the cache:
       // equivalent bodies share one entry + ETag
-      let itemFields = { 'search-entry': ['item'] };
+      let itemFields = { entry: ['item'] };
       let inertA = await post({ ...baseBody, fields: itemFields });
       let inertB = await post({
         ...baseBody,

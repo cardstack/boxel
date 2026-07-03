@@ -180,7 +180,7 @@ function searchRequest(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearerToken}`,
     },
-    // The search endpoint takes a search-entry-rooted query; benchmark the
+    // The search endpoint takes an entry-rooted query; benchmark the
     // data-only fieldset (one full `item` per result), the closest analogue
     // to the legacy live-card search response.
     body: JSON.stringify(

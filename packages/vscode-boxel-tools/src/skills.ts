@@ -378,10 +378,10 @@ export class SkillList extends vscode.TreeItem {
       headers['Authorization'] = jwt;
     }
 
-    // `_search` speaks the search-entry wire grammar: entry membership is
+    // `_search` speaks the entry wire grammar: entry membership is
     // addressed through `item.` (the card serialization), so the type anchor
     // is `item.on` and sort keys carry the `item.` prefix. Request the
-    // data-only fieldset (`fields[search-entry]=item`) — skill discovery never
+    // data-only fieldset (`fields[entry]=item`) — skill discovery never
     // renders HTML, so each entry carries only its full `item` serialization.
     const searchUrl = new URL('./_search', this.realmUrl);
     const query = {
@@ -400,7 +400,7 @@ export class SkillList extends vscode.TreeItem {
           name: 'Skill',
         },
       },
-      fields: { 'search-entry': ['item'] },
+      fields: { entry: ['item'] },
     };
     const response = await fetch(searchUrl, {
       method: 'QUERY',
@@ -422,7 +422,7 @@ export class SkillList extends vscode.TreeItem {
     const data: any = await response.json();
     console.log('Skill search data:', data);
 
-    // The `item` serializations live in `included`; each `search-entry` in
+    // The `item` serializations live in `included`; each `entry` in
     // `data` links one through its `item` relationship. Resolve them in result
     // order — these are the Skill card resources we read title/instructions
     // off of.

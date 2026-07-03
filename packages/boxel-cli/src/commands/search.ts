@@ -20,8 +20,8 @@ export interface SearchCommandOptions {
   profileManager?: ProfileManager;
 }
 
-// `_federated-search` speaks the search-entry wire grammar: one query
-// rooted on `search-entry`, where entry membership is addressed through
+// `_federated-search` speaks the entry wire grammar: one query
+// rooted on `entry`, where entry membership is addressed through
 // `item.` (the card/file serialization). The type anchor is `item.on` and the
 // field paths inside the filter operators carry the `item.` prefix. Callers
 // here author ordinary card-rooted queries, so these helpers rewrite a query
@@ -72,7 +72,7 @@ function toItemFilter(
       out.matches = value;
     } else {
       throw new Error(
-        `cannot translate filter member "${key}" to a search-entry query — the type anchor is "on"/"type" and field paths live under the ${FIELD_KEYED_OPERATORS.join('/')} operators`,
+        `cannot translate filter member "${key}" to an entry query — the type anchor is "on"/"type" and field paths live under the ${FIELD_KEYED_OPERATORS.join('/')} operators`,
       );
     }
   }
@@ -102,7 +102,7 @@ interface SearchEntryRequestBody {
   realms?: string[];
   // boxel-cli never renders HTML, so it requests the data-only fieldset: each
   // entry carries only its full `item` serialization (no prerendered `html`).
-  fields: { 'search-entry': ['item'] };
+  fields: { entry: ['item'] };
   filter?: Record<string, unknown>;
   sort?: Record<string, unknown>[];
   page?: unknown;
@@ -110,7 +110,7 @@ interface SearchEntryRequestBody {
 }
 
 /**
- * Build a search-entry request body from a card-rooted query: the
+ * Build an entry request body from a card-rooted query: the
  * `item.`-addressed filter/sort plus the data-only fieldset. Pass `realms` for
  * the federated `_federated-search`; omit it to query a single realm's own
  * `_search`.
@@ -120,7 +120,7 @@ export function searchEntryRequestBody(
   realms?: string[],
 ): SearchEntryRequestBody {
   let body: SearchEntryRequestBody = {
-    fields: { 'search-entry': ['item'] },
+    fields: { entry: ['item'] },
   };
   if (realms !== undefined) {
     body.realms = realms;
@@ -152,10 +152,10 @@ export function searchEntryRequestBody(
   return body;
 }
 
-// A data-only search-entry document, narrowed to the shape this client reads:
+// A data-only entry document, narrowed to the shape this client reads:
 // each entry links its serialization through `item`, and the `card`/`file-meta`
 // resource itself travels in `included`. A structural local type rather than
-// runtime-common's `SearchEntryCollectionDocument` — that one transitively
+// runtime-common's `EntryCollectionDocument` — that one transitively
 // pulls the index's `https://cardstack.com/base/*` imports, which don't resolve
 // in a plain Node CLI (the same boundary the query helpers above note).
 interface SearchEntryDoc {
@@ -168,7 +168,7 @@ interface SearchEntryDoc {
 }
 
 /**
- * Flatten a data-only search-entry document into the `item` serializations, in
+ * Flatten a data-only entry document into the `item` serializations, in
  * result order — the same `card`/`file-meta` resources the legacy endpoint
  * returned as its top-level `data`. Each entry points at its serialization in
  * `included`; resolve and collect them.
@@ -203,8 +203,8 @@ export function itemsFromSearchEntryDoc(
  * Federated search across one or more realms via the `_federated-search`
  * server endpoint.
  *
- * Sends the search-entry-rooted query as a QUERY request requesting the
- * data-only fieldset (`fields[search-entry]=item`), and returns the `item`
+ * Sends the entry-rooted query as a QUERY request requesting the
+ * data-only fieldset (`fields[entry]=item`), and returns the `item`
  * serializations the endpoint links in `included` — the `card`/`file-meta`
  * resources callers consume. Uses the server JWT via
  * `ProfileManager.authedRealmServerFetch`.
