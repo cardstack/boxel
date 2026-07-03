@@ -278,7 +278,14 @@ const SOURCE_ETAG_VARIANT = 'source';
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
-const CARD_JSON_ETAG_VARIANT = 'card';
+//
+// Bump this variant whenever the served card-JSON representation changes so
+// caches revalidate instead of 304'ing a client to a stale body: neither
+// `indexed_at` nor the realm-info hash moves on a serialization change, so the
+// variant is the only signal that invalidates already-cached bodies. Bumped to
+// `card-rri` when the server began serving instance ids (`id`/`links.self`/
+// relationship ids) in canonical prefix (RRI) form for mapped realms.
+const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
