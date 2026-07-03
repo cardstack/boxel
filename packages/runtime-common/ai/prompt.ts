@@ -436,12 +436,54 @@ async function getEnabledSkills(
   if (enabledSkillCards?.length) {
     return await Promise.all(
       enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
-        let cardContent = await downloadFile(client, cardFileDef);
-        return (JSON.parse(cardContent) as LooseSingleCardDocument)?.data;
+        let content = await downloadFile(client, cardFileDef);
+        // A markdown skill (SKILL.md) is a plain file, not a card document:
+        // its body is the instructions. Present it in the same card-shaped
+        // form the rest of the prompt pipeline expects, so skillCardsToMessages
+        // and getTools need no special-casing.
+        if (isMarkdownSkillFile(cardFileDef)) {
+          let { title, body } = parseMarkdownSkill(content, cardFileDef);
+          return {
+            id: cardFileDef.sourceUrl,
+            type: 'card',
+            attributes: { title, instructions: body },
+          } as unknown as LooseCardResource;
+        }
+        return (JSON.parse(content) as LooseSingleCardDocument)?.data;
       }),
     );
   }
   return [];
+}
+
+// A skill enabled as a markdown file (SKILL.md), rather than a Skill card.
+export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
+  return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
+}
+
+// Splits a markdown skill into its instruction body and a title. The body is
+// everything after the leading `--- frontmatter ---` block (the frontmatter is
+// metadata, not instructions); the title is the frontmatter `name`, falling
+// back to the file name.
+export function parseMarkdownSkill(
+  content: string,
+  fileDef: SerializedFileDef,
+): { title: string; body: string } {
+  let body = content;
+  let title: string | undefined;
+  let match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (match) {
+    body = content.slice(match[0].length);
+    let nameLine = match[1].match(/^name:\s*(.+)$/m);
+    if (nameLine) {
+      title = nameLine[1].trim().replace(/^["']|["']$/g, '');
+    }
+  }
+  if (!title) {
+    let path = fileDef.sourceUrl ?? fileDef.name ?? '';
+    title = path.split('/').filter(Boolean).pop() ?? 'Skill';
+  }
+  return { title, body: body.trim() };
 }
 
 export async function getDisabledSkillIds(
