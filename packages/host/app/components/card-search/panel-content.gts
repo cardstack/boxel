@@ -233,7 +233,7 @@ export default class PanelContent extends Component<Signature> {
     if (this.args.variant !== 'mini') {
       return wire;
     }
-    let filter: SearchEntryWireFilter = {
+    const filter: SearchEntryWireFilter = {
       ...wire.filter,
       eq: {
         ...wire.filter?.eq,
