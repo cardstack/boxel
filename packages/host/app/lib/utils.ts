@@ -86,3 +86,7 @@ export function skillCardURL(skillId: string): string {
 
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
 export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
+
+// source-code-editing now lives as a markdown SKILL.md in the skills realm and
+// is enabled by URL (loaded on demand), rather than pushed as a Skill card.
+export const sourceCodeEditingSkillUrl = `${skillsRealmURL}skills/source-code-editing/SKILL.md`;
