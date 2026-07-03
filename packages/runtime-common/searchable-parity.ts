@@ -82,6 +82,7 @@ function diffValue(
   if (isObject(lv) && isObject(gv)) {
     let keys = new Set([...Object.keys(lv), ...Object.keys(gv)]);
     keys.delete('_cardType');
+    keys.delete('_isCardInstance');
     for (let key of keys) {
       diffValue(
         path ? `${path}.${key}` : key,

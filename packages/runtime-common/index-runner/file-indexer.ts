@@ -32,6 +32,9 @@ export interface FileIndexerOptions {
   lastModified: number;
   resourceCreatedAt: number;
   hasModulePrerender?: boolean;
+  // True when this file is a card-instance .json — the fused visit dual-
+  // indexes those (an `instance` row plus this `file` row).
+  isCardInstance?: boolean;
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
@@ -59,6 +62,7 @@ export async function performFileIndexing({
   lastModified,
   resourceCreatedAt,
   hasModulePrerender,
+  isCardInstance,
   realmURL: _realmURL,
   auth: _auth,
   jobInfo,
@@ -164,6 +168,29 @@ export async function performFileIndexing({
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
 
+  // Shared by the success entry and the dependency-error entry below, so the
+  // two rows carry the same search keys. Two of them are synthetic (stamped
+  // after the extractor's searchDoc so they win deterministically):
+  // - `_isCardInstance` marks the `file` row of a dual-indexed card-instance
+  //   .json so mixed cards+files search can exclude it (the card already
+  //   appears via its `instance` row). It rides on the dependency-error entry
+  //   too, so a card .json whose card is in an error state stays out of file
+  //   search. Stamped only when true; plain file docs don't carry the key.
+  // - `cardTitle` on a file doc is NOT a claim that the file is a card: it is
+  //   the file's display title (its name) aliased under the key card docs use
+  //   (CardDef's title field is named `cardTitle`), so one mixed query can
+  //   substring-match (`contains: {cardTitle}`) and A-Z sort
+  //   (`search_doc->>'cardTitle'`, NULLS LAST) cards and files uniformly.
+  let searchData = {
+    url: fileURL,
+    sourceUrl: fileURL,
+    name,
+    contentType,
+    ...(extractResult.searchDoc ?? {}),
+    ...(isCardInstance ? { _isCardInstance: true } : {}),
+    cardTitle: name,
+  };
+
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
   let dependencyError =
@@ -179,13 +206,7 @@ export async function performFileIndexing({
     await updateEntry(entryURL, {
       type: 'file-error',
       error: normalizedDependencyError,
-      searchData: {
-        url: fileURL,
-        sourceUrl: fileURL,
-        name,
-        contentType,
-        ...(extractResult.searchDoc ?? {}),
-      },
+      searchData,
       types: fileTypes,
       diagnostics,
     });
@@ -223,13 +244,7 @@ export async function performFileIndexing({
     resourceCreatedAt,
     deps,
     resource: extractResult.resource ?? null,
-    searchData: {
-      url: fileURL,
-      sourceUrl: fileURL,
-      name,
-      contentType,
-      ...(extractResult.searchDoc ?? {}),
-    },
+    searchData,
     types: fileTypes,
     displayNames: extractResult.displayNames ?? [],
     isolatedHtml: renderResult?.isolatedHTML ?? undefined,

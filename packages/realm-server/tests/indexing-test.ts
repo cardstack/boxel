@@ -1055,6 +1055,15 @@ module(basename(import.meta.filename), function () {
         'number',
         'file entry includes contentSize',
       );
+      assert.true(
+        entry?.searchDoc?._isCardInstance,
+        'file entry for a card instance json is marked _isCardInstance',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?.cardTitle,
+        'mango.json',
+        'file entry cardTitle is the file name',
+      );
     });
 
     test('keeps instance entries when indexing card json files as file entries', async function (assert) {
@@ -1101,6 +1110,15 @@ module(basename(import.meta.filename), function () {
         typeof searchDoc.contentSize,
         'number',
         'search_doc includes contentSize',
+      );
+      assert.strictEqual(
+        searchDoc.cardTitle,
+        'random-file.txt',
+        'search_doc cardTitle is the file name',
+      );
+      assert.false(
+        '_isCardInstance' in searchDoc,
+        'non-card file search_doc does not carry _isCardInstance',
       );
     });
 
