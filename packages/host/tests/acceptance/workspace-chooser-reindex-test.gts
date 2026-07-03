@@ -225,4 +225,34 @@ module('Acceptance | workspace-chooser re-index', function (hooks) {
       .dom('[data-test-reindex-error]')
       .doesNotExist('dismissing the banner removes the error');
   });
+
+  test('a long Re-index error is line-clamped but keeps the full text on hover', async function (assert) {
+    responseStatus = 500;
+    // A server body long enough to overflow the small tile banner.
+    responseBody = 'stack trace: '.repeat(40).trim();
+    let fullMessage = `Full reindex realm failed: 500 - ${responseBody}`;
+
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+    await click('[data-test-boxel-menu-item-text="Re-index"]');
+
+    await waitFor('[data-test-reindex-error]');
+
+    // The visible text is clamped by CSS, but the full message stays reachable
+    // via the title attribute so nothing is lost.
+    let message = document.querySelector(
+      '[data-test-reindex-error] .reindex-error__message',
+    ) as HTMLElement;
+    assert.strictEqual(
+      message.getAttribute('title'),
+      fullMessage,
+      'the full error is preserved in the title for hover',
+    );
+    assert.strictEqual(
+      getComputedStyle(message).getPropertyValue('-webkit-line-clamp').trim(),
+      '3',
+      'the message is clamped to three lines so the banner cannot cover the tile',
+    );
+  });
 });

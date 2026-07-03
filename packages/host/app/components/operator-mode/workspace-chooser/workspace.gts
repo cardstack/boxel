@@ -79,7 +79,10 @@ export default class Workspace extends Component<Signature> {
       >
         {{#if this.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
-            <span class='reindex-error__message'>{{this.reindexError}}</span>
+            <span
+              class='reindex-error__message'
+              title={{this.reindexError}}
+            >{{this.reindexError}}</span>
             <button
               type='button'
               class='reindex-error__dismiss'
@@ -524,6 +527,13 @@ export default class Workspace extends Component<Signature> {
       .reindex-error__message {
         flex: 1;
         overflow-wrap: anywhere;
+        /* Cap a long server error at a few lines so the banner never grows to
+        cover the whole tile; the full text stays available via the title. */
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
       }
       .reindex-error__dismiss {
         flex-shrink: 0;
