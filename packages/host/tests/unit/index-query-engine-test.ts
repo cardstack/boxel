@@ -338,7 +338,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}1.json`,
         type: 'instance',
         has_error: true,
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: undefined,
         types: [],
@@ -351,7 +351,7 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}mango.json`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(mango),
         types: await getTypes(mango),
@@ -360,7 +360,7 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}vangogh.json`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(vangogh),
         types: await getTypes(vangogh),
@@ -1870,34 +1870,34 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
       dbAdapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+            data: { generation: 2, search_doc: { name: 'Mango' } },
           },
           {
             card: ringo,
-            data: { realm_version: 2, search_doc: { name: 'Ringo' } },
+            data: { generation: 2, search_doc: { name: 'Ringo' } },
           },
         ],
         production: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+            data: { generation: 1, search_doc: { name: 'Van Gogh' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
         ],
       },
@@ -1927,34 +1927,34 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
       dbAdapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+            data: { generation: 2, search_doc: { name: 'Mango' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+            data: { generation: 1, search_doc: { name: 'Ringo' } },
           },
         ],
         production: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+            data: { generation: 1, search_doc: { name: 'Van Gogh' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+            data: { generation: 1, search_doc: { name: 'Ringo' } },
           },
         ],
       },
@@ -3328,7 +3328,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}vangogh.json`,
         file_alias: `${testRealmURL}vangogh`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [
@@ -3342,7 +3342,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}jimmy.json`,
         file_alias: `${testRealmURL}jimmy`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [
@@ -3356,7 +3356,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}donald.json`,
         file_alias: `${testRealmURL}donald`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [

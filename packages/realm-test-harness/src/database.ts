@@ -272,9 +272,10 @@ export async function resetRealmState(
           `DELETE FROM boxel_index_working WHERE realm_url = $1`,
           [realmURL.href],
         );
-        await client.query(`DELETE FROM realm_versions WHERE realm_url = $1`, [
-          realmURL.href,
-        ]);
+        await client.query(
+          `DELETE FROM realm_generations WHERE realm_url = $1`,
+          [realmURL.href],
+        );
         await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
           realmURL.href,
         ]);
@@ -394,7 +395,7 @@ export async function rewriteClonedRealmServerUrls(
         );
 
         await client.query(
-          `UPDATE realm_versions
+          `UPDATE realm_generations
            SET realm_url = replace(realm_url, $1, $2)`,
           [fromURL, toURL],
         );
@@ -467,7 +468,7 @@ export async function rebuildWorkingIndexFromIndex(
              url,
              file_alias,
              type,
-             realm_version,
+             generation,
              realm_url,
              pristine_doc,
              search_doc,
@@ -492,7 +493,7 @@ export async function rebuildWorkingIndexFromIndex(
              url,
              file_alias,
              type,
-             realm_version,
+             generation,
              realm_url,
              pristine_doc,
              search_doc,

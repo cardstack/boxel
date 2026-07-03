@@ -16,7 +16,7 @@ import {
   type CardResource,
   type Expression,
   type BoxelIndexTable,
-  type RealmVersionsTable,
+  type RealmGenerationsTable,
   trimExecutableExtension,
   query,
   coerceTypes,
@@ -28,7 +28,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { testRealmURL } from './index';
 
 const defaultIndexEntry = {
-  realm_version: 1,
+  generation: 1,
   realm_url: testRealmURL,
   has_error: false,
 };
@@ -104,8 +104,8 @@ export type TestIndexRow =
 //    row in the boxel_index table, as well as any additional fields that you
 //    wish to set from the `data` object.
 //
-// the realm version table will default to version 1 of the testRealmURL if no
-// value is supplied
+// the realm generations table will default to generation 1 of the testRealmURL
+// if no value is supplied
 export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
@@ -113,30 +113,30 @@ export async function setupIndex(
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  versionRows: RealmVersionsTable[],
+  versionRows: RealmGenerationsTable[],
   indexRows: { working: TestIndexRow[]; production: TestIndexRow[] },
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  versionRows: RealmVersionsTable[],
+  versionRows: RealmGenerationsTable[],
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
+  maybeVersionRows: RealmGenerationsTable[] | TestIndexRow[] = [],
   maybeWorkingProductionRows?:
     | TestIndexRow[]
     | { working: TestIndexRow[]; production: TestIndexRow[] },
 ): Promise<void> {
-  let versionRows: RealmVersionsTable[];
+  let versionRows: RealmGenerationsTable[];
   let workingRows: TestIndexRow[] = [];
   let productionRows: TestIndexRow[] = [];
   if (!maybeWorkingProductionRows) {
-    versionRows = [{ realm_url: testRealmURL, current_version: 1 }];
+    versionRows = [{ realm_url: testRealmURL, current_generation: 1 }];
     workingRows = maybeVersionRows as TestIndexRow[];
     productionRows = maybeVersionRows as TestIndexRow[];
   } else {
-    versionRows = maybeVersionRows as RealmVersionsTable[];
+    versionRows = maybeVersionRows as RealmGenerationsTable[];
     if (Array.isArray(maybeWorkingProductionRows)) {
       workingRows = maybeWorkingProductionRows as TestIndexRow[];
       productionRows = maybeWorkingProductionRows as TestIndexRow[];
@@ -203,7 +203,7 @@ export async function setupIndex(
     await query(
       client,
       [
-        `INSERT INTO realm_versions`,
+        `INSERT INTO realm_generations`,
         ...addExplicitParens(
           separatedByCommas(versionExpressions[0].nameExpressions),
         ),

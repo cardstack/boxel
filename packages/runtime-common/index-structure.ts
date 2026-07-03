@@ -5,7 +5,7 @@ import type { PgPrimitive } from './expression.ts';
 export interface BoxelIndexTable {
   url: string;
   file_alias: string;
-  realm_version: number;
+  generation: number;
   realm_url: string;
   type: 'instance' | 'file';
   has_error: boolean | null;
@@ -50,9 +50,9 @@ export interface BoxelIndexTable {
   job_id?: number | null;
 }
 
-export interface RealmVersionsTable {
+export interface RealmGenerationsTable {
   realm_url: string;
-  current_version: number;
+  current_generation: number;
 }
 
 export interface CardTypeSummary {
@@ -78,7 +78,7 @@ export interface RealmMetaValue {
 }
 
 export interface RealmMetaTable {
-  realm_version: number;
+  generation: number;
   realm_url: string;
   value: RealmMetaValue;
   indexed_at: string | null;

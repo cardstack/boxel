@@ -805,7 +805,7 @@ async function waitForQueueIdle(
 
 // Pure diagnostics — never changes behavior. `_types` (and any reader of the
 // precomputed `realm_meta`) returns instances from the `realm_meta` row whose
-// `realm_version` equals `realm_versions.current_version`. An empty result has
+// `generation` equals `realm_generations.current_generation`. An empty result has
 // three distinguishable causes, and this dump tells them apart in the CI log
 // without needing another iteration:
 //   1. The from-scratch index produced no instance rows at all
@@ -813,7 +813,7 @@ async function waitForQueueIdle(
 //   2. Instances were indexed but their `types` couldn't be resolved (a render
 //      or module fetch failed) — `#fetchTypeSummary` requires `types->>0`, so
 //      those rows silently drop out of `realm_meta` (null_types > 0).
-//   3. No `realm_meta` row matches `current_version` (a version mismatch —
+//   3. No `realm_meta` row matches `current_generation` (a version mismatch —
 //      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
 //      even though instances exist (matched = NONE while instances > 0).
 // Logged unconditionally as a one-liner; degraded/error instance rows are
@@ -826,16 +826,16 @@ export async function logRealmIndexDiagnostics(
 ): Promise<void> {
   try {
     let [versionRow] = await dbAdapter.execute(
-      `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
       { bind: [realmURL] },
     );
-    let currentVersion = versionRow?.current_version ?? null;
+    let currentVersion = versionRow?.current_generation ?? null;
 
     let metaRows = await dbAdapter.execute(
-      `SELECT realm_version,
+      `SELECT generation,
               COALESCE(jsonb_array_length(value->'instances'), -1) AS instances,
               COALESCE(jsonb_array_length(value->'files'), -1) AS files
-       FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+       FROM realm_meta WHERE realm_url = $1 ORDER BY generation`,
       { bind: [realmURL] },
     );
 
@@ -851,16 +851,15 @@ export async function logRealmIndexDiagnostics(
     let metaSummary =
       metaRows
         .map(
-          (r) =>
-            `v${r.realm_version}{instances:${r.instances},files:${r.files}}`,
+          (r) => `v${r.generation}{instances:${r.instances},files:${r.files}}`,
         )
         .join(', ') || '(none)';
-    let matched = metaRows.find((r) => r.realm_version === currentVersion);
+    let matched = metaRows.find((r) => r.generation === currentVersion);
     let nullTypes = Number(counts?.null_types ?? 0);
     let errored = Number(counts?.errored ?? 0);
 
     console.log(
-      `[realm-index-diag ${label}] realm=${realmURL} current_version=${currentVersion} ` +
+      `[realm-index-diag ${label}] realm=${realmURL} current_generation=${currentVersion} ` +
         `realm_meta=[${metaSummary}] ` +
         `matched=${matched ? `instances:${matched.instances}` : 'NONE(version-mismatch)'} ` +
         `boxel_index.instances=${counts?.instances ?? '?'} null_types=${nullTypes} errored=${errored}`,

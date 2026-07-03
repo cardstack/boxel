@@ -120,7 +120,7 @@ export default function handleUnpublishRealm({
       // job whose execution runs on a worker connection of its own, so it
       // is not transactional with the lock-holder's DB cleanup either way.
       // Doing it before the tx keeps the tombstones (which mark every
-      // boxel_index entry as deleted + bump realm_version) in place if
+      // boxel_index entry as deleted + bump generation) in place if
       // the registry/permissions DELETEs fail — a retry of the same
       // unpublish will succeed without re-tombstoning the same content.
       if (publishedRealm) {

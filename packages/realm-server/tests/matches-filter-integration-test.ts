@@ -49,7 +49,7 @@ async function seedRow(
   { url, markdown }: { url: string; markdown: string | null },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
     `VALUES (`,
     param(url),
     `,`,
