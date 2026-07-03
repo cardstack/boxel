@@ -160,7 +160,7 @@ export interface IndexedFile {
   atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
-  realmVersion: number;
+  generation: number;
   realmURL: string;
   indexedAt: number | null;
 }
@@ -180,7 +180,7 @@ export interface IndexedInstance {
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
-  realmVersion: number;
+  generation: number;
   realmURL: string;
   indexedAt: number | null;
 }
@@ -189,7 +189,7 @@ interface InstanceError extends Partial<
   Omit<
     IndexedInstance,
     | 'type'
-    | 'realmVersion'
+    | 'generation'
     | 'realmURL'
     | 'instance'
     | 'lastModified'
@@ -198,7 +198,7 @@ interface InstanceError extends Partial<
 > {
   type: 'instance-error';
   error: SerializedError;
-  realmVersion: number;
+  generation: number;
   realmURL: string;
   instance: CardResource | null;
   lastModified: number | null;
@@ -386,7 +386,7 @@ export class IndexQueryEngine {
       fitted_html: fittedHtml,
       markdown,
       search_doc: searchDoc,
-      realm_version: realmVersion,
+      generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
       last_modified: lastModified,
@@ -411,7 +411,7 @@ export class IndexQueryEngine {
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
-      realmVersion,
+      generation,
     };
 
     if (maybeResult.has_error) {
@@ -535,7 +535,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       icon_html: iconHtml,
       markdown,
-      realm_version: realmVersion,
+      generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
       last_modified: lastModified,
@@ -544,10 +544,8 @@ export class IndexQueryEngine {
       types,
       display_names: displayNames,
     } = maybeResult;
-    realmVersion =
-      typeof realmVersion === 'string'
-        ? parseInt(realmVersion)
-        : (realmVersion ?? 0);
+    generation =
+      typeof generation === 'string' ? parseInt(generation) : (generation ?? 0);
     return {
       type: 'file',
       canonicalURL,
@@ -566,7 +564,7 @@ export class IndexQueryEngine {
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
-      realmVersion,
+      generation,
       realmURL,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
     };
@@ -839,7 +837,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(icon_html) AS icon_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(icon_html) AS icon_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(generation) AS generation, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
       ],
       'file',
     );
@@ -884,7 +882,7 @@ export class IndexQueryEngine {
       markdown: result.markdown ?? null,
       lastModified,
       resourceCreatedAt,
-      realmVersion: result.realm_version ?? 0,
+      generation: result.generation ?? 0,
       realmURL: result.realm_url ?? '',
       indexedAt,
     };
@@ -960,22 +958,22 @@ export class IndexQueryEngine {
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<RealmMetaValue> {
-    // JOIN against realm_versions.current_version so we always pick the
+    // JOIN against realm_generations.current_generation so we always pick the
     // realm_meta row that matches the realm's authoritative current
-    // version. Naive `SELECT … WHERE realm_url=…` returns an arbitrary
+    // generation. Naive `SELECT … WHERE realm_url=…` returns an arbitrary
     // row when stale rows linger (e.g., a from-scratch reindex resets
-    // the version to a low number, leaving older high-version rows that
-    // the legacy prune predicate `realm_version < <new>` never reaches).
-    // Ordering by `realm_version DESC` would actually pick the *wrong*
-    // row after a from-scratch — the highest version is the oldest.
-    // realm_versions is the system source of truth for "which version
+    // the generation to a low number, leaving older high-generation rows that
+    // the legacy prune predicate `generation < <new>` never reaches).
+    // Ordering by `generation DESC` would actually pick the *wrong*
+    // row after a from-scratch — the highest generation is the oldest.
+    // realm_generations is the system source of truth for "which generation
     // is current," so anchoring the read there is the robust fix.
     let results = (await this.#query([
       `SELECT rm.value
        FROM realm_meta rm
-       JOIN realm_versions rv
-         ON rv.realm_url = rm.realm_url
-        AND rv.current_version = rm.realm_version
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
       `LIMIT 1`,

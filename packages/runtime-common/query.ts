@@ -26,7 +26,7 @@ interface QueryCommon {
   page?: {
     number?: number; // page.number is 0-based
     size: number;
-    realmVersion?: number;
+    generation?: number;
   };
 }
 
@@ -49,7 +49,7 @@ interface QueryWithInterpolationsBase {
   page?: {
     number?: number; // page.number is 0-based
     size: number | string;
-    realmVersion?: number;
+    generation?: number;
   };
 }
 

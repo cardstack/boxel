@@ -21,7 +21,7 @@
    url TEXT NOT NULL,
    file_alias TEXT NOT NULL,
    type TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc BLOB,
    search_doc BLOB,
@@ -50,7 +50,7 @@
    url TEXT NOT NULL,
    file_alias TEXT NOT NULL,
    type TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc BLOB,
    search_doc BLOB,
@@ -123,12 +123,18 @@
    PRIMARY KEY ( realm_url, file_path ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_generations (
+   realm_url TEXT NOT NULL,
+   current_generation INTEGER NOT NULL,
+   PRIMARY KEY ( realm_url ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_meta (
    realm_url TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    value BLOB NOT NULL,
    indexed_at,
-   PRIMARY KEY ( realm_url, realm_version ) 
+   PRIMARY KEY ( realm_url, generation ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_metadata (
@@ -162,12 +168,6 @@
    write BOOLEAN NOT NULL,
    realm_owner BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( realm_url, username ) 
-);
-
- CREATE TABLE IF NOT EXISTS realm_versions (
-   realm_url TEXT NOT NULL,
-   current_version INTEGER NOT NULL,
-   PRIMARY KEY ( realm_url ) 
 );
 
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (

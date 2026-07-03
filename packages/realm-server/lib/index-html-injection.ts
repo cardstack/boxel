@@ -29,7 +29,7 @@ export async function retrieveHeadHTML({
 
   let rows = await query(dbAdapter, [
     `
-      SELECT head_html, realm_version
+      SELECT head_html, generation
       FROM boxel_index
       WHERE type = 'instance'
        AND head_html IS NOT NULL
@@ -38,7 +38,7 @@ export async function retrieveHeadHTML({
     `,
     ...indexCandidateExpressions(candidates),
     `
-      ORDER BY realm_version DESC
+      ORDER BY generation DESC
       LIMIT 1
     `,
   ]);
@@ -46,12 +46,12 @@ export async function retrieveHeadHTML({
   log?.debug('Head query result for %s', cardURL.href, rows);
 
   let headRow = rows[0] as
-    | { head_html?: string | null; realm_version?: string | number }
+    | { head_html?: string | null; generation?: string | number }
     | undefined;
 
   if (headRow?.head_html != null) {
     log?.debug(
-      `Using head HTML from realm version ${headRow.realm_version} for ${cardURL.href}`,
+      `Using head HTML from generation ${headRow.generation} for ${cardURL.href}`,
     );
   } else {
     log?.debug(`No head HTML returned from database for ${cardURL.href}`);
@@ -83,7 +83,7 @@ export async function retrieveIsolatedHTML({
 
   let rows = await query(dbAdapter, [
     `
-      SELECT isolated_html, realm_version
+      SELECT isolated_html, generation
       FROM boxel_index
       WHERE isolated_html IS NOT NULL
         AND type = 'instance'
@@ -92,7 +92,7 @@ export async function retrieveIsolatedHTML({
       `,
     ...indexCandidateExpressions(candidates),
     `
-      ORDER BY realm_version DESC
+      ORDER BY generation DESC
       LIMIT 1
     `,
   ]);
@@ -100,12 +100,12 @@ export async function retrieveIsolatedHTML({
   log?.debug('Isolated query result for %s', cardURL.href, rows);
 
   let isolatedRow = rows[0] as
-    | { isolated_html?: string | null; realm_version?: string | number }
+    | { isolated_html?: string | null; generation?: string | number }
     | undefined;
 
   if (isolatedRow?.isolated_html != null) {
     log?.debug(
-      `Using isolated HTML from realm version ${isolatedRow.realm_version} for ${cardURL.href}`,
+      `Using isolated HTML from generation ${isolatedRow.generation} for ${cardURL.href}`,
     );
   } else {
     log?.debug(`No isolated HTML returned from database for ${cardURL.href}`);

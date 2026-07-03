@@ -28,7 +28,7 @@ export async function retrieveScopedCSS({
 
   let scopedCSSQuery: Expression = [
     `
-      SELECT deps, last_known_good_deps, realm_version
+      SELECT deps, last_known_good_deps, generation
       FROM boxel_index
       WHERE type = 'instance'
         AND is_deleted IS NOT TRUE
@@ -37,7 +37,7 @@ export async function retrieveScopedCSS({
     `,
     ...indexCandidateExpressions(candidates),
     `
-      ORDER BY realm_version DESC
+      ORDER BY generation DESC
       LIMIT 1
     `,
   ];
@@ -60,7 +60,7 @@ export async function retrieveScopedCSS({
     | {
         deps?: string[] | string | null;
         last_known_good_deps?: string[] | string | null;
-        realm_version?: string | number;
+        generation?: string | number;
       }
     | undefined;
 
