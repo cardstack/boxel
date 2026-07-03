@@ -3,12 +3,11 @@ import {
   field,
   Component,
   CardDef,
-  relativeTo,
   linksToMany,
   FieldDef,
   containsMany,
   getCardMeta,
-  virtualNetworkFor,
+  resolveInstanceURL,
   type CardOrFieldTypeIcon,
   BaseDef,
   type CardContext,
@@ -81,23 +80,20 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
-    // The attached-file identifiers are read as fetchable source URLs (the AI
-    // source-file reader does `new URL(...)`), so this must resolve to a real
-    // URL — keep the VirtualNetwork here (a scoped RRI can't be fetched).
-    let vn = virtualNetworkFor(card);
-    if (!vn) {
-      return [];
-    }
+    // The attached-file identifier is read as a fetchable source URL (the AI
+    // source-file reader does `new URL(...)`), so the card's type module must
+    // resolve to a real URL — a scoped RRI can't be fetched.
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      vn.toURL(card.id!),
+      card.id,
       undefined,
-      vn,
     )! as ResolvedCodeRef;
-    let cardOrFieldModuleURL = codeRef.module
-      ? ensureExtension(codeRef.module, { default: '.gts' })
+    let moduleURL = codeRef.module
+      ? resolveInstanceURL(card, codeRef.module)
       : undefined;
-    return cardOrFieldModuleURL ? [cardOrFieldModuleURL] : [];
+    return moduleURL
+      ? [ensureExtension(moduleURL.href, { default: '.gts' })]
+      : [];
   }
 }
 
@@ -941,13 +937,9 @@ export class Spec extends CardDef {
       }
       // `moduleHref` is consumed as a fetchable / absolute URL (source reader's
       // `new URL(...)`, and URL-form comparisons in the code submode), so it
-      // must resolve to a real URL — keep the VirtualNetwork here (RRI space
-      // would leave a scoped prefix that those readers can't use).
-      let vn = virtualNetworkFor(this);
-      if (!vn) {
-        return undefined;
-      }
-      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
+      // must resolve to a real URL — RRI space would leave a scoped prefix that
+      // those readers can't use.
+      return resolveInstanceURL(this, this.ref.module)?.href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);

@@ -4805,18 +4805,31 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
-// The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the instance is
-// detached (no store, no loader-attached VN) — callers handle that by
-// degrading to URL math or throwing.
-export function virtualNetworkFor(
-  instance: BaseDef,
-): VirtualNetwork | undefined {
+// Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
+// relative to the instance's own location. Card definitions that must hand a
+// real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
+// AI source-file reader's `new URL(...)`) use this rather than reaching for the
+// VirtualNetwork object directly — they get back a URL, not the network itself.
+// Resolves through the active Loader's VirtualNetwork (the network boundary);
+// returns undefined when none is available (detached / static-parse contexts)
+// so callers can degrade to URL math.
+export function resolveInstanceURL(
+  instance: CardDef,
+  reference: string,
+): URL | undefined {
+  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    return getStore(instance).virtualNetwork;
+    virtualNetwork = myLoader().getVirtualNetwork();
   } catch {
     return undefined;
   }
+  if (!virtualNetwork) {
+    return undefined;
+  }
+  return virtualNetwork.resolveURL(
+    reference,
+    instance.id ?? instance[relativeTo],
+  );
 }
 
 // Resolve a (possibly relative) reference to its absolute canonical RRI,

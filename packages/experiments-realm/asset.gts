@@ -4,8 +4,7 @@ import {
   CardDef,
   FieldDef,
   Component,
-  relativeTo,
-  virtualNetworkFor,
+  resolveInstanceURL,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import CurrencyIcon from '@cardstack/boxel-icons/currency';
@@ -21,19 +20,13 @@ export class Asset extends CardDef {
       if (!this.logoURL) {
         return null;
       }
-      let rel = this[relativeTo] || this.id;
-      // The instance may have no store-attached VirtualNetwork (detached
-      // / static-parse contexts), and `rel` may be a prefix-form RRI
-      // (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse on
-      // its own. If we can't resolve a base, return `logoURL` raw so the
-      // <img src> binding still has a string to render rather than
-      // letting the compute throw.
+      // `logoURL` may be relative to the instance, which lives at a prefix-form
+      // RRI (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse.
+      // Resolve it against the instance's real URL for the <img src>; if no
+      // VirtualNetwork is available (detached / static-parse), fall back to the
+      // raw value.
       try {
-        let base =
-          typeof rel === 'string'
-            ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
-            : rel;
-        return new URL(this.logoURL, base).href;
+        return resolveInstanceURL(this, this.logoURL)?.href ?? this.logoURL;
       } catch {
         return this.logoURL;
       }
@@ -105,19 +98,13 @@ class AssetField extends FieldDef {
       if (!this.logoURL) {
         return null;
       }
-      let rel = this[relativeTo] || this.id;
-      // The instance may have no store-attached VirtualNetwork (detached
-      // / static-parse contexts), and `rel` may be a prefix-form RRI
-      // (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse on
-      // its own. If we can't resolve a base, return `logoURL` raw so the
-      // <img src> binding still has a string to render rather than
-      // letting the compute throw.
+      // `logoURL` may be relative to the instance, which lives at a prefix-form
+      // RRI (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse.
+      // Resolve it against the instance's real URL for the <img src>; if no
+      // VirtualNetwork is available (detached / static-parse), fall back to the
+      // raw value.
       try {
-        let base =
-          typeof rel === 'string'
-            ? (virtualNetworkFor(this)?.toURL(rel) ?? new URL(rel))
-            : rel;
-        return new URL(this.logoURL, base).href;
+        return resolveInstanceURL(this, this.logoURL)?.href ?? this.logoURL;
       } catch {
         return this.logoURL;
       }
