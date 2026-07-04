@@ -1344,8 +1344,8 @@ module(basename(import.meta.filename), function () {
           // never-set link — independent of searchability, so both the written
           // source and the served card+json keep `friend` as `{ self: null }`
           // and omit `friends`. (`friend` is even rendered in the isolated
-          // template, which no longer marks it "used": merely reading a link
-          // doesn't author it.)
+          // template, yet a render doesn't author a link — reading it doesn't
+          // mark it "used" — so it stays omitted unless actually set.)
           let response = await request
             .post('/')
             .send({

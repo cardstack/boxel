@@ -322,8 +322,8 @@ async function searchableLink(
   // A searchable target stays a dependency even when broken: recording it
   // reindexes the card (clearing the `{ id }` / brokenLinks diagnostic) once the
   // target becomes reachable, mirroring the successful-expansion dep below. This
-  // branch also covers the load-settle pass that planted the sentinel earlier, so
-  // the authoritative generation reaches it instead of the load branch below.
+  // branch also covers a prior settle pass having planted the sentinel, so the
+  // authoritative generation reaches it here instead of the load branch below.
   if (isLinkError(rawValue) || isLinkNotFound(rawValue)) {
     let reference = makeAbsoluteURL(rawValue.reference);
     if (matched) {
