@@ -74,8 +74,9 @@ export default class WorkspaceChooser extends Component<Signature> {
         return serverURL;
       }
     });
-    let servers =
-      hosts.length === 1 ? hosts[0] : `${hosts.length} realm servers`;
+    // Name every unreachable server, per the notice's contract. Trusted
+    // servers are few in practice, so a comma-joined list stays readable.
+    let servers = hosts.join(', ');
     return `Couldn’t reach ${servers}. Some workspaces may be missing — retrying…`;
   }
 
