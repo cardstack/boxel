@@ -167,12 +167,19 @@ export default class RenderMetaRoute extends Route<Model> {
           ),
       }) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
+      // Emulate the on-disk file serialization: a card file holds only the
+      // card's own resource — relationship slots keep their `links` but drop
+      // the resolved `data`, and no linked neighbors ride along in `included`.
+      // The searchable settle above may have loaded link targets into the
+      // store, and `serializeCard` walks whatever is resident into `included`;
+      // strip both so the serialized instance is a pure function of the card's
+      // own data, independent of which targets happen to be loaded.
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
-        // we want to emulate the file serialization here
         delete relationship.data;
       }
+      delete serialized.included;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
