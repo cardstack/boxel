@@ -1433,6 +1433,103 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('an authored-empty linksToMany is preserved distinctly from a never-set one, in both the source and the served card+json', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          // Mirror of the `linksTo` case above for the plural link. Author
+          // `friends` (linksToMany) explicitly empty and leave `friend`
+          // (linksTo) absent. An empty plural link is authored — a relationship
+          // the card has, spelled `{ self: null }` on the wire — vs. a never-set
+          // one, which is omitted. This holds even though the plural getter
+          // materializes a backing array on read: a mere render doesn't author a
+          // link, so the never-set `friend` stays omitted while the authored
+          // empty `friends` round-trips.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friends: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          let incrementalEventContent = await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              type: 'Friend',
+              timeout: 5000,
+            },
+          );
+          let id = incrementalEventContent.invalidations[0].split('/').pop()!;
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+
+          // The written source persists the card's relationships as authored:
+          // the explicitly-empty `friends` survives as `{ self: null }` while the
+          // never-authored `friend` is absent.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+          let source = readJSONSync(cardFile) as LooseSingleCardDocument;
+          assert.deepEqual(
+            source.data.relationships,
+            { friends: { links: { self: null } } },
+            'source keeps the explicitly-empty friends link and omits the absent friend link',
+          );
+
+          // The served card+json (the indexed pristine doc) keeps the same
+          // distinction: `friends` was authored empty, so it round-trips as
+          // `{ self: null }`; `friend` was never set, so it is omitted.
+          let getResponse = await request
+            .get(`/Friend/${id}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.status,
+            200,
+            `HTTP 200 status: ${getResponse.text}`,
+          );
+          let served = getResponse.body as SingleCardDocument;
+          assert.deepEqual(
+            served.data.relationships?.friends,
+            { links: { self: null } },
+            'served card+json preserves the explicitly-empty friends link',
+          );
+          assert.strictEqual(
+            served.data.relationships?.friend,
+            undefined,
+            'served card+json omits the absent friend link',
+          );
+        });
+
         test('creates card instances when it encounters "lid" in the request', async function (assert) {
           let response = await request
             .post('/')

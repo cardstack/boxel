@@ -182,6 +182,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
   propagateRealmContext,
@@ -1980,7 +1981,16 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (!Array.isArray(values.data)) {
-        return [];
+        // An authored-empty plural relationship (`{ links: { self: null } }` or
+        // `{ data: null }` in the source). Tag the empty result as authored so
+        // serialization keeps it as `{ self: null }` rather than dropping it
+        // like a never-set link. A computed field's emptiness is derived, never
+        // authored, so it is never tagged.
+        let empty: (BaseInstanceType<FieldT> | NotLoadedValue)[] = [];
+        if (!this.computeVia) {
+          markAuthoredEmptyLink(empty);
+        }
+        return empty;
       }
       relationships = values.data.map((entry) => ({
         links: {
@@ -2063,7 +2073,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return deserialized;
       });
 
-    return new WatchedArray(
+    let resolved = await Promise.all(resources);
+    let watched = new WatchedArray(
       (oldValue, value) =>
         instancePromise.then((instance) => {
           applySubscribersToInstanceValue(
@@ -2075,9 +2086,17 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifySubscribers(instance, this.name, value);
           notifyCardTracking(instance);
         }),
-      await Promise.all(resources),
+      resolved,
       { hideSlot: isNonPresentLink },
     );
+    // An authored-empty plural relationship spelled `{ data: [] }` in the source
+    // deserializes to an empty array — tag it authored so serialization keeps it
+    // as `{ self: null }`. (`{ links: { self: null } }` sources return early
+    // above.) A computed field's emptiness is derived, never authored.
+    if (resolved.length === 0 && !this.computeVia) {
+      markAuthoredEmptyLink(watched);
+    }
+    return watched;
   }
 
   emptyValue(instance: BaseDef) {
