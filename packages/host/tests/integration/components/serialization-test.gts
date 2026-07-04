@@ -58,6 +58,9 @@ import {
   field,
   NumberField,
   isSaved,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+  flushLogs,
   Base64ImageField,
   updateFromSerialized,
   CodeRefField,
@@ -7077,6 +7080,72 @@ module('Integration | serialization', function (hooks) {
       assert.ok(hassan instanceof Person, `${hassan.id} is a Person`);
       assert.ok(isSaved(hassan), `${hassan.id} is saved`);
       assert.strictEqual(hassan.firstName, 'Hassan');
+    });
+
+    test('an authored-empty linksToMany deserializes to a reactive backing array (in-place mutation notifies subscribers)', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field friends = linksToMany(() => Person);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person },
+        },
+      });
+
+      // Author `friends` explicitly empty (`{ self: null }`) rather than
+      // leaving it absent, then deserialize.
+      let doc = {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Person/hassan`,
+          attributes: { firstName: 'Hassan' },
+          relationships: { friends: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: testRRI('test-cards'), name: 'Person' },
+          },
+        },
+      };
+      let hassan = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        new URL(`${testRealmURL}Person/hassan`),
+      );
+      assert.strictEqual(hassan.friends.length, 0, 'friends starts empty');
+
+      // The getter must hand back the reactive backing array, not a bare `[]`:
+      // an in-place push runs the WatchedArray subscriber, which notifies
+      // change listeners. A plain array would mutate silently.
+      let events: { fieldName: string; value: unknown }[] = [];
+      let subscriber = (
+        _instance: unknown,
+        fieldName: string,
+        value: unknown,
+      ) => events.push({ fieldName, value });
+      subscribeToChanges(hassan, subscriber);
+      try {
+        let mango = new Person({ firstName: 'Mango' });
+        hassan.friends.push(mango);
+        await flushLogs();
+        assert.strictEqual(
+          events.length,
+          1,
+          'pushing onto the authored-empty relationship notifies subscribers',
+        );
+        assert.strictEqual(
+          events[0]?.fieldName,
+          'friends',
+          'the change event names the mutated field',
+        );
+        assert.strictEqual(
+          hassan.friends[0],
+          mango,
+          'the pushed card is read back from the same backing array',
+        );
+      } finally {
+        unsubscribeFromChanges(hassan, subscriber);
+      }
     });
   });
 
