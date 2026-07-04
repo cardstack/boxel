@@ -2062,8 +2062,9 @@ module(basename(import.meta.filename), function () {
                   relationships: {
                     // The written source records the explicitly-nulled cross-
                     // realm `friend` link — the write path persists the card's
-                    // own relationships as authored. (This is distinct from the
-                    // served card+json, which omits unset non-searchable links.)
+                    // own relationships as authored, and an authored
+                    // `{ self: null }` is preserved (the served card+json keeps
+                    // it too; only never-authored links are omitted).
                     friend: {
                       links: {
                         self: null,

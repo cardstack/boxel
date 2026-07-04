@@ -775,10 +775,11 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           hassan.doc.data.relationships,
           {
-            // Only `pet` appears: it is the sole searchable link. The base-card
-            // `cardInfo.theme` / `cardInfo.cardThumbnail` links carry no
-            // `searchable` annotation, so they are not "used" and drop from the
-            // pristine doc (they still appear in the search doc, which
+            // Only `pet` appears: it is the relationship this card actually
+            // has (a set target). The base-card `cardInfo.theme` /
+            // `cardInfo.cardThumbnail` links are never authored here, so they
+            // drop from the pristine doc — this filtering is data-driven, not
+            // searchable-driven (they still appear in the search doc, which
             // enumerates every declared field).
             pet: {
               links: {

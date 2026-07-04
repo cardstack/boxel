@@ -393,8 +393,10 @@ function renderFieldsCacheToken(
     // prototype chain and polymorphic overrides — not on what the instance set.
     return `o${overrideSize}`;
   }
-  // A non-searchable link is kept only once populated, so the map also depends
-  // on the instance's set-link count; the data bucket's size tracks it.
+  // A link is kept only when the card actually has it (authored or set), so
+  // this map — unlike the full map — also depends on the instance's data. The
+  // data bucket only grows within a render pass, so its size is a sound
+  // validity token for that dependency.
   let usedSize = deserializedData.get(subject as BaseDef)?.size ?? 0;
   return `o${overrideSize}:u${usedSize}`;
 }

@@ -66,9 +66,11 @@ export interface JSONAPISingleResourceDocument {
 
 export interface SerializeOpts {
   includeComputeds?: boolean;
-  // Include link fields that are not in a `searchable` path. By default
-  // serialization keeps only searchable links (plus contained fields, which
-  // are always present); set this to serialize every declared relationship.
+  // Include link fields the card does not actually have. By default
+  // serialization keeps only the relationships present in the card's data — a
+  // set target or an authored empty `{ self: null }` — plus contained fields
+  // (always present); set this to serialize every declared relationship,
+  // including never-authored ones (as `{ self: null }`).
   includeUnrenderedFields?: boolean;
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];

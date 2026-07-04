@@ -150,11 +150,11 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     let containerForFields =
       targetPath && this.getWrappedInstance(targetPath, parentCard);
     let fieldContainer = containerForFields ?? parentCard;
-    // Discover every declared link field, not only the ones currently set:
+    // Discover every declared link field, not only the ones the card has:
     // this loop locates the target field to relink, and the target is
     // typically empty at that point (the whole reason we're linking a copy
-    // into it). Filtering to set/searchable links here would hide an
-    // unset target and silently skip the relink.
+    // into it). The `usedLinksToFieldsOnly` default would omit an unset target
+    // and silently skip the relink.
     let fields = cardApi.getFields(fieldContainer, {
       usedLinksToFieldsOnly: false,
       includeComputeds: false,
