@@ -292,6 +292,9 @@ export default class RenderMetaRoute extends Route<Model> {
         stablePasses = 0;
       }
     }
+    computePerfLog.warn(
+      `render.meta searchable settle for ${instance.id} did not reach a stable load generation within ${SEARCHABLE_SETTLE_MAX_PASSES} passes; proceeding with the current store state`,
+    );
   }
 }
 
