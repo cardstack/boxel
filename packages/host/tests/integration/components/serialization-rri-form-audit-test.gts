@@ -95,7 +95,7 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     );
 
     let doc = serializeCard(post, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
       useAbsoluteURL: true,
     });
 

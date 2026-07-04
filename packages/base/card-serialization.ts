@@ -69,7 +69,7 @@ export interface SerializeOpts {
   // Include link fields that are not in a `searchable` path. By default
   // serialization keeps only searchable links (plus contained fields, which
   // are always present); set this to serialize every declared relationship.
-  includeNotSearchableFields?: boolean;
+  includeUnrenderedFields?: boolean;
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
@@ -269,10 +269,10 @@ export function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { includeNotSearchableFields: remove, ...fieldOpts } = opts ?? {};
+  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    usedLinksToFieldsOnly: !opts?.includeNotSearchableFields,
+    usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
   // `serializeCardResource` is reachable from the recursive field-serialize

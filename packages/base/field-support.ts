@@ -5,7 +5,6 @@ import {
   isFieldInstance,
   localId,
   primitive,
-  routesForField,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type {
@@ -195,7 +194,15 @@ export function getter<CardT extends BaseDefConstructor>(
       return deserialized.get(field.name);
     }
     let value = field.emptyValue(instance);
-    deserialized.set(field.name, value);
+    // Don't persist a nullish empty value (an unset `linksTo`): writing it would
+    // fabricate a bucket entry for a link the caller merely read, making an
+    // unset link indistinguishable from an authored `{ self: null }` when the
+    // card serializes. Recomputing the nullish empty on the next read is free;
+    // identity only matters for the mutable empties (arrays / composite fields),
+    // which are non-null and still persist for reactivity.
+    if (value != null) {
+      deserialized.set(field.name, value);
+    }
     return value;
   }
 }
@@ -352,10 +359,10 @@ export function getFieldOverrides<T extends BaseDef>(
 // `computeFields` walks the prototype chain and resolves every field on each
 // call. The result is determined by the prototype chain plus, for an instance,
 // its polymorphic field overrides and — under `usedLinksToFieldsOnly` — the set
-// of links it has populated: a non-searchable link is kept only once set, so it
-// joins the map as the data bucket grows. A read-only render only ever GROWS
-// both, so their sizes are a sound validity token: an unchanged token means an
-// identical result. Gated to the render context so the live app — where
+// of links it has (authored or set): a link joins the map as its data-bucket
+// entry appears. A read-only render only ever GROWS both, so their sizes are a
+// sound validity token: an unchanged token means an identical result. Gated to
+// the render context so the live app — where
 // instances mutate freely (same-size override swaps, field clears) — is never
 // served a memoized map. Keyed on the instance/class via a WeakMap so entries
 // fall away with their subjects; the token guards reuse across passes.
@@ -466,17 +473,15 @@ function computeFields(
         maybeField.computeVia ||
         !['contains', 'containsMany'].includes(maybeField.fieldType)
       ) {
-        // `usedLinksToFieldsOnly` keeps only the link fields that are "used".
-        // Used means the field is reachable via a `searchable` path — a
-        // property of the field definition, so it is the same whether a
-        // template rendered the link or not — OR the instance has actually set
-        // the link (a set relationship is real card data and must serialize
-        // even when not searchable). A non-searchable, unset link is dropped
-        // (callers wanting every link pass `includeNotSearchableFields`);
-        // contained fields are always kept.
+        // `usedLinksToFieldsOnly` keeps only the link fields the card actually
+        // has — an authored empty (`{ self: null }`) or a set target — and drops
+        // never-authored links. This is a property of the card's data, not of
+        // searchability (searchable annotations drive the search doc, not this
+        // serialization). Callers wanting every declared link pass
+        // `includeUnrenderedFields`; contained fields are always kept.
         if (
           opts?.usedLinksToFieldsOnly &&
-          !isFieldUsed(instance, maybeFieldName, maybeField) &&
+          !isFieldUsed(instance, maybeFieldName) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
           return [];
@@ -497,54 +502,35 @@ function computeFields(
   return fields;
 }
 
-// Whether a link field is "used" for `usedLinksToFieldsOnly` serialization:
-// it participates in a `searchable` path, or the instance has actually set the
-// link. Contained fields never reach here (they are always kept).
+// Whether a link field is "used" for `usedLinksToFieldsOnly` serialization: the
+// card actually has the relationship. A link enters the data bucket only when
+// it was authored (deserialized from the source — a set target, or an empty
+// `{ self: null }` that lands as a `null` entry) or set on the instance; a
+// never-authored `linksTo` has no bucket entry, because the getter skips
+// persisting its nullish empty value, so a mere render can't mark it "used".
+// A `linksToMany` getter must persist its (mutable) backing array even when
+// empty, so an empty array is NOT a "had" relationship — reading an unset
+// plural link would otherwise fabricate one. This is pure card data,
+// independent of searchability. Contained fields never reach here (always kept).
 function isFieldUsed(
   instance: BaseDef | undefined,
   fieldName: string,
-  field: Field<BaseDefConstructor>,
 ): boolean {
-  if (isFieldSearchable(fieldName, field)) {
-    return true;
-  }
-  // A class carries no instance data, so searchable membership is the only
-  // signal — a schema-level field map lists exactly the searchable links.
   if (!instance) {
     return false;
   }
-  return isSetLinkValue(getDataBucket(instance).get(fieldName));
-}
-
-// A link field participates in a `searchable` path when its own annotation
-// makes the self link searchable, or a dotted path routed from it names a
-// deeper link (which still pulls the self link's target in). `routesForField`
-// is the single source of that determination, shared with the search-doc
-// generator so inclusion never drifts between the two.
-function isFieldSearchable(
-  fieldName: string,
-  field: Field<BaseDefConstructor>,
-): boolean {
-  return routesForField(fieldName, field.searchable).length > 0;
-}
-
-// Whether a data-bucket value represents a link the instance actually set.
-// A set link's bucket entry is a materialized value — a not-loaded / error /
-// not-found sentinel (all carry a reference), a link-target card (which may be
-// a still-unsaved card created in the same request, e.g. a `lid` POST), or a
-// non-empty array of those for `linksToMany`. `null` (the `linksToMany`
-// empty value) and an empty array are unset. This is only consulted for the
-// serialization paths that never read an unset `linksTo` through the field
-// getter, so the fresh `emptyValue` card such a read would leave behind never
-// reaches the bucket here.
-function isSetLinkValue(value: unknown): boolean {
-  if (value == null) {
+  let bucket = getDataBucket(instance);
+  if (!bucket.has(fieldName)) {
     return false;
   }
+  let value = bucket.get(fieldName);
+  // An empty backing array is a `linksToMany` the card doesn't actually have
+  // (never authored, or materialized empty on read); `null` is an authored
+  // empty `linksTo` and is kept.
   if (Array.isArray(value)) {
     return value.length > 0;
   }
-  return isNonPresentLink(value) || isCardOrField(value);
+  return true;
 }
 
 export function isArrayOfCardOrField(

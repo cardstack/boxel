@@ -319,8 +319,17 @@ async function searchableLink(
     return null;
   }
   // A broken / not-found link can't be expanded — keep its reference as `{ id }`.
+  // A searchable target stays a dependency even when broken: recording it
+  // reindexes the card (clearing the `{ id }` / brokenLinks diagnostic) once the
+  // target becomes reachable, mirroring the successful-expansion dep below. This
+  // branch also covers the load-settle pass that planted the sentinel earlier, so
+  // the authoritative generation reaches it instead of the load branch below.
   if (isLinkError(rawValue) || isLinkNotFound(rawValue)) {
-    return { id: makeAbsoluteURL(rawValue.reference) };
+    let reference = makeAbsoluteURL(rawValue.reference);
+    if (matched) {
+      dependencies.add(reference);
+    }
+    return { id: reference };
   }
   if (!matched) {
     return {
@@ -346,6 +355,9 @@ async function searchableLink(
       // plants during a template render; search-doc generation plants its own
       // because it drives the link load directly rather than through a template.
       getDataBucket(owner).set(field.name, result.sentinel);
+      // A broken searchable target is still a dependency — see the sentinel
+      // branch above.
+      dependencies.add(resolvedRef);
       return { id: resolvedRef };
     }
     target = result.card;
@@ -391,7 +403,12 @@ async function searchableLinksToMany(
       continue;
     }
     if (isLinkError(item) || isLinkNotFound(item)) {
-      out.push({ id: makeAbsoluteURL(item.reference) });
+      let reference = makeAbsoluteURL(item.reference);
+      // A broken searchable element stays a dependency — see `searchableLink`.
+      if (matched) {
+        dependencies.add(reference);
+      }
+      out.push({ id: reference });
       continue;
     }
     if (!matched) {
@@ -413,6 +430,8 @@ async function searchableLinksToMany(
         // the proxy so the mutation reaches the data bucket the diagnostic
         // reads.
         rawValue[index] = result.sentinel;
+        // A broken searchable element stays a dependency — see `searchableLink`.
+        dependencies.add(resolvedRef);
         out.push({ id: resolvedRef });
         continue;
       }

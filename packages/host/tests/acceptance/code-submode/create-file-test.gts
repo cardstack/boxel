@@ -605,7 +605,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         );
         assert.deepEqual(
           json.data.relationships,
-          {},
+          undefined,
           'relationships data is correct',
         );
         deferred.fulfill();

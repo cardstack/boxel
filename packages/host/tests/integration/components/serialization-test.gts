@@ -291,7 +291,7 @@ module('Integration | serialization', function (hooks) {
     };
 
     let serialized = serializeCard(post, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
 
     assert.strictEqual(
@@ -688,25 +688,22 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Mango',
     });
 
-    assert.deepEqual(
-      serializeCard(mango, { includeNotSearchableFields: true }),
-      {
-        data: {
-          id: `${testRealmURL}Person/mango`,
-          type: 'card',
-          attributes: {
-            firstName: 'Mango',
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: rri(`../test-cards`),
-              name: 'Person',
-            },
+    assert.deepEqual(serializeCard(mango, { includeUnrenderedFields: true }), {
+      data: {
+        id: `${testRealmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+          cardInfo,
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri(`../test-cards`),
+            name: 'Person',
           },
         },
       },
-    );
+    });
   });
 
   test('can omit specified field type from serialized data', async function (assert) {
@@ -927,7 +924,7 @@ module('Integration | serialization', function (hooks) {
     let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     }).data.attributes?.ref;
     assert.notStrictEqual(
       serializedRef,
@@ -960,7 +957,7 @@ module('Integration | serialization', function (hooks) {
       published: parseISO('2022-04-27T16:30+00:00'),
     });
     let serialized = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.created, '2022-04-22');
     assert.strictEqual(
@@ -1086,7 +1083,7 @@ module('Integration | serialization', function (hooks) {
     await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
 
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -1221,7 +1218,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -1514,7 +1511,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let payload = serializeCard(hassan, { includeNotSearchableFields: true });
+    let payload = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         lid: hassan[localId],
@@ -1579,7 +1576,7 @@ module('Integration | serialization', function (hooks) {
     let hassan = new Person({ firstName: 'Hassan' });
 
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -1606,7 +1603,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let mango = new Person({ firstName: 'Mango', pet: null });
-    serialized = serializeCard(mango, { includeNotSearchableFields: true });
+    serialized = serializeCard(mango, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         lid: mango[localId],
@@ -1829,7 +1826,7 @@ module('Integration | serialization', function (hooks) {
     let hassan = new Person({ firstName: 'Hassan', friend: mango });
     await saveCard(mango, `${testRealmURL}Person/mango`, loader);
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -1898,7 +1895,7 @@ module('Integration | serialization', function (hooks) {
 
     let mango = new Person({ firstName: 'Mango' });
     mango.friend = mango;
-    let serialized = serializeCard(mango, { includeNotSearchableFields: true });
+    let serialized = serializeCard(mango, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         lid: mango[localId],
@@ -2065,7 +2062,7 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -2201,7 +2198,7 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -2341,7 +2338,7 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
     let serialized = serializeCard(hassan, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized, {
       data: {
@@ -2526,7 +2523,7 @@ module('Integration | serialization', function (hooks) {
 
     let firstPost = new Post({ created: null, published: null });
     let serialized = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.created, null);
     assert.strictEqual(serialized.data.attributes?.published, null);
@@ -2691,7 +2688,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes, {
       author: {
@@ -2744,7 +2741,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes?.author, {
       birthdate: '2019-10-30',
@@ -2780,7 +2777,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(card, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.strictEqual(
       serialized.data.attributes?.specialField,
@@ -2817,7 +2814,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(card, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(
       serialized.data.attributes?.specialField,
@@ -3091,7 +3088,7 @@ module('Integration | serialization', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.deepEqual(
-      serializeCard(helloWorld, { includeNotSearchableFields: true }),
+      serializeCard(helloWorld, { includeUnrenderedFields: true }),
       {
         data: {
           lid: helloWorld[localId],
@@ -3103,13 +3100,6 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Carl Stack',
             },
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
           },
           meta: {
             adoptsFrom: {
@@ -3144,7 +3134,7 @@ module('Integration | serialization', function (hooks) {
     let mango = new Person({ birthdate: p('2019-10-30') });
     let serialized = serializeCard(mango, {
       includeComputeds: true,
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
   });
@@ -3279,7 +3269,7 @@ module('Integration | serialization', function (hooks) {
       let burcu = new Person({ firstName: 'Burcu', friend: hassan });
       let serialized = serializeCard(burcu, {
         includeComputeds: true,
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
@@ -3499,7 +3489,7 @@ module('Integration | serialization', function (hooks) {
       });
       let person = new Person({ firstName: 'Burcu' });
       let serialized = serializeCard(person, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
         includeComputeds: true,
       });
       assert.deepEqual(serialized, {
@@ -3661,7 +3651,7 @@ module('Integration | serialization', function (hooks) {
       });
       let serialized = serializeCard(article, {
         includeComputeds: true,
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data.relationships?.cardTheme, {
         links: { self: `${testRealmURL}Theme/ocean-blue` },
@@ -3783,7 +3773,7 @@ module('Integration | serialization', function (hooks) {
 
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
     assert.deepEqual(
-      serializeCard(classSchedule, { includeNotSearchableFields: true }).data
+      serializeCard(classSchedule, { includeUnrenderedFields: true }).data
         .attributes?.dates,
       ['2022-04-01', '2022-04-04'],
     );
@@ -3830,7 +3820,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(classSchedule, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes?.appointments, [
       {
@@ -3870,7 +3860,7 @@ module('Integration | serialization', function (hooks) {
       cardThumbnailURL: './intro.png',
     });
     let payload = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(
       payload,
@@ -3945,7 +3935,7 @@ module('Integration | serialization', function (hooks) {
       }),
     });
     let payload = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(payload, {
       data: {
@@ -4019,7 +4009,7 @@ module('Integration | serialization', function (hooks) {
       }),
     });
     let payload = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(payload, {
       data: {
@@ -4126,7 +4116,7 @@ module('Integration | serialization', function (hooks) {
       }),
     });
     let payload = serializeCard(firstPost, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(payload, {
       data: {
@@ -4249,7 +4239,7 @@ module('Integration | serialization', function (hooks) {
       ],
     });
 
-    let payload = serializeCard(group, { includeNotSearchableFields: true });
+    let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         lid: group[localId],
@@ -4534,7 +4524,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(article, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
 
     assert.deepEqual(serialized, {
@@ -4699,7 +4689,7 @@ module('Integration | serialization', function (hooks) {
       ],
     });
 
-    let payload = serializeCard(group, { includeNotSearchableFields: true });
+    let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         lid: group[localId],
@@ -5146,7 +5136,7 @@ module('Integration | serialization', function (hooks) {
     );
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(
-      serializeCard(person, { includeNotSearchableFields: true }),
+      serializeCard(person, { includeUnrenderedFields: true }),
       {
         data: {
           lid: person[localId],
@@ -5226,7 +5216,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(post.cardTitle, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(
-      serializeCard(post, { includeNotSearchableFields: true }),
+      serializeCard(post, { includeUnrenderedFields: true }),
       {
         data: {
           lid: post[localId],
@@ -5334,7 +5324,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
 
     assert.deepEqual(
-      serializeCard(blog, { includeNotSearchableFields: true }),
+      serializeCard(blog, { includeUnrenderedFields: true }),
       {
         data: {
           lid: blog[localId],
@@ -5547,7 +5537,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(posts[1].author.certificate.level, 18);
 
     assert.deepEqual(
-      serializeCard(blog, { includeNotSearchableFields: true }),
+      serializeCard(blog, { includeUnrenderedFields: true }),
       {
         data: {
           lid: blog[localId],
@@ -5690,7 +5680,7 @@ module('Integration | serialization', function (hooks) {
     let mango = new Person({ birthdate: p('2019-10-30') });
     await renderCard(loader, mango, 'isolated');
     let withoutComputeds = serializeCard(mango, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(withoutComputeds, {
       data: {
@@ -5699,13 +5689,6 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           birthdate: '2019-10-30',
           cardInfo,
-        },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
         },
         meta: {
           adoptsFrom: {
@@ -5718,7 +5701,7 @@ module('Integration | serialization', function (hooks) {
 
     let withComputeds = serializeCard(mango, {
       includeComputeds: true,
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
     });
     assert.deepEqual(withComputeds, {
       data: {
@@ -5733,11 +5716,6 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
           cardTheme: {
             links: {
               self: null,
@@ -5776,26 +5754,23 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Mango',
     });
 
-    assert.deepEqual(
-      serializeCard(mango, { includeNotSearchableFields: true }),
-      {
-        data: {
-          id: `${testRealmURL}Person/mango`,
-          type: 'card',
-          attributes: {
-            firstName: 'Mango',
-            unRenderedField: null,
-            cardInfo,
-          },
-          meta: {
-            adoptsFrom: {
-              module: rri(`../test-cards`),
-              name: 'Person',
-            },
+    assert.deepEqual(serializeCard(mango, { includeUnrenderedFields: true }), {
+      data: {
+        id: `${testRealmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+          unRenderedField: null,
+          cardInfo,
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri(`../test-cards`),
+            name: 'Person',
           },
         },
       },
-    );
+    });
   });
 
   test('can serialize a card that is constructed by another card (test realm)', async function (assert) {
@@ -5824,7 +5799,7 @@ module('Integration | serialization', function (hooks) {
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 
     assert.deepEqual(
-      serializeCard(mangoTheBoat, { includeNotSearchableFields: true }),
+      serializeCard(mangoTheBoat, { includeUnrenderedFields: true }),
       {
         data: {
           lid: mangoTheBoat[localId],
@@ -5877,7 +5852,7 @@ module('Integration | serialization', function (hooks) {
     let mangoThePet = mangoThePerson.createEponymousPet();
 
     assert.deepEqual(
-      serializeCard(mangoThePet, { includeNotSearchableFields: true }),
+      serializeCard(mangoThePet, { includeUnrenderedFields: true }),
       {
         data: {
           lid: mangoThePet[localId],
@@ -5932,7 +5907,7 @@ module('Integration | serialization', function (hooks) {
 
     let card = new QueryCard({ cardTitle: 'Target' });
     let serialized = serializeCard(card, {
-      includeNotSearchableFields: true,
+      includeUnrenderedFields: true,
       omitQueryFields: true,
     });
 
@@ -6620,7 +6595,7 @@ module('Integration | serialization', function (hooks) {
       let hassan = new Person({ firstName: 'Hassan' });
 
       let serialized = serializeCard(hassan, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized, {
         data: {
@@ -6847,7 +6822,7 @@ module('Integration | serialization', function (hooks) {
       }
 
       let serialized = serializeCard(hassan, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized, {
         data: {
@@ -6930,7 +6905,7 @@ module('Integration | serialization', function (hooks) {
       await saveCard(vanGogh, `${testRealmURL}Person/vanGogh`, loader);
       await saveCard(hassan, `${testRealmURL}Person/hassan`, loader);
       let serialized = serializeCard(hassan, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized, {
         data: {
@@ -7138,7 +7113,7 @@ module('Integration | serialization', function (hooks) {
       let burcu = new Person({ firstName: 'Burcu', friend: hassan });
       let serialized = serializeCard(burcu, {
         includeComputeds: true,
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data, {
         lid: burcu[localId],
@@ -7405,7 +7380,7 @@ module('Integration | serialization', function (hooks) {
       });
       let person = new Person({ firstName: 'Burcu' });
       let serialized = serializeCard(person, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
         includeComputeds: true,
       });
       assert.deepEqual(serialized, {
@@ -7592,7 +7567,7 @@ module('Integration | serialization', function (hooks) {
       }
 
       let serialized = serializeCard(card, {
-        includeNotSearchableFields: true,
+        includeUnrenderedFields: true,
         includeComputeds: true,
       });
       assert.deepEqual(serialized.data.relationships, {
@@ -7704,7 +7679,7 @@ module('Integration | serialization', function (hooks) {
         });
 
         let serialized = serializeCard(sample, {
-          includeNotSearchableFields: true,
+          includeUnrenderedFields: true,
         });
 
         assert.strictEqual(
@@ -7797,7 +7772,7 @@ module('Integration | serialization', function (hooks) {
         });
 
         let serialized = serializeCard(sample, {
-          includeNotSearchableFields: true,
+          includeUnrenderedFields: true,
         });
 
         assert.strictEqual(
@@ -7862,7 +7837,7 @@ module('Integration | serialization', function (hooks) {
 
         let serialized = serializeCard(sample, {
           includeComputeds: true,
-          includeNotSearchableFields: true,
+          includeUnrenderedFields: true,
         });
 
         assert.strictEqual(
@@ -7953,7 +7928,7 @@ module('Integration | serialization', function (hooks) {
         });
 
         let serialized = serializeCard(sample, {
-          includeNotSearchableFields: true,
+          includeUnrenderedFields: true,
         });
 
         assert.strictEqual(

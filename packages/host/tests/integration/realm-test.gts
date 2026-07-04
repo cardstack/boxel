@@ -333,11 +333,6 @@ module('Integration | realm', function (hooks) {
       'owner data id points to other realm',
     );
     assert.strictEqual(
-      json.data.relationships['cardInfo.theme'].links.self,
-      null,
-      'mango theme is null',
-    );
-    assert.strictEqual(
       json.data.meta.lastModified,
       adapter.lastModifiedMap.get(`${testRealmURL}dir/mango.json`),
       'mango lastModified',
@@ -354,11 +349,6 @@ module('Integration | realm', function (hooks) {
       hassan.id,
       `${testModuleRealm}hassan`,
       'included hassan id',
-    );
-    assert.strictEqual(
-      hassan.relationships['cardInfo.theme'].links.self,
-      null,
-      'included hassan theme is null',
     );
   });
 
@@ -1299,6 +1289,9 @@ module('Integration | realm', function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
+          relationships: {
+            owner: { links: { self: null } },
+          },
           meta: {
             adoptsFrom: {
               module: `${testModuleRealm}pet`,
@@ -2058,6 +2051,13 @@ module('Integration | realm', function (hooks) {
           links: { self: `./dir/different-friend` },
           data: {
             id: `${testRealmURL}dir/different-friend`,
+            type: 'card',
+          },
+        },
+        'pets.0': {
+          links: { self: `./dir/van-gogh` },
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
             type: 'card',
           },
         },
@@ -3088,11 +3088,6 @@ module('Integration | realm', function (hooks) {
       'mango owner id',
     );
     assert.strictEqual(
-      mango.relationships['cardInfo.theme'].links.self,
-      null,
-      'mango theme is null',
-    );
-    assert.strictEqual(
       mango.meta.resourceCreatedAt,
       mangoCreatedAt,
       'mango createdAt',
@@ -3104,11 +3099,6 @@ module('Integration | realm', function (hooks) {
       mariko.attributes.fullName,
       'Mariko Abdel-Rahman',
       'mariko fullName',
-    );
-    assert.strictEqual(
-      mariko.relationships['cardInfo.theme'].links.self,
-      null,
-      'mariko theme is null',
     );
     assert.strictEqual(
       mariko.meta.resourceCreatedAt,
@@ -3129,11 +3119,6 @@ module('Integration | realm', function (hooks) {
       'vanGogh owner id',
     );
     assert.strictEqual(
-      vanGogh.relationships['cardInfo.theme'].links.self,
-      null,
-      'vanGogh theme is null',
-    );
-    assert.strictEqual(
       vanGogh.meta.resourceCreatedAt,
       vanGoghCreatedAt,
       'vanGogh createdAt',
@@ -3141,11 +3126,6 @@ module('Integration | realm', function (hooks) {
 
     let hassan = included.find((r) => r.id === `${testModuleRealm}hassan`);
     assert.ok(hassan, 'hassan (cross-realm linksTo target) is included');
-    assert.strictEqual(
-      hassan.relationships['cardInfo.theme'].links.self,
-      null,
-      'included hassan theme is null',
-    );
   });
 
   test('included card uses correct module path when realm is mounted', async function (assert) {

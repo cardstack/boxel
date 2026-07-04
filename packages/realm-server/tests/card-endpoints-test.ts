@@ -1334,15 +1334,18 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('an explicitly-null relationship and an absent relationship diverge in the source but not in the served card+json', async function (assert) {
+        test('an explicitly-null relationship is preserved and an absent one omitted, in both the source and the served card+json', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
           // `Friend.friend` (linksTo) and `Friend.friends` (linksToMany) are
           // both non-searchable. Author `friend` explicitly null and leave
-          // `friends` absent, so the two states can be compared at each layer.
-          // `friend` is even rendered in the isolated template — proving the
-          // served doc keys off the searchable/set status of the link, not off
-          // what a template happened to render.
+          // `friends` absent. Serialization keys on whether the card actually
+          // has the relationship — an authored empty (`{ self: null }`) vs a
+          // never-set link — independent of searchability, so both the written
+          // source and the served card+json keep `friend` as `{ self: null }`
+          // and omit `friends`. (`friend` is even rendered in the isolated
+          // template, which no longer marks it "used": merely reading a link
+          // doesn't author it.)
           let response = await request
             .post('/')
             .send({
@@ -1387,10 +1390,9 @@ module(basename(import.meta.filename), function () {
             `HTTP 201 status: ${response.text}`,
           );
 
-          // The written source is the one representation that keeps the two
-          // states distinct: it persists the card's relationships as authored,
-          // so the explicitly-null `friend` survives as `{ self: null }` while
-          // the never-authored `friends` is simply absent.
+          // The written source persists the card's relationships as authored:
+          // the explicitly-null `friend` survives as `{ self: null }` while the
+          // never-authored `friends` is absent.
           let cardFile = join(
             dir.name,
             'realm_server_1',
@@ -1406,11 +1408,10 @@ module(basename(import.meta.filename), function () {
             'source keeps the explicitly-null friend link and omits the absent friends link',
           );
 
-          // The served card+json is the indexed pristine doc, which keeps a
-          // link only when it is set or reachable via a searchable path.
-          // `friend` is neither (explicitly null, non-searchable) and `friends`
-          // was never set, so both collapse to absent — the null-vs-absent
-          // distinction does not survive into the served doc.
+          // The served card+json (the indexed pristine doc) keeps the same
+          // distinction: `friend` was authored empty, so it round-trips as
+          // `{ self: null }`; `friends` was never set, so it is omitted. This is
+          // data fidelity, independent of searchability.
           let getResponse = await request
             .get(`/Friend/${id}`)
             .set('Accept', 'application/vnd.card+json');
@@ -1420,10 +1421,10 @@ module(basename(import.meta.filename), function () {
             `HTTP 200 status: ${getResponse.text}`,
           );
           let served = getResponse.body as SingleCardDocument;
-          assert.strictEqual(
+          assert.deepEqual(
             served.data.relationships?.friend,
-            undefined,
-            'served card+json omits the explicitly-null friend link',
+            { links: { self: null } },
+            'served card+json preserves the explicitly-null friend link',
           );
           assert.strictEqual(
             served.data.relationships?.friends,

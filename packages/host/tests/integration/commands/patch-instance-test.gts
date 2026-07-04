@@ -142,7 +142,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
     assert.deepEqual(
       instance.relationships,
-      {},
+      undefined,
       'the relationships are correct',
     );
   });
@@ -200,7 +200,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
     assert.deepEqual(
       instance.relationships,
-      {},
+      undefined,
       'the relationships are correct',
     );
   });

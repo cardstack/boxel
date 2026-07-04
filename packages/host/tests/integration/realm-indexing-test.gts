@@ -1392,9 +1392,20 @@ module(`Integration | realm indexing`, function (hooks) {
             entry.error.errorDetail.message,
             'Encountered error rendering HTML for card: intentional error',
           );
-          assert.deepEqual(entry.error.errorDetail.deps, [
-            `${testRealmURL}boom`,
-          ]);
+          // An errored card records its full render closure as deps, not just
+          // its own module: any change to a transitive dependency could be the
+          // one that fixes the render, so the errored card must reindex when
+          // any of them changes. Assert the meaningful members rather than the
+          // whole (large, churn-prone) closure.
+          let errorDeps = entry.error.errorDetail.deps ?? [];
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}boom`),
+            "error deps include the card's own module",
+          );
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}@cardstack/base/card-api`),
+            'error deps include transitive render dependencies (the full closure)',
+          );
         } else {
           assert.ok('false', 'expected search entry to be an error document');
         }
@@ -4696,6 +4707,7 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/number/components/stat',
         '@cardstack/base/number/util/index',
         '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
         '@cardstack/base/shared-state',
         '@cardstack/base/string',
         '@cardstack/base/text-input-validator',
@@ -4861,6 +4873,7 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/number/components/stat',
         '@cardstack/base/number/util/index',
         '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
         '@cardstack/base/shared-state',
         '@cardstack/base/spec',
         '@cardstack/base/string',
