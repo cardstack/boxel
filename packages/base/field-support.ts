@@ -853,7 +853,8 @@ export interface BrokenLinkFinding {
 // planted a sentinel there), and an unmaterialized field holds neither a broken
 // link nor a nested card — so skipping absent fields loses nothing and avoids
 // the getter's side effect of initializing them with `emptyValue` (which would
-// pollute `getUsedFields` / serialization). Relationship state is then read
+// pollute the data-bucket-driven `isFieldUsed` signal / serialization).
+// Relationship state is then read
 // through `getRelationshipMembershipState`, which never triggers `lazilyLoadLink`, so a
 // recursed value surfaces only states that genuinely failed during this render.
 // `'present'`, `'not-loaded'`, and `'not-set'` are not terminal failures; a
@@ -905,19 +906,6 @@ export function getBrokenLinks(
       );
       for (let entry of membership ?? []) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
-          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
-          // only fields that won't initialize bucket entries via the
-          // field getter (constructor name + the entry's own reference);
-          // reading `instance.id` here would write the `id` field's
-          // emptyValue into the bucket and violate the pure-read contract
-          // the surrounding `getBrokenLinks` upholds.
-          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
-            ownerType: instance?.constructor?.name,
-            fieldName,
-            fieldType: field.fieldType,
-            kind: entry.kind,
-            reference: entry.reference,
-          });
           findings.push({
             fieldName,
             kind: entry.kind,
