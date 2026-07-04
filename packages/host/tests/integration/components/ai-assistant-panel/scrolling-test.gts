@@ -202,7 +202,11 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       return 'no [data-test-ai-assistant-conversation] element';
     }
     let { scrollHeight, clientHeight, scrollTop } = conversationElement;
-    let distanceFromBottom = Math.abs(scrollHeight - clientHeight - scrollTop);
+    // Signed: positive means content still sits below the fold (not scrolled
+    // far enough down), negative means scrolled past the bottom. The
+    // scrolled-to-bottom check compares the absolute value against the
+    // threshold, so the sign is diagnostic-only.
+    let distanceFromBottom = scrollHeight - clientHeight - scrollTop;
     return `scrollHeight=${scrollHeight} clientHeight=${clientHeight} scrollTop=${scrollTop} distanceFromBottom=${distanceFromBottom} bottomThreshold=${BOTTOM_THRESHOLD}`;
   }
 
@@ -221,8 +225,9 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     try {
       await waitUntil(() => isAiAssistantScrolledToBottom(), { timeout: 2000 });
       assert.ok(true, message);
-    } catch {
-      assert.ok(false, `${message} — ${describeScrollPosition()}`);
+    } catch (e) {
+      let reason = e instanceof Error ? e.message : String(e);
+      assert.ok(false, `${message} — ${describeScrollPosition()} (${reason})`);
     }
   }
 
@@ -233,8 +238,9 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     try {
       await waitUntil(() => isAiAssistantScrolledToTop(), { timeout: 2000 });
       assert.ok(true, message);
-    } catch {
-      assert.ok(false, `${message} — ${describeScrollPosition()}`);
+    } catch (e) {
+      let reason = e instanceof Error ? e.message : String(e);
+      assert.ok(false, `${message} — ${describeScrollPosition()} (${reason})`);
     }
   }
 
