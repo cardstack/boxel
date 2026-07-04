@@ -120,11 +120,7 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import {
-  devSkillId,
-  envSkillId,
-  sourceCodeEditingSkillUrl,
-} from '../lib/utils';
+import { devSkillId, envSkillId, codeModeMenuSkillUrl } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -1805,8 +1801,8 @@ export default class MatrixService extends Service {
   async loadDefaultSkills(submode: Submode) {
     let interactModeDefaultSkills = [envSkillId];
 
-    // source-code-editing is enabled separately as a markdown skill (see
-    // activateCodingSkill), so it is no longer pushed here as a card.
+    // Code editing is covered by the code-mode menu skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
     let codeModeDefaultSkills = [devSkillId, envSkillId];
 
     let defaultSkills;
@@ -2692,11 +2688,11 @@ export default class MatrixService extends Service {
     let defaultSkills = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // The card skills plus source-code-editing as a markdown skill (enabled
-      // by URL; UpdateRoomSkillsCommand loads .md files on demand).
+      // The card skills plus the code-mode menu skill: a short markdown
+      // directory whose linked skills the bot loads on demand.
       skillCardIdsToActivate: [
         ...defaultSkills.map((s) => s.id),
-        sourceCodeEditingSkillUrl,
+        codeModeMenuSkillUrl,
       ],
     });
   }

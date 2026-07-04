@@ -42,6 +42,11 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
+# Shared secret for the ai-bot -> realm-server delegated-session endpoint.
+# Enables the bot's readRealmFile tool (on-demand skill loading) in local dev;
+# deployed environments configure a real secret.
+export AI_BOT_DELEGATION_SECRET="${AI_BOT_DELEGATION_SECRET:-local-dev-delegation-secret}"
+
 # Echo the first installed system Chrome/Chromium, or nothing. Lets tooling
 # reuse an already-present browser instead of downloading its own. Explicit
 # checks (not a for-loop) so the macOS path's embedded space doesn't get
