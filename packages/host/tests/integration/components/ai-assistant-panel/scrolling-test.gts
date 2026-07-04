@@ -1,4 +1,4 @@
-import { waitFor, click, triggerEvent } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, triggerEvent } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -194,6 +194,50 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     return conversationElement.scrollTop < 20;
   }
 
+  function describeScrollPosition() {
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    );
+    if (!conversationElement) {
+      return 'no [data-test-ai-assistant-conversation] element';
+    }
+    let { scrollHeight, clientHeight, scrollTop } = conversationElement;
+    let distanceFromBottom = Math.abs(scrollHeight - clientHeight - scrollTop);
+    return `scrollHeight=${scrollHeight} clientHeight=${clientHeight} scrollTop=${scrollTop} distanceFromBottom=${distanceFromBottom} bottomThreshold=${BOTTOM_THRESHOLD}`;
+  }
+
+  // The auto-scroll that keeps the newest message in view fires when the last
+  // message registers its scroller and again whenever that message's subtree
+  // mutates. Avatars, card pills, and markdown can finish rendering (and shift
+  // layout) after the test runloop has otherwise settled, which moves the
+  // scroll position before the component re-scrolls to correct it. A single
+  // synchronous read races that correction, so poll until the conversation
+  // settles at the target position. On timeout, report the exact geometry so a
+  // future failure is diagnosable instead of a bare `expected true`.
+  async function assertScrolledToBottom(
+    assert: Assert,
+    message = 'AI assistant is scrolled to bottom',
+  ) {
+    try {
+      await waitUntil(() => isAiAssistantScrolledToBottom(), { timeout: 2000 });
+      assert.ok(true, message);
+    } catch {
+      assert.ok(false, `${message} — ${describeScrollPosition()}`);
+    }
+  }
+
+  async function assertScrolledToTop(
+    assert: Assert,
+    message = 'AI assistant is scrolled to top',
+  ) {
+    try {
+      await waitUntil(() => isAiAssistantScrolledToTop(), { timeout: 2000 });
+      assert.ok(true, message);
+    } catch {
+      assert.ok(false, `${message} — ${describeScrollPosition()}`);
+    }
+  }
+
   function fillRoomWithReadMessages(
     roomId: string,
     messagesHaveBeenRead = true,
@@ -265,11 +309,8 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     });
     await waitFor('[data-test-message-idx="40"]');
     await click('[data-test-unread-messages-button]');
-    await new Promise((r) => setTimeout(r, 2000)); // wait for animated scroll to complete
-    assert.ok(
-      isAiAssistantScrolledToBottom(),
-      'AI assistant is scrolled to bottom',
-    );
+    // poll until the animated scroll completes and settles at the bottom
+    await assertScrolledToBottom(assert);
   });
 
   test('it does not show unread message indicator when new message received and scrolled to bottom', async function (assert) {
@@ -307,8 +348,8 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-message-idx="39"]');
-    assert.ok(
-      isAiAssistantScrolledToTop(),
+    await assertScrolledToTop(
+      assert,
       'AI assistant is scrolled to top (where the first unread message is)',
     );
   });
@@ -329,10 +370,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-message-idx="39"]');
-    assert.ok(
-      isAiAssistantScrolledToBottom(),
-      'AI assistant is scrolled to bottom',
-    );
+    await assertScrolledToBottom(assert);
   });
 
   test('scrolling stays at the bottom if a message is streaming in', async function (assert) {
@@ -351,10 +389,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-message-idx="39"]');
-    assert.ok(
-      isAiAssistantScrolledToBottom(),
-      'AI assistant is scrolled to bottom',
-    );
+    await assertScrolledToBottom(assert);
 
     let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `thinking...`,
