@@ -142,7 +142,7 @@ module(
       await getService('realm').login(testRealmURL);
     });
 
-    test('a card renders the search-entry stream via @context.searchResultsComponent', async function (assert) {
+    test('a card renders the entry stream via @context.searchResultsComponent', async function (assert) {
       let query: SearchEntryWireQuery = {
         filter: { 'item.on': bookRef },
         realms: [testRealmURL],
@@ -188,7 +188,7 @@ module(
       );
     });
 
-    test('the converged @context exposes the search-entry + deprecated rendering surfaces and the instances surface', async function (assert) {
+    test('the converged @context exposes the entry + deprecated rendering surfaces and the instances surface', async function (assert) {
       // The yielded `@context` carries both rendering surfaces and the
       // instances surface at once — a card author reads them straight off
       // `@context`. The compile-time witnesses below pin the same shape at the

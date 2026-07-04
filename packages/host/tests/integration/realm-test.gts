@@ -3135,7 +3135,7 @@ module('Integration | realm', function (hooks) {
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    // `/_search` returns `search-entry` resources in `data` (each just an
+    // `/_search` returns `entry` resources in `data` (each just an
     // id + refs); the full card resources — the matched results themselves and
     // their `loadLinks`-expanded relationship targets — travel in `included`.
     let entries = json.data as any[];

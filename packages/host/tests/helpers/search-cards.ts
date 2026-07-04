@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 // Test-only: fetch the card/file-meta serializations matching a card-rooted
-// `Query` through the search-entry engine, returning them in the
+// `Query` through the entry engine, returning them in the
 // `{ data, included, meta }` collection shape index assertions read. Requests
 // the data-only fieldset (one full `item` per entry); the top-level items land
 // in `data`, their transitively-linked resources in `included`.
@@ -28,7 +28,7 @@ export async function searchCardsForTest(
     ),
     opts,
   );
-  // Key by the full `(type, id)` the search-entry `item` relationship carries,
+  // Key by the full `(type, id)` the entry `item` relationship carries,
   // not `id` alone — matches the wire contract (and the store's resolver).
   let itemKeys = new Set<string>();
   for (let entry of doc.data) {

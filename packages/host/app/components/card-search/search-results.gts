@@ -18,7 +18,7 @@ import type { HydrationMode } from './hydratable-card';
 
 import type StoreService from '../../services/store';
 
-// The one search component family. Consumes the heterogeneous `search-entry`
+// The one search component family. Consumes the heterogeneous `entry`
 // stream from `getSearchEntriesResource` (through the shared render-stable
 // view-model layer) and renders it transparently — prerendered HTML inert (the
 // fast path, hydrated lazily on interaction) or the live serialization. Used
@@ -60,7 +60,7 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
 
   // Selective Store inflate: deposit only full `item` serializations so a
   // by-URL read (or the hydration GET) resolves without a round-trip. Sparse
-  // items and `search-entry`s are never deposited (the store method no-ops on a
+  // items and `entry`s are never deposited (the store method no-ops on a
   // sparse item); an item carrying an error doc is skipped here too — it stands
   // in for a card that failed to render and must not enter the Store. A
   // render-side effect keyed on the live entry set, so it deposits an
@@ -75,10 +75,7 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
           this.store
             .inflateSearchEntryItem(entry.item)
             .catch((err: unknown) => {
-              this.#log.error(
-                `failed to inflate search-entry item ${entry.id}`,
-                err,
-              );
+              this.#log.error(`failed to inflate entry item ${entry.id}`, err);
             });
         }
       }

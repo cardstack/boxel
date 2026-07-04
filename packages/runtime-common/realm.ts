@@ -20,7 +20,7 @@ import {
   makeCardTypeSummaryDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type SearchEntryCollectionDocument,
+  type EntryCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
 import { clearReplacedArrayFieldMeta } from './resource-types.ts';
@@ -5382,14 +5382,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  // The search: the parsed search-entry query (the item. membership
+  // The search: the parsed entry query (the item. membership
   // query + the applied htmlQuery + the sparse fieldset) against the
-  // search-entry projection engine. Same opts threading as `search` —
+  // entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.
   public async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: SearchOpts,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),

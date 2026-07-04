@@ -11,8 +11,8 @@ import {
   type HtmlResource,
   type IconResource,
   type Realm,
-  type SearchEntryCollectionDocument,
-  type SearchEntryResource,
+  type EntryCollectionDocument,
+  type EntryResource,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -21,7 +21,7 @@ import {
 } from './helpers/index.ts';
 
 function htmlIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): HtmlResource | undefined {
   return doc.included?.find(
@@ -37,7 +37,7 @@ function normalizedHtml(resource: HtmlResource): string {
 }
 
 function itemIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): CardResource | FileMetaResource | undefined {
   return doc.included?.find(
@@ -47,30 +47,30 @@ function itemIn(
   );
 }
 
-function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
+function cssIn(doc: EntryCollectionDocument): CssResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is CssResource => resource.type === 'css',
   );
 }
 
-function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+function iconsIn(doc: EntryCollectionDocument): IconResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is IconResource => resource.type === 'icon',
   );
 }
 
-function iconIdOf(entry: SearchEntryResource): string | undefined {
+function iconIdOf(entry: EntryResource): string | undefined {
   return entry.relationships.icon?.data.id;
 }
 
 function entryFor(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
-): SearchEntryResource | undefined {
+): EntryResource | undefined {
   return doc.data.find((entry) => entry.id === id);
 }
 
-function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
+function htmlIdsOf(entry: EntryResource): string[] | undefined {
   return entry.relationships.html?.data.map((member) => member.id);
 }
 
@@ -321,7 +321,7 @@ module(basename(import.meta.filename), function () {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
           filterEq: { htmlQuery: { eq: { format: 'head' } } },
-          fields: { 'search-entry': ['html'] },
+          fields: { entry: ['html'] },
         }),
       );
       assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'head' } });
@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function () {
         parseSearchEntryQueryFromPayload({
           cardUrls: [`${johnId}.json`],
           filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
-          fields: { 'search-entry': ['html'] },
+          fields: { entry: ['html'] },
         }),
       );
       assert.strictEqual(
@@ -411,13 +411,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('fields[search-entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
+    test('fields[entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
           // an htmlQuery alongside an item-only fieldset is inert, not an
           // error
           filterEq: { htmlQuery: { eq: { format: 'embedded' } } },
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
         }),
       );
       let entry = entryFor(doc, johnId)!;
@@ -449,18 +449,18 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+    test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['item.firstName'] } }),
+        personQuery({ fields: { entry: ['item.firstName'] } }),
       );
       let item = itemIn(doc, johnId)!;
       assert.deepEqual(item.attributes, { firstName: 'John' });
       assert.deepEqual(item.meta.sparseFields, ['firstName']);
     });
 
-    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+    test('fields[entry]=html,item: both branches on every entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html', 'item'] } }),
+        personQuery({ fields: { entry: ['html', 'item'] } }),
       );
       let entry = entryFor(doc, johnId)!;
       let htmlId = `${johnId}#fitted#${personKey}`;
@@ -524,7 +524,7 @@ module(basename(import.meta.filename), function () {
 
       // a pinned html branch keeps membership visible with an empty array
       let pinned = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html'] } }),
+        personQuery({ fields: { entry: ['html'] } }),
       );
       let pinnedJane = entryFor(pinned, janeId)!;
       assert.deepEqual(
@@ -567,7 +567,7 @@ module(basename(import.meta.filename), function () {
           'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
           eq: { 'item.url': fileUrl },
         },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(query);
       let entry = entryFor(doc, fileUrl)!;

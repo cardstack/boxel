@@ -141,7 +141,7 @@ interface Signature {
 // The results pane of the search sheet / card chooser. Renders through the
 // `<SearchResults>` component family: one instance for the realm search, a
 // nested one for recents (with the live-recents fallback layered in), then hands
-// their yielded `search-entry` streams to `<SheetResults>`, which lays them out
+// their yielded `entry` streams to `<SheetResults>`, which lays them out
 // into realm / recents / URL-paste sections (with the header, multiselect, the
 // Adorn treatment, pagination, and the result count). Resources are
 // construct-once: the two `<SearchResults>` own their live-search resources
@@ -185,7 +185,7 @@ export default class PanelContent extends Component<Signature> {
     return this.cardResource?.isLoaded ?? false;
   }
 
-  // The `search-entry` query for the main realm search, built from the
+  // The `entry` query for the main realm search, built from the
   // shared `Query` builder via `searchEntryWireQueryFromQuery`. Fitted is the
   // default rendering, so no `htmlQuery` override is needed in the default
   // variant; the mini variant pins it to the uniform CardDef fitted tile
@@ -224,7 +224,7 @@ export default class PanelContent extends Component<Signature> {
   // rendering through the wire filter's top-level `eq` htmlQuery — fitted
   // format at the CardDef render type, served from the per-ancestor
   // `fitted_html` entries the index already carries. The `eq` carries only the
-  // htmlQuery binding, which the search-entry engine lifts out and then
+  // htmlQuery binding, which the entry engine lifts out and then
   // dissolves the now-empty `eq`, so the rest of the filter is untouched;
   // `buildSearchQuery`/`buildRecentsQuery` never emit a top-level `eq`, so
   // there is nothing to collide with. Non-mini variants pass through unchanged

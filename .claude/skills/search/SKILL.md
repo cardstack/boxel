@@ -1,11 +1,11 @@
 ---
 name: search
-description: The search surface across the platform is the `search-entry` API — realm endpoints `/_search` + `/_federated-search`, the host resource `getSearchEntriesResource`, the `<SearchResults>` component (provided to cards as `@context.searchResultsComponent`), and the `RenderableSearchEntryLike` row view-model. Use whenever adding a search/query call site, choosing which search API to call, reviewing or refactoring search code, or writing a card that lists/queries other cards.
+description: The search surface across the platform is the `entry` API — realm endpoints `/_search` + `/_federated-search`, the host resource `getSearchEntriesResource`, the `<SearchResults>` component (provided to cards as `@context.searchResultsComponent`), and the `RenderableSearchEntryLike` row view-model. Use whenever adding a search/query call site, choosing which search API to call, reviewing or refactoring search code, or writing a card that lists/queries other cards.
 ---
 
-# Search — the `search-entry` API
+# Search — the `entry` API
 
-Search is **one engine** exposed as the **`search-entry` API**. A `search-entry`
+Search is **one engine** exposed as the **`entry` API**. An `entry`
 is a heterogeneous result: the engine prefers prerendered HTML (the fast path)
 and falls back to a live serialization per row. **The governing invariant: a
 consumer never assumes whether a result came back as prerendered HTML or a live
@@ -27,7 +27,7 @@ card — it renders the entry transparently.**
 
 - `/_search` (single realm — `Realm.searchEntriesResponse`) and
   `/_federated-search` (realm-server — `handleSearch`) emit the
-  `search-entry` document natively (heterogeneous `html` / `item` results).
+  `entry` document natively (heterogeneous `html` / `item` results).
 
 ## Host
 
@@ -55,9 +55,9 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-// `@query` is a `search-entry`-rooted query (`SearchEntryWireQuery`).
+// `@query` is an `entry`-rooted query (`SearchEntryWireQuery`).
 // Build one from an ordinary `Query` with `searchEntryWireQueryFromQuery`,
-// then add `realms` / `page` / a `fields[search-entry]` fieldset as needed.
+// then add `realms` / `page` / a `fields[entry]` fieldset as needed.
 get query(): SearchEntryWireQuery {
   return {
     ...searchEntryWireQueryFromQuery({

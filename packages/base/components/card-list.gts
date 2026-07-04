@@ -62,7 +62,7 @@ export default class CardList extends Component<Signature> {
   @consume(CardContextName)
   declare cardContext: CardContext | undefined;
 
-  // The `search-entry`-rooted query, adapted from the incoming `Query`.
+  // The `entry`-rooted query, adapted from the incoming `Query`.
   // The default fieldset (no `fields` member) resolves to "html, falling back
   // to the `item` serialization where no rendering matched" — exactly what the
   // grid wants (prerendered HTML for cards; an `item`/`icon` fallback for file

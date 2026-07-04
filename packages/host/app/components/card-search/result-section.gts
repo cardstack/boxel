@@ -104,7 +104,7 @@ interface Signature {
 
 // One section of the search-results pane — a realm group, the URL-paste row, or
 // the recents row. Lays its rows out into a grid of `ResultTile`s; each tile
-// renders through the search-entry rendering surface (a search-entry's
+// renders through the entry rendering surface (an entry's
 // `entry.component`, or a live `CardDef` for the URL paste / live-recents
 // fallback).
 export default class ResultSection extends Component<Signature> {

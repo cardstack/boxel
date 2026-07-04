@@ -48,9 +48,9 @@ import {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   type SingleCardDocument,
-  type SearchEntryCollectionDocument,
-  type SearchEntryIncludedResource,
-  isSearchEntryCollectionDocument,
+  type EntryCollectionDocument,
+  type EntryIncludedResource,
+  isEntryCollectionDocument,
 } from './document-types.ts';
 import { resourceIdentity } from './resource-identity.ts';
 import { relationshipEntries } from './relationship-utils.ts';
@@ -61,7 +61,7 @@ import type {
   IconResource,
   QueryFieldMeta,
   Saved,
-  SearchEntryResource,
+  EntryResource,
 } from './resource-types.ts';
 import {
   buildCssResource,
@@ -71,7 +71,7 @@ import {
 import {
   buildHtmlResource,
   buildIconResource,
-  buildSearchEntryResource,
+  buildEntryResource,
   buildSparseItemResource,
   htmlQueryFormats,
   htmlQueryHasRenderTypePredicate,
@@ -236,10 +236,10 @@ export class RealmIndexQueryEngine {
     return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
-  // The search-entry engine. Runs the parsed search-entry query — the
+  // The entry engine. Runs the parsed entry query — the
   // `item.` membership query against the SQL core, then the htmlQuery
   // evaluated per candidate rendering in this mapper — and assembles a
-  // heterogeneous `search-entry` document: one entry per result, with the
+  // heterogeneous `entry` document: one entry per result, with the
   // selected `html` renderings (+ deduped `css`) and/or `item` resources in
   // `included` per the sparse fieldset.
   //
@@ -262,7 +262,7 @@ export class RealmIndexQueryEngine {
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let { itemQuery: query, htmlQuery, fieldset, cardUrls } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
@@ -300,8 +300,8 @@ export class RealmIndexQueryEngine {
     );
     let nativeOnly = !htmlQueryHasRenderTypePredicate(htmlQuery);
 
-    let data: SearchEntryResource[] = [];
-    let htmlResources: SearchEntryIncludedResource[] = [];
+    let data: EntryResource[] = [];
+    let htmlResources: EntryIncludedResource[] = [];
     let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
     let cssById = new Map<string, CssResource>();
     let iconById = new Map<string, IconResource>();
@@ -313,7 +313,7 @@ export class RealmIndexQueryEngine {
         continue;
       }
       // The index `url` column is the instance's file URL; a result's identity
-      // (shared by the `search-entry` and its `item`) drops the `.json`
+      // (shared by the `entry` and its `item`) drops the `.json`
       // extension.
       let cardUrl = fileUrl.endsWith('.json') ? fileUrl.slice(0, -5) : fileUrl;
       let hasError = Boolean(row.has_error);
@@ -321,7 +321,7 @@ export class RealmIndexQueryEngine {
       let htmlIds: string[] | undefined;
       // The result's type icon, deduped by native-type internal key. Resolved
       // alongside the html branch (a consumer that asks for renderings is the
-      // one that paints icons), but emitted on the `search-entry` itself so a
+      // one that paints icons), but emitted on the `entry` itself so a
       // fallback row with no matching rendering still carries it.
       let iconId = collectIconId(
         fieldset.html ? (row.types as string[] | null)?.[0] : undefined,
@@ -422,11 +422,11 @@ export class RealmIndexQueryEngine {
       }
 
       data.push(
-        buildSearchEntryResource({ url: cardUrl, htmlIds, itemType, iconId }),
+        buildEntryResource({ url: cardUrl, htmlIds, itemType, iconId }),
       );
     }
 
-    let metaWithEcho: SearchEntryCollectionDocument['meta'] = fieldset.html
+    let metaWithEcho: EntryCollectionDocument['meta'] = fieldset.html
       ? { ...meta, htmlQuery }
       : meta;
     return await this.assembleSearchEntryDoc(
@@ -446,7 +446,7 @@ export class RealmIndexQueryEngine {
   private async searchEntriesFileMeta(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let { itemQuery: query, htmlQuery, fieldset } = searchEntryQuery;
     let { includeErrors: _includeErrors, ...fileOpts } = opts ?? {};
     let runSql = () =>
@@ -464,8 +464,8 @@ export class RealmIndexQueryEngine {
     );
 
     let itemOnEveryRow = fieldset.item.kind !== 'none';
-    let data: SearchEntryResource[] = [];
-    let htmlResources: SearchEntryIncludedResource[] = [];
+    let data: EntryResource[] = [];
+    let htmlResources: EntryIncludedResource[] = [];
     let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
     let cssById = new Map<string, CssResource>();
     let iconById = new Map<string, IconResource>();
@@ -479,7 +479,7 @@ export class RealmIndexQueryEngine {
 
       let htmlIds: string[] | undefined;
       // A file's type icon, deduped by its native-type internal key — carried
-      // on the `search-entry` so a no-HTML file row (e.g. a `.gts`/`.ts`
+      // on the `entry` so a no-HTML file row (e.g. a `.gts`/`.ts`
       // FileDef with no fitted rendering) still resolves its icon.
       let iconId = collectIconId(
         fieldset.html ? file.types?.[0] : undefined,
@@ -534,7 +534,7 @@ export class RealmIndexQueryEngine {
       }
 
       data.push(
-        buildSearchEntryResource({
+        buildEntryResource({
           url,
           htmlIds,
           itemType: itemEmitted ? FileMetaResourceType : undefined,
@@ -543,7 +543,7 @@ export class RealmIndexQueryEngine {
       );
     }
 
-    let metaWithEcho: SearchEntryCollectionDocument['meta'] = fieldset.html
+    let metaWithEcho: EntryCollectionDocument['meta'] = fieldset.html
       ? { ...meta, htmlQuery }
       : meta;
     return await this.assembleSearchEntryDoc(
@@ -560,19 +560,19 @@ export class RealmIndexQueryEngine {
   // live search path. Items carry `meta.realmInfo` exactly as the live
   // search path serializes them.
   private async assembleSearchEntryDoc(
-    doc: SearchEntryCollectionDocument,
+    doc: EntryCollectionDocument,
     resources: {
-      htmlResources: SearchEntryIncludedResource[];
+      htmlResources: EntryIncludedResource[];
       cssById: Map<string, CssResource>;
       iconById: Map<string, IconResource>;
       itemResources: (CardResource<Saved> | FileMetaResource)[];
       fullItemRoots: (CardResource<Saved> | FileMetaResource)[];
     },
     opts?: Options,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let { htmlResources, cssById, iconById, itemResources, fullItemRoots } =
       resources;
-    let included: SearchEntryIncludedResource[] = [
+    let included: EntryIncludedResource[] = [
       ...htmlResources,
       ...cssById.values(),
       ...iconById.values(),
@@ -1181,7 +1181,7 @@ export class RealmIndexQueryEngine {
       let realmList = realms ?? (realm ? [realm] : [realmHref]);
       // Resolve the cross-realm query-backed field against the peer realm's
       // `/_search` endpoint, data-only: the legacy card-rooted query
-      // translates to the search-entry wire grammar, and the `item` fieldset
+      // translates to the entry wire grammar, and the `item` fieldset
       // makes every entry carry its full `card`/`file-meta` serialization.
       let wireQuery = searchEntryWireQueryFromQuery(
         queryWithoutRealm as Query,
@@ -1215,7 +1215,7 @@ export class RealmIndexQueryEngine {
         };
       }
       let json = await response.json();
-      if (!isSearchEntryCollectionDocument(json)) {
+      if (!isEntryCollectionDocument(json)) {
         return {
           cards: [],
           error: {
@@ -1272,12 +1272,12 @@ export class RealmIndexQueryEngine {
   }
 
   private async attachRealmInfo(
-    doc: SingleCardDocument | SearchEntryCollectionDocument,
+    doc: SingleCardDocument | EntryCollectionDocument,
   ): Promise<void> {
     let realmInfo = await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
     for (let resource of [...resources, ...(doc.included ?? [])]) {
-      // Only `card` / `file-meta` resources carry realm metadata. A search-entry
+      // Only `card` / `file-meta` resources carry realm metadata. An entry
       // `included` also holds `html` / `css` / `icon` resources, which have no
       // `realmURL`; they fall through this discriminant untouched.
       if (
@@ -1969,7 +1969,7 @@ function relativizeResource(
 
 // Resolve a row's `icon` (type-descriptor) resource id — its native-type
 // internal key — and register the deduped resource carrying the type's icon,
-// display name, and code ref. Returns the id to hang the `search-entry` →
+// display name, and code ref. Returns the id to hang the `entry` →
 // `icon` relationship on, or undefined when the row has no native type, no
 // `icon_html`, or an unparseable internal key. The same internal key collapses
 // every result of that type to one resource in `included`.

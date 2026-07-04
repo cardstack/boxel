@@ -21,11 +21,11 @@ import {
   GetCardContextName,
   HtmlResourceType,
   IconResourceType,
-  SearchEntryResourceType,
+  EntryResourceType,
   type CardResource,
   type Loader,
   type Saved,
-  type SearchEntryIncludedResource,
+  type EntryIncludedResource,
   type SearchEntryResults,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -88,10 +88,10 @@ function renderingIdFor(url: string): string {
   return htmlResourceId({ url, format: 'fitted', renderType: bookRef });
 }
 
-// The `search-entry` resource pointing at a prerendered rendering.
+// The `entry` resource pointing at a prerendered rendering.
 function htmlEntryResource(url: string): SearchEntryWireResource {
   return {
-    type: SearchEntryResourceType,
+    type: EntryResourceType,
     id: url,
     relationships: {
       html: { data: [{ type: HtmlResourceType, id: renderingIdFor(url) }] },
@@ -104,7 +104,7 @@ function htmlIncluded(
   url: string,
   html: string,
   isError = false,
-): SearchEntryIncludedResource[] {
+): EntryIncludedResource[] {
   return [
     {
       type: HtmlResourceType,
@@ -128,10 +128,10 @@ function htmlIncluded(
   ];
 }
 
-// The `search-entry` resource pointing at an `item` serialization.
+// The `entry` resource pointing at an `item` serialization.
 function itemEntryResource(url: string): SearchEntryWireResource {
   return {
-    type: SearchEntryResourceType,
+    type: EntryResourceType,
     id: url,
     relationships: { item: { data: { type: 'card', id: url } } },
   };
@@ -184,9 +184,7 @@ function errorItem(url: string, message: string): CardResource<Saved> {
 // `html` string absent. With no item alongside it, the row has nothing to
 // render but its error state — the host error component, with a generic
 // message (no error doc rode along).
-function htmlIncludedNoLastKnownGood(
-  url: string,
-): SearchEntryIncludedResource[] {
+function htmlIncludedNoLastKnownGood(url: string): EntryIncludedResource[] {
   return [
     {
       type: HtmlResourceType,
@@ -372,7 +370,7 @@ module('Integration | Component | search-results', function (hooks) {
     // operator-mode overlay / adorn tab reads, sourced without loading the
     // instance.
     let withIcon = (url: string): SearchEntryWireResource => ({
-      type: SearchEntryResourceType,
+      type: EntryResourceType,
       id: url,
       relationships: {
         html: { data: [{ type: HtmlResourceType, id: renderingIdFor(url) }] },
@@ -495,7 +493,7 @@ module('Integration | Component | search-results', function (hooks) {
     try {
       let query: SearchEntryWireQuery = {
         filter: { 'item.on': bookRef },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
         realms: [testRealmURL],
       };
       await render(

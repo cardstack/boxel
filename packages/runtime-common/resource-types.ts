@@ -23,7 +23,7 @@ export interface QueryFieldMeta {
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
 export const CssResourceType = 'css';
-export const SearchEntryResourceType = 'search-entry';
+export const EntryResourceType = 'entry';
 export const HtmlResourceType = 'html';
 export const IconResourceType = 'icon';
 // resource
@@ -31,7 +31,7 @@ export type Resource =
   | ModuleResource
   | CardResource
   | CssResource
-  | SearchEntryResource
+  | EntryResource
   | HtmlResource
   | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
@@ -158,7 +158,7 @@ export interface CssResource {
 // it rides as its own deduped resource rather than repeated on each rendering.
 // Its `id` is the type's internal key (the `<module>/<name>` form already
 // carried as a row's `types[0]`), so identical types collapse to one
-// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// `(type, id)` in `included`. Reached from the `entry` (not the `html`)
 // so item-only / no-HTML rows resolve their type descriptor too.
 export interface IconResource {
   id: string;
@@ -173,7 +173,7 @@ export interface IconResource {
   };
 }
 
-// The synthesized rendering-selection query bound on a `search-entry` (the
+// The synthesized rendering-selection query bound on an `entry` (the
 // "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
 // leaves composed with `every`/`any`/`not`, with real boolean semantics
 // (`not(not(q))` selects exactly what `q` selects). It selects which of an
@@ -202,9 +202,9 @@ export interface HtmlQueryLeaf {
 // `item` points at the live serialization. Which branches appear is governed
 // by the query's sparse fieldset (default: the selected renderings, falling
 // back to `item` — with the `html` relationship omitted — where none match).
-export interface SearchEntryResource {
+export interface EntryResource {
   id: string;
-  type: typeof SearchEntryResourceType;
+  type: typeof EntryResourceType;
   relationships: {
     html?: {
       data: { type: typeof HtmlResourceType; id: string }[];
@@ -281,7 +281,7 @@ export {
   isRelationship,
   isCssResource,
   isIconResource,
-  isSearchEntryResource,
+  isEntryResource,
   isHtmlResource,
   isSparseItemResource,
 } from './card-document-shape.ts';
