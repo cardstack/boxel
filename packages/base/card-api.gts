@@ -1981,23 +1981,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (!Array.isArray(values.data)) {
-        // An authored-empty plural relationship (`{ links: { self: null } }` or
-        // `{ data: null }` in the source). Tag the empty result as authored so
-        // serialization keeps it as `{ self: null }` rather than dropping it
-        // like a never-set link. A computed field's emptiness is derived, never
-        // authored, so it is never tagged.
-        let empty: (BaseInstanceType<FieldT> | NotLoadedValue)[] = [];
-        if (!this.computeVia) {
-          markAuthoredEmptyLink(empty);
-        }
-        return empty;
+        // A `{ links: { self: null } }` relationship (no `data` array) is an
+        // authored empty — no members. Fall through with an empty relationship
+        // list so the shared WatchedArray path below wraps (and tags) it the
+        // same as an empty `{ data: [] }`: a mutable, reactive backing array,
+        // not a bare `[]` (which would hand a later push/splice a plain array
+        // and skip the WatchedArray subscriber).
+        relationships = [];
+      } else {
+        relationships = values.data.map((entry) => ({
+          links: {
+            self: entry && 'id' in entry ? (entry.id ?? null) : null,
+          },
+          data: entry,
+        }));
       }
-      relationships = values.data.map((entry) => ({
-        links: {
-          self: entry && 'id' in entry ? (entry.id ?? null) : null,
-        },
-        data: entry,
-      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
@@ -2089,10 +2087,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       resolved,
       { hideSlot: isNonPresentLink },
     );
-    // An authored-empty plural relationship spelled `{ data: [] }` in the source
-    // deserializes to an empty array — tag it authored so serialization keeps it
-    // as `{ self: null }`. (`{ links: { self: null } }` sources return early
-    // above.) A computed field's emptiness is derived, never authored.
+    // An authored-empty plural relationship (`{ data: [] }` or
+    // `{ links: { self: null } }` in the source) deserializes to an empty
+    // array — tag it authored so serialization keeps it as `{ self: null }`
+    // rather than dropping it like a never-set link. A computed field's
+    // emptiness is derived, never authored, so it is never tagged.
     if (resolved.length === 0 && !this.computeVia) {
       markAuthoredEmptyLink(watched);
     }

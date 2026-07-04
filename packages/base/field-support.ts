@@ -516,7 +516,7 @@ const authoredEmptyLinks = new WeakSet<object>();
 // treats it as a relationship the card has (`isFieldUsed`). No-op for a
 // non-empty array (already "had" by length) or a non-array value.
 export function markAuthoredEmptyLink(value: unknown): void {
-  if (Array.isArray(value)) {
+  if (Array.isArray(value) && value.length === 0) {
     authoredEmptyLinks.add(value);
   }
 }
