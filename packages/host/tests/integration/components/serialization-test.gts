@@ -7096,7 +7096,7 @@ module('Integration | serialization', function (hooks) {
 
       // Author `friends` explicitly empty (`{ self: null }`) rather than
       // leaving it absent, then deserialize.
-      let doc = {
+      let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
           id: `${testRealmURL}Person/hassan`,
