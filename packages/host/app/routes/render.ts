@@ -167,6 +167,7 @@ export default class RenderRoute extends Route<Model> {
     // invalidation is handled by `fetchSearchDoc`'s entry-time
     // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
     // CS-10872: also tear down the stage setter + timestamp. Without
@@ -349,6 +350,9 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
   ): Promise<Model> {
+    // Reset before any await so a reader can never see a previous card's
+    // settle-time snapshot; #settleModelAfterRender repopulates it.
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
@@ -646,6 +650,14 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
+    // Publish the settle-time dependency snapshot (unresolved/prefix form,
+    // matching what render.meta reports as `deps`) for visits that never run
+    // the meta route: a prerender-html visit reads this global after its
+    // isolated render so the HTML rendering still reports the dependencies
+    // it pulled in. Cleared at the top of #buildModel so a later card in the
+    // same tab can never read a predecessor's snapshot.
+    (globalThis as any).__boxelRenderCapturedDeps =
+      this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
@@ -810,6 +822,7 @@ export default class RenderRoute extends Route<Model> {
       // (and the entire ApplicationInstance) on globalThis.
       (globalThis as any).__boxelRenderContext = undefined;
       (globalThis as any).__renderModel = undefined;
+      (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
     });

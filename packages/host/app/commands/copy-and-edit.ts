@@ -150,8 +150,13 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     let containerForFields =
       targetPath && this.getWrappedInstance(targetPath, parentCard);
     let fieldContainer = containerForFields ?? parentCard;
+    // Discover every declared link field, not only the ones the card has:
+    // this loop locates the target field to relink, and the target is
+    // typically empty at that point (the whole reason we're linking a copy
+    // into it). The `usedLinksToFieldsOnly` default would omit an unset target
+    // and silently skip the relink.
     let fields = cardApi.getFields(fieldContainer, {
-      usedLinksToFieldsOnly: true,
+      usedLinksToFieldsOnly: false,
       includeComputeds: false,
     });
 
@@ -278,15 +283,50 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     card: CardAPI.CardDef,
     fieldName: string,
   ): string | undefined {
-    try {
-      let serialized = this.#cardAPI?.serializeCard(card, {});
-      let relationships = (serialized?.data as any)?.relationships ?? {};
-      return Object.keys(relationships).find(
-        (key) => key === fieldName || key.endsWith(`.${fieldName}`),
-      );
-    } catch {
+    let api = this.#cardAPI;
+    if (!api) {
       return undefined;
     }
+    // Resolve a leaf field name to its full dotted path (e.g. `theme` ->
+    // `cardInfo.theme`) by walking the declared field structure, not a
+    // serialization: the target we're linking into is typically unset, so it
+    // may not appear in the card's serialized relationships at all.
+    let search = (
+      owner: CardAPI.BaseDef | typeof CardAPI.BaseDef,
+      prefix: string,
+    ): string | undefined => {
+      let fields: Record<string, any>;
+      try {
+        fields = api.getFields(owner as any, { includeComputeds: false });
+      } catch {
+        return undefined;
+      }
+      for (let [name, field] of Object.entries(fields)) {
+        if (!field) {
+          continue;
+        }
+        let path = prefix ? `${prefix}.${name}` : name;
+        if (
+          name === fieldName &&
+          (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')
+        ) {
+          return path;
+        }
+        if (
+          (field.fieldType === 'contains' ||
+            field.fieldType === 'containsMany') &&
+          'card' in field &&
+          field.card
+        ) {
+          let nested = search(field.card, path);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+      return undefined;
+    };
+    return search(card, '');
   }
 
   // Example: dotGetter('cardInfo.theme', card) -> card.cardInfo.theme

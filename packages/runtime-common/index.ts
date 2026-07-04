@@ -489,6 +489,11 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // A row is produced by two prerender visits (index + prerender-html),
+  // each its own HTTP request. `requestId` carries the index visit's id;
+  // this carries the prerender-html visit's so operators can join logs
+  // for both. Absent for in-process callers and fused single-visit rows.
+  prerenderHtmlRequestId?: string;
   // Frontmatter YAML that wouldn't parse during file extraction. The row
   // still indexes (body-only); this is the only indexed signal that the
   // file's frontmatter — and anything it declared — was dropped. Merged in
@@ -562,16 +567,41 @@ export const VISIT_PASS_ORDER = [
 ] as const;
 export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
 
+// The consolidated visit splits along the search-doc/HTML seam into two
+// visit types:
+//
+//   - 'index' — everything the search index needs: the file extract, the
+//     card's meta (search doc / serialized / types / display names / deps)
+//     and the icon render. Never runs the `html` route, never materializes
+//     a format component via `getComponent`.
+//   - 'prerender-html' — the `html` route per format (isolated, head,
+//     atom, fitted, embedded) plus markdown, for both the card and the
+//     file rendering of a URL. Produces no search-doc data.
+//
+// A visit with no `visitType` runs the union of both (the fused visit) —
+// used by callers that want a complete render in one round-trip (e.g. the
+// user-initiated prerender proxy).
+export type PrerenderVisitType = 'index' | 'prerender-html';
+
 export type PrerenderVisitArgs = {
   affinityType: AffinityType;
   affinityValue: string;
   realm: string;
   url: string;
   auth: string;
+  // Selects which half of the bifurcated visit to run — see
+  // PrerenderVisitType. Absent runs the fused union of both halves.
+  visitType?: PrerenderVisitType;
   renderOptions?: RenderRouteOptions;
   // Inputs required only when the fileRender pass is requested
   fileData?: FileRenderArgs['fileData'];
   types?: string[];
+  // Ancestor type chain (internalKeyFor form) driving the card's
+  // fitted/embedded format renders in a 'prerender-html' visit. Supplied
+  // by callers that already hold the chain (the indexing job passes the
+  // index visit's `types` through); when absent the visit resolves the
+  // chain itself via the types route.
+  cardTypes?: string[];
   // Identifies the indexing batch this visit belongs to (CS-10758 step 3).
   // Required to honor `renderOptions.clearCache: true` on the prerender
   // server when another batch currently owns the affinity. Visits without
@@ -702,6 +732,8 @@ export {
   coerceErrorMessage,
   stringifyErrorForLog,
   sanitizeForJsonb,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';

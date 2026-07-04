@@ -9,6 +9,8 @@ import {
   internalKeyFor,
   baseCardRef,
   coerceTypes,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ri,
   rri,
   type LooseCardResource,
@@ -16,6 +18,7 @@ import {
   type BoxelIndexTable,
   type CardResource,
   type RealmResourceIdentifier,
+  type SerializedError,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -2820,5 +2823,105 @@ module('Unit | index-writer', function (hooks) {
         'row exposes only url, type, deps — no error_doc / has_error / is_deleted',
       );
     });
+  });
+});
+
+module('Unit | index-writer | error doc merge', function () {
+  function err(
+    message: string,
+    extra: Partial<SerializedError> = {},
+  ): SerializedError {
+    return { message, status: 500, additionalErrors: null, ...extra };
+  }
+
+  test('a higher-generation error doc supersedes a lower-generation one', function (assert) {
+    let recent = err('recent', {
+      id: 'x',
+      additionalErrors: [err('recent-dep')],
+    });
+    let stale = err('stale', { id: 'x', additionalErrors: [err('stale-dep')] });
+
+    assert.strictEqual(
+      mergeErrorsByGeneration(recent, 5, stale, 4).message,
+      'recent',
+      'the newer generation wins when it is the first argument',
+    );
+    assert.strictEqual(
+      mergeErrorsByGeneration(stale, 4, recent, 5).message,
+      'recent',
+      'the newer generation wins when it is the second argument',
+    );
+    assert.deepEqual(
+      mergeErrorsByGeneration(recent, 5, stale, 4).additionalErrors,
+      [err('recent-dep')],
+      'the stale document contributes nothing — it is not merged in',
+    );
+  });
+
+  test('equal-generation error docs merge their detail, keeping the primary message', function (assert) {
+    let primary = err('primary message', {
+      id: 'card',
+      deps: ['dep-a'],
+      additionalErrors: [err('existing-dep', { id: 'existing' })],
+    });
+    let secondary = err('secondary message', {
+      id: 'module',
+      deps: ['dep-b'],
+      additionalErrors: [err('missing middle-field', { id: 'middle' })],
+    });
+
+    let merged = mergeErrorsByGeneration(primary, 3, secondary, 3);
+
+    assert.strictEqual(
+      merged.message,
+      'primary message',
+      'the primary envelope message is preserved',
+    );
+    let messages = (merged.additionalErrors ?? []).map((e) => e.message);
+    assert.ok(
+      messages.includes('existing-dep'),
+      "the primary's own additionalErrors are kept",
+    );
+    assert.ok(
+      messages.includes('missing middle-field'),
+      "the secondary's nested dependency detail is folded in flat",
+    );
+    assert.ok(
+      messages.includes('secondary message'),
+      "the secondary's own top-level error is folded in as a flat entry",
+    );
+    assert.deepEqual(merged.deps, ['dep-a', 'dep-b'], 'deps are unioned');
+  });
+
+  test('merging an error doc identical to the primary adds nothing', function (assert) {
+    let primary = err('same failure', { id: 'x', status: 500 });
+    let secondary = err('same failure', { id: 'x', status: 500 });
+    assert.strictEqual(
+      mergeErrorDetail(primary, secondary).additionalErrors,
+      null,
+      'a secondary that matches the primary (id, message, status) is deduped away',
+    );
+  });
+
+  test("the secondary's nested detail is folded flat, not nested", function (assert) {
+    let primary = err('primary', { id: 'p' });
+    let secondary = err('secondary', {
+      id: 's',
+      additionalErrors: [err('leaf detail', { id: 'leaf' })],
+    });
+    let merged = mergeErrorDetail(primary, secondary);
+    assert.deepEqual(
+      (merged.additionalErrors ?? []).map((e) => e.message),
+      ['secondary', 'leaf detail'],
+      'both the secondary envelope and its nested detail sit at the top level',
+    );
+    let secondaryEntry = (merged.additionalErrors ?? []).find(
+      (e) => e.id === 's',
+    );
+    assert.strictEqual(
+      secondaryEntry.additionalErrors,
+      null,
+      'the folded secondary entry does not carry its own nested list',
+    );
   });
 });

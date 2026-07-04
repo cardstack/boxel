@@ -609,13 +609,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             notes: null,
           },
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`../pet`),

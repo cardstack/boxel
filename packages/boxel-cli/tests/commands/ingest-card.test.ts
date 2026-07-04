@@ -15,7 +15,6 @@ describe('ingest-card helpers', () => {
             'bottles.0': { links: { self: '../WineBottle/a' } },
             'bottles.1': { links: { self: '../WineBottle/b' } },
             label: { links: { self: '../Image/x' } },
-            'cardInfo.theme': { links: { self: null } },
           },
         },
       });
