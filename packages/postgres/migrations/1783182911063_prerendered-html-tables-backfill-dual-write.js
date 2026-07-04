@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // The `prerendered_html` / `prerendered_html_working` pair holds a card's

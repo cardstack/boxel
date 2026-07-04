@@ -784,6 +784,139 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('promotes prerendered_html for rows resumed from a prior job attempt', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
+    // (with HTML) but never mirrored it onto prerendered_html_working — the
+    // crash-window / pre-dual-write-deploy case. prerendered_html_working is
+    // left empty. A resuming batch re-adds the URL to the invalidation set but
+    // never re-runs updateEntry, so the batch-commit projection must source
+    // from boxel_index_working or the row lands in boxel_index but is silently
+    // skipped in prerendered_html.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      {
+        working: [
+          {
+            url,
+            generation: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: String(1700000000),
+            is_deleted: false,
+            deps: [],
+            types: [],
+            isolated_html: `<div class="isolated">Resumed</div>`,
+            markdown: 'Resumed markdown',
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      { jobId: 42, reservationId: 1, priority: 0 },
+    );
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown FROM prerendered_html WHERE url = $1`,
+      { bind: [url] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">Resumed</div>`,
+      'resumed row HTML is promoted to prerendered_html',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'Resumed markdown',
+      'resumed row markdown is promoted to prerendered_html',
+    );
+
+    let [indexRow] = (await adapter.execute(
+      `SELECT isolated_html FROM boxel_index WHERE url = $1`,
+      { bind: [url] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      indexRow?.isolated_html,
+      `<div class="isolated">Resumed</div>`,
+      'boxel_index and prerendered_html advance in lockstep for resumed rows',
+    );
+  });
+
+  test('mirrors an error entry onto prerendered_html, preserving last-known-good HTML', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          is_deleted: false,
+          pristine_doc: resource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          last_known_good_deps: [`${testRealmURL}person`],
+          types,
+          isolated_html: `<div class="isolated">Last known good</div>`,
+          markdown: 'Last known good markdown',
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(url), {
+      type: 'instance-error',
+      error: { message: 'boom', status: 500, additionalErrors: [] },
+    });
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown, error_doc, is_deleted FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [url],
+        coerceTypes: { error_doc: 'JSON', is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      (rendered?.error_doc as SerializedError | null)?.message,
+      'boom',
+      'the error rides on prerendered_html.error_doc',
+    );
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">Last known good</div>`,
+      'last-known-good HTML is preserved on the error row',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'Last known good markdown',
+      'last-known-good markdown is preserved on the error row',
+    );
+    assert.false(rendered?.is_deleted, 'an error row is not a tombstone');
+  });
+
   test('can copy index entries', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
