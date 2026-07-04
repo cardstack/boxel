@@ -27,18 +27,22 @@ export async function retrieveHeadHTML({
     return null;
   }
 
+  // Dual-read: serve the head HTML from prerendered_html, falling back to the
+  // boxel_index column when no prerendered_html row exists.
   let rows = await query(dbAdapter, [
     `
-      SELECT head_html, generation
-      FROM boxel_index
-      WHERE type = 'instance'
-       AND head_html IS NOT NULL
-       AND is_deleted IS NOT TRUE
+      SELECT coalesce(ph.head_html, i.head_html) AS head_html, i.generation
+      FROM boxel_index AS i
+      LEFT JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.type = 'instance'
+       AND coalesce(ph.head_html, i.head_html) IS NOT NULL
+       AND i.is_deleted IS NOT TRUE
        AND
     `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ]);
@@ -81,18 +85,22 @@ export async function retrieveIsolatedHTML({
     return null;
   }
 
+  // Dual-read: serve the isolated HTML from prerendered_html, falling back to
+  // the boxel_index column when no prerendered_html row exists.
   let rows = await query(dbAdapter, [
     `
-      SELECT isolated_html, generation
-      FROM boxel_index
-      WHERE isolated_html IS NOT NULL
-        AND type = 'instance'
-        AND is_deleted IS NOT TRUE
+      SELECT coalesce(ph.isolated_html, i.isolated_html) AS isolated_html, i.generation
+      FROM boxel_index AS i
+      LEFT JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE coalesce(ph.isolated_html, i.isolated_html) IS NOT NULL
+        AND i.type = 'instance'
+        AND i.is_deleted IS NOT TRUE
         AND
       `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ]);

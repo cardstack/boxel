@@ -26,18 +26,26 @@ export async function retrieveScopedCSS({
     return null;
   }
 
+  // Dual-read: the scoped-CSS URLs needed to serve a card's HTML ride on the
+  // prerendered_html `deps` / `last_known_good_deps`, falling back to the
+  // boxel_index columns when no prerendered_html row exists.
   let scopedCSSQuery: Expression = [
     `
-      SELECT deps, last_known_good_deps, generation
-      FROM boxel_index
-      WHERE type = 'instance'
-        AND is_deleted IS NOT TRUE
-        AND (deps IS NOT NULL OR last_known_good_deps IS NOT NULL)
+      SELECT coalesce(ph.deps, i.deps) AS deps,
+             coalesce(ph.last_known_good_deps, i.last_known_good_deps) AS last_known_good_deps,
+             i.generation
+      FROM boxel_index AS i
+      LEFT JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.type = 'instance'
+        AND i.is_deleted IS NOT TRUE
+        AND (coalesce(ph.deps, i.deps) IS NOT NULL
+             OR coalesce(ph.last_known_good_deps, i.last_known_good_deps) IS NOT NULL)
         AND
     `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ];

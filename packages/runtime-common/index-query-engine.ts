@@ -235,10 +235,15 @@ export interface QueryResultsMeta {
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
+// SQL fragments consumed by `_search`'s ORDER BY, which runs with the
+// boxel_index alias `i` in scope (and, since dual-read, a joined prerendered
+// `ph`). `cardURL` sorts on the primary-key `url`, which now exists in both
+// joined tables — qualify it to `i` so it is unambiguous. Callers outside the
+// query engine (query.ts, search-entry.ts) use only the keys of this map.
 export const generalSortFields: Record<string, string> = {
-  lastModified: 'last_modified',
-  createdAt: 'resource_created_at',
-  cardURL: 'url COLLATE "POSIX"',
+  lastModified: 'i.last_modified',
+  createdAt: 'i.resource_created_at',
+  cardURL: 'i.url COLLATE "POSIX"',
 };
 
 export { isValidPrerenderedHtmlFormat };
@@ -293,8 +298,8 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, embedded_html, fitted_html`,
-      `FROM ${tableFromOpts(opts)} as i
+      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+      `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
         any([
@@ -330,8 +335,8 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, embedded_html, fitted_html`,
-        `FROM ${tableFromOpts(opts)} as i
+        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+        `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
           any([
@@ -448,8 +453,8 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedFile | undefined> {
     let result = (await this.#query([
-      `SELECT i.*`,
-      `FROM ${tableFromOpts(opts)} as i
+      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+      `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
         any([
@@ -483,8 +488,8 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*`,
-        `FROM ${tableFromOpts(opts)} as i
+        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+        `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
           any([
@@ -660,7 +665,7 @@ export class IndexQueryEngine {
     try {
       let conditions: CardExpression[] = [
         ['i.realm_url = ', param(realmURL.href)],
-        ['is_deleted = FALSE OR is_deleted IS NULL'],
+        ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
       ];
 
       if (opts.includeErrors) {
@@ -710,10 +715,12 @@ export class IndexQueryEngine {
           'FROM (',
           ...selectClauseExpression,
           ...innerSortColumns,
-          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
+            opts,
+          )} ${tableValuedFunctionsPlaceholder}`,
           'WHERE',
           ...everyCondition,
-          'GROUP BY url',
+          'GROUP BY i.url',
           ') AS sub',
           ...outerOrderBy,
           ...limitClause,
@@ -721,17 +728,24 @@ export class IndexQueryEngine {
       } else {
         query = [
           ...selectClauseExpression,
-          `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
+            opts,
+          )} ${tableValuedFunctionsPlaceholder}`,
           'WHERE',
           ...everyCondition,
-          'GROUP BY url',
+          'GROUP BY i.url',
           ...this.orderExpression(sort),
           ...limitClause,
         ];
       }
+      // The count query keeps its own base table (`boxel_index`) but joins the
+      // production prerendered_html so a `matches` predicate — shared with the
+      // data query through `everyCondition` — can reference `ph.markdown`.
       let queryCount = [
-        'SELECT COUNT(DISTINCT url) AS total',
-        `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
+        'SELECT COUNT(DISTINCT i.url) AS total',
+        `FROM boxel_index AS i ${prerenderedJoin(
+          undefined,
+        )} ${tableValuedFunctionsPlaceholder}`,
         'WHERE',
         ...everyCondition,
       ];
@@ -779,7 +793,7 @@ export class IndexQueryEngine {
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(pristine_doc) as pristine_doc, ANY_VALUE(error_doc) as error_doc',
+        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc',
       ];
     } else {
       // The full rendering set: every per-format HTML column whole (the
@@ -787,7 +801,7 @@ export class IndexQueryEngine {
       // atom/head columns), plus the live serialization on every row. The
       // caller enumerates candidate renderings and selects from the set.
       selectClauseExpression = [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(fitted_html) as fitted_html, ANY_VALUE(embedded_html) as embedded_html, ANY_VALUE(atom_html) as atom_html, ANY_VALUE(head_html) as head_html, ANY_VALUE(types) as types, ANY_VALUE(deps) as deps, ANY_VALUE(display_names) as display_names, ANY_VALUE(icon_html) as icon_html, ANY_VALUE(error_doc) as error_doc, ANY_VALUE(pristine_doc) as pristine_doc',
+        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(coalesce(ph.fitted_html, i.fitted_html)) as fitted_html, ANY_VALUE(coalesce(ph.embedded_html, i.embedded_html)) as embedded_html, ANY_VALUE(coalesce(ph.atom_html, i.atom_html)) as atom_html, ANY_VALUE(coalesce(ph.head_html, i.head_html)) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(coalesce(ph.deps, i.deps)) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc',
       ];
     }
 
@@ -837,7 +851,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(icon_html) AS icon_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(generation) AS generation, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+        'SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(coalesce(ph.deps, i.deps)) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(coalesce(ph.isolated_html, i.isolated_html)) AS isolated_html, ANY_VALUE(coalesce(ph.head_html, i.head_html)) AS head_html, ANY_VALUE(coalesce(ph.embedded_html, i.embedded_html)) AS embedded_html, ANY_VALUE(coalesce(ph.fitted_html, i.fitted_html)) AS fitted_html, ANY_VALUE(coalesce(ph.atom_html, i.atom_html)) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(coalesce(ph.markdown, i.markdown)) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at',
       ],
       'file',
     );
@@ -899,7 +913,7 @@ export class IndexQueryEngine {
 
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
-      return ['ORDER BY url COLLATE "POSIX"'];
+      return ['ORDER BY i.url COLLATE "POSIX"'];
     }
     return [
       'ORDER BY',
@@ -916,7 +930,7 @@ export class IndexQueryEngine {
           'NULLS LAST',
         ]),
         // we include 'url' as the final sort key for deterministic results
-        ['url COLLATE "POSIX"'],
+        ['i.url COLLATE "POSIX"'],
       ]),
     ];
   }
@@ -1184,6 +1198,17 @@ export class IndexQueryEngine {
   // empty/whitespace-only query short-circuits to FALSE so SQLite doesn't
   // match every non-null row (PG's websearch_to_tsquery already yields an
   // empty tsquery that matches nothing — we match that behavior here).
+  //
+  // Dual-read: markdown lives on `prerendered_html.markdown` (behind the
+  // prerendered_html GIN index) with a fallback to `boxel_index.markdown` for
+  // rows with no prerendered_html row. The fallback is guarded by
+  // `ph.url IS NULL` so a row whose prerendered_html markdown is intentionally
+  // absent never re-matches through the boxel_index column, and so a mirrored
+  // row is evaluated against exactly one channel. Both branches are expression
+  // matches against a GIN-indexed `to_tsvector('english', coalesce(<col>,''))`,
+  // so the planner can serve them with a bitmap-OR of the two indexes; in
+  // practice the fallback branch reaches ~no rows (dual-write mirrors every
+  // row), so the prerendered_html index carries the load.
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,
@@ -1196,16 +1221,18 @@ export class IndexQueryEngine {
         : [
             dbExpression({
               pg: [
-                `to_tsvector('english', coalesce(i.markdown, ''))`,
-                '@@',
-                `websearch_to_tsquery('english',`,
+                `(to_tsvector('english', coalesce(ph.markdown, '')) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
-                `)`,
+                `)) OR (ph.url IS NULL AND to_tsvector('english', coalesce(i.markdown, '')) @@ websearch_to_tsquery('english',`,
+                param(filter.matches),
+                `))`,
               ],
               sqlite: [
-                `LOWER(i.markdown) LIKE LOWER(`,
+                `(LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
-                `) ESCAPE '\\'`,
+                `) ESCAPE '\\') OR (ph.url IS NULL AND LOWER(coalesce(i.markdown, '')) LIKE LOWER(`,
+                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+                `) ESCAPE '\\')`,
               ],
             }),
           ];
@@ -1890,6 +1917,42 @@ function assertIndexEntry<T>(obj: T): Omit<
 function tableFromOpts(opts: WIPOptions | undefined) {
   return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
 }
+
+// The prerendered_html table paired with the boxel_index table `tableFromOpts`
+// selects: the working table mirrors boxel_index_working during an in-progress
+// pass, the production table mirrors boxel_index.
+function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
+  return opts?.useWorkInProgressIndex
+    ? 'prerendered_html_working'
+    : 'prerendered_html';
+}
+
+// Dual-read LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for each
+// boxel_index row (aliased `i`) on their shared (url, realm_url, type) primary
+// key. HTML and markdown reads prefer `ph` and fall back to the boxel_index
+// column when no prerendered row exists — rows written between the backfill
+// migration and the dual-write deploy, or a row deliberately absent from
+// prerendered_html. Being keyed on the primary key the join is 1:1, so it never
+// fans out a `GROUP BY url` grouping. `icon_html` is not dual-read: the icon
+// renders in the index visit and stays on boxel_index.
+function prerenderedJoin(opts: WIPOptions | undefined) {
+  return `LEFT JOIN ${prerenderedTableFromOpts(
+    opts,
+  )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type`;
+}
+
+// Coalesced HTML/markdown reads, appended after a `SELECT i.*` so these win over
+// the same-named boxel_index columns (duplicate result columns resolve to the
+// last one in both the pg and sqlite adapters). Each prefers the prerendered_html
+// value and falls back to boxel_index when the prerendered row is absent.
+// `icon_html` is intentionally excluded — it stays on boxel_index.
+const DUAL_READ_HTML_OVERRIDES =
+  `coalesce(ph.isolated_html, i.isolated_html) AS isolated_html, ` +
+  `coalesce(ph.head_html, i.head_html) AS head_html, ` +
+  `coalesce(ph.atom_html, i.atom_html) AS atom_html, ` +
+  `coalesce(ph.embedded_html, i.embedded_html) AS embedded_html, ` +
+  `coalesce(ph.fitted_html, i.fitted_html) AS fitted_html, ` +
+  `coalesce(ph.markdown, i.markdown) AS markdown`;
 
 // SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
 // neutralize user-supplied wildcards by prefixing them (and the escape
