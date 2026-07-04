@@ -29,6 +29,12 @@ self.addEventListener('message', (event) => {
   let port = event.ports && event.ports[0];
   if (port) {
     port.postMessage({ ok: true, active });
+    // Release the transferred ack port promptly, as relayViaClient does.
+    try {
+      port.close();
+    } catch {
+      // Ignore errors when closing an already-closed port.
+    }
   }
 });
 

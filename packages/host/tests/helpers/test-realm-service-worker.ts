@@ -56,6 +56,13 @@ async function setSwActive(active: boolean): Promise<void> {
       settled = true;
       clearTimeout(timeout);
       channel.port1.onmessage = null;
+      // Release this side's port (port2 was transferred to the SW, which
+      // closes it after acking). Mirrors relayViaClient's port cleanup.
+      try {
+        channel.port1.close();
+      } catch {
+        // Ignore errors when closing an already-closed port.
+      }
       resolve();
     };
     let timeout = setTimeout(finish, 500);
