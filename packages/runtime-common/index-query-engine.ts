@@ -801,7 +801,17 @@ export class IndexQueryEngine {
       // atom/head columns), plus the live serialization on every row. The
       // caller enumerates candidate renderings and selects from the set.
       selectClauseExpression = [
-        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(coalesce(ph.fitted_html, i.fitted_html)) as fitted_html, ANY_VALUE(coalesce(ph.embedded_html, i.embedded_html)) as embedded_html, ANY_VALUE(coalesce(ph.atom_html, i.atom_html)) as atom_html, ANY_VALUE(coalesce(ph.head_html, i.head_html)) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(coalesce(ph.deps, i.deps)) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc',
+        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
+          'fitted_html',
+        )}) as fitted_html, ANY_VALUE(${dualReadColumn(
+          'embedded_html',
+        )}) as embedded_html, ANY_VALUE(${dualReadColumn(
+          'atom_html',
+        )}) as atom_html, ANY_VALUE(${dualReadColumn(
+          'head_html',
+        )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
+          'deps',
+        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc`,
       ];
     }
 
@@ -851,7 +861,21 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(coalesce(ph.deps, i.deps)) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(coalesce(ph.isolated_html, i.isolated_html)) AS isolated_html, ANY_VALUE(coalesce(ph.head_html, i.head_html)) AS head_html, ANY_VALUE(coalesce(ph.embedded_html, i.embedded_html)) AS embedded_html, ANY_VALUE(coalesce(ph.fitted_html, i.fitted_html)) AS fitted_html, ANY_VALUE(coalesce(ph.atom_html, i.atom_html)) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(coalesce(ph.markdown, i.markdown)) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at',
+        `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(${dualReadColumn(
+          'deps',
+        )}) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(${dualReadColumn(
+          'isolated_html',
+        )}) AS isolated_html, ANY_VALUE(${dualReadColumn(
+          'head_html',
+        )}) AS head_html, ANY_VALUE(${dualReadColumn(
+          'embedded_html',
+        )}) AS embedded_html, ANY_VALUE(${dualReadColumn(
+          'fitted_html',
+        )}) AS fitted_html, ANY_VALUE(${dualReadColumn(
+          'atom_html',
+        )}) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(${dualReadColumn(
+          'markdown',
+        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
       ],
       'file',
     );
@@ -1941,18 +1965,32 @@ function prerenderedJoin(opts: WIPOptions | undefined) {
   )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type`;
 }
 
-// Coalesced HTML/markdown reads, appended after a `SELECT i.*` so these win over
+// A single dual-read column. A present prerendered_html row is authoritative for
+// the column — its value wins even when NULL — and boxel_index is consulted only
+// when no prerendered_html row exists (`ph.url IS NULL`, the primary key so never
+// null on a matched row). This matches matchesCondition's `ph.url IS NULL` guard,
+// so a present-but-null prerendered rendering reads as an absence consistently:
+// the column and full-text membership never disagree (a plain
+// `coalesce(ph.col, i.col)` would leak the stale boxel_index value for a row the
+// FTS path already treats as unrendered).
+function dualReadColumn(col: string): string {
+  return `CASE WHEN ph.url IS NULL THEN i.${col} ELSE ph.${col} END`;
+}
+
+// Dual-read HTML/markdown reads, appended after a `SELECT i.*` so these win over
 // the same-named boxel_index columns (duplicate result columns resolve to the
-// last one in both the pg and sqlite adapters). Each prefers the prerendered_html
-// value and falls back to boxel_index when the prerendered row is absent.
-// `icon_html` is intentionally excluded — it stays on boxel_index.
-const DUAL_READ_HTML_OVERRIDES =
-  `coalesce(ph.isolated_html, i.isolated_html) AS isolated_html, ` +
-  `coalesce(ph.head_html, i.head_html) AS head_html, ` +
-  `coalesce(ph.atom_html, i.atom_html) AS atom_html, ` +
-  `coalesce(ph.embedded_html, i.embedded_html) AS embedded_html, ` +
-  `coalesce(ph.fitted_html, i.fitted_html) AS fitted_html, ` +
-  `coalesce(ph.markdown, i.markdown) AS markdown`;
+// last one in both the pg and sqlite adapters). `icon_html` is intentionally
+// excluded — it stays on boxel_index.
+const DUAL_READ_HTML_OVERRIDES = [
+  'isolated_html',
+  'head_html',
+  'atom_html',
+  'embedded_html',
+  'fitted_html',
+  'markdown',
+]
+  .map((col) => `${dualReadColumn(col)} AS ${col}`)
+  .join(', ');
 
 // SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
 // neutralize user-supplied wildcards by prefixing them (and the escape

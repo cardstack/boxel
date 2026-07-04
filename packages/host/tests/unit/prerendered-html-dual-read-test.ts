@@ -351,6 +351,31 @@ module('Unit | prerendered-html dual-read', function (hooks) {
     );
   });
 
+  test('a present prerendered_html row is authoritative for a null column (no boxel_index fallback)', async function (assert) {
+    await mirrorPrerenderedHtml(adapter, testRealmURL);
+    // Null the prerendered rendering while boxel_index still carries a value.
+    // A present prerendered_html row is authoritative, so the read reports the
+    // absence rather than leaking the stale boxel_index column — otherwise a row
+    // could drop out of full-text search yet still serve stale markdown/HTML.
+    await adapter.execute(
+      `UPDATE prerendered_html SET markdown = NULL, isolated_html = NULL WHERE url = $1`,
+      { bind: [`${testRealmURL}1.json`] },
+    );
+    let entry = (await indexQueryEngine.getInstance(
+      new URL(`${testRealmURL}1`),
+    )) as IndexedInstance;
+    assert.strictEqual(
+      entry.markdown,
+      null,
+      'a present-but-null prerendered markdown reads as absent, not the boxel_index value',
+    );
+    assert.strictEqual(
+      entry.isolatedHtml,
+      null,
+      'a present-but-null prerendered isolated_html reads as absent',
+    );
+  });
+
   test('FTS matches reads prerendered_html.markdown with a boxel_index fallback', async function (assert) {
     await mirrorPrerenderedHtml(adapter, testRealmURL);
 
