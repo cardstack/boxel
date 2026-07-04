@@ -738,13 +738,14 @@ export class IndexQueryEngine {
           ...limitClause,
         ];
       }
-      // The count query keeps its own base table (`boxel_index`) but joins the
-      // production prerendered_html so a `matches` predicate — shared with the
-      // data query through `everyCondition` — can reference `ph.markdown`.
+      // Count over the same tables as the data query (via `opts`) so `total`
+      // stays consistent with the result set — including in WIP mode and for a
+      // `matches` predicate, which is shared with the data query through
+      // `everyCondition` and references `ph.markdown`.
       let queryCount = [
         'SELECT COUNT(DISTINCT i.url) AS total',
-        `FROM boxel_index AS i ${prerenderedJoin(
-          undefined,
+        `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
+          opts,
         )} ${tableValuedFunctionsPlaceholder}`,
         'WHERE',
         ...everyCondition,
@@ -1953,12 +1954,11 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
 
 // Dual-read LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for each
 // boxel_index row (aliased `i`) on their shared (url, realm_url, type) primary
-// key. HTML and markdown reads prefer `ph` and fall back to the boxel_index
-// column when no prerendered row exists — rows written between the backfill
-// migration and the dual-write deploy, or a row deliberately absent from
-// prerendered_html. Being keyed on the primary key the join is 1:1, so it never
-// fans out a `GROUP BY url` grouping. `icon_html` is not dual-read: the icon
-// renders in the index visit and stays on boxel_index.
+// key. A boxel_index row without a matching prerendered_html row leaves `ph`'s
+// columns NULL (`ph.url IS NULL`), which the reads treat as the fallback to the
+// boxel_index column. Being keyed on the primary key the join is 1:1, so it
+// never fans out a `GROUP BY url` grouping. `icon_html` is not dual-read: the
+// icon renders in the index visit and stays on boxel_index.
 function prerenderedJoin(opts: WIPOptions | undefined) {
   return `LEFT JOIN ${prerenderedTableFromOpts(
     opts,
@@ -1979,8 +1979,12 @@ function dualReadColumn(col: string): string {
 
 // Dual-read HTML/markdown reads, appended after a `SELECT i.*` so these win over
 // the same-named boxel_index columns (duplicate result columns resolve to the
-// last one in both the pg and sqlite adapters). `icon_html` is intentionally
-// excluded — it stays on boxel_index.
+// last one in both the pg and sqlite adapters). `icon_html` is excluded — the
+// icon renders in the index visit and stays on boxel_index. `deps` is excluded
+// too: `getInstance`/`getFile` expose `deps` for the dependency graph
+// (`getCardDependencies`), which is boxel_index's; the scoped-CSS URLs needed to
+// serve HTML are dual-read where HTML is served — the search selects, searchFiles,
+// and retrieve-scoped-css.
 const DUAL_READ_HTML_OVERRIDES = [
   'isolated_html',
   'head_html',

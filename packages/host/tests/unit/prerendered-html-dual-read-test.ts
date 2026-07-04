@@ -30,10 +30,9 @@ import {
 
 const testRealmURLObject = new URL(testRealmURL);
 
-// Copy every boxel_index row for the realm into prerendered_html exactly as the
-// backfill migration does (rendered_at seeded from indexed_at), so a mirrored
-// row reads identically whether the dual-read serves it from prerendered_html
-// or from the boxel_index fallback.
+// Copy every boxel_index row for the realm into prerendered_html, seeding
+// rendered_at from indexed_at, so a mirrored row reads identically whether the
+// dual-read serves it from prerendered_html or from the boxel_index fallback.
 async function mirrorPrerenderedHtml(adapter: SQLiteAdapter, realmURL: string) {
   await adapter.execute(
     `INSERT INTO prerendered_html (
@@ -253,8 +252,8 @@ module('Unit | prerendered-html dual-read', function (hooks) {
   }
 
   test('golden parity: prerendered_html mirror and boxel_index fallback return identical results', async function (assert) {
-    // Fallback path: no prerendered_html rows exist yet, so every read falls
-    // back to the boxel_index columns.
+    // Fallback path: with no prerendered_html rows, every read falls back to
+    // the boxel_index columns.
     let fallback = await snapshot();
 
     // Sanity: HTML actually flowed through the fallback (guards against a
@@ -286,8 +285,8 @@ module('Unit | prerendered-html dual-read', function (hooks) {
       'prerendered_html mirror returns identical results to the boxel_index fallback',
     );
 
-    // A row deliberately missing from prerendered_html still resolves — via the
-    // boxel_index fallback — while its neighbors are served from prerendered_html.
+    // A row deliberately missing from prerendered_html resolves via the
+    // boxel_index fallback, while its neighbors are served from prerendered_html.
     await adapter.execute(`DELETE FROM prerendered_html WHERE url = $1`, {
       bind: [`${testRealmURL}2.json`],
     });
@@ -353,10 +352,10 @@ module('Unit | prerendered-html dual-read', function (hooks) {
 
   test('a present prerendered_html row is authoritative for a null column (no boxel_index fallback)', async function (assert) {
     await mirrorPrerenderedHtml(adapter, testRealmURL);
-    // Null the prerendered rendering while boxel_index still carries a value.
-    // A present prerendered_html row is authoritative, so the read reports the
-    // absence rather than leaking the stale boxel_index column — otherwise a row
-    // could drop out of full-text search yet still serve stale markdown/HTML.
+    // Null the prerendered rendering while boxel_index retains a value. A
+    // present prerendered_html row is authoritative, so the read reports the
+    // absence rather than leaking the boxel_index column — otherwise a row
+    // absent from full-text search could serve stale markdown/HTML.
     await adapter.execute(
       `UPDATE prerendered_html SET markdown = NULL, isolated_html = NULL WHERE url = $1`,
       { bind: [`${testRealmURL}1.json`] },
@@ -408,7 +407,7 @@ module('Unit | prerendered-html dual-read', function (hooks) {
     );
 
     // Blanking a prerendered_html markdown drops the row from FTS even though
-    // boxel_index still carries the old text (the ph row exists, so the guarded
+    // boxel_index retains its markdown (the ph row exists, so the guarded
     // boxel_index fallback does not re-add it).
     await adapter.execute(
       `UPDATE prerendered_html SET markdown = NULL WHERE url = $1`,
