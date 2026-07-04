@@ -273,6 +273,14 @@ export async function resetRealmState(
           [realmURL.href],
         );
         await client.query(
+          `DELETE FROM prerendered_html WHERE realm_url = $1`,
+          [realmURL.href],
+        );
+        await client.query(
+          `DELETE FROM prerendered_html_working WHERE realm_url = $1`,
+          [realmURL.href],
+        );
+        await client.query(
           `DELETE FROM realm_generations WHERE realm_url = $1`,
           [realmURL.href],
         );
@@ -394,6 +402,27 @@ export async function rewriteClonedRealmServerUrls(
           [fromURL, toURL],
         );
 
+        // prerendered_html carries the same URL-bearing HTML/deps columns as
+        // boxel_index (dual-written); rewrite them so a cloned harness DB stays
+        // consistent with the rewritten realm-server URL.
+        for (let table of ['prerendered_html', 'prerendered_html_working']) {
+          await client.query(
+            `UPDATE ${table}
+             SET url = replace(url, $1, $2),
+                 file_alias = replace(file_alias, $1, $2),
+                 realm_url = replace(realm_url, $1, $2),
+                 isolated_html = replace(isolated_html, $1, $2),
+                 atom_html = replace(atom_html, $1, $2),
+                 head_html = replace(head_html, $1, $2),
+                 embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
+                 fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
+                 deps = replace(deps::text, $1, $2)::jsonb,
+                 last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb,
+                 error_doc = replace(error_doc::text, $1, $2)::jsonb`,
+            [fromURL, toURL],
+          );
+        }
+
         await client.query(
           `UPDATE realm_generations
            SET realm_url = replace(realm_url, $1, $2)`,
@@ -514,6 +543,47 @@ export async function rebuildWorkingIndexFromIndex(
              has_error,
              last_known_good_deps
            FROM boxel_index`,
+        );
+        // Mirror the working rebuild for the prerendered_html channel. `job_id`
+        // is omitted (defaults NULL), matching the boxel_index_working rebuild.
+        await client.query(`DELETE FROM prerendered_html_working`);
+        await client.query(
+          `INSERT INTO prerendered_html_working (
+             url,
+             file_alias,
+             realm_url,
+             type,
+             fitted_html,
+             embedded_html,
+             atom_html,
+             head_html,
+             isolated_html,
+             markdown,
+             deps,
+             last_known_good_deps,
+             generation,
+             is_deleted,
+             error_doc,
+             rendered_at
+           )
+           SELECT
+             url,
+             file_alias,
+             realm_url,
+             type,
+             fitted_html,
+             embedded_html,
+             atom_html,
+             head_html,
+             isolated_html,
+             markdown,
+             deps,
+             last_known_good_deps,
+             generation,
+             is_deleted,
+             error_doc,
+             rendered_at
+           FROM prerendered_html`,
         );
         await client.query('COMMIT');
       } catch (error) {

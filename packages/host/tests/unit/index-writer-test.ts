@@ -16,6 +16,7 @@ import {
   type LooseCardResource,
   type IndexedInstance,
   type BoxelIndexTable,
+  type PrerenderedHtmlTable,
   type CardResource,
   type RealmResourceIdentifier,
   type SerializedError,
@@ -522,6 +523,264 @@ module('Unit | index-writer', function (hooks) {
         ].map((i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork)),
       },
       'final version of the doc exists',
+    );
+  });
+
+  test('dual-writes prerendered HTML on index and swaps it into production on done', async function (assert) {
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+        },
+      ],
+    );
+
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    let embeddedHtml = Object.fromEntries(
+      types.map((type) => [type, `<div class="embedded">${type}</div>`]),
+    );
+    let fittedHtml = Object.fromEntries(
+      types.map((type) => [type, `<div class="fitted">${type}</div>`]),
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: ['Person', 'Card'],
+      types,
+      embeddedHtml,
+      fittedHtml,
+      isolatedHtml: `<div class="isolated">Isolated</div>`,
+      atomHtml: `<span class="atom">Atom</span>`,
+      headHtml: `<span class="head">Head</span>`,
+      iconHTML: `<svg>icon</svg>`,
+      markdown: 'Van Gogh markdown',
+    });
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT url, realm_url, type, fitted_html, embedded_html, isolated_html, atom_html, head_html, markdown, deps, generation, is_deleted, error_doc
+       FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: {
+          fitted_html: 'JSON',
+          embedded_html: 'JSON',
+          deps: 'JSON',
+          error_doc: 'JSON',
+          is_deleted: 'BOOLEAN',
+        },
+      },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+
+    assert.deepEqual(
+      rendered,
+      {
+        url: `${testRealmURL}1.json`,
+        realm_url: testRealmURL,
+        type: 'instance',
+        fitted_html: fittedHtml,
+        embedded_html: embeddedHtml,
+        isolated_html: `<div class="isolated">Isolated</div>`,
+        atom_html: `<span class="atom">Atom</span>`,
+        head_html: `<span class="head">Head</span>`,
+        markdown: 'Van Gogh markdown',
+        deps: [`${testRealmURL}person`],
+        generation: 2,
+        is_deleted: false,
+        error_doc: null,
+      },
+      'prerendered_html carries the HTML at the job generation',
+    );
+
+    // No read-path change: the HTML is also on boxel_index (dual-write, not a
+    // move), and icon_html is NOT dual-written (it stays on boxel_index).
+    let [indexRow] = (await adapter.execute(
+      `SELECT isolated_html, markdown, icon_html FROM boxel_index WHERE url = $1`,
+      { bind: [`${testRealmURL}1.json`] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      indexRow.isolated_html,
+      `<div class="isolated">Isolated</div>`,
+      'boxel_index retains isolated_html',
+    );
+    assert.strictEqual(
+      indexRow.markdown,
+      'Van Gogh markdown',
+      'boxel_index retains markdown',
+    );
+    assert.strictEqual(
+      indexRow.icon_html,
+      `<svg>icon</svg>`,
+      'icon_html stays on boxel_index (not part of prerendered_html)',
+    );
+  });
+
+  test('tombstones the prerendered_html row on delete, preserving last-known HTML', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+        },
+      ],
+    );
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+
+    // First index the instance with HTML so prerendered_html has a rendering.
+    let batch1 = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch1.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch1.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: ['Person'],
+      types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+        (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+      ),
+      isolatedHtml: `<div class="isolated">Isolated</div>`,
+      markdown: 'Van Gogh markdown',
+    });
+    await batch1.done();
+
+    // Then delete it: invalidate + done with no updateEntry (file removed).
+    let batch2 = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch2.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch2.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT is_deleted, isolated_html, markdown, generation FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as PrerenderedHtmlTable[];
+    assert.true(rendered.is_deleted, 'prerendered_html row is tombstoned');
+    assert.strictEqual(
+      rendered.isolated_html,
+      `<div class="isolated">Isolated</div>`,
+      'last-known HTML is preserved on the tombstone',
+    );
+    assert.strictEqual(
+      rendered.generation,
+      3,
+      'tombstone stamped at the deleting job generation',
+    );
+
+    let [indexRow] = (await adapter.execute(
+      `SELECT is_deleted FROM boxel_index WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as BoxelIndexTable[];
+    assert.true(
+      indexRow.is_deleted,
+      'boxel_index row is tombstoned in lockstep',
+    );
+  });
+
+  test('copyFrom dual-writes prerendered_html for the copied realm', async function (assert) {
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          last_known_good_deps: [`${testRealmURL}person`],
+          types,
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          icon_html: '<svg>test icon</svg>',
+          markdown: 'Mango markdown',
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT url, realm_url, isolated_html, markdown, generation FROM prerendered_html WHERE realm_url = $1`,
+      { bind: [testRealmURL2] },
+    )) as unknown as PrerenderedHtmlTable[];
+    assert.strictEqual(rows.length, 1, 'one prerendered_html row copied');
+    let [rendered] = rows;
+    assert.strictEqual(
+      rendered.url,
+      `${testRealmURL2}1.json`,
+      'copied prerendered_html row has the dest-realm URL',
+    );
+    assert.strictEqual(
+      rendered.isolated_html,
+      `<div class="isolated">Isolated HTML</div>`,
+      'HTML copied into the dest realm',
+    );
+    assert.strictEqual(rendered.markdown, 'Mango markdown', 'markdown copied');
+    assert.strictEqual(
+      rendered.generation,
+      2,
+      'copied rows stamped at the dest-realm job generation',
     );
   });
 

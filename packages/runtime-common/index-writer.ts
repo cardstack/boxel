@@ -51,6 +51,25 @@ import {
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
+// Non-primary-key columns of `prerendered_html(_working)` — everything the
+// dual-write upserts overwrite on conflict. The PK is (url, realm_url, type).
+const PRERENDERED_HTML_MUTABLE_COLUMNS = [
+  'file_alias',
+  'fitted_html',
+  'embedded_html',
+  'atom_html',
+  'head_html',
+  'isolated_html',
+  'markdown',
+  'deps',
+  'last_known_good_deps',
+  'generation',
+  'is_deleted',
+  'error_doc',
+  'rendered_at',
+  'job_id',
+];
+
 export class IndexWriter {
   #dbAdapter: DBAdapter;
   constructor(dbAdapter: DBAdapter) {
@@ -359,6 +378,7 @@ export class Batch {
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
+    let copiedURLs: string[] = [];
     let copyURL = (value: string) =>
       this.isRegisteredPrefix(value)
         ? value
@@ -366,6 +386,7 @@ export class Batch {
     let values = sources.map((entry) => {
       let destURL = copyURL(entry.url);
       this.#invalidations.add(destURL);
+      copiedURLs.push(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.generation = this.generation;
@@ -422,6 +443,10 @@ export class Batch {
         values,
       ),
     ]);
+
+    // Dual-write: mirror the copied rows' HTML onto the prerendered_html
+    // channel so the copied realm's renderings ride into production with it.
+    await this.syncPrerenderedHtmlFromWorking(copiedURLs);
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
@@ -629,6 +654,9 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+
+    // Dual-write: mirror this row's HTML onto the prerendered_html channel.
+    await this.syncPrerenderedHtmlFromWorking([href]);
   }
 
   async done(): Promise<{ totalIndexEntries: number }> {
@@ -826,6 +854,90 @@ export class Batch {
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
+
+      // Swap the mirrored HTML rows into production in the same transaction,
+      // keyed by the same invalidation set and generation. `prerendered_html`
+      // has no `job_id` column, so getColumnNames yields the production
+      // projection and the SELECT drops `job_id` from prerendered_html_working.
+      let prerenderedColumns = (
+        await this.#dbAdapter.getColumnNames('prerendered_html')
+      ).map((c) => [c]);
+      let prerenderedNames = flattenDeep(prerenderedColumns);
+      await this.#query([
+        'INSERT INTO prerendered_html',
+        ...addExplicitParens(separatedByCommas(prerenderedColumns)),
+        'SELECT',
+        ...separatedByCommas(prerenderedColumns),
+        'FROM prerendered_html_working',
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url in',
+            ...addExplicitParens(
+              separatedByCommas(
+                [...this.#invalidations].map((i) => [param(i)]),
+              ),
+            ),
+          ],
+        ]),
+        'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
+        ...separatedByCommas(
+          prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
+        ),
+      ] as Expression);
+    }
+  }
+
+  // Dual-write: project the rows just written to `boxel_index_working` onto
+  // `prerendered_html_working`, keyed by URL. The fused indexing pass writes the
+  // HTML to `boxel_index_working` (which the read path reads); this mirrors it
+  // onto `prerendered_html_working` (the dedicated HTML channel), keeping the
+  // latter a faithful projection of the former for the given URLs — carrying
+  // tombstones (`is_deleted`) and the last-known-good HTML preserved through
+  // error cycles. `rendered_at` seeds from the source row's `indexed_at`, and
+  // `applyBatchUpdates` swaps these rows into `prerendered_html`. Deriving from
+  // the already-persisted row avoids re-serializing the HTML through JS and
+  // reuses the error-path last-known-good merge that `updateEntry` computed.
+  private async syncPrerenderedHtmlFromWorking(urls: string[]): Promise<void> {
+    if (urls.length === 0) {
+      return;
+    }
+    let uniqueUrls = [...new Set(urls)];
+    // SQLite has a lower bound-parameter limit than Postgres; chunk the URL
+    // list to keep the IN-clause within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      await this.#query([
+        `INSERT INTO prerendered_html_working (
+           url, file_alias, realm_url, type,
+           fitted_html, embedded_html, atom_html, head_html, isolated_html,
+           markdown, deps, last_known_good_deps,
+           generation, is_deleted, error_doc, rendered_at, job_id
+         )
+         SELECT
+           url, file_alias, realm_url, type,
+           fitted_html, embedded_html, atom_html, head_html, isolated_html,
+           markdown, deps, last_known_good_deps,
+           generation, is_deleted, error_doc, indexed_at, job_id
+         FROM boxel_index_working WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(urlBatch.map((url) => [param(url)])),
+            ),
+          ],
+        ]),
+        `ON CONFLICT ON CONSTRAINT prerendered_html_working_pkey DO UPDATE SET`,
+        ...separatedByCommas(
+          PRERENDERED_HTML_MUTABLE_COLUMNS.map((name) => [
+            `${name}=EXCLUDED.${name}`,
+          ]),
+        ),
+      ] as Expression);
     }
   }
 
@@ -959,6 +1071,15 @@ export class Batch {
         rows,
       ),
     ]);
+
+    // Mirror the tombstones onto the prerendered_html channel. Syncing from
+    // boxel_index_working (now carrying `is_deleted = true` for these URLs)
+    // marks the prerendered rows deleted while the ON CONFLICT SET preserves
+    // their last-known HTML — the same semantics the boxel_index tombstone has.
+    let tombstonedUrls = toTombstone.filter(
+      (id) => (existingTypes.get(id)?.length ?? 0) > 0,
+    );
+    await this.syncPrerenderedHtmlFromWorking(tombstonedUrls);
   }
 
   private async existingIndexTypes(
