@@ -345,9 +345,13 @@ export async function visitFileForIndexing({
 // formats + markdown, and the runtime deps are the union of both visits'
 // captures — the meta deps cover the search-doc walk, the html visit's
 // cover what the format renders pulled in, and both edge sets must land on
-// the row for invalidation to reach every dependent. When both visits
-// error, the index visit's error is the instance's primary error (the
-// instance could not be indexed); the html visit's fills in otherwise.
+// the row for invalidation to reach every dependent. When both visits error
+// — a card whose computed throws fails serialization (index) and template
+// render (html) alike — the html visit's error is the instance's primary
+// error: it is the isolated-render-wrapped, card-facing message
+// ("Encountered error rendering HTML for card: …"), whereas the index visit
+// surfaces the same throw as a lower-level serialization stack. The index
+// visit's error fills in when the html visit did not run or did not error.
 function mergeCardVisitResults(
   index: RenderResponse | undefined,
   html: RenderResponse | undefined,
@@ -355,7 +359,7 @@ function mergeCardVisitResults(
   if (!index && !html) {
     return undefined;
   }
-  let error = index?.error ?? html?.error;
+  let error = html?.error ?? index?.error;
   return {
     serialized: index?.serialized ?? null,
     searchDoc: index?.searchDoc ?? null,
