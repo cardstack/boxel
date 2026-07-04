@@ -731,6 +731,8 @@ export {
   coerceErrorMessage,
   stringifyErrorForLog,
   sanitizeForJsonb,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';

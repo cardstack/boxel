@@ -20,7 +20,7 @@ import {
   type RenderRouteOptions,
   type RenderVisitResponse,
 } from '../index.ts';
-import { CardError } from '../error.ts';
+import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
@@ -345,13 +345,16 @@ export async function visitFileForIndexing({
 // formats + markdown, and the runtime deps are the union of both visits'
 // captures — the meta deps cover the search-doc walk, the html visit's
 // cover what the format renders pulled in, and both edge sets must land on
-// the row for invalidation to reach every dependent. When both visits error
-// — a card whose computed throws fails serialization (index) and template
-// render (html) alike — the html visit's error is the instance's primary
-// error: it is the isolated-render-wrapped, card-facing message
-// ("Encountered error rendering HTML for card: …"), whereas the index visit
-// surfaces the same throw as a lower-level serialization stack. The index
-// visit's error fills in when the html visit did not run or did not error.
+// the row for invalidation to reach every dependent. When both visits error,
+// they belong to one indexing job — the same index generation — so neither
+// supersedes the other: keep the html visit's isolated-render-wrapped,
+// card-facing message ("Encountered error rendering HTML for card: …") as the
+// primary error and fold the index visit's dependency-error detail into its
+// additionalErrors. A card whose computed throws fails serialization (index)
+// and template render (html) alike; a card whose adopted module is missing
+// carries its dependency chain on the index visit's error, which the html
+// render path does not reconstruct. Whichever visit is the sole one to error
+// is used as-is.
 function mergeCardVisitResults(
   index: RenderResponse | undefined,
   html: RenderResponse | undefined,
@@ -359,7 +362,16 @@ function mergeCardVisitResults(
   if (!index && !html) {
     return undefined;
   }
-  let error = html?.error ?? index?.error;
+  let error: RenderResponse['error'];
+  if (index?.error && html?.error) {
+    error = {
+      ...html.error,
+      // Both visits are the same indexing job → the same index generation.
+      error: mergeErrorsByGeneration(html.error.error, 0, index.error.error, 0),
+    };
+  } else {
+    error = index?.error ?? html?.error;
+  }
   return {
     serialized: index?.serialized ?? null,
     searchDoc: index?.searchDoc ?? null,
