@@ -41,8 +41,8 @@ writeSync(
 
 import {
   logger,
-  userInitiatedPriority,
-  systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
+  systemInitiatedPrerenderHtmlPriority,
   query as _query,
   param,
   separatedByCommas,
@@ -138,7 +138,7 @@ let {
     },
     highPriorityCount: {
       description:
-        'The number of workers that service high priority jobs (user initiated) to start (default 0)',
+        'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -656,11 +656,16 @@ let adapter: PgAdapter;
   // is set.
   eventSink.setAdapter(adapter);
 
+  // Each pool's minimum priority is a dequeue floor: its workers only
+  // claim jobs at or above it. The high-priority pool floors at the
+  // user-initiated prerender-html tier so it serves all user-initiated
+  // work — prerender-html included — and never system-tier jobs; the
+  // all-priority pool floors at the lowest tier and serves everything.
   for (let i = 0; i < highPriorityCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings);
+    await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
   }
   for (let i = 0; i < allPriorityCount; i++) {
-    await startWorker(systemInitiatedPriority, urlMappings);
+    await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
   }
   isReady = true;
   log.info('All workers have been started');

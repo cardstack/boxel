@@ -189,10 +189,11 @@ export interface RenderTimeoutDiagnostics {
   // join all three stacks for this call.
   requestId?: string;
   // Worker-job priority of the request that produced this render.
-  // Plumbed from the producer side via `Job.priority`. `0` is the
-  // system-initiated default; `10` is user-initiated. Read in post-
-  // mortems and in `prerender-queue-snapshot` triage to tell whether a
-  // stalled render was background or user-priority work.
+  // Plumbed from the producer side via `Job.priority`, on the tier
+  // scale defined in `queue.ts` (system tiers `0`/`1` below the user
+  // tiers `9`/`10`). Read in post-mortems and in
+  // `prerender-queue-snapshot` triage to tell whether a stalled render
+  // was background or user-initiated work.
   priority?: number;
   // Whether this render landed on a tab that was already bound to its
   // affinity. `true` = warm tab, fast launch + cached BrowserContext
@@ -544,8 +545,8 @@ export type ModulePrerenderArgs = {
   // Higher priority requests dequeue ahead of lower-priority pending
   // work on the prerender server (per-tab queues + per-affinity file-
   // admission semaphore + global render semaphore). No preemption: an
-  // in-flight low-priority render runs to completion. Defaults to 0
-  // when absent (system-priority).
+  // in-flight low-priority render runs to completion. Defaults to the
+  // lowest tier (0) when absent.
   priority?: number;
 };
 
