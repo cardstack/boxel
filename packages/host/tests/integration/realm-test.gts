@@ -1785,6 +1785,13 @@ module('Integration | realm', function (hooks) {
         cardThumbnailURL: null,
         cardInfo,
       },
+      // Emptying `pets` authors it empty — a relationship the card has, spelled
+      // `{ self: null }` on the wire — as distinct from a never-set link, which
+      // is omitted. So the served card+json keeps the emptied `pets` and omits
+      // the never-authored `friend`.
+      relationships: {
+        pets: { links: { self: null } },
+      },
       meta: {
         adoptsFrom: {
           module: `${testModuleRealm}pet-person`,

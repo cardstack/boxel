@@ -504,16 +504,41 @@ function computeFields(
   return fields;
 }
 
+// Empty `linksToMany` backing arrays that came from an authored-empty
+// relationship (`{ self: null }` / `{ data: [] }` in the source), tagged by
+// `LinksToMany.deserialize`. An empty array in the data bucket is ambiguous —
+// it may be an authored empty or one a mere render fabricated (the plural
+// getter persists a backing array on read, unlike `linksTo`) — so this tag is
+// what lets serialization keep the authored empty and drop the fabricated one.
+const authoredEmptyLinks = new WeakSet<object>();
+
+// Tag an empty `linksToMany` backing array as an authored empty so serialization
+// treats it as a relationship the card has (`isFieldUsed`). No-op for a
+// non-empty array (already "had" by length) or a non-array value.
+export function markAuthoredEmptyLink(value: unknown): void {
+  if (Array.isArray(value) && value.length === 0) {
+    authoredEmptyLinks.add(value);
+  }
+}
+
 // Whether a link field is "used" for `usedLinksToFieldsOnly` serialization: the
 // card actually has the relationship. A link enters the data bucket only when
 // it was authored (deserialized from the source — a set target, or an empty
 // `{ self: null }` that lands as a `null` entry) or set on the instance; a
 // never-authored `linksTo` has no bucket entry, because the getter skips
 // persisting its nullish empty value, so a mere render can't mark it "used".
+//
 // A `linksToMany` getter must persist its (mutable) backing array even when
-// empty, so an empty array is NOT a "had" relationship — reading an unset
-// plural link would otherwise fabricate one. This is pure card data,
-// independent of searchability. Contained fields never reach here (always kept).
+// empty, so a never-set plural link merely read fabricates an empty array in
+// the bucket. An empty array is therefore ambiguous: authored empty vs.
+// render-fabricated. `LinksToMany.deserialize` disambiguates by tagging the
+// arrays it produces from an authored-empty relationship
+// (`markAuthoredEmptyLink`); an untagged empty array is treated as never-set
+// and omitted. So an authored empty plural link round-trips as `{ self: null }`
+// while a never-set one stays off the wire — matching the `linksTo` fidelity.
+//
+// This is pure card data, independent of searchability. Contained fields never
+// reach here (always kept).
 function isFieldUsed(
   instance: BaseDef | undefined,
   fieldName: string,
@@ -526,11 +551,12 @@ function isFieldUsed(
     return false;
   }
   let value = bucket.get(fieldName);
-  // An empty backing array is a `linksToMany` the card doesn't actually have
-  // (never authored, or materialized empty on read); `null` is an authored
-  // empty `linksTo` and is kept.
+  // A non-empty array is a set plural link. An empty array is "had" only when
+  // `deserialize` tagged it as an authored empty; a render-fabricated empty
+  // (an unset plural link merely read) is untagged and dropped. `null` is an
+  // authored empty `linksTo` and is kept.
   if (Array.isArray(value)) {
-    return value.length > 0;
+    return value.length > 0 || authoredEmptyLinks.has(value);
   }
   return true;
 }
