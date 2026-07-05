@@ -93,7 +93,7 @@ class Assistant {
   id: string;
   aiBotInstanceId: string;
   // Mints user-scoped, read-only realm tokens on demand. Inert unless
-  // AI_BOT_DELEGATION_SECRET is configured; the readRealmFile tool is its
+  // AI_BOT_USER_SESSION_DELEGATION_SECRET is configured; the readRealmFile tool is its
   // consumer.
   delegatedUserRealmSessions: DelegatedUserRealmSessionManager;
 
@@ -107,7 +107,7 @@ class Assistant {
     this.pgAdapter = new PgAdapter();
     this.aiBotInstanceId = aiBotInstanceId;
     this.delegatedUserRealmSessions = new DelegatedUserRealmSessionManager(
-      process.env.AI_BOT_DELEGATION_SECRET,
+      process.env.AI_BOT_USER_SESSION_DELEGATION_SECRET,
     );
   }
 

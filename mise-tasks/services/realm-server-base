@@ -20,7 +20,7 @@ NODE_ENV=development \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
-  AI_BOT_DELEGATION_SECRET="shhh! it's a secret" \
+  AI_BOT_USER_SESSION_DELEGATION_SECRET="shhh! it's a secret" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   node main.ts \
