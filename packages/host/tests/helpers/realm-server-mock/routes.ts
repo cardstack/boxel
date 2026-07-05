@@ -301,6 +301,9 @@ function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
+      if (state.failRealmAuth) {
+        return new Response('realm server unreachable', { status: 503 });
+      }
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
