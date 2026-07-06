@@ -423,6 +423,9 @@ catalogs:
     eslint-plugin-qunit:
       specifier: ^8.0.1
       version: 8.2.6
+    eslint-plugin-qunit-dom:
+      specifier: ^1.0.0
+      version: 1.0.0
     eslint-plugin-simple-import-sort:
       specifier: ^8.0.0
       version: 8.0.0
@@ -2306,8 +2309,8 @@ importers:
         specifier: 'catalog:'
         version: 8.2.6(eslint@8.57.1)
       eslint-plugin-qunit-dom:
-        specifier: file:../../.vendor/eslint-plugin-qunit-dom
-        version: file:.vendor/eslint-plugin-qunit-dom(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 1.0.0(eslint@8.57.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0
@@ -10145,9 +10148,9 @@ packages:
       eslint-config-prettier:
         optional: true
 
-  eslint-plugin-qunit-dom@file:.vendor/eslint-plugin-qunit-dom:
-    resolution: {directory: .vendor/eslint-plugin-qunit-dom, type: directory}
-    engines: {node: 12.* || 14.* || >= 16.*}
+  eslint-plugin-qunit-dom@1.0.0:
+    resolution: {integrity: sha512-cXUax+/v5bjV9THUcYKb+gsuiA+Tp/Wr5v6V1fxNvKhczIubwMSuYrbMymyZo9WiqYNa6W1Eq3z/oEBrfCAo7w==}
+    engines: {node: 22.* || >= 24.*}
     peerDependencies:
       eslint: ^7.11.0 || ^8.0.0
 
@@ -24575,7 +24578,7 @@ snapshots:
       '@types/eslint': 8.56.5
       eslint-config-prettier: 9.1.2(eslint@8.57.1)
 
-  eslint-plugin-qunit-dom@file:.vendor/eslint-plugin-qunit-dom(eslint@8.57.1):
+  eslint-plugin-qunit-dom@1.0.0(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
 
