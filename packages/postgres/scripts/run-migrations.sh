@@ -15,9 +15,8 @@ node ./scripts/fix-migration-names.ts
 # the migrations directory (the `{ "type": "commonjs" }` package.json that pins
 # migrations to CommonJS, plus .eslintrc.js) as migrations. Without it,
 # package.json is loaded as a migration, has no `up` export, and the whole `up`
-# run errors and rolls back — so no migrations apply. Mirrors the `migrate`
-# script in package.json. (.eslintrc.js is a dotfile and ignored by default;
-# package.json is not, so it must be listed explicitly.)
+# run errors and rolls back — so no migrations apply. (.eslintrc.js is a dotfile
+# and ignored by default; package.json is not, so it must be listed explicitly.)
 exec ./node_modules/.bin/node-pg-migrate \
   --check-order false \
   --migrations-table migrations \
