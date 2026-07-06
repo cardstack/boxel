@@ -290,23 +290,18 @@ module('Unit | instance-filter-matcher', function (hooks) {
 
   // -- reference (id/url) canonical-RRI tolerance -----------------------------
 
-  test('id filter matches a URL-form instance against a prefix-form value', function (assert) {
+  test('in filter matches a URL-form instance against a prefix-form value', function (assert) {
     let { mango, ringo } = cards;
     // The cards' ids are URL form (`http://test-realm/test/mango`). Register a
     // realm-prefix mapping so the same realm also has a canonical RRI spelling.
     api.virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
 
-    // A filter value in prefix-RRI form must match the URL-form instance id —
-    // the client counterpart of the server's index-side tolerance (CS-11733).
+    // A prefix-RRI `in` value must match the URL-form instance id — the client
+    // counterpart of the server's index-side `in` tolerance (CS-11733).
     assert.strictEqual(
       match(mango, { on: personRef, in: { id: ['@test/cards/mango'] } }),
       'match',
       'prefix-form `in` value matches the URL-form id',
-    );
-    assert.strictEqual(
-      match(mango, { on: personRef, eq: { id: '@test/cards/mango' } }),
-      'match',
-      'prefix-form `eq` value matches the URL-form id',
     );
     // A different card's prefix-form id must not match.
     assert.strictEqual(
@@ -316,9 +311,23 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
     // The URL form continues to match (no regression).
     assert.strictEqual(
+      match(mango, { on: personRef, in: { id: [`${testRealmURL}mango`] } }),
+      'match',
+      'URL-form `in` value still matches the URL-form id',
+    );
+    // `eq` on a reference field keeps EXACT semantics, mirroring the server's
+    // `fieldEqFilter` (tolerance is applied to `in` only). A prefix-form `eq`
+    // value therefore does NOT match a URL-form id — matching a tolerant `eq`
+    // here would diverge from the authoritative search response.
+    assert.strictEqual(
+      match(mango, { on: personRef, eq: { id: '@test/cards/mango' } }),
+      'no-match',
+      'prefix-form `eq` value does not match (eq stays exact)',
+    );
+    assert.strictEqual(
       match(mango, { on: personRef, eq: { id: `${testRealmURL}mango` } }),
       'match',
-      'URL-form value still matches the URL-form id',
+      'exact URL-form `eq` value matches',
     );
   });
 

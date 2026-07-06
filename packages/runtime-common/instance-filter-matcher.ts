@@ -270,9 +270,13 @@ function resolvePath(
   return { values, leafField, sawUnresolvable };
 }
 
-// All equivalent spellings (RRI-prefix / real-URL / virtual-alias) of a
-// reference value. A registered-prefix RRI is first resolved to its real URL so
-// `equivalentURLForms` can enumerate the set; anything else is expanded as-is.
+// Equivalent spellings of a reference value, mirroring the index engine's
+// `expandReferenceFilterValues` exactly: match the value as given by default,
+// and expand to the full RRI / real-URL / virtual-alias set ONLY for a
+// registered-prefix RRI. URL-form values (and ordinary strings on an `id`/`url`
+// path) stay exact — expanding them would let client reconciliation match a
+// virtual/RRI spelling the server, which only expands prefixes, would not
+// return.
 function referenceForms(
   value: unknown,
   virtualNetwork: VirtualNetwork,
@@ -281,15 +285,16 @@ function referenceForms(
     return [];
   }
   let forms = new Set<string>([value]);
-  try {
-    let url = virtualNetwork.isRegisteredPrefix(value)
-      ? virtualNetwork.toURL(value).href
-      : value;
-    for (let form of virtualNetwork.equivalentURLForms(url)) {
-      forms.add(form);
+  if (virtualNetwork.isRegisteredPrefix(value)) {
+    try {
+      for (let form of virtualNetwork.equivalentURLForms(
+        virtualNetwork.toURL(value).href,
+      )) {
+        forms.add(form);
+      }
+    } catch {
+      // Unresolvable prefix — match the value as given.
     }
-  } catch {
-    // Unresolvable (e.g. a bare local id or an unmapped prefix) — compare as-is.
   }
   return [...forms];
 }
@@ -335,8 +340,13 @@ function matchEq(
     return existential(values, sawUnresolvable, (lv) => lv == null);
   }
   let formatted = formatValue(leafField, value, api);
+  // Exact match, including for reference (`id`/`url`) leaves: the server's
+  // `fieldEqFilter` deliberately keeps `eq` exact (so a singular `.id` eq is
+  // served by the `@>` GIN path) and applies canonical-RRI tolerance to `in`
+  // filters only. Mirror that here — tolerant `eq` would diverge from the
+  // authoritative search response during client reconciliation.
   return existential(values, sawUnresolvable, (leafValue) =>
-    leafMatches(leafValue, formatted, path, api.virtualNetwork),
+    isEqual(leafValue, formatted),
   );
 }
 
