@@ -487,8 +487,14 @@ module(basename(import.meta.filename), function () {
     });
 
     test('mixed index: a row with no matching rendering falls back per the fieldset', async function (assert) {
+      // Clear the rendering from both channels: the engine dual-reads HTML from
+      // prerendered_html, falling back to boxel_index, so a rendering is absent
+      // only when neither carries it.
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
       // default mode: the fallback row carries item and omits the html
       // relationship entirely
@@ -542,6 +548,11 @@ module(basename(import.meta.filename), function () {
       // html — at the format the htmlQuery names and the row's own type.
       await dbAdapter.execute(
         `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      // The renderings the engine reads live on prerendered_html; clear them
+      // there too so nothing renderable remains for the error row.
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
       );
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());

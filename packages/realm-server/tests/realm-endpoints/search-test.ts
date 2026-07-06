@@ -219,8 +219,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('mixed index: fallback per the fieldset', async function (assert) {
+      // Clear the rendering from both channels: the engine dual-reads HTML from
+      // prerendered_html, falling back to boxel_index, so a rendering is absent
+      // only when neither carries it.
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
       // default mode: the fallback row carries item and omits html
       let response = await postSearch({ filter: personFilter() });
