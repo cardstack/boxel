@@ -103,9 +103,9 @@ function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   // Resolve in RRI space (no VirtualNetwork), matching the MarkDownTemplate
   // display path. Instance ids are canonical (prefix form for mapped realms,
   // URL for unmapped), so a prefix-form base resolves relative refs to RRI and
-  // a URL-form base to URL — either way the `in:{ id }` reference query below
-  // matches the indexed card (prefix ids are expanded to their URL forms
-  // index-side).
+  // a URL-form base to URL. Either form matches the indexed card because the
+  // search tolerates a reference's equivalent spellings (RRI / real-URL /
+  // virtual-alias) rather than requiring one canonical form.
   try {
     return trimJsonExtension(
       resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
