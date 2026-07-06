@@ -1,6 +1,6 @@
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs/promises';
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as path from 'path';
 import { isProtectedFile } from './realm-sync-base.ts';
 
@@ -618,9 +618,9 @@ export class CheckpointManager {
   // `git maintenance run --auto` that races the next command's ref/object
   // reads on the same repo, surfacing intermittently as
   // "fatal: could not parse HEAD" partway through a rapid commit loop. Passing
-  // these per invocation (rather than writing them once at init) applies them
-  // to every repo regardless of how it was initialized and overrides any
-  // inherited global/system git config.
+  // these per invocation (rather than writing them at init) applies them to
+  // every repo however it is initialized and overrides any inherited
+  // global/system git config.
   private static readonly gitConfigArgs = [
     '-c',
     'gc.auto=0',
@@ -666,12 +666,12 @@ export class CheckpointManager {
   }
 
   // Best-effort snapshot of what HEAD points to and whether that commit object
-  // is on disk. Only ever runs after a git command has already failed, so it
-  // must never throw. With background maintenance disabled these repos keep
-  // every object loose, so a loose-object check reliably answers "did the
-  // parent commit exist?" — the crux of a "could not parse HEAD" failure. If
-  // that ever prints `object=MISSING`, the object store lost a reachable
-  // commit; if it prints `object=present`, look at the ref/index instead.
+  // exists, to make a "could not parse HEAD" recurrence diagnosable from the CI
+  // log alone. Only ever runs after a git command has already failed, so it
+  // must never throw. `object=absent` means the store does not hold the commit
+  // HEAD names — the crux of that failure; `object=present` points at a
+  // ref/index problem instead; `object=unknown` if the existence check itself
+  // could not run.
   private describeHeadState(): string {
     try {
       const gitInternalDir = path.join(this.gitDir, '.git');
@@ -686,17 +686,32 @@ export class CheckpointManager {
       }
       let object = 'n/a';
       if (/^[0-9a-f]{40}$/.test(oid)) {
-        const loosePath = path.join(
-          gitInternalDir,
-          'objects',
-          oid.slice(0, 2),
-          oid.slice(2),
-        );
-        object = existsSync(loosePath) ? 'present' : 'MISSING';
+        object = this.objectExists(oid);
       }
       return ` [head-state: HEAD=${JSON.stringify(head)} oid=${oid} object=${object}]`;
     } catch (err) {
       return ` [head-state unavailable: ${(err as Error).message}]`;
+    }
+  }
+
+  // `git cat-file -e` is authoritative across both loose and packed storage,
+  // unlike a bare loose-object file check — a commit may live in a pack rather
+  // than as a loose object. Kept synchronous and bounded so the failure path
+  // stays best-effort: a spawn error or timeout reads as "unknown" rather than
+  // throwing.
+  private objectExists(oid: string): 'present' | 'absent' | 'unknown' {
+    try {
+      const res = spawnSync(
+        'git',
+        [...CheckpointManager.gitConfigArgs, 'cat-file', '-e', oid],
+        { cwd: this.gitDir, timeout: 5000 },
+      );
+      if (res.error) {
+        return 'unknown';
+      }
+      return res.status === 0 ? 'present' : 'absent';
+    } catch {
+      return 'unknown';
     }
   }
 
