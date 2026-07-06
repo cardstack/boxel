@@ -269,6 +269,65 @@ function resolvePath(
   return { values, leafField, sawUnresolvable };
 }
 
+// A filter path whose leaf is a card/file reference (`id` / `url`). Values on
+// these paths are compared with canonical-RRI tolerance below, mirroring the
+// server's `expandReferenceFilterValues` (index-query-engine.ts) which matches
+// a reference filter value against every equivalent spelling.
+function isReferenceLeaf(path: string): boolean {
+  let leaf = path.split('.').pop();
+  return leaf === 'id' || leaf === 'url';
+}
+
+// All equivalent spellings (RRI-prefix / real-URL / virtual-alias) of a
+// reference value. A registered-prefix RRI is first resolved to its real URL so
+// `equivalentURLForms` can enumerate the set; anything else is expanded as-is.
+function referenceForms(
+  value: unknown,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  if (typeof value !== 'string') {
+    return [];
+  }
+  let forms = new Set<string>([value]);
+  try {
+    let url = virtualNetwork.isRegisteredPrefix(value)
+      ? virtualNetwork.toURL(value).href
+      : value;
+    for (let form of virtualNetwork.equivalentURLForms(url)) {
+      forms.add(form);
+    }
+  } catch {
+    // Unresolvable (e.g. a bare local id or an unmapped prefix) — compare as-is.
+  }
+  return [...forms];
+}
+
+// Compare a resolved leaf value against a formatted filter value. For reference
+// leaves (`id` / `url`) the comparison is spelling-tolerant: a card whose id is
+// stored in URL form matches a filter value in canonical RRI (prefix) form, and
+// vice versa. Non-reference leaves use exact equality, as before.
+function leafMatches(
+  leafValue: unknown,
+  filterValue: unknown,
+  path: string,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (isEqual(leafValue, filterValue)) {
+    return true;
+  }
+  if (
+    isReferenceLeaf(path) &&
+    typeof leafValue === 'string' &&
+    typeof filterValue === 'string'
+  ) {
+    let leafForms = new Set(referenceForms(leafValue, virtualNetwork));
+    return referenceForms(filterValue, virtualNetwork).some((form) =>
+      leafForms.has(form),
+    );
+  }
+  return false;
+}
+
 // -- per-operator predicates -------------------------------------------------
 
 function matchEq(
@@ -285,7 +344,7 @@ function matchEq(
   }
   let formatted = formatValue(leafField, value, api);
   return existential(values, sawUnresolvable, (leafValue) =>
-    isEqual(leafValue, formatted),
+    leafMatches(leafValue, formatted, path, api.virtualNetwork),
   );
 }
 
@@ -309,7 +368,9 @@ function matchIn(
     sawUnresolvable,
     (leafValue) =>
       (hasNull && leafValue == null) ||
-      formatted.some((fv) => isEqual(leafValue, fv)),
+      formatted.some((fv) =>
+        leafMatches(leafValue, fv, path, api.virtualNetwork),
+      ),
   );
 }
 
