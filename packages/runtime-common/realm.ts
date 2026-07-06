@@ -3,7 +3,10 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
+  fieldsetFromParam,
+  htmlQueryFromParams,
   parseSearchEntryQueryFromPayload,
+  type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
 import {
@@ -21,9 +24,18 @@ import {
   type SingleCardDocument,
   type SingleFileMetaDocument,
   type EntryCollectionDocument,
+  type EntrySingleDocument,
 } from './document-types.ts';
-import type { CardResource, Relationship } from './resource-types.ts';
-import { clearReplacedArrayFieldMeta } from './resource-types.ts';
+import type {
+  CardResource,
+  HtmlQuery,
+  HtmlResource,
+  Relationship,
+} from './resource-types.ts';
+import {
+  clearReplacedArrayFieldMeta,
+  HtmlResourceType,
+} from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
@@ -476,6 +488,31 @@ function buildCardJsonEtag(
   }
   let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
   return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+}
+
+// The card+html / file-meta+html GET's composite validator. It encodes both
+// channels the response draws from: the entry's index-data generation and the
+// rendering's generation — or `none` when no rendering is present — so the
+// validator changes when EITHER advances. An ETag of the rendering generation
+// alone breaks the refresh flow: a client that cached the no-rendering response
+// at index generation 42 would send a validator that still matches after HTML
+// lands at 42 and would 304 forever. The rendering generation is read off the
+// entry's own `html` linkage; all of one card's renderings share a generation
+// (it's a per-row value), so the first referenced `html` resource stands for
+// the channel.
+function buildEntryHtmlEtag(doc: EntrySingleDocument): string {
+  let indexGeneration = doc.data.meta?.generation ?? 0;
+  let htmlIds = doc.data.relationships.html?.data ?? [];
+  let htmlGeneration: number | undefined;
+  if (htmlIds.length > 0) {
+    let firstId = htmlIds[0].id;
+    let htmlResource = doc.included?.find(
+      (resource): resource is HtmlResource =>
+        resource.type === HtmlResourceType && resource.id === firstId,
+    );
+    htmlGeneration = htmlResource?.meta?.generation;
+  }
+  return `"${indexGeneration}:${htmlGeneration ?? 'none'}"`;
 }
 
 // RFC 9110 §13.1.2: `If-None-Match` may be `*`, a comma-separated
@@ -1037,6 +1074,12 @@ export class Realm {
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
+      .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.FileMetaHtml,
+        this.getFileMetaHtml.bind(this),
+      )
       .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
       .patch(
         '/.+(?<!.json)',
@@ -5225,6 +5268,118 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start);
     }
+  }
+
+  // The single-instance card+html GET: one `entry` sourced by URL, carrying
+  // the card's selected rendering (`html`) plus its `item` serialization — the
+  // single-instance counterpart to `_search` and the primitive the host's
+  // selective refresh uses to update one member's HTML without re-running a
+  // whole query.
+  private async getCardHtml(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    return this.#entryHtmlResponse(request, requestContext, 'instance');
+  }
+
+  // The file counterpart of `getCardHtml`: one file's `entry` (a native
+  // rendering + its `file-meta` serialization).
+  private async getFileMetaHtml(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    return this.#entryHtmlResponse(request, requestContext, 'file');
+  }
+
+  async #entryHtmlResponse(
+    request: Request,
+    requestContext: RequestContext,
+    kind: 'instance' | 'file',
+  ): Promise<Response> {
+    let mimeType =
+      kind === 'file'
+        ? SupportedMimeType.FileMetaHtml
+        : SupportedMimeType.CardHtml;
+
+    // Read endpoints serve the realm's canonical indexed view — drain any
+    // in-flight incremental indexing first, exactly as `getCard` does.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
+
+    let htmlQuery: HtmlQuery;
+    let fieldset: SearchEntryFieldset;
+    try {
+      let { searchParams } = new URL(request.url);
+      // `?format=` (default fitted) + optional `?renderType=<module>/<name>`
+      // select the rendering; `?fields=` (html | item | html,item) is the
+      // sparse fieldset. Both mirror the html. branch, sourced from the query
+      // string rather than a request body.
+      htmlQuery = htmlQueryFromParams({
+        format: searchParams.get('format'),
+        renderType: searchParams.get('renderType'),
+      });
+      fieldset = fieldsetFromParam(searchParams.get('fields'));
+    } catch (e) {
+      if (e instanceof SearchRequestError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': mimeType },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
+
+    let localPath = this.paths.local(new URL(request.url));
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    // Instance rows key on their `.json` file URL; file rows on the bare path.
+    let dbUrl =
+      kind === 'file'
+        ? this.paths.fileURL(localPath)
+        : this.paths.fileURL(
+            `${localPath.replace(/\.json$/, '') || 'index'}.json`,
+          );
+
+    let doc = await this.#realmIndexQueryEngine.searchEntry(
+      dbUrl,
+      { htmlQuery, fieldset, kind },
+      {
+        loadLinks: true,
+        ...(isDuringPrerenderRequest(request)
+          ? { cacheOnlyDefinitions: true }
+          : {}),
+      },
+    );
+    if (!doc) {
+      return notFound(request, requestContext);
+    }
+
+    let etag = buildEntryHtmlEtag(doc);
+    let ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 304,
+          headers: { etag, 'content-type': mimeType },
+        },
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': mimeType, etag },
+      },
+      requestContext,
+    });
   }
 
   private async getCardMarkdown(

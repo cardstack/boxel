@@ -216,7 +216,8 @@ export type InstanceOrError = IndexedInstance | InstanceError;
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
-  // Restrict the result set to this subset of card URLs (SQL `i.url IN (...)`).
+  // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
+  // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
   timings?: RequestTimings;
 };
@@ -685,11 +686,11 @@ export class IndexQueryEngine {
         );
       }
 
-      if (
-        entryType === 'instance' &&
-        opts.cardUrls &&
-        opts.cardUrls.length > 0
-      ) {
+      if (opts.cardUrls && opts.cardUrls.length > 0) {
+        // Restrict to this URL subset. Instance rows key on their `.json` file
+        // URL; file rows on their canonical file URL — the same `i.url` column,
+        // so the filter applies to both projections (the single-instance
+        // card+html / file-meta+html GET sources one entry this way).
         conditions.push([
           'i.url IN',
           ...addExplicitParens(

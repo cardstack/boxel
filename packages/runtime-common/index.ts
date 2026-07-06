@@ -916,6 +916,7 @@ export type {
   CardCollectionDocument,
   FileMetaCollectionDocument,
   EntryCollectionDocument,
+  EntrySingleDocument,
   EntryIncludedResource,
   SearchEntryResults,
 } from './document-types.ts';

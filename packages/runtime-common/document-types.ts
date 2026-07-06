@@ -48,6 +48,16 @@ export interface EntryCollectionDocument {
   };
 }
 
+// The single-instance entry response (the card+html / file-meta+html GET): one
+// `entry` sourced by URL rather than by a query, with everything it composes
+// riding in `included`. The collection's document-level `meta` (page total,
+// htmlQuery echo) drops away — the single `entry` carries its own
+// `meta.generation`, and the caller named the format/renderType in the request.
+export interface EntrySingleDocument {
+  data: EntryResource;
+  included?: EntryIncludedResource[];
+}
+
 // The public-API name for the raw entry wire format a programmatic
 // `searchEntries` caller receives.
 export type SearchEntryResults = EntryCollectionDocument;
