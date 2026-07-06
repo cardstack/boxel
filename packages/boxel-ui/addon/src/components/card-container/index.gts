@@ -114,13 +114,25 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--_boxel-scale));
 
       /* border-radius */
-      --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
-      --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
-      --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
-      --boxel-border-radius: var(--boxel-radius); /* base */
-      --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
-      --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
-      --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+      --boxel-border-radius-2xs: calc(
+        var(--boxel-border-radius) * 0.5
+      ); /* 1.5px */
+      --boxel-border-radius-xs: calc(
+        var(--boxel-border-radius) * 0.4
+      ); /* 4px */
+      --boxel-border-radius-sm: calc(
+        var(--boxel-border-radius) * 0.6
+      ); /* 6px */
+      --boxel-border-radius: var(--boxel-radius); /* 10px - base */
+      --boxel-border-radius-lg: calc(
+        var(--boxel-border-radius) * 1.2
+      ); /* 12px */
+      --boxel-border-radius-xl: calc(
+        var(--boxel-border-radius) * 1.5
+      ); /* 15px */
+      --boxel-border-radius-2xl: calc(
+        var(--boxel-border-radius) * 2
+      ); /* 20px */
       --boxel-form-control-border-radius: var(--boxel-border-radius);
 
       /* h1 */

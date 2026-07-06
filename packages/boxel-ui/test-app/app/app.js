@@ -5,6 +5,7 @@ import config from 'test-app/config/environment';
 import '@cardstack/boxel-ui/styles/global.css';
 import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
+import '@cardstack/boxel-ui/styles/theme.css';
 import './deprecation-workflow';
 
 export default class App extends Application {
