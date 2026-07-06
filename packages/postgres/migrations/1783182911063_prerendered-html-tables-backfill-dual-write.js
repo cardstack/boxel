@@ -118,7 +118,7 @@ exports.up = (pgm) => {
   // call this same function or the planner won't use the index. The boxel_index
   // markdown FTS indexes are rebuilt onto this function in a later migration.
   pgm.sql(`
-    CREATE FUNCTION markdown_search_text(md text) RETURNS text
+    CREATE OR REPLACE FUNCTION markdown_search_text(md text) RETURNS text
       LANGUAGE sql IMMUTABLE PARALLEL SAFE
       AS $$
         SELECT left(

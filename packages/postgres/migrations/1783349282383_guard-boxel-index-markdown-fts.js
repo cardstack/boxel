@@ -20,6 +20,23 @@ exports.shorthands = undefined;
 
 exports.up = (pgm) => {
   pgm.noTransaction();
+  // `markdown_search_text` is normally created by the prerendered_html migration
+  // (1783182911063). But a database that already recorded that migration before
+  // it was edited to add the function will not rerun it, so define the function
+  // here too (idempotently, identical body) BEFORE the indexes reference it —
+  // otherwise this non-transactional migration would drop the FTS indexes and
+  // then fail with "function markdown_search_text(text) does not exist",
+  // leaving the database with no markdown indexes.
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION markdown_search_text(md text) RETURNS text
+      LANGUAGE sql IMMUTABLE PARALLEL SAFE
+      AS $$
+        SELECT left(
+          regexp_replace(coalesce(md, ''), '[A-Za-z0-9+/=]{255,}', ' ', 'g'),
+          400000
+        )
+      $$;
+  `);
   pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS boxel_index_markdown_fts_idx;`);
   pgm.sql(
     `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_working_markdown_fts_idx;`,
