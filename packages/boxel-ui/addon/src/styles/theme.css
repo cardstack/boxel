@@ -1,0 +1,143 @@
+/* Boxel UI — semantic token contract + default (light) theme.
+
+   This file is the source of record for the semantic design tokens that
+   boxel-ui components consume (--primary, --foreground, --muted, etc.).
+   Shipping it from the addon means components render correctly with zero
+   host configuration — a consumer that imports the addon's styles gets a
+   complete, working theme by default.
+
+   The default values below map the semantic tokens onto the --boxel-*
+   palette declared in variables.css, so the palette remains the single
+   underlying source of truth for brand colors. A consumer overrides any
+   token by redeclaring it on :root (or a scoped element) after this file.
+
+   The full list of tokens declared here is the contract every theme must
+   satisfy. The dark-mode counterpart (a `.dark` / `[data-theme='dark']` scope)
+   is layered on separately, below.
+*/
+
+/* Light — the default theme, and the explicit `data-theme="light"` scope used
+   to force light back on inside a dark subtree. Both resolve to the same
+   values. */
+:root,
+[data-theme='light'] {
+  --boxel-color-scheme: light;
+
+  /* surfaces */
+  --background: var(--boxel-light);
+  --foreground: var(--boxel-dark);
+  --card: var(--boxel-light);
+  --card-foreground: var(--boxel-dark);
+  --popover: var(--boxel-light);
+  --popover-foreground: var(--boxel-dark);
+
+  /* roles */
+  --primary: var(--boxel-highlight);
+  --primary-foreground: var(--boxel-dark);
+  --secondary: var(--boxel-200);
+  --secondary-foreground: var(--boxel-dark);
+  --muted: var(--boxel-100);
+  --muted-foreground: var(--boxel-500);
+  --accent: var(--boxel-200);
+  --accent-foreground: var(--boxel-dark);
+  --destructive: var(--boxel-danger);
+  --destructive-foreground: var(--boxel-50);
+
+  /* form + focus */
+  --border: var(--boxel-border-color);
+  --input: var(--boxel-light);
+  --ring: var(--boxel-highlight);
+
+  /* charts */
+  --chart-1: var(--boxel-fuschia);
+  --chart-2: var(--boxel-purple);
+  --chart-3: var(--boxel-lime);
+  --chart-4: var(--boxel-blue);
+  --chart-5: var(--boxel-green);
+
+  /* sidebar */
+  --sidebar: var(--boxel-light);
+  --sidebar-foreground: var(--boxel-dark);
+  --sidebar-primary: var(--boxel-dark);
+  --sidebar-primary-foreground: var(--boxel-light);
+  --sidebar-accent: var(--boxel-200);
+  --sidebar-accent-foreground: var(--boxel-dark);
+  --sidebar-border: var(--boxel-border-color);
+  --sidebar-ring: var(--boxel-highlight);
+
+  /* typography */
+  --font-sans:
+    'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif,
+    system-ui;
+  --font-serif: 'IBM Plex Serif', 'Georgia', Times, serif;
+  --font-mono:
+    'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace;
+  --tracking-normal: 0.01em;
+
+  /* geometry + spacing */
+  --radius: 0.625rem;
+  --spacing: 0.25rem;
+
+  /* shadow scale */
+  --shadow-x: 0;
+  --shadow-y: 1px;
+  --shadow-blur: 3px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.1;
+  --shadow-color: var(--boxel-dark);
+  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-sm:
+    0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md:
+    0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg:
+    0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-xl:
+    0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────────────
+   Opt-in and explicit: add class `dark` or `data-theme="dark"` to <html>, or to
+   any subtree you want themed dark. Force light back on inside a dark subtree
+   with `data-theme="light"` (see the light block above).
+
+   OS-driven dark (`prefers-color-scheme` / a `data-theme="system"` mode) is
+   intentionally NOT wired up yet — it needs to resolve in both directions
+   (falling back to light when the OS is light, including inside a dark subtree),
+   so it is deferred until that feature is implemented.
+*/
+.dark,
+[data-theme='dark'] {
+  --boxel-color-scheme: dark;
+
+  --background: var(--boxel-700);
+  --foreground: var(--boxel-light);
+  --card: var(--boxel-650);
+  --card-foreground: var(--boxel-light);
+  --popover: #4f4b57;
+  --popover-foreground: var(--boxel-light);
+  --primary: var(--boxel-highlight);
+  --primary-foreground: var(--boxel-dark);
+  --secondary: #46434e;
+  --secondary-foreground: var(--boxel-light);
+  --muted: #34313c;
+  --muted-foreground: #b6b6be;
+  --accent: #797788;
+  --accent-foreground: var(--boxel-light);
+  --destructive: var(--boxel-danger);
+  --destructive-foreground: var(--boxel-light-100);
+  --border: var(--boxel-550);
+  --input: var(--boxel-dark);
+  --ring: var(--boxel-highlight);
+  --sidebar: #555366;
+  --sidebar-foreground: var(--boxel-light);
+  --sidebar-primary: var(--boxel-highlight);
+  --sidebar-primary-foreground: var(--boxel-dark);
+  --sidebar-accent: #797788;
+  --sidebar-accent-foreground: var(--boxel-light);
+  --sidebar-border: var(--boxel-550);
+  --sidebar-ring: var(--boxel-highlight);
+}
