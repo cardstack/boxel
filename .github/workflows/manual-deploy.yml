@@ -227,15 +227,119 @@ jobs:
       image: ${{ needs.build-pg-migration.outputs.image }}
       wait-for-service-stability: false
 
-  # the wait-for-service-stability flag doesn't seem to work in
-  # aws-actions/amazon-ecs-deploy-task-definition@v2. we keep getting timeouts
-  # waiting for service stability. So we are manually waiting here.
+  # Gate the rest of the deploy on the DB migration actually succeeding, so the
+  # app never rolls out ahead of its schema. `migrate-db` force-deploys the
+  # pg-migration service with the new image but doesn't wait
+  # (wait-for-service-stability: false), and the migration container's command
+  # is `<run migrations> && sleep infinity` — so a task only reaches and stays
+  # RUNNING when the migration exits 0; a failing migration exits non-zero and
+  # ECS restarts it in a crash loop. This job watches the service's new
+  # deployment and asserts that outcome instead of blindly sleeping: it
+  # succeeds once the deployment reaches rolloutState COMPLETED (a migrated
+  # task is up and stable), and fails the moment a task on the new task
+  # definition revision STOPs (the crash loop). The pg-migration service has no
+  # ECS deployment circuit breaker, so rolloutState never flips to FAILED on
+  # its own — we read the stopped task's exit code directly.
   post-migrate-db:
     name: Wait for db-migration
     needs: [migrate-db]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLUSTER: ${{ inputs.environment }}
+      SERVICE: boxel-pg-migration-${{ inputs.environment }}
+      CONTAINER: boxel-pg-migration
+      LOG_GROUP: ecs-boxel-pg-migration-${{ inputs.environment }}
+      # Generous cap: real failures are caught immediately via the stopped-task
+      # check, so this only bounds a migration that hangs (e.g. blocked on a
+      # lock) rather than fails. A long backfill migration must finish under it.
+      TIMEOUT_SECONDS: "1800"
     steps:
-      - run: sleep 180
+      - name: Set up env
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
+          else
+            echo "unrecognized environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Assert migration succeeded
+        run: |
+          set -euo pipefail
+
+          # Scope every check to the task definition revision migrate-db just
+          # deployed (the new PRIMARY deployment) so a previous deploy's tasks
+          # can't be mistaken for this migration's.
+          target_td=$(aws ecs describe-services \
+            --cluster "$CLUSTER" --services "$SERVICE" \
+            --query "services[0].deployments[?status=='PRIMARY']|[0].taskDefinition" \
+            --output text)
+          if [ -z "$target_td" ] || [ "$target_td" = "None" ]; then
+            echo "No PRIMARY deployment found for $SERVICE — cannot verify the migration."
+            exit 1
+          fi
+          echo "Watching migration task definition: $target_td"
+
+          region=us-east-1
+          console_logs="https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${LOG_GROUP}"
+
+          report_stopped() {
+            echo "Migration container logs: ${console_logs}"
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$@" \
+              --query "tasks[].{task:taskArn,stopCode:stopCode,taskReason:stoppedReason,exit:containers[?name=='${CONTAINER}']|[0].exitCode,containerReason:containers[?name=='${CONTAINER}']|[0].reason}" \
+              --output table || true
+          }
+
+          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          while :; do
+            # Fail fast on a crash loop: with `... && sleep infinity`, a task on
+            # the new revision can only be STOPPED if the migration exited
+            # non-zero (or the container otherwise died), never on success.
+            stopped=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status STOPPED --query 'taskArns' --output text)
+            if [ -n "$stopped" ] && [ "$stopped" != "None" ]; then
+              failed=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $stopped \
+                --query "tasks[?taskDefinitionArn=='$target_td'].taskArn" --output text)
+              if [ -n "$failed" ] && [ "$failed" != "None" ]; then
+                echo "::error::DB migration failed — pg-migration task stopped instead of staying up."
+                report_stopped $failed
+                exit 1
+              fi
+            fi
+
+            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].deployments[?status=='PRIMARY']|[0].rolloutState" \
+              --output text)
+            echo "pg-migration rollout state: ${state}"
+            case "$state" in
+              COMPLETED)
+                echo "DB migration succeeded — pg-migration task is running and stable."
+                exit 0
+                ;;
+              FAILED)
+                echo "::error::pg-migration deployment reported rolloutState FAILED."
+                exit 1
+                ;;
+            esac
+
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out after ${TIMEOUT_SECONDS}s waiting for the DB migration to succeed."
+              echo "Migration container logs: ${console_logs}"
+              exit 1
+            fi
+            sleep 15
+          done
 
   deploy-prerender:
     name: Deploy prerender
