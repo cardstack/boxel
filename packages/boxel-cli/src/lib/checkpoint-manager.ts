@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
+import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 import { isProtectedFile } from './realm-sync-base.ts';
 
@@ -612,11 +613,30 @@ export class CheckpointManager {
     );
   }
 
+  // Ephemeral checkpoint repos never benefit from git's background
+  // housekeeping. Left enabled, a commit forks a detached
+  // `git maintenance run --auto` that races the next command's ref/object
+  // reads on the same repo, surfacing intermittently as
+  // "fatal: could not parse HEAD" partway through a rapid commit loop. Passing
+  // these per invocation (rather than writing them once at init) applies them
+  // to every repo regardless of how it was initialized and overrides any
+  // inherited global/system git config.
+  private static readonly gitConfigArgs = [
+    '-c',
+    'gc.auto=0',
+    '-c',
+    'maintenance.auto=false',
+  ];
+
   private git(...args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn('git', args, {
-        cwd: this.gitDir,
-      });
+      const child = spawn(
+        'git',
+        [...CheckpointManager.gitConfigArgs, ...args],
+        {
+          cwd: this.gitDir,
+        },
+      );
 
       let stdout = '';
       let stderr = '';
@@ -632,11 +652,73 @@ export class CheckpointManager {
 
       child.on('close', (code) => {
         if (code !== 0 && !args.includes('status')) {
-          reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+          reject(
+            new Error(
+              `git ${args.join(' ')} failed: ${stderr.trim()}` +
+                this.describeHeadState(),
+            ),
+          );
           return;
         }
         resolve(stdout);
       });
     });
+  }
+
+  // Best-effort snapshot of what HEAD points to and whether that commit object
+  // is on disk. Only ever runs after a git command has already failed, so it
+  // must never throw. With background maintenance disabled these repos keep
+  // every object loose, so a loose-object check reliably answers "did the
+  // parent commit exist?" — the crux of a "could not parse HEAD" failure. If
+  // that ever prints `object=MISSING`, the object store lost a reachable
+  // commit; if it prints `object=present`, look at the ref/index instead.
+  private describeHeadState(): string {
+    try {
+      const gitInternalDir = path.join(this.gitDir, '.git');
+      const head = readFileSync(
+        path.join(gitInternalDir, 'HEAD'),
+        'utf-8',
+      ).trim();
+      let oid = head;
+      if (head.startsWith('ref:')) {
+        const ref = head.slice('ref:'.length).trim();
+        oid = this.resolveRef(gitInternalDir, ref) ?? '(unresolved)';
+      }
+      let object = 'n/a';
+      if (/^[0-9a-f]{40}$/.test(oid)) {
+        const loosePath = path.join(
+          gitInternalDir,
+          'objects',
+          oid.slice(0, 2),
+          oid.slice(2),
+        );
+        object = existsSync(loosePath) ? 'present' : 'MISSING';
+      }
+      return ` [head-state: HEAD=${JSON.stringify(head)} oid=${oid} object=${object}]`;
+    } catch (err) {
+      return ` [head-state unavailable: ${(err as Error).message}]`;
+    }
+  }
+
+  private resolveRef(gitInternalDir: string, ref: string): string | null {
+    try {
+      return readFileSync(path.join(gitInternalDir, ref), 'utf-8').trim();
+    } catch {
+      // Loose ref absent — fall back to packed-refs.
+      try {
+        const packed = readFileSync(
+          path.join(gitInternalDir, 'packed-refs'),
+          'utf-8',
+        );
+        for (const line of packed.split('\n')) {
+          if (line.endsWith(` ${ref}`)) {
+            return line.slice(0, 40);
+          }
+        }
+      } catch {
+        // No packed-refs file; nothing more to try.
+      }
+      return null;
+    }
   }
 }
