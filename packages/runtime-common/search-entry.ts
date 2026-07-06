@@ -872,8 +872,13 @@ export function buildEntryResource(args: {
   // The id of the result's `icon` resource (its native-type internal key) —
   // omitted when the row carries no `icon_html`.
   iconId?: string;
+  // The row's index-data generation (`boxel_index.generation`) — rides in
+  // `meta.generation` so a consumer can tell fresh index data from stale.
+  // Omitted only by callers with no generation to surface (unit tests); the
+  // engine always supplies it.
+  generation?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId } = args;
+  let { url, htmlIds, itemType, iconId, generation } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -892,6 +897,9 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
+  if (generation !== undefined) {
+    resource.meta = { generation };
+  }
   return resource;
 }
 
@@ -909,9 +917,15 @@ export function buildHtmlResource(args: {
   cardType: string;
   isError?: boolean;
   cssIds: string[];
+  // The generation this rendering was produced at
+  // (`prerendered_html.generation`) — rides in `meta.generation`, independent
+  // of the owning entry's index-data generation. Omitted only by callers with
+  // no generation to surface (unit tests); the engine always supplies it.
+  generation?: number;
 }): HtmlResource {
-  let { url, format, renderType, html, cardType, isError, cssIds } = args;
-  return {
+  let { url, format, renderType, html, cardType, isError, cssIds, generation } =
+    args;
+  let resource: HtmlResource = {
     type: HtmlResourceType,
     id: htmlResourceId({ url, format, renderType }),
     attributes: {
@@ -927,6 +941,10 @@ export function buildHtmlResource(args: {
       },
     },
   };
+  if (generation !== undefined) {
+    resource.meta = { generation };
+  }
+  return resource;
 }
 
 // One card-type `icon` resource (see `IconResource`): the per-type descriptor

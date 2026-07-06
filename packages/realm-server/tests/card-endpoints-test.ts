@@ -162,8 +162,18 @@ module(basename(import.meta.filename), function () {
           );
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
+          assert.strictEqual(
+            typeof json.data.meta.generation,
+            'number',
+            'card+json GET carries the index-data generation in meta',
+          );
+          assert.ok(
+            json.data.meta.generation > 0,
+            'the index-data generation is positive',
+          );
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -938,6 +948,7 @@ module(basename(import.meta.filename), function () {
 
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
 
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
@@ -1770,6 +1781,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -1904,6 +1916,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2010,6 +2023,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2050,6 +2064,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2260,6 +2275,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2437,6 +2453,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
@@ -2941,6 +2958,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           {
             let cardFile = join(
               dir.name,
@@ -3086,6 +3104,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3220,6 +3239,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3326,6 +3346,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3366,6 +3387,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3472,6 +3494,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           {
             let cardFile = join(
               dir.name,
@@ -3551,6 +3574,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3635,6 +3659,7 @@ module(basename(import.meta.filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,

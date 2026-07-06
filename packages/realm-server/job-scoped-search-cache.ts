@@ -4,6 +4,8 @@ import {
   query,
   param,
   sortKeysDeep,
+  separatedByCommas,
+  addExplicitParens,
   type DBAdapter,
   type Expression,
   type Query,
@@ -190,6 +192,60 @@ export class JobScopedSearchCache {
   // stale-stats janitor; exposed so tests can assert that backstop runs.
   get trackedStatJobCount(): number {
     return this.#stats.size;
+  }
+
+  // Per-realm generation fingerprint the handler folds into the cache key so a
+  // cached `304` cannot pin an HTML-less or older-rendering result after newer
+  // index data or HTML lands. Two channels advance independently once
+  // prerendering is split off the indexing pass, so both ride the key:
+  //   - `index`: the realm's authoritative current index-data generation
+  //     (`realm_generations.current_generation`), the same source of truth the
+  //     index writer and `realm_meta` reads anchor on. NOT `MAX(generation)`
+  //     across rows — a from-scratch reindex can leave older high-generation
+  //     rows lingering, so a naive max reads the wrong value.
+  //   - `html`: the realm's newest published prerendered-HTML generation
+  //     (`MAX(prerendered_html.generation)`). HTML generation only ever moves
+  //     up as newer renderings land, so the max is a sound, monotonic signal
+  //     here (a stale-high row could only over-fragment the cache, never serve
+  //     a stale body).
+  // A realm absent from `realm_generations`, or with no prerendered rows (or
+  // one not backed by this local index — a remote federation peer), reads as 0.
+  // Folding these in only fragments the cache; the body a miss produces is
+  // whatever the current DB state renders, so freshness follows the data.
+  async realmGenerations(
+    realms: string[],
+  ): Promise<Record<string, { index: number; html: number }>> {
+    let out: Record<string, { index: number; html: number }> = {};
+    for (let realm of realms) {
+      out[realm] = { index: 0, html: 0 };
+    }
+    if (realms.length === 0) {
+      return out;
+    }
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT rg.realm_url AS realm_url,
+              rg.current_generation AS index_generation,
+              (SELECT MAX(ph.generation) FROM prerendered_html ph
+                 WHERE ph.realm_url = rg.realm_url) AS html_generation
+         FROM realm_generations rg
+        WHERE rg.realm_url IN`,
+      ...addExplicitParens(
+        separatedByCommas(realms.map((realm) => [param(realm)])),
+      ),
+    ] as Expression)) as {
+      realm_url: string;
+      index_generation: number | string | null;
+      html_generation: number | string | null;
+    }[];
+    let toNum = (value: number | string | null): number =>
+      typeof value === 'string' ? parseInt(value) : (value ?? 0);
+    for (let row of rows) {
+      out[row.realm_url] = {
+        index: toNum(row.index_generation),
+        html: toNum(row.html_generation),
+      };
+    }
+    return out;
   }
 
   // Job-id-based weak ETag. Same `(jobId, realms, query, opts)` always produces

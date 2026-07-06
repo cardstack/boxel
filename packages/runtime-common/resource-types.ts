@@ -99,6 +99,11 @@ export type CardResourceMeta = Meta & {
   // consumer falls through to the host error component (the terminal rung of
   // the resolution chain) and never deposits the resource into the Store.
   error?: ErrorEntry;
+  // The index-data generation the row was written at (`boxel_index.generation`).
+  // Stamped on a single-card `card+json` GET so a consumer can tell fresh index
+  // data from stale. Additive — absent when the serialization did not come off
+  // the index (e.g. a freshly-built resource that has not been persisted).
+  generation?: number;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -222,6 +227,13 @@ export interface EntryResource {
       data: { type: typeof IconResourceType; id: string };
     };
   };
+  // The entry's index-data generation (`boxel_index.generation`) — the
+  // generation the row's search doc / serialization was written at. Lets a
+  // consumer tell fresh index data from stale and pair it against the `html`
+  // resource's own generation (the two channels advance independently).
+  meta?: {
+    generation: number;
+  };
 }
 
 // One prerendered rendering of a card/file: a platform resource whose `id` is the
@@ -247,6 +259,13 @@ export interface HtmlResource {
     styles: {
       data: { type: typeof CssResourceType; id: string }[];
     };
+  };
+  // The generation this rendering was produced at
+  // (`prerendered_html.generation`). Independent of the owning entry's
+  // index-data generation: HTML lands on its own channel and can lag the
+  // index, so a consumer compares the two to tell fresh HTML from stale.
+  meta?: {
+    generation: number;
   };
 }
 
