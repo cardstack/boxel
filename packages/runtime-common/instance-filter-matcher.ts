@@ -9,6 +9,7 @@ import {
   isMatchesFilter,
   isNotFilter,
   isRangeFilter,
+  isReferenceFilterField,
   type Filter,
   type RangeFilterValue,
   type RangeOperator,
@@ -269,15 +270,6 @@ function resolvePath(
   return { values, leafField, sawUnresolvable };
 }
 
-// A filter path whose leaf is a card/file reference (`id` / `url`). Values on
-// these paths are compared with canonical-RRI tolerance below, mirroring the
-// server's `expandReferenceFilterValues` (index-query-engine.ts) which matches
-// a reference filter value against every equivalent spelling.
-function isReferenceLeaf(path: string): boolean {
-  let leaf = path.split('.').pop();
-  return leaf === 'id' || leaf === 'url';
-}
-
 // All equivalent spellings (RRI-prefix / real-URL / virtual-alias) of a
 // reference value. A registered-prefix RRI is first resolved to its real URL so
 // `equivalentURLForms` can enumerate the set; anything else is expanded as-is.
@@ -316,7 +308,7 @@ function leafMatches(
     return true;
   }
   if (
-    isReferenceLeaf(path) &&
+    isReferenceFilterField(path) &&
     typeof leafValue === 'string' &&
     typeof filterValue === 'string'
   ) {

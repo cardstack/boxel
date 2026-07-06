@@ -187,6 +187,16 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
 }
 
+// A filter path whose leaf is a card/file reference (`id` / `url`). Values on
+// these paths are compared with canonical-RRI tolerance (a reference matches
+// any of its equivalent RRI / real-URL / virtual-alias spellings) rather than
+// by exact string equality — applied both index-side (the query engine's
+// `expandReferenceFilterValues`) and client-side (the instance-filter matcher).
+export function isReferenceFilterField(path: string): boolean {
+  let leaf = path.split('.').pop();
+  return leaf === 'id' || leaf === 'url';
+}
+
 export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
