@@ -48,6 +48,7 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
+  isReferenceFilterField,
 } from './query.ts';
 import type { SerializedError } from './error.ts';
 import type { DBAdapter } from './db.ts';
@@ -1123,16 +1124,11 @@ export class IndexQueryEngine {
   // strings or URLs and whose `in` filter is an exact string comparison —
   // those are matched exactly as given, gaining no extra normalized spellings,
   // so exact semantics are preserved for non-reference fields.
-  private isReferenceFilterField(key: string): boolean {
-    let leaf = key.split('.').pop();
-    return leaf === 'id' || leaf === 'url';
-  }
-
   private expandReferenceFilterValues(
     key: string,
     values: JSONTypes.Value[],
   ): JSONTypes.Value[] {
-    if (!this.isReferenceFilterField(key)) {
+    if (!isReferenceFilterField(key)) {
       return values;
     }
     let expanded: JSONTypes.Value[] = [];
