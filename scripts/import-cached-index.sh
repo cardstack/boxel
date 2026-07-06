@@ -21,9 +21,9 @@ trap cleanup EXIT
 
 # Check if the database already has index data — if so, skip.
 ROW_COUNT=$(docker exec boxel-pg psql -U postgres -d "$DB_NAME" -tAc \
-  "SELECT COUNT(*) FROM realm_versions" 2>/dev/null) || ROW_COUNT=""
+  "SELECT COUNT(*) FROM realm_generations" 2>/dev/null) || ROW_COUNT=""
 if [ -n "$ROW_COUNT" ] && [ "$ROW_COUNT" -gt 0 ] 2>/dev/null; then
-  echo "Database already has index data ($ROW_COUNT realm versions), skipping cache import."
+  echo "Database already has index data ($ROW_COUNT realm generations), skipping cache import."
   exit 0
 fi
 
@@ -58,7 +58,7 @@ fi
 # Clear any partial data before importing.
 echo "Truncating index tables..."
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_versions, realm_meta"
+  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html"
 
 # Import the cache into the local database.
 # In BOXEL_ENVIRONMENT mode, remap URLs from CI standard mode (localhost:4201)
@@ -80,5 +80,16 @@ else
   gunzip -c "$CACHE_FILE" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 fi
+
+# Rebuild the realm_generations allocator from the restored rows: dumps
+# predating the allocator's inclusion don't carry it, and it must agree with
+# the highest generation present per realm or the next incremental index
+# would collide with restored rows. The upsert keeps whichever is greater
+# when the dump DOES carry allocator rows.
+docker exec boxel-pg psql $PSQL_OPTS -c \
+  "INSERT INTO realm_generations (realm_url, current_generation)
+     SELECT realm_url, MAX(generation) FROM boxel_index GROUP BY realm_url
+   ON CONFLICT (realm_url) DO UPDATE
+     SET current_generation = GREATEST(realm_generations.current_generation, EXCLUDED.current_generation)"
 
 echo "Index cache imported successfully."

@@ -69,8 +69,8 @@ done
 wait "$WAIT_ON_PID"
 
 echo "All realms ready. Dumping index tables..."
-docker exec boxel-pg pg_dump -U postgres --data-only \
-  -t boxel_index -t realm_versions -t realm_meta \
+docker exec boxel-pg pg_dump -U postgres --data-only --strict-names \
+  -t boxel_index -t realm_generations -t realm_meta -t prerendered_html \
   boxel > /tmp/boxel-index-cache.sql
 
 gzip /tmp/boxel-index-cache.sql
