@@ -500,7 +500,18 @@ function buildCardJsonEtag(
 // entry's own `html` linkage; all of one card's renderings share a generation
 // (it's a per-row value), so the first referenced `html` resource stands for
 // the channel.
-function buildEntryHtmlEtag(doc: EntrySingleDocument): string {
+//
+// When the response carries an `item`, its serialization also rides
+// `meta.realmInfo` — which can change without reindexing the card (realm
+// rename / icon / publish) and so advances neither generation. So fold the
+// realm-info hash in for item-bearing responses, exactly as the card+json GET
+// does, or a validator would pin the stale realmInfo across such a change. A
+// pure-html response carries no realmInfo, so its validator stays the clean
+// index:html composite.
+function buildEntryHtmlEtag(
+  doc: EntrySingleDocument,
+  realmInfoHash: string | undefined,
+): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
   let htmlGeneration: number | undefined;
@@ -512,7 +523,11 @@ function buildEntryHtmlEtag(doc: EntrySingleDocument): string {
     );
     htmlGeneration = htmlResource?.meta?.generation;
   }
-  return `"${indexGeneration}:${htmlGeneration ?? 'none'}"`;
+  let base = `${indexGeneration}:${htmlGeneration ?? 'none'}`;
+  if (doc.data.relationships.item && realmInfoHash) {
+    base = `${base}:${realmInfoHash}`;
+  }
+  return `"${base}"`;
 }
 
 // RFC 9110 §13.1.2: `If-None-Match` may be `*`, a comma-separated
@@ -5361,7 +5376,10 @@ export class Realm {
       return notFound(request, requestContext);
     }
 
-    let etag = buildEntryHtmlEtag(doc);
+    // `searchEntry` ran `attachRealmInfo`, which (re)populated the realm-info
+    // cache, so the hash we fold into an item-bearing response's ETag reflects
+    // the realm info the item was just serialized with.
+    let etag = buildEntryHtmlEtag(doc, this.getCachedRealmInfoHash());
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
       return createResponse({

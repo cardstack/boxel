@@ -248,10 +248,13 @@ module(basename(import.meta.filename), function () {
         ),
         'the card item rides in included',
       );
+      // An item carries `meta.realmInfo` (which can change without a reindex),
+      // so an item-bearing response folds the realm-info hash in as a third
+      // segment on top of the `<index>:none` composite.
       let etag = response.get('etag') ?? '';
       assert.true(
-        /^"\d+:none"$/.test(etag),
-        `an item-only response depends only on the index channel, got ${etag}`,
+        /^"\d+:none:[^:"]+"$/.test(etag),
+        `an item response has no rendering channel + a realm-info segment, got ${etag}`,
       );
     });
 
@@ -294,10 +297,11 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(data.type, 'entry');
       // A file renders natively; whichever branch it resolves, the ETag pairs
-      // the two channels (a rendering → `<gen>:<gen>`, else `<gen>:none`).
+      // the two channels (a rendering → `<gen>:<gen>`, else `<gen>:none`), plus
+      // a realm-info segment when it falls back to its item.
       let etag = response.get('etag') ?? '';
       assert.true(
-        /^"\d+:(\d+|none)"$/.test(etag),
+        /^"\d+:(\d+|none)(:[^:"]+)?"$/.test(etag),
         `the file entry carries a composite ETag, got ${etag}`,
       );
     });
