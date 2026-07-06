@@ -437,10 +437,12 @@ async function getEnabledSkills(
     return await Promise.all(
       enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
         let content = await downloadFile(client, cardFileDef);
-        // A markdown skill (SKILL.md) is a plain file, not a card document:
-        // its body is the instructions. Present it in the same card-shaped
-        // form the rest of the prompt pipeline expects, so skillCardsToMessages
-        // and getTools need no special-casing.
+        // Dual-path window: markdown skills (this branch) are the pull
+        // model — a SKILL.md is a plain file whose body is the instructions.
+        // Present it in the same card-shaped form the rest of the prompt
+        // pipeline expects, so skillCardsToMessages and getTools need no
+        // special-casing. The JSON.parse fallthrough below is the legacy
+        // pushed-card path; it is removed when the push model is retired.
         if (isMarkdownSkillFile(cardFileDef)) {
           let { title, body } = parseMarkdownSkill(content, cardFileDef);
           return {

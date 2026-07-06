@@ -1807,6 +1807,9 @@ export default class MatrixService extends Service {
 
     // Code editing is covered by the code-mode entry-point skill (see
     // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
     let codeModeDefaultSkills = [devSkillId, envSkillId];
 
     let defaultSkills;
@@ -2692,8 +2695,12 @@ export default class MatrixService extends Service {
     let defaultSkills = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // The card skills plus the code-mode entry-point skill: a short
-      // markdown directory whose linked skills the bot loads on demand.
+      // Dual-path window: the legacy card skills (pushed in full) activate
+      // alongside the code-mode entry-point skill — a short markdown
+      // directory whose linked skills the bot loads on demand. As the card
+      // skills convert to markdown, the pushed set shrinks; the separate
+      // entry-point skill can fold away once boxel-development's own
+      // SKILL.md (which links source-code-editing) is what gets enabled.
       skillCardIdsToActivate: [
         ...defaultSkills.map((s) => s.id),
         codeModeEntryPointSkillUrl,
