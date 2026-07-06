@@ -49,6 +49,7 @@ import {
   isSingleFileMetaDocument,
   type SingleCardDocument,
   type EntryCollectionDocument,
+  type EntrySingleDocument,
   type EntryIncludedResource,
   isEntryCollectionDocument,
 } from './document-types.ts';
@@ -58,6 +59,7 @@ import type {
   CardResource,
   CssResource,
   FileMetaResource,
+  HtmlQuery,
   IconResource,
   QueryFieldMeta,
   Saved,
@@ -79,6 +81,7 @@ import {
   resolveHtmlQuery,
   searchEntryWireQueryFromQuery,
   type RenderingCandidate,
+  type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
@@ -455,6 +458,54 @@ export class RealmIndexQueryEngine {
       { htmlResources, cssById, iconById, itemResources, fullItemRoots },
       opts,
     );
+  }
+
+  // The single-instance counterpart of `searchEntries`: one entry sourced by
+  // URL rather than by a membership query. `kind` selects the instance vs file
+  // projection — the caller's accept header is the discriminator (card+html →
+  // instance, file-meta+html → file), mirroring the card+json vs
+  // file-meta+json GET split. Reuses the collection path with a one-URL
+  // `cardUrls` filter (so all the rendering enumeration / htmlQuery matching /
+  // css + icon dedup / item serialization + loadLinks assembly is shared),
+  // then unwraps to a single-resource document. Returns undefined when no row
+  // matches the URL (the handler 404s).
+  async searchEntry(
+    url: URL,
+    args: {
+      htmlQuery: HtmlQuery;
+      fieldset: SearchEntryFieldset;
+      kind: 'instance' | 'file';
+    },
+    opts?: Options,
+  ): Promise<EntrySingleDocument | undefined> {
+    let { htmlQuery, fieldset, kind } = args;
+    let searchEntryQuery: SearchEntryQuery = {
+      itemQuery: {},
+      htmlQuery,
+      fieldset,
+      cardUrls: [url.href],
+    };
+    let collection =
+      kind === 'file'
+        ? // The file path is reached only through this explicit `kind` — an
+          // empty membership query never routes to file-meta on its own (see
+          // `queryTargetsFileMeta`), so a file's entry must be requested by
+          // accept header. `cardUrls` rides in `opts` for the file path (it's
+          // read there, not off the SearchEntryQuery).
+          await this.searchEntriesFileMeta(searchEntryQuery, {
+            ...opts,
+            cardUrls: [url.href],
+          })
+        : await this.searchEntries(searchEntryQuery, opts);
+    let [entry] = collection.data;
+    if (!entry) {
+      return undefined;
+    }
+    let doc: EntrySingleDocument = { data: entry };
+    if (collection.included && collection.included.length > 0) {
+      doc.included = collection.included;
+    }
+    return doc;
   }
 
   // The file-meta counterpart of `searchEntries`. Files are indexed as

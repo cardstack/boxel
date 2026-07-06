@@ -43,6 +43,7 @@ import {
 import { isCodeRef } from './card-document-shape.ts';
 import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
+import { parseUsedRenderType } from './search-resource-helpers.ts';
 
 // ---------------------------------------------------------------------------
 // The entry query.
@@ -654,6 +655,86 @@ export function parseSearchEntryQueryFromPayload(
     fieldset,
     realms,
     cardUrls,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The single-instance GET's query-string surface. The card+html /
+// file-meta+html GET sources one entry by URL, so it needs no membership
+// query — only the rendering selection (`?format=` / `?renderType=`) and the
+// sparse fieldset (`?fields=`), the query-string spelling of the html. branch's
+// `htmlQuery` + `fields[entry]`. The two helpers translate those params into
+// the same `HtmlQuery` / `SearchEntryFieldset` the engine consumes, reusing
+// the wire grammar's validation.
+// ---------------------------------------------------------------------------
+
+// `?format=` (default `fitted`) + optional `?renderType=<module>/<name>` → the
+// htmlQuery selecting the rendering. An absent `renderType` leaves only the
+// card's native type in play (no renderType predicate), exactly like an
+// htmlQuery that constrains format alone.
+export function htmlQueryFromParams(params: {
+  format?: string | null;
+  renderType?: string | null;
+}): HtmlQuery {
+  // Empty or absent means "unspecified" for both dimensions, consistent with
+  // an omitted `?fields=` — the universal query-string convention. So an empty
+  // `?format=` falls back to fitted, and an empty `?renderType=` leaves only
+  // the native type in play (no predicate). A genuinely malformed value still
+  // fails: a bad format is rejected by `assertHtmlQuery` below, and a
+  // renderType that isn't a `<module>/<name>` key throws here.
+  let format = params.format || DEFAULT_HTML_QUERY.eq.format;
+  let renderType: unknown;
+  if (params.renderType) {
+    renderType = parseUsedRenderType(params.renderType);
+    if (renderType === undefined) {
+      throw invalidHtmlQuery(
+        `renderType must be a <module>/<name> key (got "${params.renderType}")`,
+      );
+    }
+  }
+  let htmlQuery = {
+    eq: {
+      format,
+      ...(renderType !== undefined ? { renderType } : {}),
+    },
+  };
+  // Validates the format is a known rendering format and the renderType is a
+  // CodeRef — the same checks the wire grammar applies to a bound htmlQuery.
+  assertHtmlQuery(htmlQuery);
+  return htmlQuery;
+}
+
+// `?fields=` → the sparse fieldset. The single GET serves the three
+// combinations `html`, `item`, and `html,item`; the wire grammar's sparse
+// `item.<field>` selectors have no query-string spelling here. Omitted → the
+// default resolution policy (the selected rendering, falling back to the item
+// where none matched).
+export function fieldsetFromParam(
+  fields: string | null | undefined,
+): SearchEntryFieldset {
+  if (fields == null || fields.trim() === '') {
+    return { html: true, item: { kind: 'none' }, itemAsFallback: true };
+  }
+  let html = false;
+  let item = false;
+  for (let part of fields.split(',').map((f) => f.trim())) {
+    if (part === 'html') {
+      html = true;
+    } else if (part === 'item') {
+      item = true;
+    } else if (part !== '') {
+      throw invalidQuery(
+        `each fields entry must be "html" or "item" (got "${part}")`,
+      );
+    }
+  }
+  if (!html && !item) {
+    throw invalidQuery(`fields must name at least one of "html" or "item"`);
+  }
+  return {
+    html,
+    item: item ? { kind: 'full' } : { kind: 'none' },
+    itemAsFallback: false,
   };
 }
 

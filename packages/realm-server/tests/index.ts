@@ -220,6 +220,7 @@ const ALL_TEST_FILES: string[] = [
   './billing-test',
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
+  './card-html-endpoints-test',
   './card-source-endpoints-test',
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
