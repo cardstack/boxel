@@ -20,13 +20,13 @@ export const TOOLTIP_VARIANTS = [
   'muted',
   'destructive',
 ] as const;
-export type ThemeVariant = (typeof TOOLTIP_VARIANTS)[number];
+export type TooltipThemeVariant = (typeof TOOLTIP_VARIANTS)[number];
 
 interface Signature {
   Args: {
     offset?: number;
     placement?: MiddlewareState['placement'];
-    variant?: ThemeVariant;
+    variant?: TooltipThemeVariant;
   };
   Blocks: {
     content: [];

@@ -98,7 +98,7 @@ class IndexComponent extends Component {
           class='freestyle-components-section'
           as |Section|
         >
-          {{#each this.usageComponents as |c|}}
+          {{#each this.usageComponents key='title' as |c|}}
             <Section.subsection @name={{formatComponentName c.title}}>
               <BoxelContainer>
                 <div class='subsection-import'>
