@@ -55,7 +55,10 @@ import {
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants.ts';
-import { decodeCommandRequest } from '../commands.ts';
+import {
+  buildCommandFunctionNameFromResolvedRef,
+  decodeCommandRequest,
+} from '../commands.ts';
 import type { CommandRequest } from '../commands.ts';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
@@ -450,7 +453,7 @@ async function getEnabledSkills(
           // choke on non-JSON. The JSON.parse fallthrough is the legacy
           // pushed-card path; it is removed when the push model is retired.
           if (isMarkdownSkillFile(cardFileDef)) {
-            let { title, body, kind } = parseMarkdownSkill(
+            let { title, body, kind, commands } = parseMarkdownSkill(
               content,
               cardFileDef,
             );
@@ -459,7 +462,7 @@ async function getEnabledSkills(
             }
             return {
               id: cardFileDef.sourceUrl,
-              attributes: { title, instructions: body },
+              attributes: { title, instructions: body, commands },
             };
           }
           return (JSON.parse(content) as LooseSingleCardDocument)?.data;
@@ -488,8 +491,17 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
   return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
 }
 
-// Splits a markdown skill into its instruction body, a title, and its
-// declared boxel.kind. The body is everything after the leading
+// A command a markdown skill contributes via its `boxel.commands`
+// frontmatter, with the functionName the host derives for the same code ref —
+// so getTools can match it against the room's uploaded command definitions.
+export interface MarkdownSkillCommand {
+  codeRef: { module: string; name: string };
+  functionName: string;
+  requiresApproval?: boolean;
+}
+
+// Splits a markdown skill into its instruction body, a title, its declared
+// boxel.kind, and its frontmatter commands. The body is everything after the
 // `--- frontmatter ---` block (the frontmatter is metadata, not
 // instructions); the title is the frontmatter `name`, falling back to the
 // file name. Invalid frontmatter YAML degrades to the raw content as body —
@@ -497,10 +509,16 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
 export function parseMarkdownSkill(
   content: string,
   fileDef: SerializedFileDef,
-): { title: string; body: string; kind?: string } {
+): {
+  title: string;
+  body: string;
+  kind?: string;
+  commands: MarkdownSkillCommand[];
+} {
   let body = content;
   let title: string | undefined;
   let kind: string | undefined;
+  let commands: MarkdownSkillCommand[] = [];
   try {
     let { data, body: parsedBody } = parseFrontmatter(content);
     body = parsedBody;
@@ -514,6 +532,7 @@ export function parseMarkdownSkill(
     if (typeof boxel?.kind === 'string') {
       kind = boxel.kind;
     }
+    commands = markdownSkillCommands(data, fileDef.sourceUrl);
   } catch {
     // Malformed frontmatter: keep the full content as the body.
   }
@@ -521,7 +540,55 @@ export function parseMarkdownSkill(
     let path = fileDef.sourceUrl ?? fileDef.name ?? '';
     title = path.split('/').filter(Boolean).pop() ?? 'Skill';
   }
-  return { title, body: body.trim(), kind };
+  return { title, body: body.trim(), kind, commands };
+}
+
+// Extracts `boxel.commands` from parsed frontmatter and computes each
+// command's functionName the way the host does when it uploads the room's
+// command definitions. Package specifiers (e.g. @cardstack/boxel-host/...)
+// resolve verbatim on the host, so hashing the literal module gives the same
+// name; relative modules resolve against the skill's own URL.
+function markdownSkillCommands(
+  frontmatter: Record<string, unknown>,
+  skillUrl: string | undefined,
+): MarkdownSkillCommand[] {
+  let boxel =
+    frontmatter.boxel &&
+    typeof frontmatter.boxel === 'object' &&
+    !Array.isArray(frontmatter.boxel)
+      ? (frontmatter.boxel as Record<string, unknown>)
+      : undefined;
+  if (!Array.isArray(boxel?.commands)) {
+    return [];
+  }
+  let commands: MarkdownSkillCommand[] = [];
+  for (let entry of boxel.commands) {
+    let codeRef = (entry as { codeRef?: { module?: string; name?: string } })
+      ?.codeRef;
+    if (
+      typeof codeRef?.module !== 'string' ||
+      typeof codeRef?.name !== 'string'
+    ) {
+      continue;
+    }
+    let module = codeRef.module;
+    if (module.startsWith('.') && skillUrl) {
+      try {
+        module = new URL(module, skillUrl).href;
+      } catch {
+        // keep the module as authored; a bad relative ref simply won't match
+      }
+    }
+    let resolvedRef = { module, name: codeRef.name };
+    commands.push({
+      codeRef: resolvedRef,
+      functionName: buildCommandFunctionNameFromResolvedRef(resolvedRef),
+      requiresApproval: Boolean(
+        (entry as { requiresApproval?: unknown }).requiresApproval,
+      ),
+    });
+  }
+  return commands;
 }
 
 export async function getDisabledSkillIds(

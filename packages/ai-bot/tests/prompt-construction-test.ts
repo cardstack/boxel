@@ -17,6 +17,7 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -7246,5 +7247,154 @@ module('markdown skills', () => {
     } as any);
     assert.strictEqual(title, 'SKILL.md');
     assert.strictEqual(body, 'Just instructions.');
+  });
+});
+
+module('markdown skill commands', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
+  let originalFetch: any;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 500,
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
+  });
+
+  hooks.afterEach(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  const SKILL_MD = [
+    '---',
+    'name: "Boxel Environment"',
+    'description: "env"',
+    'boxel:',
+    '  kind: skill',
+    '  commands:',
+    '    - codeRef:',
+    '        module: "@cardstack/boxel-host/commands/switch-submode"',
+    '        name: "default"',
+    '      requiresApproval: false',
+    '---',
+    '',
+    'Use switch-submode to change modes.',
+  ].join('\n');
+
+  test('parseMarkdownSkill computes the same functionName the host derives', (assert) => {
+    let { commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    assert.strictEqual(commands.length, 1);
+    // switch-submode_dd88 is the name the host's buildCommandFunctionName
+    // produces for this code ref (registered prefixes resolve verbatim).
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+    assert.false(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill resolves relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "../../commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  test('getTools offers a command definition matched by a markdown skill', async () => {
+    mockResponses.set('mxc://mock-server/switch-submode-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/switch-submode',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'Switch between interact and code submodes',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+
+    const eventList = [
+      {
+        type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        event_id: 'skills-1',
+        origin_server_ts: 1000,
+        state_key: '',
+        content: {
+          enabledSkillCards: [
+            {
+              sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+              url: 'mxc://mock-server/env-skill',
+              name: 'SKILL.md',
+              contentType: 'text/plain',
+            },
+          ],
+          disabledSkillCards: [],
+          commandDefinitions: [
+            {
+              sourceUrl: 'https://realm/commands/switch-submode',
+              url: 'mxc://mock-server/switch-submode-def',
+              name: 'switch-submode_dd88',
+              contentType: 'text/plain',
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000 },
+        status: EventStatus.SENT,
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    // The card-shaped skill getEnabledSkills produces for this SKILL.md.
+    let { title, body, commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    const enabledSkills = [
+      {
+        id: 'https://realm/skills/boxel-environment/SKILL.md',
+        type: 'card',
+        attributes: { title, instructions: body, commands },
+      } as unknown as LooseCardResource,
+    ];
+
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
   });
 });
