@@ -161,6 +161,12 @@ export interface IndexedFile {
   iconHtml: string | null;
   markdown: string | null;
   generation: number;
+  // The generation the file's prerendered HTML was produced at
+  // (`prerendered_html.generation`, falling back to `boxel_index.generation`
+  // when no prerendered row exists). Distinct from `generation`, the file's
+  // index-data generation. Only populated on the search-entry read path
+  // (`fileEntryFromResult`); undefined on the single-file `getFile` path.
+  htmlGeneration?: number;
   realmURL: string;
   indexedAt: number | null;
 }
@@ -799,12 +805,16 @@ export class IndexQueryEngine {
     results: (Partial<BoxelIndexTable> & {
       html?: string | null;
       used_render_type?: string | null;
+      // The dual-read rendering generation (`prerendered_html.generation`,
+      // falling back to `boxel_index.generation` when no prerendered row
+      // exists) — distinct from `generation`, the entry's index-data generation.
+      html_generation?: number | null;
     })[];
   }> {
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
-        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc',
+        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.generation) as generation',
       ];
     } else {
       // The full rendering set: every per-format HTML column whole (the
@@ -822,7 +832,9 @@ export class IndexQueryEngine {
           'head_html',
         )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
           'deps',
-        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc`,
+        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
+          'generation',
+        )}) as html_generation`,
       ];
     }
 
@@ -886,7 +898,9 @@ export class IndexQueryEngine {
           'atom_html',
         )}) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(${dualReadColumn(
           'markdown',
-        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
+        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(${dualReadColumn(
+          'generation',
+        )}) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
       ],
       'file',
     );
@@ -932,6 +946,10 @@ export class IndexQueryEngine {
       lastModified,
       resourceCreatedAt,
       generation: result.generation ?? 0,
+      htmlGeneration:
+        (result as { html_generation?: number | null }).html_generation ??
+        result.generation ??
+        0,
       realmURL: result.realm_url ?? '',
       indexedAt,
     };

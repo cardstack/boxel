@@ -741,6 +741,44 @@ module(basename(import.meta.filename), function () {
       assert.true(isHtmlResource(resource));
     });
 
+    test('generation rides in meta.generation, independently per channel', function (assert) {
+      // The entry's index-data generation and the rendering's own generation
+      // are threaded separately, so they can differ per row.
+      let entry = buildEntryResource({
+        url: cardUrl,
+        htmlIds: [htmlResourceId({ url: cardUrl, format: 'fitted' })],
+        itemType: 'card',
+        generation: 42,
+      });
+      assert.deepEqual(entry.meta, { generation: 42 });
+      assert.true(isEntryResource(entry));
+
+      let html = buildHtmlResource({
+        url: cardUrl,
+        format: 'fitted',
+        renderType: authorRef,
+        html: '<div>hi</div>',
+        cardType: 'Author',
+        cssIds: [],
+        generation: 40,
+      });
+      assert.deepEqual(html.meta, { generation: 40 });
+      assert.true(isHtmlResource(html));
+
+      // Omitting generation omits meta entirely (additive: existing callers
+      // that don't supply it are unaffected).
+      let bare = buildEntryResource({ url: cardUrl, itemType: 'card' });
+      assert.strictEqual(bare.meta, undefined);
+      let bareHtml = buildHtmlResource({
+        url: cardUrl,
+        format: 'fitted',
+        html: '<div/>',
+        cardType: 'Author',
+        cssIds: [],
+      });
+      assert.strictEqual(bareHtml.meta, undefined);
+    });
+
     test('buildSparseItemResource projects the requested fields and stamps the marker', function (assert) {
       let full: CardResource = {
         type: 'card',

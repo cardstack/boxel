@@ -783,6 +783,7 @@ module(basename(import.meta.filename), function () {
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
         delete json.data.meta.resourceCreatedAt;
+        delete json.data.meta.generation;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmHref,
