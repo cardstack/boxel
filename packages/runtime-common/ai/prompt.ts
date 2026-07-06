@@ -437,7 +437,7 @@ async function getEnabledSkills(
     return await Promise.all(
       enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
         let content = await downloadFile(client, cardFileDef);
-        // Dual-path window: markdown skills (this branch) are the pull
+        // Dual-path window: markdown skills, handled here, are the pull
         // model — a SKILL.md is a plain file whose body is the instructions.
         // Present it in the same card-shaped form the rest of the prompt
         // pipeline expects, so skillCardsToMessages and getTools need no
