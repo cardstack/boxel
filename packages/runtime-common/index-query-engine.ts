@@ -240,6 +240,16 @@ export interface QueryResultsMeta {
 // `ph`). `cardURL` sorts on the primary-key `url`, which now exists in both
 // joined tables — qualify it to `i` so it is unambiguous. Callers outside the
 // query engine (query.ts, search-entry.ts) use only the keys of this map.
+// Full-text `matches` builds its tsvector from `markdown_search_text(markdown)`,
+// an IMMUTABLE Postgres function (defined in the prerendered_html migration)
+// that strips long base64-alphabet runs and caps length. Postgres caps a single
+// tsvector at 1,048,575 bytes and throws SQLSTATE 54000 (`make_tsvector`) above
+// it — which, for a plain GIN expression index, aborts the whole index build.
+// Some instances carry multi-megabyte markdown (base64 image data embedded by
+// image cards), so the raw column can't be indexed. The four markdown GIN
+// indexes (prerendered_html(_working), boxel_index(_working)) all index
+// `to_tsvector('english', markdown_search_text(markdown))`, so the query
+// predicate below must call the same function or the planner won't use them.
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
   createdAt: 'i.resource_created_at',
@@ -1230,10 +1240,14 @@ export class IndexQueryEngine {
   // `ph.url IS NULL` so a row whose prerendered_html markdown is intentionally
   // absent never re-matches through the boxel_index column, and so a mirrored
   // row is evaluated against exactly one channel. Both branches are expression
-  // matches against a GIN-indexed `to_tsvector('english', coalesce(<col>,''))`,
-  // so the planner can serve them with a bitmap-OR of the two indexes; in
-  // practice the fallback branch reaches ~no rows (dual-write mirrors every
-  // row), so the prerendered_html index carries the load.
+  // matches against a GIN-indexed
+  // `to_tsvector('english', markdown_search_text(<col>))` — `markdown_search_text`
+  // strips oversized base64 runs and caps length so the tsvector stays under
+  // Postgres's byte limit, and the predicate must call the same function as the
+  // migration's index expression or the planner won't use the index. The planner
+  // can serve the two branches with a bitmap-OR of the two indexes; in practice
+  // the fallback branch reaches ~no rows (dual-write mirrors every row), so the
+  // prerendered_html index carries the load.
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,
@@ -1246,9 +1260,9 @@ export class IndexQueryEngine {
         : [
             dbExpression({
               pg: [
-                `(to_tsvector('english', coalesce(ph.markdown, '')) @@ websearch_to_tsquery('english',`,
+                `(to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
-                `)) OR (ph.url IS NULL AND to_tsvector('english', coalesce(i.markdown, '')) @@ websearch_to_tsquery('english',`,
+                `)) OR (ph.url IS NULL AND to_tsvector('english', markdown_search_text(i.markdown)) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
                 `))`,
               ],
