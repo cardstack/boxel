@@ -7220,7 +7220,7 @@ module('markdown skills', () => {
   test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
     let content =
       '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
-    let { title, body } = parseMarkdownSkill(content, {
+    let { title, body, kind } = parseMarkdownSkill(content, {
       sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
     } as any);
     assert.strictEqual(title, 'Source Code Editing');
@@ -7228,7 +7228,16 @@ module('markdown skills', () => {
       body,
       '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
     );
+    assert.strictEqual(kind, 'skill');
     assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');
+  });
+
+  test('parseMarkdownSkill reports no kind for plain markdown', (assert) => {
+    let { kind } = parseMarkdownSkill(
+      '---\nname: "Notes"\n---\nJust some notes.',
+      { sourceUrl: 'https://r/notes.md' } as any,
+    );
+    assert.strictEqual(kind, undefined);
   });
 
   test('parseMarkdownSkill falls back to the file name when no frontmatter', (assert) => {

@@ -2684,9 +2684,9 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
-  // Enables the code-mode entry-point skill in a room. Rooms created while
-  // already in code mode never pass through activateCodingSkill (which only
-  // fires on a mode switch), so room creation calls this directly.
+  // Enables the code-mode entry-point skill in a room. Every room gets it at
+  // creation: its body is small, and it routes code requests (load skills on
+  // demand, switch mode) from any submode.
   async activateCodeModeEntryPoint(roomId: string) {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
@@ -2708,16 +2708,10 @@ export default class MatrixService extends Service {
     let defaultSkills = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills (pushed in full) activate
-      // alongside the code-mode entry-point skill — a short markdown
-      // directory whose linked skills the bot loads on demand. As the card
-      // skills convert to markdown, the pushed set shrinks; the separate
-      // entry-point skill can fold away once boxel-development's own
-      // SKILL.md (which links source-code-editing) is what gets enabled.
-      skillCardIdsToActivate: [
-        ...defaultSkills.map((s) => s.id),
-        codeModeEntryPointSkillUrl,
-      ],
+      // Dual-path window: the legacy card skills are still pushed in full;
+      // as they convert to markdown the pushed set shrinks. The entry-point
+      // skill needs nothing here — every room enables it at creation.
+      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
   }
 

@@ -453,11 +453,9 @@ export default class AiAssistantPanelService extends Service {
           }
 
           ({ roomId } = await createRoomCommand.execute(input));
-          // Rooms created while already in code mode miss the mode-switch
-          // hook that enables the entry-point skill; add it here.
-          if (this.operatorModeStateService.state.submode === 'code') {
-            await this.matrixService.activateCodeModeEntryPoint(roomId);
-          }
+          // Every room advertises the entry-point skill; its linked skills
+          // load on demand.
+          await this.matrixService.activateCodeModeEntryPoint(roomId);
         }
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);

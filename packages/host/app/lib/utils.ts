@@ -87,7 +87,8 @@ export function skillCardURL(skillId: string): string {
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
 export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
 
-// Code mode enables this entry-point skill instead of pushing full skill
-// bodies: its short body lists the code skills (source-code-editing, ...) by
-// SKILL.md path and the bot loads each on demand via readRealmFile.
+// Every room enables this entry-point skill at creation instead of pushing
+// full skill bodies: its short body lists the code skills
+// (source-code-editing, ...) by SKILL.md path and the bot loads each on
+// demand via readRealmFile.
 export const codeModeEntryPointSkillUrl = `${skillsRealmURL}skills/code-mode/SKILL.md`;
