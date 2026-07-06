@@ -205,6 +205,36 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
+    test('entries and html renderings carry meta.generation from their own channels', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      let entry = entryFor(doc, johnId)!;
+      let entryGeneration = entry.meta?.generation;
+      assert.strictEqual(
+        typeof entryGeneration,
+        'number',
+        'entry carries its index-data generation',
+      );
+      assert.ok(entryGeneration! > 0, `entry generation is positive`);
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      let htmlGeneration = html.meta?.generation;
+      assert.strictEqual(
+        typeof htmlGeneration,
+        'number',
+        'html rendering carries its own generation',
+      );
+      assert.ok(htmlGeneration! > 0, 'html generation is positive');
+      // The index visit and the prerender-html visit still run fused, so a
+      // freshly-indexed row's two channels sit at the same generation — but
+      // they are threaded from separate columns (boxel_index.generation vs.
+      // prerendered_html.generation), ready to diverge once the split lands.
+      assert.strictEqual(
+        htmlGeneration,
+        entryGeneration,
+        'fused indexing leaves both channels at the same generation',
+      );
+    });
+
     test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
       // The realm has no registered prefix by default; register one so a
       // canonical-RRI value resolves, and remove it afterward so the cached

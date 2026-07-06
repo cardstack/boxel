@@ -48,6 +48,7 @@ import {
   type RangeFilter,
   RANGE_OPERATORS,
   isCardTypeFilter,
+  isReferenceFilterField,
 } from './query.ts';
 import type { SerializedError } from './error.ts';
 import type { DBAdapter } from './db.ts';
@@ -161,6 +162,12 @@ export interface IndexedFile {
   iconHtml: string | null;
   markdown: string | null;
   generation: number;
+  // The generation the file's prerendered HTML was produced at
+  // (`prerendered_html.generation`, falling back to `boxel_index.generation`
+  // when no prerendered row exists). Distinct from `generation`, the file's
+  // index-data generation. Only populated on the search-entry read path
+  // (`fileEntryFromResult`); undefined on the single-file `getFile` path.
+  htmlGeneration?: number;
   realmURL: string;
   indexedAt: number | null;
 }
@@ -210,7 +217,8 @@ export type InstanceOrError = IndexedInstance | InstanceError;
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
-  // Restrict the result set to this subset of card URLs (SQL `i.url IN (...)`).
+  // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
+  // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
   timings?: RequestTimings;
 };
@@ -689,11 +697,11 @@ export class IndexQueryEngine {
         );
       }
 
-      if (
-        entryType === 'instance' &&
-        opts.cardUrls &&
-        opts.cardUrls.length > 0
-      ) {
+      if (opts.cardUrls && opts.cardUrls.length > 0) {
+        // Restrict to this URL subset. Instance rows key on their `.json` file
+        // URL; file rows on their canonical file URL — the same `i.url` column,
+        // so the filter applies to both projections (the single-instance
+        // card+html / file-meta+html GET sources one entry this way).
         conditions.push([
           'i.url IN',
           ...addExplicitParens(
@@ -799,12 +807,16 @@ export class IndexQueryEngine {
     results: (Partial<BoxelIndexTable> & {
       html?: string | null;
       used_render_type?: string | null;
+      // The dual-read rendering generation (`prerendered_html.generation`,
+      // falling back to `boxel_index.generation` when no prerendered row
+      // exists) — distinct from `generation`, the entry's index-data generation.
+      html_generation?: number | null;
     })[];
   }> {
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
-        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc',
+        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.generation) as generation',
       ];
     } else {
       // The full rendering set: every per-format HTML column whole (the
@@ -822,7 +834,9 @@ export class IndexQueryEngine {
           'head_html',
         )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
           'deps',
-        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc`,
+        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
+          'generation',
+        )}) as html_generation`,
       ];
     }
 
@@ -886,7 +900,9 @@ export class IndexQueryEngine {
           'atom_html',
         )}) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(${dualReadColumn(
           'markdown',
-        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
+        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(${dualReadColumn(
+          'generation',
+        )}) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
       ],
       'file',
     );
@@ -932,6 +948,10 @@ export class IndexQueryEngine {
       lastModified,
       resourceCreatedAt,
       generation: result.generation ?? 0,
+      htmlGeneration:
+        (result as { html_generation?: number | null }).html_generation ??
+        result.generation ??
+        0,
       realmURL: result.realm_url ?? '',
       indexedAt,
     };
@@ -1104,16 +1124,11 @@ export class IndexQueryEngine {
   // strings or URLs and whose `in` filter is an exact string comparison —
   // those are matched exactly as given, gaining no extra normalized spellings,
   // so exact semantics are preserved for non-reference fields.
-  private isReferenceFilterField(key: string): boolean {
-    let leaf = key.split('.').pop();
-    return leaf === 'id' || leaf === 'url';
-  }
-
   private expandReferenceFilterValues(
     key: string,
     values: JSONTypes.Value[],
   ): JSONTypes.Value[] {
-    if (!this.isReferenceFilterField(key)) {
+    if (!isReferenceFilterField(key)) {
       return values;
     }
     let expanded: JSONTypes.Value[] = [];

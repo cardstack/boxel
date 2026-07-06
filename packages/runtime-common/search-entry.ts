@@ -43,6 +43,7 @@ import {
 import { isCodeRef } from './card-document-shape.ts';
 import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
+import { parseUsedRenderType } from './search-resource-helpers.ts';
 
 // ---------------------------------------------------------------------------
 // The entry query.
@@ -658,6 +659,86 @@ export function parseSearchEntryQueryFromPayload(
 }
 
 // ---------------------------------------------------------------------------
+// The single-instance GET's query-string surface. The card+html /
+// file-meta+html GET sources one entry by URL, so it needs no membership
+// query — only the rendering selection (`?format=` / `?renderType=`) and the
+// sparse fieldset (`?fields=`), the query-string spelling of the html. branch's
+// `htmlQuery` + `fields[entry]`. The two helpers translate those params into
+// the same `HtmlQuery` / `SearchEntryFieldset` the engine consumes, reusing
+// the wire grammar's validation.
+// ---------------------------------------------------------------------------
+
+// `?format=` (default `fitted`) + optional `?renderType=<module>/<name>` → the
+// htmlQuery selecting the rendering. An absent `renderType` leaves only the
+// card's native type in play (no renderType predicate), exactly like an
+// htmlQuery that constrains format alone.
+export function htmlQueryFromParams(params: {
+  format?: string | null;
+  renderType?: string | null;
+}): HtmlQuery {
+  // Empty or absent means "unspecified" for both dimensions, consistent with
+  // an omitted `?fields=` — the universal query-string convention. So an empty
+  // `?format=` falls back to fitted, and an empty `?renderType=` leaves only
+  // the native type in play (no predicate). A genuinely malformed value still
+  // fails: a bad format is rejected by `assertHtmlQuery` below, and a
+  // renderType that isn't a `<module>/<name>` key throws here.
+  let format = params.format || DEFAULT_HTML_QUERY.eq.format;
+  let renderType: unknown;
+  if (params.renderType) {
+    renderType = parseUsedRenderType(params.renderType);
+    if (renderType === undefined) {
+      throw invalidHtmlQuery(
+        `renderType must be a <module>/<name> key (got "${params.renderType}")`,
+      );
+    }
+  }
+  let htmlQuery = {
+    eq: {
+      format,
+      ...(renderType !== undefined ? { renderType } : {}),
+    },
+  };
+  // Validates the format is a known rendering format and the renderType is a
+  // CodeRef — the same checks the wire grammar applies to a bound htmlQuery.
+  assertHtmlQuery(htmlQuery);
+  return htmlQuery;
+}
+
+// `?fields=` → the sparse fieldset. The single GET serves the three
+// combinations `html`, `item`, and `html,item`; the wire grammar's sparse
+// `item.<field>` selectors have no query-string spelling here. Omitted → the
+// default resolution policy (the selected rendering, falling back to the item
+// where none matched).
+export function fieldsetFromParam(
+  fields: string | null | undefined,
+): SearchEntryFieldset {
+  if (fields == null || fields.trim() === '') {
+    return { html: true, item: { kind: 'none' }, itemAsFallback: true };
+  }
+  let html = false;
+  let item = false;
+  for (let part of fields.split(',').map((f) => f.trim())) {
+    if (part === 'html') {
+      html = true;
+    } else if (part === 'item') {
+      item = true;
+    } else if (part !== '') {
+      throw invalidQuery(
+        `each fields entry must be "html" or "item" (got "${part}")`,
+      );
+    }
+  }
+  if (!html && !item) {
+    throw invalidQuery(`fields must name at least one of "html" or "item"`);
+  }
+  return {
+    html,
+    item: item ? { kind: 'full' } : { kind: 'none' },
+    itemAsFallback: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The wire grammar — what a client sends to `_search` /
 // `_federated-search`. `SearchEntryWireQuery` is the entry-rooted
 // request body: entry membership addressed through `item.` paths (`item.on`
@@ -872,8 +953,13 @@ export function buildEntryResource(args: {
   // The id of the result's `icon` resource (its native-type internal key) —
   // omitted when the row carries no `icon_html`.
   iconId?: string;
+  // The row's index-data generation (`boxel_index.generation`) — rides in
+  // `meta.generation` so a consumer can tell fresh index data from stale.
+  // Omitted only by callers with no generation to surface (unit tests); the
+  // engine always supplies it.
+  generation?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId } = args;
+  let { url, htmlIds, itemType, iconId, generation } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -892,6 +978,9 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
+  if (generation !== undefined) {
+    resource.meta = { generation };
+  }
   return resource;
 }
 
@@ -909,9 +998,15 @@ export function buildHtmlResource(args: {
   cardType: string;
   isError?: boolean;
   cssIds: string[];
+  // The generation this rendering was produced at
+  // (`prerendered_html.generation`) — rides in `meta.generation`, independent
+  // of the owning entry's index-data generation. Omitted only by callers with
+  // no generation to surface (unit tests); the engine always supplies it.
+  generation?: number;
 }): HtmlResource {
-  let { url, format, renderType, html, cardType, isError, cssIds } = args;
-  return {
+  let { url, format, renderType, html, cardType, isError, cssIds, generation } =
+    args;
+  let resource: HtmlResource = {
     type: HtmlResourceType,
     id: htmlResourceId({ url, format, renderType }),
     attributes: {
@@ -927,6 +1022,10 @@ export function buildHtmlResource(args: {
       },
     },
   };
+  if (generation !== undefined) {
+    resource.meta = { generation };
+  }
+  return resource;
 }
 
 // One card-type `icon` resource (see `IconResource`): the per-type descriptor

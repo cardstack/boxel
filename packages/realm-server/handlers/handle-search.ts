@@ -223,17 +223,23 @@ async function respondWithJobScopedSearchCache(
     emitTimeline?: () => void;
   },
 ): Promise<void> {
-  let { searchCache, jobId, consumingRealm, realms, query, opts, runSearch } =
-    args;
+  let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
   let emitTimeline = args.emitTimeline ?? (() => {});
   let cacheable = searchCache && jobId && consumingRealm;
 
   if (cacheable) {
+    // Fold each realm's generation fingerprint (index + prerendered-HTML) into
+    // the cache key so the ETag advances when either channel does — a cached
+    // `304` can't pin an HTML-less or older-rendering result after newer HTML
+    // lands. Purely a key change: it only fragments the cache, and the body a
+    // miss produces reflects the current DB state.
+    let generations = await searchCache!.realmGenerations(realms);
+    let keyOpts = { ...(args.opts as Record<string, unknown>), generations };
     let expectedEtag = searchCache!.computeETag({
       jobId: jobId!,
       realms,
       query,
-      opts,
+      opts: keyOpts,
     });
     let ifNoneMatch = ctxt.get('If-None-Match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
@@ -245,7 +251,7 @@ async function respondWithJobScopedSearchCache(
         jobId: jobId!,
         realms,
         query,
-        opts,
+        opts: keyOpts,
       });
       if (cached !== undefined) {
         ctxt.status = 304;
@@ -258,7 +264,7 @@ async function respondWithJobScopedSearchCache(
       jobId: jobId!,
       realms,
       query,
-      opts,
+      opts: keyOpts,
       populate: runSearch,
     });
     await setContextResponse(

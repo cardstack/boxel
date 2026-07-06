@@ -9,6 +9,7 @@ import {
   isMatchesFilter,
   isNotFilter,
   isRangeFilter,
+  isReferenceFilterField,
   type Filter,
   type RangeFilterValue,
   type RangeOperator,
@@ -269,6 +270,67 @@ function resolvePath(
   return { values, leafField, sawUnresolvable };
 }
 
+// Equivalent spellings of a reference value, mirroring the index engine's
+// `expandReferenceFilterValues` exactly: match the value as given by default,
+// and expand to the full RRI / real-URL / virtual-alias set ONLY for a
+// registered-prefix RRI. URL-form values (and ordinary strings on an `id`/`url`
+// path) stay exact — expanding them would let client reconciliation match a
+// virtual/RRI spelling the server, which only expands prefixes, would not
+// return.
+function referenceForms(
+  value: unknown,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  if (typeof value !== 'string') {
+    return [];
+  }
+  let forms = new Set<string>([value]);
+  if (virtualNetwork.isRegisteredPrefix(value)) {
+    try {
+      for (let form of virtualNetwork.equivalentURLForms(
+        virtualNetwork.toURL(value).href,
+      )) {
+        forms.add(form);
+      }
+    } catch {
+      // Unresolvable prefix — match the value as given.
+    }
+  }
+  return [...forms];
+}
+
+// Compare a resolved leaf value against a formatted filter value. For reference
+// leaves (`id` / `url`) the comparison is spelling-tolerant: a card whose id is
+// in URL form matches a filter value in canonical RRI (prefix) form, and vice
+// versa. Non-reference leaves use exact equality.
+function leafMatches(
+  leafValue: unknown,
+  filterValue: unknown,
+  path: string,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (isEqual(leafValue, filterValue)) {
+    return true;
+  }
+  if (
+    isReferenceFilterField(path) &&
+    typeof leafValue === 'string' &&
+    typeof filterValue === 'string' &&
+    // Only a registered-prefix RRI expands to alternate spellings; when neither
+    // side is one, `referenceForms` returns each value unchanged and the sets
+    // can only intersect on an exact match, which `isEqual` above already ruled
+    // out. Skip the allocation in that (common) case.
+    (virtualNetwork.isRegisteredPrefix(leafValue) ||
+      virtualNetwork.isRegisteredPrefix(filterValue))
+  ) {
+    let leafForms = new Set(referenceForms(leafValue, virtualNetwork));
+    return referenceForms(filterValue, virtualNetwork).some((form) =>
+      leafForms.has(form),
+    );
+  }
+  return false;
+}
+
 // -- per-operator predicates -------------------------------------------------
 
 function matchEq(
@@ -284,6 +346,11 @@ function matchEq(
     return existential(values, sawUnresolvable, (lv) => lv == null);
   }
   let formatted = formatValue(leafField, value, api);
+  // Exact match, including for reference (`id`/`url`) leaves: the server's
+  // `fieldEqFilter` deliberately keeps `eq` exact (so a singular `.id` eq is
+  // served by the `@>` GIN path) and applies canonical-RRI tolerance to `in`
+  // filters only. Mirror that here — tolerant `eq` would diverge from the
+  // authoritative search response during client reconciliation.
   return existential(values, sawUnresolvable, (leafValue) =>
     isEqual(leafValue, formatted),
   );
@@ -309,7 +376,9 @@ function matchIn(
     sawUnresolvable,
     (leafValue) =>
       (hasNull && leafValue == null) ||
-      formatted.some((fv) => isEqual(leafValue, fv)),
+      formatted.some((fv) =>
+        leafMatches(leafValue, fv, path, api.virtualNetwork),
+      ),
   );
 }
 

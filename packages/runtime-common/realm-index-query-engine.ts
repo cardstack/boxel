@@ -49,6 +49,7 @@ import {
   isSingleFileMetaDocument,
   type SingleCardDocument,
   type EntryCollectionDocument,
+  type EntrySingleDocument,
   type EntryIncludedResource,
   isEntryCollectionDocument,
 } from './document-types.ts';
@@ -58,6 +59,7 @@ import type {
   CardResource,
   CssResource,
   FileMetaResource,
+  HtmlQuery,
   IconResource,
   QueryFieldMeta,
   Saved,
@@ -79,6 +81,7 @@ import {
   resolveHtmlQuery,
   searchEntryWireQueryFromQuery,
   type RenderingCandidate,
+  type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
@@ -148,6 +151,12 @@ type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
+  // The primary card's index-data generation (`boxel_index.generation`). The
+  // realm's card+json GET handler stamps it onto the response's per-instance
+  // `meta` so a consumer can tell fresh index data from stale. Kept off the
+  // assembled `doc` here — direct `cardDocument()` callers (indexing, POST /
+  // PATCH echoes) don't surface it — and applied only on the GET response.
+  generation: number;
   // indexed_at on the primary card's index row. Bumps on every reindex
   // (direct file write OR dependency-triggered re-write), so it's a
   // complete fingerprint for the assembled card+json document and is
@@ -317,6 +326,13 @@ export class RealmIndexQueryEngine {
       // extension.
       let cardUrl = fileUrl.endsWith('.json') ? fileUrl.slice(0, -5) : fileUrl;
       let hasError = Boolean(row.has_error);
+      // The entry carries its index-data generation (`boxel_index.generation`);
+      // each `html` rendering carries the generation it was produced at
+      // (`prerendered_html.generation`, dual-read with a boxel_index fallback).
+      // The two channels advance independently, so they can differ per row.
+      let generation = (row.generation as number | null | undefined) ?? 0;
+      let htmlGeneration =
+        (row.html_generation as number | null | undefined) ?? generation;
 
       let htmlIds: string[] | undefined;
       // The result's type icon, deduped by native-type internal key. Resolved
@@ -367,6 +383,7 @@ export class RealmIndexQueryEngine {
             cardType: (row.display_names as string[] | null)?.[0] ?? '',
             isError: hasError || undefined,
             cssIds,
+            generation: htmlGeneration,
           });
           htmlResources.push(htmlResource);
           ids.push(htmlResource.id);
@@ -385,6 +402,7 @@ export class RealmIndexQueryEngine {
               cardType: (row.display_names as string[] | null)?.[0] ?? '',
               isError: true,
               cssIds: [],
+              generation: htmlGeneration,
             });
             htmlResources.push(htmlResource);
             ids.push(htmlResource.id);
@@ -422,7 +440,13 @@ export class RealmIndexQueryEngine {
       }
 
       data.push(
-        buildEntryResource({ url: cardUrl, htmlIds, itemType, iconId }),
+        buildEntryResource({
+          url: cardUrl,
+          htmlIds,
+          itemType,
+          iconId,
+          generation,
+        }),
       );
     }
 
@@ -434,6 +458,54 @@ export class RealmIndexQueryEngine {
       { htmlResources, cssById, iconById, itemResources, fullItemRoots },
       opts,
     );
+  }
+
+  // The single-instance counterpart of `searchEntries`: one entry sourced by
+  // URL rather than by a membership query. `kind` selects the instance vs file
+  // projection — the caller's accept header is the discriminator (card+html →
+  // instance, file-meta+html → file), mirroring the card+json vs
+  // file-meta+json GET split. Reuses the collection path with a one-URL
+  // `cardUrls` filter (so all the rendering enumeration / htmlQuery matching /
+  // css + icon dedup / item serialization + loadLinks assembly is shared),
+  // then unwraps to a single-resource document. Returns undefined when no row
+  // matches the URL (the handler 404s).
+  async searchEntry(
+    url: URL,
+    args: {
+      htmlQuery: HtmlQuery;
+      fieldset: SearchEntryFieldset;
+      kind: 'instance' | 'file';
+    },
+    opts?: Options,
+  ): Promise<EntrySingleDocument | undefined> {
+    let { htmlQuery, fieldset, kind } = args;
+    let searchEntryQuery: SearchEntryQuery = {
+      itemQuery: {},
+      htmlQuery,
+      fieldset,
+      cardUrls: [url.href],
+    };
+    let collection =
+      kind === 'file'
+        ? // The file path is reached only through this explicit `kind` — an
+          // empty membership query never routes to file-meta on its own (see
+          // `queryTargetsFileMeta`), so a file's entry must be requested by
+          // accept header. `cardUrls` rides in `opts` for the file path (it's
+          // read there, not off the SearchEntryQuery).
+          await this.searchEntriesFileMeta(searchEntryQuery, {
+            ...opts,
+            cardUrls: [url.href],
+          })
+        : await this.searchEntries(searchEntryQuery, opts);
+    let [entry] = collection.data;
+    if (!entry) {
+      return undefined;
+    }
+    let doc: EntrySingleDocument = { data: entry };
+    if (collection.included && collection.included.length > 0) {
+      doc.included = collection.included;
+    }
+    return doc;
   }
 
   // The file-meta counterpart of `searchEntries`. Files are indexed as
@@ -509,6 +581,7 @@ export class RealmIndexQueryEngine {
             html: candidate.html,
             cardType: file.displayNames?.[0] ?? '',
             cssIds,
+            generation: file.htmlGeneration ?? file.generation,
           });
           htmlResources.push(htmlResource);
           ids.push(htmlResource.id);
@@ -539,6 +612,7 @@ export class RealmIndexQueryEngine {
           htmlIds,
           itemType: itemEmitted ? FileMetaResourceType : undefined,
           iconId,
+          generation: file.generation,
         }),
       );
     }
@@ -754,6 +828,7 @@ export class RealmIndexQueryEngine {
     return {
       type: 'doc',
       doc,
+      generation: instance.generation,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
     };
