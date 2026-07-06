@@ -66,6 +66,7 @@ import type {
 import type { ToolChoice } from '../helpers/ai.ts';
 import { logger } from '../log.ts';
 
+import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -466,20 +467,22 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
 // Splits a markdown skill into its instruction body and a title. The body is
 // everything after the leading `--- frontmatter ---` block (the frontmatter is
 // metadata, not instructions); the title is the frontmatter `name`, falling
-// back to the file name.
+// back to the file name. Invalid frontmatter YAML degrades to the raw content
+// as body — prompt assembly must not crash on a malformed skill file.
 export function parseMarkdownSkill(
   content: string,
   fileDef: SerializedFileDef,
 ): { title: string; body: string } {
   let body = content;
   let title: string | undefined;
-  let match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-  if (match) {
-    body = content.slice(match[0].length);
-    let nameLine = match[1].match(/^name:\s*(.+)$/m);
-    if (nameLine) {
-      title = nameLine[1].trim().replace(/^["']|["']$/g, '');
+  try {
+    let { data, body: parsedBody } = parseFrontmatter(content);
+    body = parsedBody;
+    if (typeof data.name === 'string' && data.name.trim()) {
+      title = data.name.trim();
     }
+  } catch {
+    // Malformed frontmatter: keep the full content as the body.
   }
   if (!title) {
     let path = fileDef.sourceUrl ?? fileDef.name ?? '';

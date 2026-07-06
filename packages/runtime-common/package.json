@@ -91,6 +91,7 @@
     "super-fast-md5": "catalog:",
     "transform-modules-amd-plugin": "workspace:*",
     "uuid": "catalog:",
+    "yaml": "catalog:",
     "zod": "^3.24.4"
   },
   "devDependencies": {
