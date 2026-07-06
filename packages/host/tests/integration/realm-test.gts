@@ -175,28 +175,31 @@ module('Integration | realm', function (hooks) {
     // Registering a realm-prefix mapping makes the same GET serve the id (and
     // links.self) in canonical RRI (prefix) form. The unresolve happens at
     // serve time in getCard, so the mapping need not be present at index time.
-    getService('network').virtualNetwork.addRealmMapping(
-      '@test-prefix/',
-      testRealmURL,
-    );
-
-    let rriResponse = await handle(
-      realm,
-      new Request(`${testRealmURL}dir/empty`, {
-        headers: { Accept: 'application/vnd.card+json' },
-      }),
-    );
-    let rriDoc = await rriResponse.json();
-    assert.strictEqual(
-      rriDoc.data.id,
-      '@test-prefix/dir/empty',
-      'a prefix-mapped realm serves the instance id in canonical RRI form',
-    );
-    assert.strictEqual(
-      rriDoc.data.links.self,
-      '@test-prefix/dir/empty',
-      'links.self is served in canonical RRI form too',
-    );
+    // The network service's VirtualNetwork is shared across tests, so remove
+    // the mapping afterward to avoid leaking it into later tests.
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test-prefix/', testRealmURL);
+    try {
+      let rriResponse = await handle(
+        realm,
+        new Request(`${testRealmURL}dir/empty`, {
+          headers: { Accept: 'application/vnd.card+json' },
+        }),
+      );
+      let rriDoc = await rriResponse.json();
+      assert.strictEqual(
+        rriDoc.data.id,
+        '@test-prefix/dir/empty',
+        'a prefix-mapped realm serves the instance id in canonical RRI form',
+      );
+      assert.strictEqual(
+        rriDoc.data.links.self,
+        '@test-prefix/dir/empty',
+        'links.self is served in canonical RRI form too',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test-prefix/');
+    }
   });
 
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
