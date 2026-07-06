@@ -50,6 +50,40 @@ export interface BoxelIndexTable {
   job_id?: number | null;
 }
 
+// Prerendered HTML lives on its own channel, separate from the search-doc
+// index in `boxel_index`. One row per (url, realm_url, type), one column per
+// HTML format. `icon_html` deliberately is NOT here — the icon renders in the
+// index visit and stays on `boxel_index`. `generation` correlates a rendering
+// with the index data it belongs to (fresh when it equals the matching
+// `boxel_index` row's generation). A render error rides on `error_doc` here;
+// an index error rides on `boxel_index.error_doc`; an instance's effective
+// error is the union of the two.
+export interface PrerenderedHtmlTable {
+  url: string;
+  file_alias: string;
+  realm_url: string;
+  type: 'instance' | 'file';
+  fitted_html: Record<string, string> | null;
+  embedded_html: Record<string, string> | null;
+  atom_html: string | null;
+  head_html: string | null;
+  isolated_html: string | null;
+  // The full-text `matches` predicate and its GIN index read this column.
+  markdown: string | null;
+  // Scoped-CSS URLs / deps needed to serve the HTML. `last_known_good_deps`
+  // is the fallback preserved through error cycles.
+  deps: string[] | null;
+  last_known_good_deps: string[] | null;
+  generation: number;
+  is_deleted: boolean | null;
+  error_doc: SerializedError | null;
+  rendered_at: string | null; // pg represents big integers as strings in javascript
+  // Originating worker job id. Only present on `prerendered_html_working`;
+  // the production `prerendered_html` mirror does not carry this column,
+  // hence the field is optional.
+  job_id?: number | null;
+}
+
 export interface RealmGenerationsTable {
   realm_url: string;
   current_generation: number;
@@ -116,6 +150,7 @@ export const coerceTypes = Object.freeze({
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
+  rendered_at: 'VARCHAR',
   value: 'JSON',
   diagnostics: 'JSON',
 });

@@ -51,6 +51,25 @@ import {
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
+// Non-primary-key columns of `prerendered_html(_working)` — everything the
+// dual-write upserts overwrite on conflict. The PK is (url, realm_url, type).
+const PRERENDERED_HTML_MUTABLE_COLUMNS = [
+  'file_alias',
+  'fitted_html',
+  'embedded_html',
+  'atom_html',
+  'head_html',
+  'isolated_html',
+  'markdown',
+  'deps',
+  'last_known_good_deps',
+  'generation',
+  'is_deleted',
+  'error_doc',
+  'rendered_at',
+  'job_id',
+];
+
 export class IndexWriter {
   #dbAdapter: DBAdapter;
   constructor(dbAdapter: DBAdapter) {
@@ -825,6 +844,99 @@ export class Batch {
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+      ] as Expression);
+
+      // Mirror every invalidated URL's HTML onto prerendered_html_working in one
+      // projection from boxel_index_working — the authoritative, complete source
+      // for the invalidation set. Doing it here (rather than per updateEntry)
+      // also covers rows a resumed job wrote in a prior attempt that this
+      // attempt never revisits, and rows written between the backfill migration
+      // and the dual-write deploy, so the swap below can never silently skip a
+      // promoted URL.
+      await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+
+      // Swap the mirrored HTML rows into production in the same transaction,
+      // keyed by the same invalidation set and generation. `prerendered_html`
+      // has no `job_id` column, so getColumnNames yields the production
+      // projection and the SELECT drops `job_id` from prerendered_html_working.
+      let prerenderedColumns = (
+        await this.#dbAdapter.getColumnNames('prerendered_html')
+      ).map((c) => [c]);
+      let prerenderedNames = flattenDeep(prerenderedColumns);
+      await this.#query([
+        'INSERT INTO prerendered_html',
+        ...addExplicitParens(separatedByCommas(prerenderedColumns)),
+        'SELECT',
+        ...separatedByCommas(prerenderedColumns),
+        'FROM prerendered_html_working',
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url in',
+            ...addExplicitParens(
+              separatedByCommas(
+                [...this.#invalidations].map((i) => [param(i)]),
+              ),
+            ),
+          ],
+        ]),
+        'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
+        ...separatedByCommas(
+          prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
+        ),
+      ] as Expression);
+    }
+  }
+
+  // Dual-write: project `boxel_index_working` rows onto `prerendered_html_working`
+  // for the given URLs. During the fused indexing pass `boxel_index_working`
+  // holds the HTML (the read path still reads it); this mirrors it onto the
+  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`) and
+  // the last-known-good HTML preserved through error cycles, with `rendered_at`
+  // seeded from the source row's `indexed_at`. Called from `applyBatchUpdates`
+  // over the whole invalidation set just before the production swap, so the
+  // projection is complete for every promoted row. Deriving from the
+  // already-persisted row reuses the error-path last-known-good merge that
+  // `updateEntry` computed and avoids re-serializing the HTML through JS.
+  private async syncPrerenderedHtmlFromWorking(urls: string[]): Promise<void> {
+    if (urls.length === 0) {
+      return;
+    }
+    let uniqueUrls = [...new Set(urls)];
+    // SQLite has a lower bound-parameter limit than Postgres; chunk the URL
+    // list to keep the IN-clause within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      await this.#query([
+        `INSERT INTO prerendered_html_working (
+           url, file_alias, realm_url, type,
+           fitted_html, embedded_html, atom_html, head_html, isolated_html,
+           markdown, deps, last_known_good_deps,
+           generation, is_deleted, error_doc, rendered_at, job_id
+         )
+         SELECT
+           url, file_alias, realm_url, type,
+           fitted_html, embedded_html, atom_html, head_html, isolated_html,
+           markdown, deps, last_known_good_deps,
+           generation, is_deleted, error_doc, indexed_at, job_id
+         FROM boxel_index_working WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(urlBatch.map((url) => [param(url)])),
+            ),
+          ],
+        ]),
+        `ON CONFLICT ON CONSTRAINT prerendered_html_working_pkey DO UPDATE SET`,
+        ...separatedByCommas(
+          PRERENDERED_HTML_MUTABLE_COLUMNS.map((name) => [
+            `${name}=EXCLUDED.${name}`,
+          ]),
+        ),
       ] as Expression);
     }
   }
