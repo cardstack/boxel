@@ -299,11 +299,12 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .kind-text-only:not(:disabled):hover,
       .kind-text-only:not(:disabled):active {
-        --boxel-button-color: var(
-          --accent,
-          color-mix(in oklab, currentColor 10%, transparent)
+        --boxel-button-color: color-mix(
+          in oklab,
+          currentColor 10%,
+          transparent
         );
-        --boxel-button-text-color: var(--accent-foreground, currentColor);
+        --boxel-button-text-color: currentColor;
       }
 
       .kind-primary-dark {
@@ -390,6 +391,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-lg);
         --boxel-button-min-height: var(--boxel-button-tall);
         --boxel-button-min-width: 5rem;
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       }
 
       /*
