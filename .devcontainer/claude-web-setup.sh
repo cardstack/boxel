@@ -53,10 +53,14 @@ mise run build:ui
 # mkcert provisions the local-dev CA + leaf cert; infra:ensure-dev-cert fails
 # hard if it's missing. The base cloud image doesn't ship it, so install it
 # (and libnss3-tools, which mkcert -install needs to write the NSS trust DB).
+# --allow-releaseinfo-change: the base image carries third-party PPAs whose
+# release metadata drifts (a Label change makes plain `apt-get update` exit
+# non-zero for the whole run, killing this script under `set -e`), and mkcert
+# comes from the stock ubuntu archive anyway.
 if ! command -v mkcert >/dev/null 2>&1; then
   SUDO=""
   [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
-  $SUDO apt-get update -y
+  $SUDO apt-get update -y --allow-releaseinfo-change
   $SUDO apt-get install -y mkcert libnss3-tools
 fi
 
