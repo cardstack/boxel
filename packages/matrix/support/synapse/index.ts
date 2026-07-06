@@ -553,10 +553,14 @@ export async function createRegistrationToken(
     },
   );
   if (!res.ok) {
+    let body = await res.text();
+    // Registering is idempotent: an earlier (possibly partial) run may have
+    // already created this token, and Synapse rejects duplicates with a 400.
+    if (res.status === 400 && body.includes('Token already exists')) {
+      return;
+    }
     throw new Error(
-      `could not create registration token: ${
-        res.status
-      } - ${await res.text()}`,
+      `could not create registration token: ${res.status} - ${body}`,
     );
   }
 }
