@@ -105,26 +105,49 @@ exports.up = (pgm) => {
   pgm.createIndex('prerendered_html_working', ['realm_url']);
   pgm.createIndex('prerendered_html_working', ['realm_url', 'job_id']);
 
-  // GIN expression index for the full-text `matches` predicate. The
-  // expression must match matchesCondition() in
-  // packages/runtime-common/index-query-engine.ts — same language literal and
-  // coalesce() wrapper — or the planner won't use it. Built non-concurrently
-  // inside the migration transaction: these tables are brand new and have no
-  // concurrent writers until the dual-write code deploys behind this same
-  // migration.
+  // `markdown_search_text` sanitizes markdown before it is fed to `to_tsvector`.
+  // Postgres caps a single tsvector at 1,048,575 bytes; `make_tsvector` throws
+  // SQLSTATE 54000 above that, which aborts a plain GIN expression-index build.
+  // Image cards embed base64 in their markdown (multi-megabyte, one long
+  // `[A-Za-z0-9+/=]` run that the `+`/`/` split into thousands of lexemes), so
+  // the raw column can't be indexed. The function strips runs of >=255
+  // base64-alphabet characters (no natural word is that long, so real prose is
+  // untouched) and then caps length at 400000 as a backstop against any other
+  // pathological density. IMMUTABLE so it is usable in an index expression;
+  // matchesCondition() in packages/runtime-common/index-query-engine.ts MUST
+  // call this same function or the planner won't use the index. The boxel_index
+  // markdown FTS indexes are rebuilt onto this function in a later migration.
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION markdown_search_text(md text) RETURNS text
+      LANGUAGE sql IMMUTABLE PARALLEL SAFE
+      AS $$
+        SELECT left(
+          regexp_replace(coalesce(md, ''), '[A-Za-z0-9+/=]{255,}', ' ', 'g'),
+          400000
+        )
+      $$;
+  `);
+
+  // GIN expression index for the full-text `matches` predicate. Built
+  // non-concurrently inside the migration transaction: these tables are brand
+  // new and have no concurrent writers until the dual-write code deploys behind
+  // this same migration.
   pgm.sql(`
     CREATE INDEX prerendered_html_markdown_fts_idx
       ON prerendered_html
-      USING GIN (to_tsvector('english', coalesce(markdown, '')));
+      USING GIN (to_tsvector('english', markdown_search_text(markdown)));
   `);
   pgm.sql(`
     CREATE INDEX prerendered_html_working_markdown_fts_idx
       ON prerendered_html_working
-      USING GIN (to_tsvector('english', coalesce(markdown, '')));
+      USING GIN (to_tsvector('english', markdown_search_text(markdown)));
   `);
 };
 
 exports.down = (pgm) => {
   pgm.dropTable('prerendered_html_working', { cascade: true });
   pgm.dropTable('prerendered_html', { cascade: true });
+  // Dropped last: the boxel_index FTS-repair migration (later timestamp) has
+  // already reverted off this function by the time this down() runs.
+  pgm.sql(`DROP FUNCTION IF EXISTS markdown_search_text(text);`);
 };
