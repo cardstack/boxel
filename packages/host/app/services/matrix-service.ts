@@ -2684,6 +2684,19 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
+  // Enables the code-mode entry-point skill in a room. Rooms created while
+  // already in code mode never pass through activateCodingSkill (which only
+  // fires on a mode switch), so room creation calls this directly.
+  async activateCodeModeEntryPoint(roomId: string) {
+    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+      this.commandService.commandContext,
+    );
+    await updateRoomSkillsCommand.execute({
+      roomId,
+      skillCardIdsToActivate: [codeModeEntryPointSkillUrl],
+    });
+  }
+
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
