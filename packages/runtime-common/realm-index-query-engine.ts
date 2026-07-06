@@ -148,6 +148,12 @@ type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
+  // The primary card's index-data generation (`boxel_index.generation`). The
+  // realm's card+json GET handler stamps it onto the response's per-instance
+  // `meta` so a consumer can tell fresh index data from stale. Kept off the
+  // assembled `doc` here — direct `cardDocument()` callers (indexing, POST /
+  // PATCH echoes) don't surface it — and applied only on the GET response.
+  generation: number;
   // indexed_at on the primary card's index row. Bumps on every reindex
   // (direct file write OR dependency-triggered re-write), so it's a
   // complete fingerprint for the assembled card+json document and is
@@ -746,15 +752,7 @@ export class RealmIndexQueryEngine {
       };
     }
     doc = {
-      data: {
-        ...instance.instance,
-        // Surface the instance's index-data generation
-        // (`boxel_index.generation`) in per-instance `meta` so a consumer can
-        // tell fresh index data from stale. A fresh `meta` object — never a
-        // mutation of the cached pristine doc's `meta`.
-        meta: { ...instance.instance.meta, generation: instance.generation },
-        ...{ links: { self: url.href } },
-      },
+      data: { ...instance.instance, ...{ links: { self: url.href } } },
     };
     if (!doc) {
       throw new Error(
@@ -779,6 +777,7 @@ export class RealmIndexQueryEngine {
     return {
       type: 'doc',
       doc,
+      generation: instance.generation,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
     };

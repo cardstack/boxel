@@ -5116,6 +5116,11 @@ export class Realm {
       }
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
+      // Surface the instance's index-data generation
+      // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
+      // card+json GET can tell fresh index data from stale. A fresh `meta`
+      // object — never a mutation of the cached pristine doc's `meta`.
+      card.data.meta = { ...card.data.meta, generation: maybeError.generation };
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the

@@ -108,6 +108,9 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/empty.json');
+    // The card+json GET stamps the index-data generation in per-instance meta;
+    // it's server metadata not asserted by this structural comparison.
+    delete json.data.meta.generation;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -199,6 +202,9 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
+    // The card+json GET stamps the index-data generation in per-instance meta;
+    // it's server metadata not asserted by this structural comparison.
+    delete json.data.meta.generation;
     assert.deepEqual(json, {
       data: {
         type: 'card',
