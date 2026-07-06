@@ -313,12 +313,12 @@ module(basename(import.meta.filename), function () {
         i.toString(36),
       ).join('/');
       await seedRow(dbAdapter, {
-        url: `${testRealmURL}polaroid.json`,
-        markdown: `Sunset polaroid caption. data:image/png;base64,${base64Blob}`,
+        url: `${testRealmURL}embedded-image.json`,
+        markdown: `Embedded image caption text. data:image/png;base64,${base64Blob}`,
       });
 
       let { meta } = await engine.searchCards(new URL(testRealmURL), {
-        filter: { matches: 'sunset polaroid' },
+        filter: { matches: 'embedded image caption' },
       });
       assert.strictEqual(
         meta.page.total,

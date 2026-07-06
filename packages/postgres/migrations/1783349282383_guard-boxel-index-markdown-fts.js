@@ -1,18 +1,16 @@
 exports.shorthands = undefined;
 
 // Rebuild the boxel_index / boxel_index_working markdown FTS indexes onto
-// `markdown_search_text(markdown)` (created in the prerendered_html migration),
-// matching the prerendered_html indexes and the `matches` query predicate.
+// `markdown_search_text(markdown)`, matching the prerendered_html indexes and
+// the `matches` query predicate.
 //
-// The original indexes (migration 1776790148459) index the raw
-// `to_tsvector('english', coalesce(markdown, ''))`. That build fails on rows
-// whose markdown exceeds Postgres's ~1 MiB tsvector limit (base64 image data) —
-// and because it was built CONCURRENTLY, the failure left the indexes INVALID
-// (they enforce nothing and the planner ignores them, so those oversized rows
-// were able to land and full-text search fell back to seq scans). Rebuilding
-// onto the sanitizing function makes the indexes buildable, valid, and
-// consistent with the prerendered_html side that reads them via the dual-read
-// fallback.
+// A raw `to_tsvector('english', coalesce(markdown, ''))` index cannot build on
+// rows whose markdown exceeds Postgres's ~1 MiB tsvector limit (base64 image
+// data). Built CONCURRENTLY, that failure leaves the index INVALID rather than
+// aborting — so it enforces nothing, the planner ignores it, and full-text
+// search runs on a seq scan. Rebuilding onto the sanitizing function makes the
+// indexes buildable, valid, and consistent with the prerendered_html side that
+// reads them via the dual-read fallback.
 //
 // CONCURRENTLY (so live writers on boxel_index aren't blocked) requires
 // noTransaction — CREATE/DROP INDEX CONCURRENTLY cannot run inside a
@@ -20,13 +18,13 @@ exports.shorthands = undefined;
 
 exports.up = (pgm) => {
   pgm.noTransaction();
-  // `markdown_search_text` is normally created by the prerendered_html migration
-  // (1783182911063). But a database that already recorded that migration before
-  // it was edited to add the function will not rerun it, so define the function
-  // here too (idempotently, identical body) BEFORE the indexes reference it —
-  // otherwise this non-transactional migration would drop the FTS indexes and
-  // then fail with "function markdown_search_text(text) does not exist",
-  // leaving the database with no markdown indexes.
+  // `markdown_search_text` is also created by the migration that adds the
+  // prerendered_html tables. A database that already recorded that migration
+  // will not rerun it, so define the function here too (idempotently, identical
+  // body) BEFORE the indexes reference it — otherwise this non-transactional
+  // migration would drop the FTS indexes and then fail with "function
+  // markdown_search_text(text) does not exist", leaving the database with no
+  // markdown indexes.
   pgm.sql(`
     CREATE OR REPLACE FUNCTION markdown_search_text(md text) RETURNS text
       LANGUAGE sql IMMUTABLE PARALLEL SAFE
