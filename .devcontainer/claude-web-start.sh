@@ -21,6 +21,12 @@
 #     so PUPPETEER_DISABLE_SANDBOX makes its standby probe pass.
 #   - SKIP_CATALOG / SKIP_BOXEL_HOMEPAGE: fit the memory budget and skip the
 #     realm whose content repo this VM can't clone.
+#   - HTTP/2 trailers race: node's h2 compat layer can truncate responses
+#     (RST_STREAM NO_ERROR without END_STREAM) when many streams finish in one
+#     event-loop batch, and Chromium then hangs module-script loads forever —
+#     wedging the prerender's standby pages. A preload strips the unused
+#     waitForTrailers flag so responses end on their final DATA frame; see
+#     claude-web-h2-preload.cjs for the full story.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,6 +52,15 @@ COMBINED="$HOME/.local/share/boxel/dev-certs/combined-ca.pem"
 if [ -f "$COMBINED" ]; then
   export NODE_EXTRA_CA_CERTS="$COMBINED"
 fi
+
+# End h2 responses with END_STREAM on the final DATA frame (see header note
+# and claude-web-h2-preload.cjs). Applies to every node process in the stack;
+# it's inert unless the process serves HTTP/2 and nothing here uses trailers.
+# --max-old-space-size mirrors the host launcher's own default, which only
+# applies when NODE_OPTIONS is unset (see vite-with-traefik.js) — setting
+# NODE_OPTIONS here would otherwise silently drop the host's 8 GB heap
+# ceiling.
+export NODE_OPTIONS="--require $REPO_ROOT/.devcontainer/claude-web-h2-preload.cjs --max-old-space-size=8192${NODE_OPTIONS:+ $NODE_OPTIONS}"
 
 # Register Matrix users on a fresh Synapse, once, before the stack boots, so
 # the realm-server logs in cleanly instead of caching a failed session.
