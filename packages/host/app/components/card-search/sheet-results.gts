@@ -95,7 +95,7 @@ interface Signature {
   Blocks: {};
 }
 
-// Lays the heterogeneous `search-entry` stream from `<SearchResults>` out into
+// Lays the heterogeneous `entry` stream from `<SearchResults>` out into
 // the search sheet's realm / recents / URL-paste sections, with the header,
 // multiselect, the Adorn treatment, pagination, and the result count expressed
 // here at the call site over the yielded entries. Every derivation is a getter
@@ -205,6 +205,20 @@ export default class SheetResults extends Component<Signature> {
     return [...new Set(urls)];
   }
 
+  // The global summary + Sort row. Hidden in the mini chooser's default
+  // Recents view (empty search): there the Recents section supplies its own
+  // header (label + count), and the design shows no Sort control until the
+  // user actually searches. Unaffected for the full search sheet.
+  private get showGlobalHeader(): boolean {
+    if (!this.args.showHeader || this.args.isCompact) {
+      return false;
+    }
+    if (this.args.variant === 'mini' && this.args.isSearchKeyEmpty) {
+      return false;
+    }
+    return true;
+  }
+
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
@@ -230,24 +244,22 @@ export default class SheetResults extends Component<Signature> {
   }
 
   <template>
-    {{#if @showHeader}}
-      {{#unless @isCompact}}
-        <SearchResultHeader
-          @summaryText={{this.summaryText}}
-          @viewOptions={{this.VIEW_OPTIONS}}
-          @activeViewId={{@activeViewId}}
-          @activeSort={{@activeSort}}
-          @sortOptions={{this.SORT_OPTIONS}}
-          @onChangeView={{@onChangeView}}
-          @onChangeSort={{@onChangeSort}}
-          @multiSelect={{@multiSelect}}
-          @selectedCards={{@selectedCards}}
-          @allCards={{this.allCards}}
-          @onSelectAll={{@onSelectAll}}
-          @onDeselectAll={{@onDeselectAll}}
-          @hideViewSelector={{eq @variant 'mini'}}
-        />
-      {{/unless}}
+    {{#if this.showGlobalHeader}}
+      <SearchResultHeader
+        @summaryText={{this.summaryText}}
+        @viewOptions={{this.VIEW_OPTIONS}}
+        @activeViewId={{@activeViewId}}
+        @activeSort={{@activeSort}}
+        @sortOptions={{this.SORT_OPTIONS}}
+        @onChangeView={{@onChangeView}}
+        @onChangeSort={{@onChangeSort}}
+        @multiSelect={{@multiSelect}}
+        @selectedCards={{@selectedCards}}
+        @allCards={{this.allCards}}
+        @onSelectAll={{@onSelectAll}}
+        @onDeselectAll={{@onDeselectAll}}
+        @hideViewSelector={{eq @variant 'mini'}}
+      />
     {{/if}}
 
     {{! Handle empty URL search state — only after loading completes }}

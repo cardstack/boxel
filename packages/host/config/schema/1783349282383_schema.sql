@@ -21,7 +21,7 @@
    url TEXT NOT NULL,
    file_alias TEXT NOT NULL,
    type TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc BLOB,
    search_doc BLOB,
@@ -50,7 +50,7 @@
    url TEXT NOT NULL,
    file_alias TEXT NOT NULL,
    type TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
    pristine_doc BLOB,
    search_doc BLOB,
@@ -114,6 +114,47 @@
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
+ CREATE TABLE IF NOT EXISTS prerendered_html (
+   url TEXT NOT NULL,
+   file_alias TEXT NOT NULL,
+   realm_url TEXT NOT NULL,
+   type TEXT NOT NULL,
+   fitted_html BLOB,
+   embedded_html BLOB,
+   atom_html TEXT,
+   head_html TEXT,
+   isolated_html TEXT,
+   markdown TEXT,
+   deps BLOB,
+   last_known_good_deps BLOB,
+   generation INTEGER NOT NULL,
+   is_deleted BOOLEAN,
+   error_doc BLOB,
+   rendered_at,
+   PRIMARY KEY ( url, realm_url, type ) 
+);
+
+ CREATE TABLE IF NOT EXISTS prerendered_html_working (
+   url TEXT NOT NULL,
+   file_alias TEXT NOT NULL,
+   realm_url TEXT NOT NULL,
+   type TEXT NOT NULL,
+   fitted_html BLOB,
+   embedded_html BLOB,
+   atom_html TEXT,
+   head_html TEXT,
+   isolated_html TEXT,
+   markdown TEXT,
+   deps BLOB,
+   last_known_good_deps BLOB,
+   generation INTEGER NOT NULL,
+   is_deleted BOOLEAN,
+   error_doc BLOB,
+   rendered_at,
+   job_id INTEGER,
+   PRIMARY KEY ( url, realm_url, type ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_file_meta (
    realm_url TEXT NOT NULL,
    file_path TEXT NOT NULL,
@@ -123,12 +164,18 @@
    PRIMARY KEY ( realm_url, file_path ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_generations (
+   realm_url TEXT NOT NULL,
+   current_generation INTEGER NOT NULL,
+   PRIMARY KEY ( realm_url ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_meta (
    realm_url TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
+   generation INTEGER NOT NULL,
    value BLOB NOT NULL,
    indexed_at,
-   PRIMARY KEY ( realm_url, realm_version ) 
+   PRIMARY KEY ( realm_url, generation ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_metadata (
@@ -162,12 +209,6 @@
    write BOOLEAN NOT NULL,
    realm_owner BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( realm_url, username ) 
-);
-
- CREATE TABLE IF NOT EXISTS realm_versions (
-   realm_url TEXT NOT NULL,
-   current_version INTEGER NOT NULL,
-   PRIMARY KEY ( realm_url ) 
 );
 
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (

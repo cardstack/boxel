@@ -66,6 +66,13 @@ export class Responder {
 
   needsMessageSend = false;
 
+  // The event id of the bot message this turn streamed into. ai-bot relates the
+  // command-result events for its own readRealmFile calls back to it, so they
+  // pair with the requests carried on that message.
+  get responseEventId(): string | undefined {
+    return this.matrixResponsePublisher.originalResponseEventId;
+  }
+
   async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
   }

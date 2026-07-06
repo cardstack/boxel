@@ -189,10 +189,11 @@ export interface RenderTimeoutDiagnostics {
   // join all three stacks for this call.
   requestId?: string;
   // Worker-job priority of the request that produced this render.
-  // Plumbed from the producer side via `Job.priority`. `0` is the
-  // system-initiated default; `10` is user-initiated. Read in post-
-  // mortems and in `prerender-queue-snapshot` triage to tell whether a
-  // stalled render was background or user-priority work.
+  // Plumbed from the producer side via `Job.priority`, on the tier
+  // scale defined in `queue.ts` (system tiers `0`/`1` below the user
+  // tiers `9`/`10`). Read in post-mortems and in
+  // `prerender-queue-snapshot` triage to tell whether a stalled render
+  // was background or user-initiated work.
   priority?: number;
   // Whether this render landed on a tab that was already bound to its
   // affinity. `true` = warm tab, fast launch + cached BrowserContext
@@ -488,6 +489,11 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // A row is produced by two prerender visits (index + prerender-html),
+  // each its own HTTP request. `requestId` carries the index visit's id;
+  // this carries the prerender-html visit's so operators can join logs
+  // for both. Absent for in-process callers and fused single-visit rows.
+  prerenderHtmlRequestId?: string;
   // Frontmatter YAML that wouldn't parse during file extraction. The row
   // still indexes (body-only); this is the only indexed signal that the
   // file's frontmatter — and anything it declared — was dropped. Merged in
@@ -544,8 +550,8 @@ export type ModulePrerenderArgs = {
   // Higher priority requests dequeue ahead of lower-priority pending
   // work on the prerender server (per-tab queues + per-affinity file-
   // admission semaphore + global render semaphore). No preemption: an
-  // in-flight low-priority render runs to completion. Defaults to 0
-  // when absent (system-priority).
+  // in-flight low-priority render runs to completion. Defaults to the
+  // lowest tier (0) when absent.
   priority?: number;
 };
 
@@ -561,16 +567,41 @@ export const VISIT_PASS_ORDER = [
 ] as const;
 export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
 
+// The consolidated visit splits along the search-doc/HTML seam into two
+// visit types:
+//
+//   - 'index' — everything the search index needs: the file extract, the
+//     card's meta (search doc / serialized / types / display names / deps)
+//     and the icon render. Never runs the `html` route, never materializes
+//     a format component via `getComponent`.
+//   - 'prerender-html' — the `html` route per format (isolated, head,
+//     atom, fitted, embedded) plus markdown, for both the card and the
+//     file rendering of a URL. Produces no search-doc data.
+//
+// A visit with no `visitType` runs the union of both (the fused visit) —
+// used by callers that want a complete render in one round-trip (e.g. the
+// user-initiated prerender proxy).
+export type PrerenderVisitType = 'index' | 'prerender-html';
+
 export type PrerenderVisitArgs = {
   affinityType: AffinityType;
   affinityValue: string;
   realm: string;
   url: string;
   auth: string;
+  // Selects which half of the bifurcated visit to run — see
+  // PrerenderVisitType. Absent runs the fused union of both halves.
+  visitType?: PrerenderVisitType;
   renderOptions?: RenderRouteOptions;
   // Inputs required only when the fileRender pass is requested
   fileData?: FileRenderArgs['fileData'];
   types?: string[];
+  // Ancestor type chain (internalKeyFor form) driving the card's
+  // fitted/embedded format renders in a 'prerender-html' visit. Supplied
+  // by callers that already hold the chain (the indexing job passes the
+  // index visit's `types` through); when absent the visit resolves the
+  // chain itself via the types route.
+  cardTypes?: string[];
   // Identifies the indexing batch this visit belongs to (CS-10758 step 3).
   // Required to honor `renderOptions.clearCache: true` on the prerender
   // server when another batch currently owns the affinity. Visits without
@@ -701,6 +732,8 @@ export {
   coerceErrorMessage,
   stringifyErrorForLog,
   sanitizeForJsonb,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';
@@ -754,6 +787,7 @@ export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
@@ -768,6 +802,7 @@ export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
 export * from './expression.ts';
+export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
@@ -880,8 +915,8 @@ export type {
   SingleFileMetaDocument,
   CardCollectionDocument,
   FileMetaCollectionDocument,
-  SearchEntryCollectionDocument,
-  SearchEntryIncludedResource,
+  EntryCollectionDocument,
+  EntryIncludedResource,
   SearchEntryResults,
 } from './document-types.ts';
 export type {
@@ -902,7 +937,7 @@ export {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -1366,8 +1401,13 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
-  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
+// A local id is a client-minted token for an instance that has not yet been
+// saved to a realm — it is neither a URL nor a prefix-form RRI. Both remote
+// forms are syntactically distinguishable (URLs start with `http`, prefix-form
+// RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
+// canonical RRI by the time they reach here.
+export function isLocalId(id: string) {
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {

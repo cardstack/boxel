@@ -29,7 +29,7 @@ import {
   isFileMetaResource,
   isSingleCardDocument,
   isSingleFileMetaDocument,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   isSparseItemResource,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
@@ -137,22 +137,22 @@ const storeLogger = logger('store');
 //
 // 1. Inside a prerender tab: forward the worker job's priority as-is.
 //    The render-runner injects `__boxelJobPriority` alongside
-//    `__boxelJobId` on each visit — a priority of 0 is meaningful
-//    (the originating job is system-initiated background indexing)
+//    `__boxelJobId` on each visit — a low priority is meaningful
+//    (the originating job is system-initiated background work)
 //    and must be preserved, not upgraded. Sub-`prerenderModule`
 //    calls fired by the federated search for a `lookupDefinition`
 //    cache miss inherit this priority so they don't outrun the
 //    parent. If `__boxelJobPriority` is missing here (older
 //    render-runner build, test fixture, etc.) treat as 0 — the
-//    safe default for prerender-context work.
+//    lowest tier, the safe default for prerender-context work.
 //
 // 2. Outside a prerender tab (the host SPA in a real user's browser):
-//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    stamp `userInitiatedPriority`. User clicks driving a
 //    search are by definition user-initiated work and should outrank
 //    background indexing on the realm-server's PagePool. Without
 //    this, a user search whose definition lookup misses the modules
-//    cache would fire its sub-prerender at priority 0 and queue
-//    behind concurrent indexing fan-out.
+//    cache would fire its sub-prerender at background priority and
+//    queue behind concurrent indexing fan-out.
 //
 // External (non-host) HTTP callers — anything that doesn't run in
 // the host SPA's JS runtime — bypass this helper entirely and set
@@ -502,7 +502,7 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    if (isLocalId(id, this.network.virtualNetwork)) {
+    if (isLocalId(id)) {
       let instanceOrError = this.peek(id);
       if (instanceOrError) {
         let realmURL = isCardInstance(instanceOrError)
@@ -883,9 +883,7 @@ export default class StoreService extends Service implements StoreInterface {
     fileDef: FileDef,
   ): Promise<SingleFileMetaDocument> {
     let api = await this.cardService.getAPI();
-    return api.serializeFileDef(fileDef, {
-      virtualNetwork: this.network.virtualNetwork,
-    }) as SingleFileMetaDocument;
+    return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
   async delete(id: string): Promise<void> {
@@ -1029,7 +1027,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   // Instances only: the query runs against the search requesting full
   // `item` serializations, the results hydrate into the store, and the caller
-  // gets instances back. For the raw search-entry wire format (HTML
+  // gets instances back. For the raw entry wire format (HTML
   // renderings, field-limited serializations, the document itself) use
   // `searchEntries` — that surface lives on this service only, never on the
   // `Store` interface cards receive.
@@ -1055,7 +1053,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
       throw new Error(
-        `store.search returns instances only — use store.searchEntries for the raw search-entry wire format`,
+        `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
       );
     }
     let searchRealms = this.normalizeSearchRealms(realms);
@@ -1072,8 +1070,8 @@ export default class StoreService extends Service implements StoreInterface {
     return opts?.includeMeta ? result : result.instances;
   }
 
-  // The raw wire format: heterogeneous `search-entry` resources with the
-  // `html` / `item` branches the query's `fields[search-entry]` selects.
+  // The raw wire format: heterogeneous `entry` resources with the
+  // `html` / `item` branches the query's `fields[entry]` selects.
   // Nothing is hydrated into the store.
   async searchEntries(
     query: SearchEntryWireQuery,
@@ -1093,7 +1091,7 @@ export default class StoreService extends Service implements StoreInterface {
   // the instance and could clobber a correctly-loaded full one — so the call
   // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
   // which stands in for a card that failed to render and is not a real
-  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // instance. `entry`s carry no serialization to deposit. Idempotent:
   // depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
@@ -1125,7 +1123,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms);
 
-    // Hydrate each result into the store. The data-only search-entry doc
+    // Hydrate each result into the store. The data-only entry doc
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
     // `included`, reached through the entry's `item` relationship.
     let items = this.itemResourcesFromSearchEntries(collectionDoc);
@@ -1153,7 +1151,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   // The instances path's resolved-document layer: the `Query` runs against
   // the search requesting full `item` serializations, and the resulting
-  // search-entry document (one `item` per entry in `included`) is what the
+  // entry document (one `item` per entry in `included`) is what the
   // hydration pipeline and the caches below consume.
   // Sits between `store.search` and `_federated-search`.
   //
@@ -1270,7 +1268,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // Extract the per-entry `item` (`card`/`file-meta`) serializations from a
-  // data-only search-entry document, in entry order: each entry's `item`
+  // data-only entry document, in entry order: each entry's `item`
   // relationship names a `(type, id)` resolved against `included`.
   private itemResourcesFromSearchEntries(
     doc: SearchEntryResults,
@@ -1332,9 +1330,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isSearchEntryCollectionDocument(json)) {
+    if (!isEntryCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a valid search-entry collection document:
+        `The realm search response was not a valid entry collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
@@ -1562,7 +1560,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // if there are no more subscribers to this realm then unsubscribe from realm
-    let realmHref = !isLocalId(id, this.network.virtualNetwork)
+    let realmHref = !isLocalId(id)
       ? [...this.subscriptions.keys()].find((realmURL) =>
           id.startsWith(realmURL),
         )
@@ -1576,7 +1574,7 @@ export default class StoreService extends Service implements StoreInterface {
       subscription &&
       ![...this.referenceCount.entries()].find(
         ([referenceId, count]) =>
-          !isLocalId(referenceId, this.network.virtualNetwork) &&
+          !isLocalId(referenceId) &&
           count > 0 &&
           referenceId.startsWith(realmHref),
       )
@@ -1762,7 +1760,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (referenceCount === 0) {
         continue;
       }
-      if (isLocalId(id, this.network.virtualNetwork)) {
+      if (isLocalId(id)) {
         let remoteIdsForLocal = this.store.getRemoteIds(id);
         if (remoteIdsForLocal.length === 0) {
           let error = this.store.getCardError(id);
@@ -2037,7 +2035,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -2216,7 +2214,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T | CardErrorJSONAPI;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
       let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
@@ -2374,10 +2372,7 @@ export default class StoreService extends Service implements StoreInterface {
         } finally {
           autoSaveState.isSaving = false;
           this.calculateLastSavedMsg(autoSaveState);
-          if (
-            isLocalId(queueName, this.network.virtualNetwork) &&
-            instance.id
-          ) {
+          if (isLocalId(queueName) && instance.id) {
             this.autoSaveStates.set(instance.id, autoSaveState);
           }
         }
@@ -2569,11 +2564,7 @@ export default class StoreService extends Service implements StoreInterface {
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
         let remoteId = cardError.meta?.remoteId;
-        if (
-          remoteId &&
-          (!cardError.id ||
-            isLocalId(cardError.id, this.network.virtualNetwork))
-        ) {
+        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
           this.store.addCardInstanceOrError(remoteId, cardError);
         }
         return cardError;
@@ -2797,8 +2788,12 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN.
-  return isLocalId(id, vn) ? id : vn.toURL(id).href;
+  // Locals stay as-is; remotes resolve through the VN to a normalized URL.
+  // Keying stays in URL form so it matches gc-card-store, which keys instances
+  // by their (URL-form) data.id. Flipping the store's canonical key to RRI is
+  // deferred — it needs gc-card-store keyed the same way and the URL
+  // normalization `toURL` provides here (see CS-11730).
+  return isLocalId(id) ? id : vn.toURL(id).href;
 }
 
 function isSystemCardDefaultId(

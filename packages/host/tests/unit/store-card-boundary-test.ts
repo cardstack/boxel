@@ -8,7 +8,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 // The card boundary, codified at the type level: the `Store` interface cards
 // receive via `@context.store` exposes instances-level search only. The raw
-// search-entry wire format (`searchEntries`) lives on the host `StoreService`
+// entry wire format (`searchEntries`) lives on the host `StoreService`
 // and is deliberately unreachable through the cards' interface. These
 // assertions fail the type-check (and so the test suite) if that boundary
 // ever erodes.

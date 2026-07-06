@@ -35,6 +35,7 @@
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:no-isused-option": "node scripts/check-no-isused-option.mjs"
   }
 }

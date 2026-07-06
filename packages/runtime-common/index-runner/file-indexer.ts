@@ -35,13 +35,13 @@ export interface FileIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Extract / render results from the fused visit. extractResult may be
-  // undefined if the visit short-circuited before the fileExtract pass ran;
-  // renderResult may be undefined if the visit skipped fileRender (e.g. for
-  // module files, which produce HTML via their own module prerender).
+  // Extract result from the index visit and merged render result from the
+  // index + prerender-html visits. extractResult may be undefined if the
+  // visit short-circuited before the fileExtract pass ran; renderResult may
+  // be undefined if no visit produced a file rendering.
   precomputedExtractResult: FileExtractResponse | undefined;
   precomputedRenderResult?: FileRenderResponse;
-  // Timing / diagnostic payload attached to the fused-visit response;
+  // Timing / diagnostic payload attached to the visit responses;
   // persisted onto `boxel_index.diagnostics` for this file's row.
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
@@ -192,17 +192,17 @@ export async function performFileIndexing({
     return 'error';
   }
 
-  // HTML for the file entry comes from the fused visit's fileRender pass
-  // (when the visit chose to run it — modules skip fileRender since their
-  // module prerender already produces HTML).
+  // HTML for the file entry comes from the visits' fileRender passes (icon
+  // from the index visit, html formats + markdown from the prerender-html
+  // visit).
   let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
   if (renderResult?.error) {
     logWarn(
       `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
     );
   }
-  // hasModulePrerender is retained on the options as a hint for callers but
-  // is no longer acted on here — the fused visit already gates fileRender.
+  // hasModulePrerender remains on the options as a hint for callers; the visit
+  // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
 
   // A frontmatter parse failure doesn't fail the file (it still indexes

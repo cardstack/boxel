@@ -18,7 +18,7 @@ export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
   @field firstName = contains(StringField);
   @field friend = linksTo(Person);
-  @field pets = linksToMany(Pet);
+  @field pets = linksToMany(Pet, { searchable: true });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;
@@ -45,7 +45,7 @@ export class PetPerson extends CardDef {
 export class PetPersonField extends FieldDef {
   @field firstName = contains(StringField);
   @field friend = linksTo(Person);
-  @field pets = linksToMany(Pet);
+  @field pets = linksToMany(Pet, { searchable: true });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPersonField) {
       return `${this.firstName} Pet Person`;

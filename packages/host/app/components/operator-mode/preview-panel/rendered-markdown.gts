@@ -29,15 +29,14 @@ import {
   extractFileReferenceUrls,
   fileNameFromUrl,
   isCardErrorJSONAPI,
+  resolveRRIReference,
   rri,
   trimJsonExtension,
-  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type NetworkService from '@cardstack/host/services/network';
 import type StoreService from '@cardstack/host/services/store';
 
 import type {
@@ -70,14 +69,14 @@ interface RenderSlot {
   typeName?: string; // present when state === 'unresolved'
 }
 
-function resolveUrl(
-  raw: string,
-  baseUrl: string | undefined,
-  virtualNetwork: VirtualNetwork,
-): string {
+function resolveUrl(raw: string, baseUrl: string | undefined): string {
   try {
+    // Resolve in RRI space (no VirtualNetwork), the same way
+    // `extractCardReferenceUrls`/`extractFileReferenceUrls` resolve the refs
+    // that key `loadedCards`/`loadedFiles` — so a slot's resolved key matches
+    // the loaded instance's map key.
     return trimJsonExtension(
-      virtualNetwork.resolveRRI(raw, baseUrl ? rri(baseUrl) : undefined),
+      resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
     );
   } catch {
     return trimJsonExtension(raw);
@@ -116,7 +115,6 @@ const DEFAULT_CARD_CONTEXT: Partial<CardContext> = {
 };
 
 export default class RenderedMarkdown extends Component<Signature> {
-  @service declare private network: NetworkService;
   @service declare private store: StoreService;
   @consume(CardContextName) declare private dynamicCardContext: CardContext;
 
@@ -163,7 +161,6 @@ export default class RenderedMarkdown extends Component<Signature> {
     return extractCardReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
-      this.network.virtualNetwork,
     );
   }
 
@@ -173,7 +170,6 @@ export default class RenderedMarkdown extends Component<Signature> {
     return extractFileReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
-      this.network.virtualNetwork,
     );
   }
 
@@ -277,11 +273,7 @@ export default class RenderedMarkdown extends Component<Signature> {
             );
           }
 
-          let resolvedUrl = resolveUrl(
-            rawUrl,
-            baseUrl,
-            this.network.virtualNetwork,
-          );
+          let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 
           if (refType === 'file') {
             let file = filesByUrl.get(resolvedUrl);

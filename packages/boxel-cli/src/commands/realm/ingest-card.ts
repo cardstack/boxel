@@ -439,7 +439,7 @@ class RealmCardIngester extends RealmSyncBase {
     // search returns nothing for it — which is why instances and Specs went
     // uncopied (the module crawl survives because it uses direct file fetches).
     // The realm's own endpoint sees its full index. The request is data-only
-    // (`fields[search-entry]=item`); the response is a search-entry document
+    // (`fields[entry]=item`); the response is an entry document
     // whose matched `item` serializations resolve out of `included` uniformly
     // for normal and published realms (the v1 `data`-vs-`included` split
     // disappears — every match is an entry that references its item).

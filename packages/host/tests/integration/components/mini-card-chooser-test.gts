@@ -38,6 +38,7 @@ import {
 } from '../../helpers';
 import {
   CardDef,
+  Component,
   StringField,
   contains,
   field,
@@ -128,6 +129,21 @@ module('Integration | mini-card-chooser', function (hooks) {
       static displayName = 'Movie';
       @field title = contains(StringField);
     }
+    // Overrides `fitted` with a distinctive marker so the uniform-rendering
+    // test can prove the mini chooser rows use the CardDef-level fitted tile,
+    // not this card's own fitted template.
+    class Gadget extends CardDef {
+      static displayName = 'Gadget';
+      @field title = contains(StringField);
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div class='custom-gadget-fitted' data-test-custom-gadget-fitted>
+            Custom Gadget Fitted:
+            <@fields.title />
+          </div>
+        </template>
+      };
+    }
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -135,9 +151,11 @@ module('Integration | mini-card-chooser', function (hooks) {
       contents: {
         'book.gts': { Book },
         'movie.gts': { Movie },
+        'gadget.gts': { Gadget },
         'books/mango.json': new Book({ title: 'Mango' }),
         'books/vincent.json': new Book({ title: 'Vincent' }),
         'movies/casablanca.json': new Movie({ title: 'Casablanca' }),
+        'gadgets/atomizer.json': new Gadget({ title: 'Atomizer' }),
       },
     });
     await getService('realm').login(testRealmURL);
@@ -204,6 +222,22 @@ module('Integration | mini-card-chooser', function (hooks) {
     await waitFor('[data-test-mini-card-chooser] [data-test-item-button]', {
       timeout: 5000,
     });
+
+    // The results header carries the "Searching…"/count indicator and lives
+    // inside the same scroll container as the rows, so it must be sticky to
+    // stay visible while the list scrolls.
+    const resultHeader = document.querySelector(
+      '[data-test-mini-card-chooser] [data-test-search-result-header]',
+    );
+    assert.ok(
+      resultHeader,
+      'the results header is rendered once search is live',
+    );
+    assert.strictEqual(
+      getComputedStyle(resultHeader!).position,
+      'sticky',
+      'the results header sticks so the Searching…/count indicator stays visible while scrolling',
+    );
 
     // Capture the URL of every visible row, then click each in turn and
     // assert that exactly that row carries the selected marker.
@@ -355,5 +389,59 @@ module('Integration | mini-card-chooser', function (hooks) {
         `[data-test-mini-card-chooser] [data-test-item-button="${casablanca}"]`,
       )
       .doesNotExist('Movie-type cards are excluded by a Book baseFilter');
+  });
+
+  test('rows render the uniform CardDef fitted tile, not each card’s own template', async function (assert) {
+    const gadget = `${testRealmURL}gadgets/atomizer`;
+
+    const selections: string[] = [];
+    const onSelect = (url: string) => selections.push(url);
+
+    await render(
+      <template>
+        <DesignRatioContainer>
+          <HostContextProvider>
+            <MiniCardChooser @onSelect={{onSelect}} />
+          </HostContextProvider>
+        </DesignRatioContainer>
+      </template>,
+    );
+
+    await waitFor('[data-test-mini-card-chooser] [data-test-search-field]');
+    await fillIn(
+      '[data-test-mini-card-chooser] [data-test-search-field]',
+      'Atomizer',
+    );
+    await waitFor(
+      `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"]`,
+      { timeout: 5000 },
+    );
+
+    // The row renders CardDef's default fitted template (served from the
+    // per-ancestor fitted index at renderType CardDef)…
+    assert
+      .dom(
+        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] .fitted-template`,
+      )
+      .exists('the row renders the uniform CardDef fitted tile');
+    // …and not the Gadget's own fitted template.
+    assert
+      .dom(
+        `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"] [data-test-custom-gadget-fitted]`,
+      )
+      .doesNotExist(
+        'the card’s own fitted template does not leak into the row',
+      );
+
+    // Selection still works from an ancestor-rendered row.
+    await click(
+      `[data-test-mini-card-chooser] [data-test-item-button="${gadget}"]`,
+    );
+    await waitUntil(() => selections.length > 0);
+    assert.deepEqual(
+      selections,
+      [gadget],
+      'clicking an ancestor-rendered row fires onSelect with the canonical URL',
+    );
   });
 });

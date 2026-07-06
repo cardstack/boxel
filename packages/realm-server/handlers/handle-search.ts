@@ -35,8 +35,8 @@ import {
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
 
-// The federated search: the search-entry wire model over every requested
-// realm. Parses the search-entry-rooted query (the `item.` membership query,
+// The federated search: the entry wire model over every requested
+// realm. Parses the entry-rooted query (the `item.` membership query,
 // the `htmlQuery` binding, the sparse fieldset), fans out to each realm's
 // `searchEntries`, and merges the per-realm documents (`included` deduped by
 // `(type, id)`). Cache + ETag ride the job-scoped search-cache protocol; the
@@ -151,7 +151,7 @@ export default function handleSearch(opts: {
         ? await timings.time('resolveRealms', resolveRealms)
         : await resolveRealms();
       let doc = await searchEntryRealms(realmInstances, parsed, runSearchOpts);
-      // Serialize compact: a search-entry doc can run to many MB, so indentation
+      // Serialize compact: an entry doc can run to many MB, so indentation
       // whitespace is pure wire overhead the consumer parses straight back off.
       let stringify = async () => JSON.stringify(doc);
       return timings ? await timings.time('stringify', stringify) : stringify();

@@ -943,18 +943,6 @@ module(basename(import.meta.filename), function () {
                     field2a: 'c',
                     cardInfo,
                   },
-                  relationships: {
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('../test-card'),

@@ -4,19 +4,7 @@ const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
   CJS_GLOBALS_IN_ESM,
 } = require('./eslint/erasable-syntax-selectors.cjs');
-
-const DATA_TEST_SELECTORS = [
-  {
-    selector: 'Literal[value=/\\[data-test-/]',
-    message:
-      '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/\\[data-test-/]',
-    message:
-      '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-  },
-];
+const { DATA_TEST_SELECTORS } = require('./eslint/data-test-selectors.cjs');
 
 module.exports = {
   root: true,

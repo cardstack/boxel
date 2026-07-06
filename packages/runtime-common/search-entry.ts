@@ -13,14 +13,14 @@ import {
 } from './search-utils.ts';
 import { RequestTimings } from './request-timings.ts';
 import type {
-  SearchEntryCollectionDocument,
-  SearchEntryIncludedResource,
+  EntryCollectionDocument,
+  EntryIncludedResource,
 } from './document-types.ts';
 import {
   CssResourceType,
   HtmlResourceType,
   IconResourceType,
-  SearchEntryResourceType,
+  EntryResourceType,
   htmlResourceId,
   resourceIdentity,
   type CardResource,
@@ -32,7 +32,7 @@ import {
   type IconResource,
   type Relationship,
   type Saved,
-  type SearchEntryResource,
+  type EntryResource,
 } from './resource-types.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import {
@@ -45,9 +45,9 @@ import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 
 // ---------------------------------------------------------------------------
-// The search-entry query.
+// The entry query.
 //
-// A search-entry request is one query rooted on `search-entry`. Entry MEMBERSHIP is
+// An entry request is one query rooted on `entry`. Entry MEMBERSHIP is
 // addressed through `item.` (the card/file serialization) with the standard
 // operator-keyed filter grammar (`eq` / `contains` / `in` / `range` / `any` /
 // `every` / `not` / `matches`) — only the addressing changes:
@@ -60,7 +60,7 @@ import { ensureTrailingSlash } from './paths.ts';
 //     anchor (a card-field sort without one inherits the filter's anchor).
 //
 // RENDERING SELECTION is bound through `htmlQuery` — a synthesized,
-// single-valued field of `search-entry` (the `html` has-many is computed from
+// single-valued field of `entry` (the `html` has-many is computed from
 // it). It is bound with an ordinary `eq` in the filter's top-level node, and
 // being single-valued it can be bound exactly once: binding it in a nested
 // node, under `not`, or through any other operator is an unsatisfiable
@@ -75,7 +75,7 @@ import { ensureTrailingSlash } from './paths.ts';
 // (`types[0]`) is in play — an explicit predicate opens the full
 // adoption-chain universe.
 //
-// `fields[search-entry]` is the sparse fieldset selecting which branches the
+// `fields[entry]` is the sparse fieldset selecting which branches the
 // response carries: `html`, `item` (the full serialization), or
 // `item.<field>` entries (a field-limited serialization that ships
 // `meta.sparseFields` and never enters the Store). No fieldset means the
@@ -124,7 +124,7 @@ export interface SearchEntryFieldset {
   itemAsFallback: boolean;
 }
 
-// The parsed form of a search-entry request: the legacy `Query` for the SQL core (the
+// The parsed form of an entry request: the legacy `Query` for the SQL core (the
 // `item.` addressing stripped), the applied (bound or defaulted) htmlQuery,
 // and the parsed sparse fieldset. The compat layer constructs this directly
 // from a legacy request — it does not round-trip through the wire grammar.
@@ -423,7 +423,7 @@ function translateFilterNode(
       );
     }
   }
-  // A node carrying only the type anchor is the search-entry spelling of a pure
+  // A node carrying only the type anchor is the entry spelling of a pure
   // card-type filter.
   let keys = Object.keys(out);
   if (keys.length === 1 && keys[0] === 'on') {
@@ -512,18 +512,16 @@ function parseFieldset(fields: unknown): SearchEntryFieldset {
     throw invalidQuery(`fields must be an object`);
   }
   let keys = Object.keys(fields);
-  if (keys.length !== 1 || keys[0] !== 'search-entry') {
-    throw invalidQuery(`fields supports only the "search-entry" type`);
+  if (keys.length !== 1 || keys[0] !== 'entry') {
+    throw invalidQuery(`fields supports only the "entry" type`);
   }
-  let entries = (fields as Record<string, unknown>)['search-entry'];
+  let entries = (fields as Record<string, unknown>)['entry'];
   if (
     !Array.isArray(entries) ||
     entries.length === 0 ||
     !entries.every((entry) => typeof entry === 'string')
   ) {
-    throw invalidQuery(
-      `fields[search-entry] must be a non-empty array of strings`,
-    );
+    throw invalidQuery(`fields[entry] must be a non-empty array of strings`);
   }
   let html = false;
   let itemFull = false;
@@ -540,13 +538,13 @@ function parseFieldset(fields: unknown): SearchEntryFieldset {
       sparseFields.push(entry.slice(ITEM_PREFIX.length));
     } else {
       throw invalidQuery(
-        `each fields[search-entry] entry must be "html", "item", or "item.<field>" (got "${entry}")`,
+        `each fields[entry] entry must be "html", "item", or "item.<field>" (got "${entry}")`,
       );
     }
   }
   if (itemFull && sparseFields.length > 0) {
     throw invalidQuery(
-      `fields[search-entry] cannot combine "item" (the full serialization) with item.<field> entries`,
+      `fields[entry] cannot combine "item" (the full serialization) with item.<field> entries`,
     );
   }
   let item: SearchEntryItemSelection = itemFull
@@ -570,7 +568,7 @@ export function parseSearchEntryQueryFromPayload(
   let record = payload as Record<string, unknown>;
   for (let key of Object.keys(record)) {
     if (!SEARCH_ENTRY_QUERY_MEMBERS.includes(key)) {
-      throw invalidQuery(`unknown member "${key}" in search-entry query`);
+      throw invalidQuery(`unknown member "${key}" in entry query`);
     }
   }
 
@@ -661,16 +659,16 @@ export function parseSearchEntryQueryFromPayload(
 
 // ---------------------------------------------------------------------------
 // The wire grammar — what a client sends to `_search` /
-// `_federated-search`. `SearchEntryWireQuery` is the search-entry-rooted
+// `_federated-search`. `SearchEntryWireQuery` is the entry-rooted
 // request body: entry membership addressed through `item.` paths (`item.on`
 // as the type anchor), the htmlQuery bound in the filter's top-level `eq`,
-// and the sparse fieldset under `fields[search-entry]`.
+// and the sparse fieldset under `fields[entry]`.
 //
 // `searchEntryWireQueryFromQuery` translates a legacy card-rooted `Query`
 // into that grammar — the exact inverse of the parser's addressing strip
 // (round-trip parity is pinned by test) — so an instances-level caller can
 // keep authoring the legacy query shape while the request runs against the
-// search-entry engine.
+// entry engine.
 // ---------------------------------------------------------------------------
 
 export interface SearchEntryWireSortExpression {
@@ -697,8 +695,8 @@ export type SearchEntryWireFilter = {
 export interface SearchEntryWireQuery {
   filter?: SearchEntryWireFilter;
   sort?: SearchEntryWireSortExpression[];
-  page?: { number?: number; size: number; realmVersion?: number };
-  fields?: { 'search-entry': string[] };
+  page?: { number?: number; size: number; generation?: number };
+  fields?: { entry: string[] };
   cardUrls?: string[];
   realms?: string[];
 }
@@ -727,7 +725,7 @@ function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       out.matches = value as string;
     } else {
       throw new Error(
-        `cannot translate filter member "${key}" to the search-entry wire grammar`,
+        `cannot translate filter member "${key}" to the entry wire grammar`,
       );
     }
   }
@@ -741,7 +739,7 @@ export function searchEntryWireQueryFromQuery(
   // the legacy `realm`/`realms` members are deliberately not carried — the
   // caller addresses realms at the request level; `asData`/`fields` are the
   // legacy data path's members and have no wire spelling here (the
-  // projection is `opts.fields`, the `fields[search-entry]` sparse fieldset)
+  // projection is `opts.fields`, the `fields[entry]` sparse fieldset)
   let wire: SearchEntryWireQuery = {};
   if (query.filter) {
     wire.filter = wireFilterFromFilter(query.filter);
@@ -757,7 +755,7 @@ export function searchEntryWireQueryFromQuery(
     wire.page = query.page;
   }
   if (opts?.fields) {
-    wire.fields = { 'search-entry': [...opts.fields] };
+    wire.fields = { entry: [...opts.fields] };
   }
   return wire;
 }
@@ -773,13 +771,13 @@ export function searchEntryWireQueryFromQuery(
 // ---------------------------------------------------------------------------
 
 export function combineSearchEntryResults(
-  docs: SearchEntryCollectionDocument[],
-): SearchEntryCollectionDocument {
-  let combined: SearchEntryCollectionDocument = {
+  docs: EntryCollectionDocument[],
+): EntryCollectionDocument {
+  let combined: EntryCollectionDocument = {
     data: [],
     meta: { page: { total: 0 } },
   };
-  let included: SearchEntryIncludedResource[] = [];
+  let included: EntryIncludedResource[] = [];
   let includedByIdentity = new Set<string>();
 
   for (let doc of docs) {
@@ -812,7 +810,7 @@ type SearchEntrySearchableRealm = {
   searchEntries: (
     searchEntryQuery: SearchEntryQuery,
     opts?: SearchOpts,
-  ) => Promise<SearchEntryCollectionDocument>;
+  ) => Promise<EntryCollectionDocument>;
   url?: string;
 };
 
@@ -820,7 +818,7 @@ export async function searchEntryRealms(
   realms: Array<SearchEntrySearchableRealm | null | undefined>,
   searchEntryQuery: SearchEntryQuery,
   opts?: SearchOpts,
-): Promise<SearchEntryCollectionDocument> {
+): Promise<EntryCollectionDocument> {
   // Same instrumentation contract as `searchRealms`: a caller that threads
   // its own collector (the realm-server handler) emits the complete
   // request→response line itself; a caller that threads only a
@@ -854,30 +852,30 @@ export async function searchEntryRealms(
 }
 
 // ---------------------------------------------------------------------------
-// Builders for the search-entry resources. The projection engine runs these per row
-// when assembling a `search-entry` document; keeping them pure (no SQL, no
+// Builders for the entry resources. The projection engine runs these per row
+// when assembling an `entry` document; keeping them pure (no SQL, no
 // realm state) lets the shapes be unit-tested directly. The `css` resource
 // builder is shared with the pre-existing search paths (`buildCssResource`).
 // ---------------------------------------------------------------------------
 
-// One `search-entry` — the top-level `data` resource for a result. Which
+// One `entry` — the top-level `data` resource for a result. Which
 // branches it carries is the resolution policy / sparse fieldset's call; this
 // just assembles the linkage. The `item` shares the entry's URL as its id;
 // each `html` member points at one specific rendering by its composite id.
 // `htmlIds` undefined omits the relationship (the default mode's fallback
 // rows); an empty array emits `data: []` (a pinned html branch with no
 // matching rendering yet).
-export function buildSearchEntryResource(args: {
+export function buildEntryResource(args: {
   url: string;
   htmlIds?: string[];
   itemType?: typeof CardResourceType | typeof FileMetaResourceType;
   // The id of the result's `icon` resource (its native-type internal key) —
   // omitted when the row carries no `icon_html`.
   iconId?: string;
-}): SearchEntryResource {
+}): EntryResource {
   let { url, htmlIds, itemType, iconId } = args;
-  let resource: SearchEntryResource = {
-    type: SearchEntryResourceType,
+  let resource: EntryResource = {
+    type: EntryResourceType,
     id: url,
     relationships: {},
   };
@@ -934,7 +932,7 @@ export function buildHtmlResource(args: {
 // One card-type `icon` resource (see `IconResource`): the per-type descriptor
 // (icon, display name, code ref). Its `id` is the type's internal key — the
 // `<module>/<name>` form a row already carries as `types[0]` — so the same type
-// collapses to one resource in `included`. The `search-entry` → `icon`
+// collapses to one resource in `included`. The `entry` → `icon`
 // relationship points here, reachable for item-only rows that carry no `html`
 // rendering.
 export function buildIconResource(args: {

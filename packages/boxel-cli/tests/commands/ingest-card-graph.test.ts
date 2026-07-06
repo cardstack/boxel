@@ -161,7 +161,7 @@ function makeFakeAuthenticator(fetchedUrls: string[]): RealmAuthenticator {
 // The cards the source realm matches for the two shapes the ingester issues:
 // instances of the entry card's exported classes, and all base-realm Spec
 // cards (filtered by specType + ref in the ingester itself). The type anchor
-// arrives `item.`-addressed (`filter['item.on']`) — the search-entry grammar
+// arrives `item.`-addressed (`filter['item.on']`) — the entry grammar
 // `_search` speaks.
 function fakeSearchData(
   bodyStr: string,
@@ -204,7 +204,7 @@ function fakeSearchData(
   return [];
 }
 
-// Wrap matched cards as a data-only search-entry document — one entry per card
+// Wrap matched cards as a data-only entry document — one entry per card
 // linking its `item`, with the card resources themselves in `included` (the
 // shape `_search` returns; a published realm carries its matches the same
 // way, so the ingester needs no published-vs-normal special-casing).

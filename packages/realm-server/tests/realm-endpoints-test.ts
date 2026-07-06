@@ -815,18 +815,6 @@ module(basename(import.meta.filename), function () {
             links: {
               self: newCardId,
             },
-            relationships: {
-              'cardInfo.cardThumbnail': {
-                links: {
-                  self: null,
-                },
-              },
-              'cardInfo.theme': {
-                links: {
-                  self: null,
-                },
-              },
-            },
           },
         });
       }

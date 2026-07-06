@@ -161,10 +161,12 @@ export async function linkBoardToRealmIndex(
         filter: {
           type: { module: issueTrackerModuleUrl, name: 'IssueTracker' },
         },
+        // One board per bootstrapped realm; newest-first so a re-run that
+        // somehow produced more than one links the most recently created.
+        // linkProjectToSeedIssue selects the Project the same way, so the
+        // board and the seed issue's project stay on the same generation.
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
       }),
-    // Bootstrap creates one board per project; if a run produced more than
-    // one, link the lexicographically-first id deterministically.
-    selectId: (ids) => [...ids].sort()[0],
     buildLink: (id, realm) => `./${toRealmRelativePath(id, realm)}`,
     log,
     searchRetries: options.searchRetries,

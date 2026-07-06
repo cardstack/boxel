@@ -11,7 +11,7 @@ import {
   SupportedMimeType,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
-  type SearchEntryCollectionDocument,
+  type EntryCollectionDocument,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
@@ -69,6 +69,7 @@ export function registerDefaultRoutes() {
   registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
+  registerArchiveRoutes();
 }
 
 function registerSearchRoutes() {
@@ -300,9 +301,17 @@ function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
+      if (state.failRealmAuth) {
+        return new Response('realm server unreachable', { status: 503 });
+      }
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
+        // Archived realms are omitted from enumeration, matching the real
+        // `_realm-auth` so the active workspace list excludes them.
+        if (state.archivedRealms.has(realmURL)) {
+          continue;
+        }
         if (state.ensureSessionRoom) {
           await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
         }
@@ -403,7 +412,107 @@ function registerAuthRoutes() {
   });
 }
 
-// The search-entry searchable-realm resolver. In-process registry
+function registerArchiveRoutes() {
+  registerRealmServerRoute({
+    path: '/_archive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, true),
+  });
+  registerRealmServerRoute({
+    path: '/_unarchive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, false),
+  });
+  registerRealmServerRoute({
+    path: '/_archived-realms',
+    handler: async (_req, _url, state: RealmServerMockState) => {
+      let data: {
+        type: 'realm';
+        id: string;
+        attributes: {
+          archivedAt: string;
+          name: string;
+          iconURL: string | null;
+          backgroundURL: string | null;
+        };
+      }[] = [];
+      for (let [realmURL, { archivedAt }] of state.archivedRealms.entries()) {
+        // The endpoint is owner-scoped server-side; mirror that by surfacing
+        // only realms the caller owns.
+        let permissions = state.realmPermissions.get(realmURL);
+        if (!permissions?.includes('realm-owner')) {
+          continue;
+        }
+        let info = await getRealmInfoForURL(realmURL);
+        data.push({
+          type: 'realm',
+          id: realmURL,
+          attributes: {
+            archivedAt,
+            name: info?.name ?? realmURL,
+            iconURL: info?.iconURL ?? null,
+            backgroundURL: info?.backgroundURL ?? null,
+          },
+        });
+      }
+      // Order most-recently-archived first, breaking ties by url, matching
+      // fetchArchivedRealmsForOwner's `archived_at DESC, url ASC`.
+      data.sort((a, b) => {
+        if (a.attributes.archivedAt !== b.attributes.archivedAt) {
+          return a.attributes.archivedAt < b.attributes.archivedAt ? 1 : -1;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    },
+  });
+}
+
+async function handleArchiveToggle(
+  req: Request,
+  state: RealmServerMockState,
+  archive: boolean,
+): Promise<Response> {
+  let body = (await req.json()) as { data?: { id?: string; type?: string } };
+  let realmURL = body.data?.id;
+  if (!realmURL || body.data?.type !== 'realm') {
+    return new Response(
+      JSON.stringify({ errors: ['Request body must include a realm id'] }),
+      { status: 400, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+    );
+  }
+
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let permissions = state.realmPermissions.get(normalizedRealmURL);
+  if (!permissions?.includes('realm-owner')) {
+    return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
+      status: 403,
+      headers: { 'content-type': SupportedMimeType.JSONAPI },
+    });
+  }
+
+  if (archive) {
+    state.archivedRealms.set(normalizedRealmURL, {
+      archivedAt: new Date().toISOString(),
+    });
+  } else {
+    state.archivedRealms.delete(normalizedRealmURL);
+  }
+
+  return new Response(
+    JSON.stringify({
+      data: {
+        type: 'realm',
+        id: normalizedRealmURL,
+        attributes: { archived: archive },
+      },
+    }),
+    { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+  );
+}
+
+// The entry searchable-realm resolver. In-process registry
 // realms expose `searchEntries` directly; a live remote realm (base, skills,
 // catalog on localhost:4201) is reached by passing the original wire payload
 // through to its per-realm `_search` endpoint — the parsed query the
@@ -417,7 +526,7 @@ function getSearchEntrySearchableRealmForURL(
       url?: string;
       searchEntries: (
         searchEntryQuery: SearchEntryQuery,
-      ) => Promise<SearchEntryCollectionDocument>;
+      ) => Promise<EntryCollectionDocument>;
     }
   | undefined {
   let registry = getTestRealmRegistry();
@@ -455,7 +564,7 @@ function getSearchEntrySearchableRealmForURL(
           `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
         );
       }
-      return (await response.json()) as SearchEntryCollectionDocument;
+      return (await response.json()) as EntryCollectionDocument;
     },
   };
 }

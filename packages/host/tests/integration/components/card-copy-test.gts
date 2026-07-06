@@ -1020,7 +1020,6 @@ module('Integration | card-copy', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       });
       assert.strictEqual(json.included?.length, 1);
       // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
@@ -1155,7 +1154,6 @@ module('Integration | card-copy', function (hooks) {
             id: `${testRealm2URL}Pet/paper`,
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       });
       assert.strictEqual(json.included?.length, 1);
       // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain

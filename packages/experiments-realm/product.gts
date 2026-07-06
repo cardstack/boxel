@@ -320,9 +320,6 @@ class Isolated extends Component<typeof Product> {
         padding: 7px 24px;
         border: 0;
       }
-      div[data-test-compound-field-format='atom'] {
-        display: inline-block;
-      }
     </style>
   </template>
 }
@@ -334,9 +331,9 @@ export class Product extends CardDef {
   // use title field for product title
 
   @field images = containsMany(StringField);
-  @field seller = linksTo(SellerCard);
-  @field unitPrice = contains(MonetaryAmountField);
-  @field shippingCost = contains(MonetaryAmountField);
+  @field seller = linksTo(SellerCard, { searchable: true });
+  @field unitPrice = contains(MonetaryAmountField, { searchable: 'currency' });
+  @field shippingCost = contains(MonetaryAmountField, { searchable: 'currency' });
   @field leadTimeDays = contains(NumberField);
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);
@@ -348,9 +345,7 @@ export class Product extends CardDef {
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <EmbeddedProductComponent @model={{@model}} />
-    </template>
+    <template><EmbeddedProductComponent @model={{@model}} /></template>
   };
 
   static isolated = Isolated;

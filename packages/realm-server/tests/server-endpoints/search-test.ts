@@ -10,7 +10,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { baseCardRef, rri } from '@cardstack/runtime-common';
+import { archiveRealm, baseCardRef, rri } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
@@ -174,7 +174,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         .send(body);
     }
 
-    test('QUERY /_federated-search federates search-entry results across realms', async function (assert) {
+    test('QUERY /_federated-search federates entry results across realms', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
         realms: [testRealm.url, secondaryRealm.url],
@@ -241,6 +241,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       }
     });
 
+    // A federated search payload that names an archived realm must not
+    // return hits. The mechanism is the enumeration filter in
+    // fetchUserPermissions: once a realm is archived, the requester has
+    // no permission for it per the filtered enumeration, so the
+    // multi-realm-authorization middleware short-circuits the request
+    // with 403 before handle-search runs. The handler itself does no
+    // extra work; this test pins the contract end-to-end so a refactor
+    // of the enumeration layer can't silently weaken it.
+    test('archived realms in a federated search payload are refused at the auth boundary', async function (assert) {
+      await archiveRealm(dbAdapter, new URL(secondaryRealm.url));
+
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      });
+      assert.strictEqual(
+        response.status,
+        403,
+        'a request including an archived realm is forbidden',
+      );
+      assert.ok(
+        String(response.body?.errors?.[0] ?? response.text).includes(
+          secondaryRealm.url,
+        ),
+        'the forbidden response names the archived realm',
+      );
+
+      let activeOnly = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+      });
+      assert.strictEqual(
+        activeOnly.status,
+        200,
+        'the same request restricted to the active realm succeeds',
+      );
+      assert.strictEqual(
+        activeOnly.body.meta.page.total,
+        2,
+        'active realms continue to search normally',
+      );
+    });
+
     test('cardUrls narrows results across the federation', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
@@ -286,7 +329,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       let differentFields = await post({
         ...baseBody,
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       assert.notStrictEqual(
         differentFields.headers['etag'],
@@ -309,7 +352,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       // an inert htmlQuery (fieldset without html) does not key the cache:
       // equivalent bodies share one entry + ETag
-      let itemFields = { 'search-entry': ['item'] };
+      let itemFields = { entry: ['item'] };
       let inertA = await post({ ...baseBody, fields: itemFields });
       let inertB = await post({
         ...baseBody,

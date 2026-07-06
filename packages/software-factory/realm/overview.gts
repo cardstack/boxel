@@ -30,6 +30,7 @@ import {
   issuePriorityOptions,
   issueStatusOptions,
   issueTypeOptions,
+  type Option,
 } from './kanban-config.gts';
 import { EmptyState } from './empty-state.gts';
 import { StatusPill } from './status-pill.gts';
@@ -39,14 +40,35 @@ import type { RealmDashboard } from './realm-dashboard.gts';
 const importMetaUrl: string = import.meta.url;
 
 // The five validation-result card types the factory writes under
-// `Validations/` after every agent turn. A `type` filter matches each
-// card and its subclasses, so the tab surfaces the whole pipeline.
-const VALIDATION_TYPES = [
-  codeRef(importMetaUrl, './parse-result', 'ParseResult'),
-  codeRef(importMetaUrl, './lint-result', 'LintResult'),
-  codeRef(importMetaUrl, './eval-result', 'EvalResult'),
-  codeRef(importMetaUrl, './instantiate-result', 'InstantiateResult'),
-  codeRef(importMetaUrl, './test-results', 'TestRun'),
+// `Validations/` after every agent turn, in pipeline order. A `type` filter
+// matches each card and its subclasses, so the tab surfaces the whole
+// pipeline; the Validation Runs widget renders one group per type.
+const VALIDATION_TYPE_GROUPS = [
+  {
+    key: 'parse',
+    label: 'Parse',
+    ref: codeRef(importMetaUrl, './parse-result', 'ParseResult'),
+  },
+  {
+    key: 'lint',
+    label: 'Lint',
+    ref: codeRef(importMetaUrl, './lint-result', 'LintResult'),
+  },
+  {
+    key: 'eval',
+    label: 'Eval',
+    ref: codeRef(importMetaUrl, './eval-result', 'EvalResult'),
+  },
+  {
+    key: 'instantiate',
+    label: 'Instantiate',
+    ref: codeRef(importMetaUrl, './instantiate-result', 'InstantiateResult'),
+  },
+  {
+    key: 'test',
+    label: 'Tests',
+    ref: codeRef(importMetaUrl, './test-results', 'TestRun'),
+  },
 ];
 
 const KNOWLEDGE_TYPE = codeRef(
@@ -60,12 +82,6 @@ interface FunnelRow {
   label: string;
   color: string | undefined;
   count: number;
-}
-
-interface Option {
-  value: string;
-  label: string;
-  color?: string;
 }
 
 type SetupStatus = 'done' | 'active' | 'upcoming';
@@ -176,20 +192,23 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
     return url ? [url.href] : [];
   }
 
-  // Validation results link *to* an issue, so to group them we run one
-  // query per issue. Each of the five result types has its own `issue`
-  // field, so the `issue.id` constraint is scoped per type via `on`.
-  validationQueryForIssue = (
-    issueId: string | undefined,
+  get validationTypeGroups() {
+    return VALIDATION_TYPE_GROUPS;
+  }
+
+  // One query per validation type, newest run first. Grouping by type keeps
+  // the whole pipeline (parse → lint → eval → instantiate → test) legible at a
+  // glance; each result card already names its issue, so issue context isn't
+  // lost by dropping the per-issue grouping. Sort by `runAt` (a global
+  // timestamp): `sequenceNumber` restarts at 1 per issue slug, so it would rank
+  // an older issue's run #5 ahead of a newer issue's run #1.
+  validationQueryForType = (
+    ref: (typeof VALIDATION_TYPE_GROUPS)[number]['ref'],
   ): SearchEntryWireQuery => {
     return {
       ...searchEntryWireQueryFromQuery({
-        filter: {
-          any: VALIDATION_TYPES.map((ref) => ({
-            on: ref,
-            eq: { 'issue.id': issueId ?? '' },
-          })),
-        },
+        filter: { type: ref },
+        sort: [{ by: 'runAt', on: ref, direction: 'desc' }],
       }),
       realms: this.validationRealms,
     };
@@ -328,12 +347,24 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
                 >
                   <span class='gs-step-mark'>
                     {{#if (eq step.status 'done')}}
-                      <CircleCheck class='gs-icon done' aria-hidden='true' />
+                      <CircleCheck
+                        class='gs-icon done'
+                        width='20'
+                        height='20'
+                        aria-hidden='true'
+                      />
                     {{else if (eq step.status 'active')}}
-                      <CircleDot class='gs-icon active' aria-hidden='true' />
+                      <CircleDot
+                        class='gs-icon active'
+                        width='20'
+                        height='20'
+                        aria-hidden='true'
+                      />
                     {{else}}
                       <CircleDashed
                         class='gs-icon upcoming'
+                        width='20'
+                        height='20'
                         aria-hidden='true'
                       />
                     {{/if}}
@@ -465,7 +496,12 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
           <div class='overview-grid'>
             <section class='widget'>
               <h3 class='widget-title'>
-                <CircleAlert class='widget-icon' aria-hidden='true' />
+                <CircleAlert
+                  class='widget-icon'
+                  width='16'
+                  height='16'
+                  aria-hidden='true'
+                />
                 Needs Attention
               </h3>
               {{#if this.blockedIssues.length}}
@@ -534,7 +570,12 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
 
           <section class='widget'>
             <h3 class='widget-title'>
-              <BookOpen class='widget-icon' aria-hidden='true' />
+              <BookOpen
+                class='widget-icon'
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />
               Knowledge Articles
             </h3>
             {{#if this.validationRealms.length}}
@@ -571,18 +612,20 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
           <section class='widget'>
             <h3 class='widget-title'>Validation Runs</h3>
             {{#if this.validationRealms.length}}
-              {{#each this.issues key='id' as |issue|}}
+              {{#each this.validationTypeGroups key='key' as |group|}}
                 <div class='validation-group'>
                   <div class='validation-group-head'>
-                    <span class='issue-id'>{{issue.issueId}}</span>
-                    <span class='issue-title'>{{issue.cardTitle}}</span>
+                    <span
+                      class='validation-type'
+                      data-test-validation-type={{group.key}}
+                    >{{group.label}}</span>
                   </div>
                   {{#let
                     (component @context.searchResultsComponent)
                     as |SearchResults|
                   }}
                     <SearchResults
-                      @query={{this.validationQueryForIssue issue.id}}
+                      @query={{this.validationQueryForType group.ref}}
                       @mode='none'
                       as |results|
                     >
@@ -602,8 +645,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
                     </SearchResults>
                   {{/let}}
                 </div>
-              {{else}}
-                <p class='empty-state'>No issues yet.</p>
               {{/each}}
             {{else}}
               <p class='empty-state'>Realm not resolved — open this card from
@@ -705,8 +746,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         font-weight: 600;
       }
       .widget-icon {
-        width: 1rem;
-        height: 1rem;
         color: var(--muted-foreground, var(--boxel-500));
       }
       .funnel,
@@ -773,13 +812,17 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp-xs);
       }
+      .validation-type {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground, var(--boxel-500));
+      }
       .validation-list {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
-      }
-      .validation-row {
-        min-height: 4rem;
       }
       .validation-empty {
         margin: 0;
@@ -851,10 +894,6 @@ export class Overview extends GlimmerComponent<OverviewSignature> {
         width: 1.5rem;
         flex-shrink: 0;
         padding-top: 0.1rem;
-      }
-      .gs-icon {
-        width: 1.25rem;
-        height: 1.25rem;
       }
       .gs-icon.done,
       .gs-icon.active {

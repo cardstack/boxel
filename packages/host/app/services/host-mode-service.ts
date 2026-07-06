@@ -306,7 +306,7 @@ export default class HostModeService extends Service {
     }
     let searchURL = new URL('_federated-search', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
-    // The head markup is the `head` rendering of the card's `search-entry`:
+    // The head markup is the `head` rendering of the card's `entry`:
     // an html-only query at `html.format: head`, scoped to the single card.
     // The head HTML rides on the resolved `html` resource in `included`,
     // reached through the entry's `html` relationship.
@@ -321,7 +321,7 @@ export default class HostModeService extends Service {
         realms: [realmRoot],
         cardUrls: [cardJsonURL],
         filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
-        fields: { 'search-entry': ['html'] },
+        fields: { entry: ['html'] },
       }),
     });
 

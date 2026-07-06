@@ -69,7 +69,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       url: args.url,
       file_alias: args.url,
       type: 'instance',
-      realm_version: 1,
+      generation: 1,
       realm_url: args.realmURL,
     });
     await query(
@@ -150,13 +150,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await context.testRealmServer.testingOnlyReconcile();
 
     // Publish returns 202 before indexing finishes, and the mount kicks the
-    // published realm's index in the background — its realm_versions rows are
+    // published realm's index in the background — its realm_generations rows are
     // written when that index completes. Wait for them before asserting they
     // exist below.
     await waitUntil(
       async () => {
         let rows = await context.dbAdapter.execute(
-          `SELECT 1 FROM realm_versions WHERE realm_url = '${publishedRealmURL}' LIMIT 1`,
+          `SELECT 1 FROM realm_generations WHERE realm_url = '${publishedRealmURL}' LIMIT 1`,
         );
         return rows.length > 0 ? rows : undefined;
       },
@@ -164,7 +164,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         timeout: 30_000,
         interval: 100,
         timeoutMessage:
-          'published realm_versions rows did not appear after publish',
+          'published realm_generations rows did not appear after publish',
       },
     );
 
@@ -221,33 +221,33 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await insertRealmFileMeta(unrelatedRealmURL, unrelatedFileMetaPath);
 
     let existingSourceRealmVersionRows = await context.dbAdapter.execute(
-      `SELECT * FROM realm_versions WHERE realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_generations WHERE realm_url = '${realmURL}'`,
     );
     let existingPublishedRealmVersionRows = await context.dbAdapter.execute(
-      `SELECT * FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+      `SELECT * FROM realm_generations WHERE realm_url = '${publishedRealmURL}'`,
     );
     assert.ok(
       existingSourceRealmVersionRows.length > 0,
-      'source realm rows exist in realm_versions before deletion',
+      'source realm rows exist in realm_generations before deletion',
     );
     assert.ok(
       existingPublishedRealmVersionRows.length > 0,
-      'published realm rows exist in realm_versions before deletion',
+      'published realm rows exist in realm_generations before deletion',
     );
 
     let {
-      nameExpressions: realmVersionNames,
-      valueExpressions: realmVersionValues,
+      nameExpressions: generationNames,
+      valueExpressions: generationValues,
     } = asExpressions({
       realm_url: unrelatedRealmURL,
-      current_version: 77,
+      current_generation: 77,
     });
     await query(
       context.dbAdapter,
-      insert('realm_versions', realmVersionNames, realmVersionValues),
+      insert('realm_generations', generationNames, generationValues),
     );
 
-    for (let [cleanupRealmURL, realmVersion] of [
+    for (let [cleanupRealmURL, generation] of [
       [realmURL, 91],
       [publishedRealmURL, 92],
       [unrelatedRealmURL, 93],
@@ -255,7 +255,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
           realm_url: cleanupRealmURL,
-          realm_version: realmVersion,
+          generation: generation,
           value: {
             scopedCssLinks: [],
             types: {},
@@ -470,28 +470,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
 
     let remainingSourceRealmVersionRows = await context.dbAdapter.execute(
-      `SELECT * FROM realm_versions WHERE realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_generations WHERE realm_url = '${realmURL}'`,
     );
     let remainingPublishedRealmVersionRows = await context.dbAdapter.execute(
-      `SELECT * FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+      `SELECT * FROM realm_generations WHERE realm_url = '${publishedRealmURL}'`,
     );
     let remainingUnrelatedRealmVersionRows = await context.dbAdapter.execute(
-      `SELECT * FROM realm_versions WHERE realm_url = '${unrelatedRealmURL}'`,
+      `SELECT * FROM realm_generations WHERE realm_url = '${unrelatedRealmURL}'`,
     );
     assert.strictEqual(
       remainingSourceRealmVersionRows.length,
       0,
-      'source realm rows are removed from realm_versions',
+      'source realm rows are removed from realm_generations',
     );
     assert.strictEqual(
       remainingPublishedRealmVersionRows.length,
       0,
-      'published realm rows are removed from realm_versions',
+      'published realm rows are removed from realm_generations',
     );
     assert.strictEqual(
       remainingUnrelatedRealmVersionRows.length,
       1,
-      'unrelated realm rows remain in realm_versions',
+      'unrelated realm rows remain in realm_generations',
     );
 
     let sourceRealmMetaRows = await context.dbAdapter.execute(
@@ -703,6 +703,37 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let publishedRealmId = publishResponse.body.data.id as string;
     // Phase 3: drive reconcile so the published realm shows up in realms[].
     await context.testRealmServer.testingOnlyReconcile();
+
+    // _publish-realm returns 202 before the published realm's from-scratch
+    // index finishes; the background mount keeps writing its boxel_index /
+    // realm_generations rows. The DELETE below removes those same rows via
+    // removeRealmDatabaseArtifacts, so issuing it while that index is still in
+    // flight races the indexer's writes against the delete's and intermittently
+    // fails the transaction with a 500. Wait for the index to commit —
+    // realm_generations.current_generation >= 1 lands atomically with the rest of the
+    // from-scratch pass — and for no indexing job to remain queued, before
+    // tearing the realm down.
+    await waitUntil(
+      async () => {
+        let versionRows = await context.dbAdapter.execute(
+          `SELECT current_generation FROM realm_generations WHERE realm_url = '${publishedRealmURL}' AND current_generation >= 1 LIMIT 1`,
+        );
+        if (versionRows.length === 0) {
+          return undefined;
+        }
+        let pendingJobs = await context.dbAdapter.execute(
+          `SELECT id FROM jobs WHERE concurrency_group = 'indexing:${publishedRealmURL}' AND status = 'unfulfilled'`,
+        );
+        return pendingJobs.length === 0 ? versionRows : undefined;
+      },
+      {
+        timeout: 30_000,
+        interval: 100,
+        timeoutMessage:
+          'published realm from-scratch index did not settle before delete',
+      },
+    );
+
     let publishedRealmPath = join(
       context.dir.name,
       'realm_server_1',
@@ -755,7 +786,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    assert.strictEqual(
+      deleteResponse.status,
+      204,
+      `realm deleted${
+        deleteResponse.status === 204
+          ? ''
+          : ` (got ${deleteResponse.status}: ${JSON.stringify(
+              deleteResponse.body,
+            )})`
+      }`,
+    );
     // Phase 3: unmount is reconciler-driven.
     await context.testRealmServer.testingOnlyReconcile();
     assert.false(

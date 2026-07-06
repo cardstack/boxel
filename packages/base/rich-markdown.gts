@@ -3,7 +3,6 @@ import {
   extractFileReferenceUrls,
   fieldSerializer,
   relativeTo,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { TrackedObject } from 'tracked-built-ins';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -62,28 +61,23 @@ export class RichMarkdownField extends FieldDef {
     if (!rel) {
       return '';
     }
-    return typeof rel === 'string'
-      ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-      : rel.href;
+    // `relativeTo` is already a canonical RRI; references resolve against it in
+    // RRI space (no VirtualNetwork).
+    return typeof rel === 'string' ? rel : rel.href;
   }
 
-  /** Resolved absolute URLs of `:card[URL]` and `::card[URL]` references. */
+  /** Resolved canonical-RRI references of `:card[URL]` and `::card[URL]`. */
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: RichMarkdownField) {
       if (!this.content) {
         return [];
       }
-      return extractCardReferenceUrls(
-        this.content,
-        this.refBaseUrl,
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractCardReferenceUrls(this.content, this.refBaseUrl);
     },
   });
 
   /** Cards referenced in the markdown, loaded via query. */
   @field linkedCards = linksToMany(CardDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
@@ -97,11 +91,7 @@ export class RichMarkdownField extends FieldDef {
       if (!this.content) {
         return [];
       }
-      return extractFileReferenceUrls(
-        this.content,
-        this.refBaseUrl,
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractFileReferenceUrls(this.content, this.refBaseUrl);
     },
   });
 
@@ -111,7 +101,6 @@ export class RichMarkdownField extends FieldDef {
    * (unlike CardDef instances), so `in: { id }` never matches.
    */
   @field linkedFiles = linksToMany(FileDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { url: '$this.fileReferenceUrls' },
@@ -235,7 +224,10 @@ export class RichMarkdownField extends FieldDef {
           {{! Preview has no CodeMirrorEditor, so the sticky mode selector
               lives in its own docked bar above the rendered markdown. }}
           <div class='rich-markdown-toolbar' data-test-markdown-toolbar>
-            <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
+            <MarkdownEditorModeSelect
+              @mode={{this._mode}}
+              @onChange={{this.setMode}}
+            />
           </div>
           <div class='rich-markdown-preview' data-test-markdown-preview>
             <MarkdownTemplate
@@ -259,7 +251,10 @@ export class RichMarkdownField extends FieldDef {
               @getCards={{context.getCards}}
             >
               <:leadingControls>
-                <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
+                <MarkdownEditorModeSelect
+                  @mode={{this._mode}}
+                  @onChange={{this.setMode}}
+                />
               </:leadingControls>
             </CodeMirrorEditor>
           </CardContextConsumer>

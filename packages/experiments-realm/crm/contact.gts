@@ -495,8 +495,8 @@ export class Contact extends CardDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field position = contains(StringField);
-  @field crmApp = linksTo(() => CrmApp);
-  @field company = linksTo(() => Company);
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
+  @field company = linksTo(() => Company, { searchable: 'crmApp' });
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);

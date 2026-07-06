@@ -56,7 +56,7 @@ function formatDiskSnapshot(snapshot: DiskSnapshot): string {
 }
 
 // Read the raw rows for a URL from boxel_index + boxel_index_working,
-// plus realm_versions, so we can tell whether a stale GET is the index
+// plus realm_generations, so we can tell whether a stale GET is the index
 // being out of date or the GET path picking up the wrong row.
 async function readIndexSnapshot(
   dbAdapter: PgAdapter,
@@ -64,17 +64,17 @@ async function readIndexSnapshot(
   cardURL: string,
   fileURL: string,
 ): Promise<{
-  realmVersion: unknown;
+  generation: unknown;
   stable: unknown[];
   working: unknown[];
 }> {
   let [versionRow] = (await dbAdapter.execute(
-    `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+    `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
     { bind: [realmHref] },
-  )) as { current_version: number }[];
+  )) as { current_generation: number }[];
 
   let stable = (await dbAdapter.execute(
-    `SELECT url, file_alias, type, realm_version, is_deleted,
+    `SELECT url, file_alias, type, generation, is_deleted,
             pristine_doc, last_modified
        FROM boxel_index
       WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
@@ -82,7 +82,7 @@ async function readIndexSnapshot(
   )) as unknown[];
 
   let working = (await dbAdapter.execute(
-    `SELECT url, file_alias, type, realm_version, is_deleted,
+    `SELECT url, file_alias, type, generation, is_deleted,
             pristine_doc, last_modified
        FROM boxel_index_working
       WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
@@ -90,7 +90,7 @@ async function readIndexSnapshot(
   )) as unknown[];
 
   return {
-    realmVersion: versionRow?.current_version ?? null,
+    generation: versionRow?.current_generation ?? null,
     stable,
     working,
   };

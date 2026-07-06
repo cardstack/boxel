@@ -17,7 +17,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
-import type { ResourceID, VirtualNetwork } from '@cardstack/runtime-common';
+import type { ResourceID } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
 
@@ -35,10 +35,10 @@ import {
   loadCardDef,
   localId,
   maybeRelativeReference,
-  maybeURL,
   meta,
   primitive,
   relativeTo,
+  resolveRRIReference,
   rri,
 } from '@cardstack/runtime-common';
 import { getFieldOverrides, getFields, serializedGet } from './field-support';
@@ -66,15 +66,17 @@ export interface JSONAPISingleResourceDocument {
 
 export interface SerializeOpts {
   includeComputeds?: boolean;
+  // Include link fields the card does not actually have. By default
+  // serialization keeps only the relationships present in the card's data — a
+  // set target or an authored empty `{ self: null }` — plus contained fields
+  // (always present); set this to serialize every declared relationship,
+  // including never-authored ones (as `{ self: null }`).
   includeUnrenderedFields?: boolean;
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
-  // The VirtualNetwork to consult for prefix/RRI resolution during
-  // serialization. Required — every caller must thread a VN.
-  virtualNetwork: VirtualNetwork;
 }
 
 export interface DeserializeOpts {
@@ -220,32 +222,25 @@ export function serializeCard(
   };
   let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
     model.id ?? model[relativeTo];
-  let vn = opts.virtualNetwork;
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
       maybeRelativeReference(possibleReference: string) {
-        // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-        // in their canonical portable form — return as-is.
-        if (vn.isRegisteredPrefix(possibleReference)) {
+        // Prefix-form RRIs (e.g. @cardstack/catalog/foo) are already in their
+        // canonical portable form — return as-is.
+        if (possibleReference.startsWith('@')) {
           return possibleReference;
         }
-        let modelRelativeToForURL: URL | undefined =
-          typeof modelRelativeTo === 'string'
-            ? vn.toURL(modelRelativeTo)
-            : modelRelativeTo;
-        let url = maybeURL(possibleReference, modelRelativeToForURL);
-        if (!url) {
-          throw new Error(
-            `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
-          );
-        }
+        // Identifiers are canonical RRI, so resolve relative refs to their
+        // absolute form with plain path math (no VirtualNetwork), then
+        // relativize against the model's own id.
+        let absolute = resolveRRIReference(possibleReference, modelRelativeTo);
         if (!modelRelativeTo) {
-          return url.href;
+          return absolute;
         }
         const realmURLString = getCardMeta(model, 'realmURL');
         const realmURL = realmURLString ? new URL(realmURLString) : undefined;
-        return maybeRelativeReference(url, modelRelativeTo, realmURL);
+        return maybeRelativeReference(rri(absolute), modelRelativeTo, realmURL);
       },
     },
   });
@@ -325,7 +320,6 @@ export function serializeFileDef(
   };
   let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
     model.id ?? model[relativeTo];
-  let vn = opts.virtualNetwork;
   let data = serializeCardResource(
     model,
     doc,
@@ -333,27 +327,28 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeReference(possibleReference: string) {
-          // Registered prefix refs (e.g. @cardstack/catalog/foo) are
-          // already in their canonical portable form — return as-is.
-          if (vn.isRegisteredPrefix(possibleReference)) {
+          // Prefix-form RRIs (e.g. @cardstack/catalog/foo) are already in
+          // their canonical portable form — return as-is.
+          if (possibleReference.startsWith('@')) {
             return possibleReference;
           }
-          let modelRelativeToForURL: URL | undefined =
-            typeof modelRelativeTo === 'string'
-              ? vn.toURL(modelRelativeTo)
-              : modelRelativeTo;
-          let url = maybeURL(possibleReference, modelRelativeToForURL);
-          if (!url) {
-            throw new Error(
-              `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
-            );
-          }
+          // Identifiers are canonical RRI, so resolve relative refs to their
+          // absolute form with plain path math (no VirtualNetwork), then
+          // relativize against the model's own id.
+          let absolute = resolveRRIReference(
+            possibleReference,
+            modelRelativeTo,
+          );
           if (!modelRelativeTo) {
-            return url.href;
+            return absolute;
           }
           const realmURLString = getCardMeta(model, 'realmURL');
           const realmURL = realmURLString ? new URL(realmURLString) : undefined;
-          return maybeRelativeReference(url, modelRelativeTo, realmURL);
+          return maybeRelativeReference(
+            rri(absolute),
+            modelRelativeTo,
+            realmURL,
+          );
         },
       },
     },

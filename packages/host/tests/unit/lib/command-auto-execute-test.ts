@@ -10,8 +10,9 @@ type AutoExecCommandInput = Parameters<typeof isAutoExecutableCommand>[0];
 function cmd(
   name: string | undefined,
   requiresApproval = true,
+  executedBy: string | undefined = undefined,
 ): AutoExecCommandInput {
-  return { name, requiresApproval };
+  return { name, requiresApproval, executedBy };
 }
 
 module('Unit | Lib | command-auto-execute', function () {
@@ -56,6 +57,41 @@ module('Unit | Lib | command-auto-execute', function () {
     assert.false(
       isAutoExecutableCommand(cmd('patchCardInstance', true), undefined, true),
       'manual approval is required when mode is unknown',
+    );
+  });
+
+  test('commands already executed by a server-side actor never auto-execute', function (assert) {
+    // readRealmFile and friends are run by ai-bot itself; the host records them
+    // in the timeline but must never execute them, even in act mode or with
+    // requiresApproval=false.
+    assert.false(
+      isAutoExecutableCommand(
+        cmd('readRealmFile', false, 'ai-bot'),
+        'act',
+        true,
+      ),
+      'executedBy overrides requiresApproval=false',
+    );
+    assert.false(
+      isAutoExecutableCommand(
+        cmd('readRealmFile', true, 'ai-bot'),
+        'act',
+        true,
+      ),
+      'executedBy overrides act mode',
+    );
+  });
+
+  test('a non-ai-bot executor is not treated as bot-executed', function (assert) {
+    // The guard matches ai-bot's own executor explicitly, not any value — a
+    // command executed by the host (or any other actor) is evaluated normally.
+    assert.true(
+      isAutoExecutableCommand(
+        cmd('patchCardInstance', true, 'host'),
+        'act',
+        true,
+      ),
+      "executedBy: 'host' does not short-circuit; act mode still auto-executes",
     );
   });
 

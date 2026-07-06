@@ -24,7 +24,7 @@ function makeDoc(label: string): string {
   return JSON.stringify(
     {
       data: [{ type: 'card', id: `${realmA}${label}` }],
-      meta: { page: { total: 1, realmVersion: 1 } },
+      meta: { page: { total: 1, generation: 1 } },
     },
     null,
     2,

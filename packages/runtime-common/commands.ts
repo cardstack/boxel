@@ -12,10 +12,20 @@ import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
 import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 
+// `executedBy` value for tool calls ai-bot runs itself in-process (e.g.
+// readRealmFile).
+export const AI_BOT_EXECUTOR = 'ai-bot';
+
 export interface CommandRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
+  // Names the actor that ran (or will run) this tool call — e.g. AI_BOT_EXECUTOR
+  // for tools ai-bot executes itself. It's a value (not a boolean) so it can
+  // identify *which* actor in a multi-bot / multi-user room, and so the field
+  // can later carry e.g. 'host' too. The host therefore matches its own
+  // executor explicitly rather than treating any value as "not mine to run".
+  executedBy?: string;
 }
 
 export const CommandContextStamp = Symbol.for('CommandContext');
@@ -123,7 +133,11 @@ function friendlyModuleName(fullModuleUrl: string) {
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
+  // `functionName` is a recomputed `computeVia` field (never persisted), and
+  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // every command name self-consistent.
+  virtualNetwork?: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
@@ -170,6 +184,9 @@ export function decodeCommandRequest(
       // ignore malformed nested json; validation will report a clearer error later
     }
   }
+  if (commandRequest.executedBy != null) {
+    decodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
   return decodedCommandRequest;
 }
 
@@ -189,6 +206,9 @@ export function encodeCommandRequest(
   }
   if (commandRequest.arguments) {
     encodedCommandRequest.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  if (commandRequest.executedBy != null) {
+    encodedCommandRequest.executedBy = commandRequest.executedBy;
   }
   return encodedCommandRequest;
 }

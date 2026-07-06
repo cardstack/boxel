@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // A grep-style guard that the superseded search scaffolding stays
-// removed. The platform's search relationships live on `search-entry`, so the
+// removed. The platform's search relationships live on `entry`, so the
 // superseded in-place additions to the card resource and the old result mappers must
 // not reappear. Each entry asserts a removed identifier is absent from the
 // source file that used to define it.
@@ -19,7 +19,7 @@ function source(relativePath: string): string {
 const GUARDS: { file: string; forbidden: string[] }[] = [
   {
     // The `rendered-html` resource type, its on-`card` relationship, and the
-    // identity-only marker — superseded by the `search-entry` → `html` / `item`
+    // identity-only marker — superseded by the `entry` → `html` / `item`
     // model.
     file: 'runtime-common/resource-types.ts',
     forbidden: ['RenderedHtmlResource', "'rendered-html'", 'identityOnly'],

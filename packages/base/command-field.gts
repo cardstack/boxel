@@ -1,11 +1,4 @@
-import {
-  Component,
-  FieldDef,
-  field,
-  contains,
-  relativeTo,
-  virtualNetworkFor,
-} from './card-api';
+import { Component, FieldDef, field, contains, relativeTo } from './card-api';
 import BooleanField from './boolean';
 import { AbsoluteCodeRefField } from './code-ref';
 import StringField from './string';
@@ -47,16 +40,12 @@ export class CommandField extends FieldDef {
   @field functionName = contains(StringField, {
     description: 'The name of the function to be executed',
     computeVia: function (this: CommandField) {
-      let vn = virtualNetworkFor(this);
-      if (!vn) {
-        throw new Error(
-          `CommandField.functionName requires a VirtualNetwork (no store attached to ${this.constructor.name})`,
-        );
-      }
+      // Resolve the code ref in RRI space (no VirtualNetwork). `codeRef` is a
+      // canonical (absolute) code ref; relative modules join against the
+      // instance's relative-to base.
       return buildCommandFunctionName(
         this.codeRef,
         this[Symbol.for('cardstack-relative-to') as typeof relativeTo],
-        vn,
       );
     },
   });

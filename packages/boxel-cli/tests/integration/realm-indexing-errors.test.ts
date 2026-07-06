@@ -76,7 +76,7 @@ describe('realm indexing-errors (integration)', () => {
     // is needed since the /_indexing-errors endpoint reads it directly.
     await dbAdapter!.execute(
       `INSERT INTO boxel_index
-         (url, file_alias, type, realm_version, realm_url,
+         (url, file_alias, type, generation, realm_url,
           has_error, error_doc, diagnostics, is_deleted)
        VALUES ($1, $2, 'instance', 1, $3,
                TRUE, $4::jsonb, $5::jsonb, FALSE)`,
@@ -125,7 +125,7 @@ describe('realm indexing-errors (integration)', () => {
     ] as const) {
       await dbAdapter!.execute(
         `INSERT INTO boxel_index
-           (url, file_alias, type, realm_version, realm_url,
+           (url, file_alias, type, generation, realm_url,
             has_error, error_doc, is_deleted)
          VALUES ($1, $2, $3, 1, $4, TRUE, $5::jsonb, FALSE)`,
         {
@@ -174,7 +174,7 @@ describe('realm indexing-errors (integration)', () => {
 
     await dbAdapter!.execute(
       `INSERT INTO boxel_index
-         (url, file_alias, type, realm_version, realm_url,
+         (url, file_alias, type, generation, realm_url,
           has_error, error_doc, diagnostics, is_deleted)
        VALUES ($1, $2, 'instance', 1, $3,
                FALSE, NULL, $4::jsonb, FALSE)`,
@@ -207,7 +207,7 @@ describe('realm indexing-errors (integration)', () => {
 
     await dbAdapter!.execute(
       `INSERT INTO boxel_index
-         (url, file_alias, type, realm_version, realm_url,
+         (url, file_alias, type, generation, realm_url,
           has_error, error_doc, diagnostics, is_deleted)
        VALUES ($1, $2, 'file', 1, $3,
                FALSE, NULL, $4::jsonb, FALSE)`,
@@ -249,7 +249,7 @@ describe('realm indexing-errors (integration)', () => {
 
     await dbAdapter!.execute(
       `INSERT INTO boxel_index
-         (url, file_alias, type, realm_version, realm_url,
+         (url, file_alias, type, generation, realm_url,
           has_error, error_doc, diagnostics, is_deleted)
        VALUES ($1, $2, 'file', 1, $3,
                FALSE, NULL, $4::jsonb, FALSE)`,

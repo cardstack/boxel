@@ -731,11 +731,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
-        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon).
+        // The head-HTML injection dual-reads from prerendered_html (falling back
+        // to boxel_index), so set the head on both channels for the row.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let faviconHead = `'<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'`;
         await dbAdapter.execute(
           `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+           SET head_html = ${faviconHead}
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+        await dbAdapter.execute(
+          `UPDATE prerendered_html
+           SET head_html = ${faviconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,
@@ -784,10 +794,20 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        // The head-HTML injection dual-reads from prerendered_html (falling back
+        // to boxel_index), so set the head on both channels for the row.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let touchIconHead = `'<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'`;
         await dbAdapter.execute(
           `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+           SET head_html = ${touchIconHead}
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+        await dbAdapter.execute(
+          `UPDATE prerendered_html
+           SET head_html = ${touchIconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,

@@ -8,6 +8,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   userInitiatedPriority,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -99,7 +100,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class PetPerson extends CardDef {
         @field firstName = contains(StringField);
-        @field pet = linksTo(() => Pet);
+        @field pet = linksTo(() => Pet, { searchable: true });
         @field nickName = contains(StringField, {
           computeVia: function (this: Person) {
             if (this.pet?.firstName) {
@@ -144,7 +145,7 @@ function makeTestRealmFileSystem(): Record<
 
       export class Post extends CardDef {
         static displayName = 'Post';
-        @field author = linksTo(Person);
+        @field author = linksTo(Person, { searchable: true });
         @field message = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -774,19 +775,15 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           hassan.doc.data.relationships,
           {
+            // Only `pet` appears: it is the relationship this card actually
+            // has (a set target). The base-card `cardInfo.theme` /
+            // `cardInfo.cardThumbnail` links are never authored here, so they
+            // drop from the pristine doc — this filtering is data-driven, not
+            // searchable-driven (they still appear in the search doc, which
+            // enumerates every declared field).
             pet: {
               links: {
                 self: './ringo',
-              },
-            },
-            'cardInfo.cardThumbnail': {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
               },
             },
           },
@@ -801,27 +798,39 @@ module(basename(import.meta.filename), function () {
 
       let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
       if (hassanEntry) {
+        // The searchable-driven generator is authoritative: every relationship
+        // is present (an unset link is `null`, a set one expands per its
+        // `searchable` annotation), and every card carries its base-card fields
+        // (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+        // generator output; `diffDoc(..., false)` reports any deviation.
         assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
+          diffDoc(
+            {
+              id: hassanId,
+              pet: {
+                id: `${testRealm}ringo`,
+                cardTitle: 'Untitled Card',
+                firstName: 'Ringo',
+                cardTheme: null,
+                cardInfo: {
+                  cardThumbnail: null,
+                  theme: null,
+                },
+              },
+              nickName: "Ringo's buddy",
+              _cardType: 'PetPerson',
+              firstName: 'Hassan',
               cardTitle: 'Untitled Card',
-              firstName: 'Ringo',
+              cardTheme: null,
               cardInfo: {
+                cardThumbnail: null,
                 theme: null,
               },
             },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            cardTitle: 'Untitled Card',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
-            },
-          },
+            hassanEntry.searchDoc ?? {},
+            false,
+          ),
+          [],
           'searchData is correct',
         );
       } else {
@@ -1496,7 +1505,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `realm_version` —
+        // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
         // same URL. Any column NOT in the tombstone upsert's SET list keeps
         // its previous value. Before this guard, `has_error` and `error_doc`

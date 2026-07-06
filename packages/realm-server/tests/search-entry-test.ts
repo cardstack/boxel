@@ -4,7 +4,7 @@ import { basename } from 'path';
 import {
   buildHtmlResource,
   buildIconResource,
-  buildSearchEntryResource,
+  buildEntryResource,
   buildSparseItemResource,
   htmlResourceId,
   cssResourceId,
@@ -12,8 +12,8 @@ import {
   htmlQueryMatches,
   isHtmlResource,
   isIconResource,
-  isSearchEntryCollectionDocument,
-  isSearchEntryResource,
+  isEntryCollectionDocument,
+  isEntryResource,
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
   resolveHtmlQuery,
@@ -81,8 +81,8 @@ const universe: RenderingCandidate[] = [
 ];
 
 module(basename(import.meta.filename), function () {
-  module('search-entry query parser', function () {
-    test('translates the canonical search-entry query', function (assert) {
+  module('entry query parser', function () {
+    test('translates the canonical entry query', function (assert) {
       let htmlQuery: HtmlQuery = {
         every: [
           { eq: { format: 'embedded' } },
@@ -100,7 +100,7 @@ module(basename(import.meta.filename), function () {
         sort: [{ by: 'item.title', direction: 'asc' }],
         page: { size: 20 },
         realms: ['http://localhost:4201/test'],
-        fields: { 'search-entry': ['html'] },
+        fields: { entry: ['html'] },
       });
       assert.deepEqual(parsed.itemQuery, {
         filter: { on: authorRef, eq: { status: 'ready' } },
@@ -258,13 +258,13 @@ module(basename(import.meta.filename), function () {
     test('sparse fieldsets parse to the item selection', function (assert) {
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
         }).fieldset,
         { html: false, item: { kind: 'full' }, itemAsFallback: false },
       );
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['item.title', 'item.status'] },
+          fields: { entry: ['item.title', 'item.status'] },
         }).fieldset,
         {
           html: false,
@@ -274,7 +274,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['html', 'item'] },
+          fields: { entry: ['html', 'item'] },
         }).fieldset,
         { html: true, item: { kind: 'full' }, itemAsFallback: false },
       );
@@ -287,22 +287,22 @@ module(basename(import.meta.filename), function () {
         'bare field path',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': ['item', 'item.title'] } }).code,
+        parseError({ fields: { entry: ['item', 'item.title'] } }).code,
         'invalid-query',
         'full item cannot combine with item.<field>',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': ['html.cardType'] } }).code,
+        parseError({ fields: { entry: ['html.cardType'] } }).code,
         'invalid-query',
         'html does not dot deeper in a fieldset',
       );
       assert.strictEqual(
         parseError({ fields: { card: ['title'] } }).code,
         'invalid-query',
-        'only the search-entry type is selectable',
+        'only the entry type is selectable',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': [] } }).code,
+        parseError({ fields: { entry: [] } }).code,
         'invalid-query',
         'empty fieldset',
       );
@@ -442,39 +442,38 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('search-entry collection document guard', function () {
-    let entry = () =>
-      buildSearchEntryResource({ url: cardUrl, itemType: 'card' });
+  module('entry collection document guard', function () {
+    let entry = () => buildEntryResource({ url: cardUrl, itemType: 'card' });
     let meta = { page: { total: 1 } };
 
     test('accepts a well-formed document, with and without included', function (assert) {
-      assert.true(isSearchEntryCollectionDocument({ data: [entry()], meta }));
+      assert.true(isEntryCollectionDocument({ data: [entry()], meta }));
       assert.true(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: [{ type: 'card', id: cardUrl, attributes: {}, meta: {} }],
           meta,
         }),
       );
-      assert.true(isSearchEntryCollectionDocument({ data: [], meta }));
+      assert.true(isEntryCollectionDocument({ data: [], meta }));
     });
 
     test('rejects malformed data and included members', function (assert) {
-      assert.false(isSearchEntryCollectionDocument(null));
-      assert.false(isSearchEntryCollectionDocument({ data: [entry()] }));
+      assert.false(isEntryCollectionDocument(null));
+      assert.false(isEntryCollectionDocument({ data: [entry()] }));
       assert.false(
-        isSearchEntryCollectionDocument({ data: 'nope', meta }),
+        isEntryCollectionDocument({ data: 'nope', meta }),
         'data must be an array',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [{ type: 'card', id: cardUrl }],
           meta,
         }),
-        'data members must be search-entry resources',
+        'data members must be entry resources',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: 'nope',
           meta,
@@ -482,7 +481,7 @@ module(basename(import.meta.filename), function () {
         'a present included must be an array',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: [{ attributes: {} }],
           meta,
@@ -633,21 +632,21 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('search-entry builders', function () {
-    test('buildSearchEntryResource links the requested branches', function (assert) {
+  module('entry builders', function () {
+    test('buildEntryResource links the requested branches', function (assert) {
       let htmlId = htmlResourceId({
         url: cardUrl,
         format: 'fitted',
         renderType: authorRef,
       });
-      let both = buildSearchEntryResource({
+      let both = buildEntryResource({
         url: cardUrl,
         htmlIds: [htmlId],
         itemType: 'card',
         iconId: `${authorRef.module}/${authorRef.name}`,
       });
       assert.deepEqual(both, {
-        type: 'search-entry',
+        type: 'entry',
         id: cardUrl,
         relationships: {
           html: { data: [{ type: 'html', id: htmlId }] },
@@ -660,20 +659,20 @@ module(basename(import.meta.filename), function () {
           },
         },
       });
-      assert.true(isSearchEntryResource(both));
+      assert.true(isEntryResource(both));
 
       // a pinned html branch with no matching rendering: empty array
-      let empty = buildSearchEntryResource({ url: cardUrl, htmlIds: [] });
+      let empty = buildEntryResource({ url: cardUrl, htmlIds: [] });
       assert.deepEqual(empty.relationships.html, { data: [] });
-      assert.true(isSearchEntryResource(empty));
+      assert.true(isEntryResource(empty));
 
       // the default mode's fallback rows omit the relationship entirely
-      let itemOnly = buildSearchEntryResource({
+      let itemOnly = buildEntryResource({
         url: cardUrl,
         itemType: 'card',
       });
       assert.deepEqual(Object.keys(itemOnly.relationships), ['item']);
-      assert.true(isSearchEntryResource(itemOnly));
+      assert.true(isEntryResource(itemOnly));
     });
 
     test('buildHtmlResource carries the rendering attributes and styles', function (assert) {

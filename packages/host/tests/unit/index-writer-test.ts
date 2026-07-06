@@ -9,13 +9,17 @@ import {
   internalKeyFor,
   baseCardRef,
   coerceTypes,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ri,
   rri,
   type LooseCardResource,
   type IndexedInstance,
   type BoxelIndexTable,
+  type PrerenderedHtmlTable,
   type CardResource,
   type RealmResourceIdentifier,
+  type SerializedError,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -143,43 +147,43 @@ module('Unit | index-writer', function (hooks) {
     await setupIndex(
       adapter,
       [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 5 },
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 5 },
       ],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
           url: `${testRealmURL}2.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}4.json`],
         },
         {
           url: `${testRealmURL}3.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}2.json`],
         },
         {
           url: `${testRealmURL}4.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
           url: `${testRealmURL}5.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [],
         },
         {
           url: `${testRealmURL2}A.json`,
-          realm_version: 5,
+          generation: 5,
           realm_url: testRealmURL2,
           deps: [],
         },
@@ -201,7 +205,7 @@ module('Unit | index-writer', function (hooks) {
     ]);
 
     let invalidatedEntries = await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -214,7 +218,7 @@ module('Unit | index-writer', function (hooks) {
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
     let otherRealms = await adapter.execute(
-      `SELECT url, realm_url, realm_version, is_deleted FROM boxel_index_working WHERE realm_url != '${testRealmURL}'`,
+      `SELECT url, realm_url, generation, is_deleted FROM boxel_index_working WHERE realm_url != '${testRealmURL}'`,
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -223,28 +227,28 @@ module('Unit | index-writer', function (hooks) {
         {
           url: `${testRealmURL2}A.json`,
           realm_url: testRealmURL2,
-          realm_version: 5,
+          generation: 5,
           is_deleted: null,
         },
       ],
       'the index entries from other realms are unchanged',
     );
-    let realmVersions = await adapter.execute(
-      'select * from realm_versions ORDER BY realm_url COLLATE "POSIX"',
+    let generations = await adapter.execute(
+      'select * from realm_generations ORDER BY realm_url COLLATE "POSIX"',
     );
     assert.deepEqual(
-      realmVersions,
+      generations,
       [
         {
           realm_url: `${testRealmURL}`,
-          current_version: 1,
+          current_generation: 1,
         },
         {
           realm_url: `${testRealmURL2}`,
-          current_version: 5,
+          current_generation: 5,
         },
       ],
-      'the "production" realm versions are correct',
+      'the "production" realm generations are correct',
     );
   });
 
@@ -252,15 +256,15 @@ module('Unit | index-writer', function (hooks) {
     await setupIndex(
       adapter,
       [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 5 },
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 5 },
       ],
       [
         {
           url: `${testRealmURL}1.json`,
           file_alias: `${testRealmURL}1.json`,
           type: 'instance',
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
         },
@@ -268,7 +272,7 @@ module('Unit | index-writer', function (hooks) {
           url: `${testRealmURL}2.json`,
           file_alias: `${testRealmURL}2.json`,
           type: 'instance',
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}1.json`],
         },
@@ -276,7 +280,7 @@ module('Unit | index-writer', function (hooks) {
           url: `${testRealmURL}3.json`,
           file_alias: `${testRealmURL}3.json`,
           type: 'instance',
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           deps: [],
         },
@@ -301,15 +305,15 @@ module('Unit | index-writer', function (hooks) {
     await setupIndex(
       adapter,
       [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 5 },
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 5 },
       ],
       [
         {
           url: `${testRealmURL2}luke.json`,
           file_alias: `${testRealmURL2}luke.json`,
           type: 'instance',
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL2,
           deps: [`${testRealmURL}person`],
         },
@@ -330,11 +334,11 @@ module('Unit | index-writer', function (hooks) {
   test('can update an index entry', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: {
             id: `${testRealmURL}1.json`,
@@ -395,7 +399,7 @@ module('Unit | index-writer', function (hooks) {
     });
 
     let [liveVersion] = await adapter.execute(
-      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1`,
+      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -410,7 +414,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       liveVersion,
       {
-        realm_version: 1,
+        generation: 1,
         pristine_doc: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -434,7 +438,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let [wipVersion] = await adapter.execute(
-      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM boxel_index_working WHERE url = $1`,
+      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index_working WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -448,7 +452,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       wipVersion,
       {
-        realm_version: 2,
+        generation: 2,
         pristine_doc: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -479,7 +483,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [finalVersion] = await adapter.execute(
-      `SELECT realm_version, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1`,
+      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -493,7 +497,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       finalVersion,
       {
-        realm_version: 2,
+        generation: 2,
         pristine_doc: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -522,6 +526,397 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('dual-writes prerendered HTML on index and swaps it into production on done', async function (assert) {
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+        },
+      ],
+    );
+
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    let embeddedHtml = Object.fromEntries(
+      types.map((type) => [type, `<div class="embedded">${type}</div>`]),
+    );
+    let fittedHtml = Object.fromEntries(
+      types.map((type) => [type, `<div class="fitted">${type}</div>`]),
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: ['Person', 'Card'],
+      types,
+      embeddedHtml,
+      fittedHtml,
+      isolatedHtml: `<div class="isolated">Isolated</div>`,
+      atomHtml: `<span class="atom">Atom</span>`,
+      headHtml: `<span class="head">Head</span>`,
+      iconHTML: `<svg>icon</svg>`,
+      markdown: 'Van Gogh markdown',
+    });
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT url, realm_url, type, fitted_html, embedded_html, isolated_html, atom_html, head_html, markdown, deps, generation, is_deleted, error_doc
+       FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: {
+          fitted_html: 'JSON',
+          embedded_html: 'JSON',
+          deps: 'JSON',
+          error_doc: 'JSON',
+          is_deleted: 'BOOLEAN',
+        },
+      },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+
+    assert.deepEqual(
+      rendered,
+      {
+        url: `${testRealmURL}1.json`,
+        realm_url: testRealmURL,
+        type: 'instance',
+        fitted_html: fittedHtml,
+        embedded_html: embeddedHtml,
+        isolated_html: `<div class="isolated">Isolated</div>`,
+        atom_html: `<span class="atom">Atom</span>`,
+        head_html: `<span class="head">Head</span>`,
+        markdown: 'Van Gogh markdown',
+        deps: [`${testRealmURL}person`],
+        generation: 2,
+        is_deleted: false,
+        error_doc: null,
+      },
+      'prerendered_html carries the HTML at the job generation',
+    );
+
+    // No read-path change: the HTML is also on boxel_index (dual-write, not a
+    // move), and icon_html is NOT dual-written (it stays on boxel_index).
+    let [indexRow] = (await adapter.execute(
+      `SELECT isolated_html, markdown, icon_html FROM boxel_index WHERE url = $1`,
+      { bind: [`${testRealmURL}1.json`] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      indexRow.isolated_html,
+      `<div class="isolated">Isolated</div>`,
+      'boxel_index retains isolated_html',
+    );
+    assert.strictEqual(
+      indexRow.markdown,
+      'Van Gogh markdown',
+      'boxel_index retains markdown',
+    );
+    assert.strictEqual(
+      indexRow.icon_html,
+      `<svg>icon</svg>`,
+      'icon_html stays on boxel_index (not part of prerendered_html)',
+    );
+  });
+
+  test('tombstones the prerendered_html row on delete, preserving last-known HTML', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+        },
+      ],
+    );
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: { name: 'Van Gogh' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+
+    // First index the instance with HTML so prerendered_html has a rendering.
+    let batch1 = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch1.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch1.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: ['Person'],
+      types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+        (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+      ),
+      isolatedHtml: `<div class="isolated">Isolated</div>`,
+      markdown: 'Van Gogh markdown',
+    });
+    await batch1.done();
+
+    // Then delete it: invalidate + done with no updateEntry (file removed).
+    let batch2 = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch2.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch2.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT is_deleted, isolated_html, markdown, generation FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as PrerenderedHtmlTable[];
+    assert.true(rendered.is_deleted, 'prerendered_html row is tombstoned');
+    assert.strictEqual(
+      rendered.isolated_html,
+      `<div class="isolated">Isolated</div>`,
+      'last-known HTML is preserved on the tombstone',
+    );
+    assert.strictEqual(
+      rendered.generation,
+      3,
+      'tombstone stamped at the deleting job generation',
+    );
+
+    let [indexRow] = (await adapter.execute(
+      `SELECT is_deleted FROM boxel_index WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as BoxelIndexTable[];
+    assert.true(
+      indexRow.is_deleted,
+      'boxel_index row is tombstoned in lockstep',
+    );
+  });
+
+  test('copyFrom dual-writes prerendered_html for the copied realm', async function (assert) {
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          last_known_good_deps: [`${testRealmURL}person`],
+          types,
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          icon_html: '<svg>test icon</svg>',
+          markdown: 'Mango markdown',
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT url, realm_url, isolated_html, markdown, generation FROM prerendered_html WHERE realm_url = $1`,
+      { bind: [testRealmURL2] },
+    )) as unknown as PrerenderedHtmlTable[];
+    assert.strictEqual(rows.length, 1, 'one prerendered_html row copied');
+    let [rendered] = rows;
+    assert.strictEqual(
+      rendered.url,
+      `${testRealmURL2}1.json`,
+      'copied prerendered_html row has the dest-realm URL',
+    );
+    assert.strictEqual(
+      rendered.isolated_html,
+      `<div class="isolated">Isolated HTML</div>`,
+      'HTML copied into the dest realm',
+    );
+    assert.strictEqual(rendered.markdown, 'Mango markdown', 'markdown copied');
+    assert.strictEqual(
+      rendered.generation,
+      2,
+      'copied rows stamped at the dest-realm job generation',
+    );
+  });
+
+  test('promotes prerendered_html for rows resumed from a prior job attempt', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
+    // (with HTML) but never mirrored it onto prerendered_html_working — the
+    // crash-window / pre-dual-write-deploy case. prerendered_html_working is
+    // left empty. A resuming batch re-adds the URL to the invalidation set but
+    // never re-runs updateEntry, so the batch-commit projection must source
+    // from boxel_index_working or the row lands in boxel_index but is silently
+    // skipped in prerendered_html.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      {
+        working: [
+          {
+            url,
+            generation: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: String(1700000000),
+            is_deleted: false,
+            deps: [],
+            types: [],
+            isolated_html: `<div class="isolated">Resumed</div>`,
+            markdown: 'Resumed markdown',
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      { jobId: 42, reservationId: 1, priority: 0 },
+    );
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown FROM prerendered_html WHERE url = $1`,
+      { bind: [url] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">Resumed</div>`,
+      'resumed row HTML is promoted to prerendered_html',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'Resumed markdown',
+      'resumed row markdown is promoted to prerendered_html',
+    );
+
+    let [indexRow] = (await adapter.execute(
+      `SELECT isolated_html FROM boxel_index WHERE url = $1`,
+      { bind: [url] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      indexRow?.isolated_html,
+      `<div class="isolated">Resumed</div>`,
+      'boxel_index and prerendered_html advance in lockstep for resumed rows',
+    );
+  });
+
+  test('mirrors an error entry onto prerendered_html, preserving last-known-good HTML', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          is_deleted: false,
+          pristine_doc: resource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          last_known_good_deps: [`${testRealmURL}person`],
+          types,
+          isolated_html: `<div class="isolated">Last known good</div>`,
+          markdown: 'Last known good markdown',
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(url), {
+      type: 'instance-error',
+      error: { message: 'boom', status: 500, additionalErrors: [] },
+    });
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown, error_doc, is_deleted FROM prerendered_html WHERE url = $1`,
+      {
+        bind: [url],
+        coerceTypes: { error_doc: 'JSON', is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      (rendered?.error_doc as SerializedError | null)?.message,
+      'boom',
+      'the error rides on prerendered_html.error_doc',
+    );
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">Last known good</div>`,
+      'last-known-good HTML is preserved on the error row',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'Last known good markdown',
+      'last-known-good markdown is preserved on the error row',
+    );
+    assert.false(rendered?.is_deleted, 'an error row is not a tombstone');
+  });
+
   test('can copy index entries', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
@@ -547,13 +942,13 @@ module('Unit | index-writer', function (hooks) {
     await setupIndex(
       adapter,
       [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 1 },
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
       ],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'instance',
           pristine_doc: resource,
@@ -621,7 +1016,7 @@ module('Unit | index-writer', function (hooks) {
       {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
-        realm_version: 2,
+        generation: 2,
         realm_url: testRealmURL2,
         type: 'instance',
         has_error: false,
@@ -681,7 +1076,7 @@ module('Unit | index-writer', function (hooks) {
 
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL2, current_version: 1 }],
+      [{ realm_url: testRealmURL2, current_generation: 1 }],
       [],
     );
     let batch = await indexWriter.createBatch(
@@ -720,11 +1115,11 @@ module('Unit | index-writer', function (hooks) {
     };
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: resource,
           search_doc: { name: 'Mango' },
@@ -768,7 +1163,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [rawErrorEntry] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE generation = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     // Strip non-deterministic write-time stamps from both the row and
@@ -790,7 +1185,7 @@ module('Unit | index-writer', function (hooks) {
       {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
-        realm_version: 2,
+        generation: 2,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -845,7 +1240,7 @@ module('Unit | index-writer', function (hooks) {
   test('strips jsonb-illegal code points from error_doc and diagnostics on write', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     let batch = await indexWriter.createBatch(
@@ -874,7 +1269,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [row] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE has_error = TRUE AND realm_version = 2',
+      'SELECT * FROM boxel_index WHERE has_error = TRUE AND generation = 2',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.ok(row?.error_doc, 'error row persisted despite binary in message');
@@ -909,7 +1304,7 @@ module('Unit | index-writer', function (hooks) {
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     let batch = await indexWriter.createBatch(
@@ -927,7 +1322,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [rawErrorEntry] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE generation = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
@@ -945,7 +1340,7 @@ module('Unit | index-writer', function (hooks) {
       {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
-        realm_version: 2,
+        generation: 2,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -990,7 +1385,7 @@ module('Unit | index-writer', function (hooks) {
   test('normalizes error doc id and deps', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     let batch = await indexWriter.createBatch(
@@ -1010,7 +1405,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ error_doc: errorDoc, deps }] = (await adapter.execute(
-      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
+      'SELECT error_doc, deps FROM boxel_index WHERE generation = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as Pick<BoxelIndexTable, 'error_doc' | 'deps'>[];
 
@@ -1035,7 +1430,7 @@ module('Unit | index-writer', function (hooks) {
   test('error_doc within budget is persisted unchanged', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     let inputError = {
@@ -1109,7 +1504,7 @@ module('Unit | index-writer', function (hooks) {
   test('oversized error_doc is shed progressively until it fits', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     // Deliberately pathological: 50 entries × ~1 MiB stacks (≈50 MiB)
@@ -1181,7 +1576,7 @@ module('Unit | index-writer', function (hooks) {
     await setupIndex(adapter, [
       {
         url: `${testRealmURL}1.json`,
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -1206,7 +1601,7 @@ module('Unit | index-writer', function (hooks) {
           additionalErrors: [],
         },
         canonicalURL: `${testRealmURL}1.json`,
-        realmVersion: 1,
+        generation: 1,
         realmURL: testRealmURL,
         instance: null,
         lastModified: null,
@@ -1291,11 +1686,11 @@ module('Unit | index-writer', function (hooks) {
     };
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: originalResource,
           last_modified: String(originalModified),
@@ -1337,7 +1732,7 @@ module('Unit | index-writer', function (hooks) {
     if (entry?.type === 'instance') {
       assert.deepEqual(entry, {
         type: 'instance',
-        realmVersion: 1,
+        generation: 1,
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
@@ -1374,11 +1769,11 @@ module('Unit | index-writer', function (hooks) {
   test('can get work in progress card', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: {
             attributes: {
@@ -1436,7 +1831,7 @@ module('Unit | index-writer', function (hooks) {
       delete (entry as Partial<IndexedInstance>)?.indexedAt;
       assert.deepEqual(entry as Omit<IndexedInstance, 'indexedAt'>, {
         type: 'instance',
-        realmVersion: 2,
+        generation: 2,
         realmURL: testRealmURL,
         canonicalURL: `${testRealmURL}1.json`,
         instance: {
@@ -1472,7 +1867,7 @@ module('Unit | index-writer', function (hooks) {
   test('persists and reads back markdown for an instance entry', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [],
     );
     let resource: CardResource = {
@@ -1526,11 +1921,11 @@ module('Unit | index-writer', function (hooks) {
   test('returns undefined when getting a deleted card', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           is_deleted: true,
         },
@@ -1547,7 +1942,7 @@ module('Unit | index-writer', function (hooks) {
     for (let i = 1; i <= 1002; i++) {
       indexRows.push({
         url: `${testRealmURL}${i}.json`,
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [...(i <= 1 ? [] : [`${testRealmURL}1.json`])],
       });
@@ -1555,7 +1950,7 @@ module('Unit | index-writer', function (hooks) {
     indexRows.sort((a, b) => a.url.localeCompare(b.url));
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       indexRows,
     );
 
@@ -1573,7 +1968,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let invalidatedEntries = (await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
     assert.deepEqual(
@@ -1585,18 +1980,18 @@ module('Unit | index-writer', function (hooks) {
       })) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[],
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
-    let realmVersions = await adapter.execute(
-      'select * from realm_versions ORDER BY realm_url COLLATE "POSIX"',
+    let generations = await adapter.execute(
+      'select * from realm_generations ORDER BY realm_url COLLATE "POSIX"',
     );
     assert.deepEqual(
-      realmVersions,
+      generations,
       [
         {
           realm_url: `${testRealmURL}`,
-          current_version: 1,
+          current_generation: 1,
         },
       ],
-      'the "production" realm versions are correct',
+      'the "production" realm generations are correct',
     );
   });
 
@@ -1624,11 +2019,11 @@ module('Unit | index-writer', function (hooks) {
     );
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: {
             id: `${testRealmURL}1`,
@@ -1809,12 +2204,12 @@ module('Unit | index-writer', function (hooks) {
 
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         // Plain instance row — should land in `instances`.
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'instance',
           pristine_doc: makeCardResource('1', 'Mango', {
@@ -1835,7 +2230,7 @@ module('Unit | index-writer', function (hooks) {
         // summary row with total: 2.
         {
           url: `${testRealmURL}notes/a.md`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'file',
           search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
@@ -1845,7 +2240,7 @@ module('Unit | index-writer', function (hooks) {
         },
         {
           url: `${testRealmURL}notes/b.md`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'file',
           search_doc: { name: 'b.md', url: `${testRealmURL}notes/b.md` },
@@ -1856,7 +2251,7 @@ module('Unit | index-writer', function (hooks) {
         // A bare-FileDef file — base type used when the extension isn't mapped.
         {
           url: `${testRealmURL}misc/raw.bin`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'file',
           search_doc: { name: 'raw.bin', url: `${testRealmURL}misc/raw.bin` },
@@ -1932,14 +2327,14 @@ module('Unit | index-writer', function (hooks) {
 
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         // Two markdown files with the same code_ref but different
         // display_names — simulates the rolling-deploy state where the
         // new extractor populated names for one file but not the other.
         {
           url: `${testRealmURL}notes/new.md`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'file',
           search_doc: { name: 'new.md', url: `${testRealmURL}notes/new.md` },
@@ -1949,7 +2344,7 @@ module('Unit | index-writer', function (hooks) {
         },
         {
           url: `${testRealmURL}notes/old.md`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'file',
           search_doc: { name: 'old.md', url: `${testRealmURL}notes/old.md` },
@@ -1981,9 +2376,9 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('fetchCardTypeSummary returns the realm_meta row at realm_versions.current_version', async function (assert) {
+  test('fetchCardTypeSummary returns the realm_meta row at realm_generations.current_generation', async function (assert) {
     // Regression: the read path JOINs realm_meta against
-    // realm_versions.current_version so it always picks the row that
+    // realm_generations.current_generation so it always picks the row that
     // matches the realm's authoritative current version. Without the JOIN,
     // a naive SELECT returns an arbitrary realm_meta row when stale rows
     // linger (e.g., after a from-scratch reindex resets the version) and
@@ -2001,11 +2396,11 @@ module('Unit | index-writer', function (hooks) {
     // (new partitioned shape) for v1.
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           type: 'instance',
           pristine_doc: makeCardResource('1', 'Mango', {
@@ -2031,11 +2426,11 @@ module('Unit | index-writer', function (hooks) {
 
     // Now plant a *stale* legacy-shape row at a HIGHER version number. This
     // is exactly the layout you get after a from-scratch reindex: the prune
-    // predicate `realm_version < current` doesn't reach v999, so it lingers.
+    // predicate `generation < current` doesn't reach v999, so it lingers.
     // The naive `SELECT … WHERE realm_url=…` (no ORDER BY) would happily
     // return this row first.
     await adapter.execute(
-      `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+      `INSERT INTO realm_meta (realm_url, generation, value, indexed_at)
        VALUES ($1, $2, $3, $4)`,
       {
         bind: [
@@ -2060,7 +2455,7 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       summary.instances.map((s) => s.code_ref),
       [`${testRealmURL}person/Person`],
-      'fetchCardTypeSummary returns the row at realm_versions.current_version even when a higher-numbered stale row is present',
+      'fetchCardTypeSummary returns the row at realm_generations.current_generation even when a higher-numbered stale row is present',
     );
     assert.notOk(
       summary.instances.find((s) => s.display_name === 'Stale'),
@@ -2070,15 +2465,15 @@ module('Unit | index-writer', function (hooks) {
 
   test('done() prunes realm_meta rows at any version, including ones higher than the current', async function (assert) {
     // Regression: pruneObsoleteEntries uses != instead of < so a
-    // from-scratch reindex (which resets the realm_version to a low
+    // from-scratch reindex (which resets the generation to a low
     // number) doesn't leave older high-version rows orphaned in
     // realm_meta forever.
     let iconHTML = '<svg>icon</svg>';
 
-    // realm_versions starts at 0, so the next batch will write at v1.
+    // realm_generations starts at 0, so the next batch will write at v1.
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 0 }],
+      [{ realm_url: testRealmURL, current_generation: 0 }],
       [],
     );
 
@@ -2087,7 +2482,7 @@ module('Unit | index-writer', function (hooks) {
     // from-scratch reindex.
     for (let version of [50, 100, 200, 999]) {
       await adapter.execute(
-        `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+        `INSERT INTO realm_meta (realm_url, generation, value, indexed_at)
          VALUES ($1, $2, $3, $4)`,
         {
           bind: [
@@ -2108,11 +2503,11 @@ module('Unit | index-writer', function (hooks) {
     }
 
     let rowsBefore = await adapter.execute(
-      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      `SELECT generation FROM realm_meta WHERE realm_url = $1 ORDER BY generation`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(
-      rowsBefore.map((r) => r.realm_version),
+      rowsBefore.map((r) => r.generation),
       [50, 100, 200, 999],
       'stale rows are seeded before the batch runs',
     );
@@ -2124,11 +2519,11 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let rowsAfter = await adapter.execute(
-      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      `SELECT generation FROM realm_meta WHERE realm_url = $1 ORDER BY generation`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(
-      rowsAfter.map((r) => r.realm_version),
+      rowsAfter.map((r) => r.generation),
       [1],
       'pruneObsoleteEntries deletes every row that is not the current version, including higher-numbered stale ones',
     );
@@ -2148,11 +2543,11 @@ module('Unit | index-writer', function (hooks) {
 
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       [
         {
           url: `${testRealmURL}1.json`,
-          realm_version: 1,
+          generation: 1,
           realm_url: testRealmURL,
           pristine_doc: personResource as LooseCardResource,
           search_doc: { name: 'Mango' },
@@ -2204,12 +2599,12 @@ module('Unit | index-writer', function (hooks) {
     let lastModified = 1700000000;
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
@@ -2253,12 +2648,12 @@ module('Unit | index-writer', function (hooks) {
     let url = `${testRealmURL}errored.json`;
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
@@ -2302,12 +2697,12 @@ module('Unit | index-writer', function (hooks) {
   test('does not resume rows from a different job', async function (assert) {
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url: `${testRealmURL}from-other-job.json`,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 99,
@@ -2347,12 +2742,12 @@ module('Unit | index-writer', function (hooks) {
     let otherUrl = `${testRealmURL}other-job-row.json`;
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url: otherUrl,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 99,
@@ -2395,12 +2790,12 @@ module('Unit | index-writer', function (hooks) {
     let url = `${testRealmURL}1.json`;
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
@@ -2449,12 +2844,12 @@ module('Unit | index-writer', function (hooks) {
     };
     await setupIndex(
       adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             url,
-            realm_version: 1,
+            generation: 1,
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
@@ -2509,13 +2904,13 @@ module('Unit | index-writer', function (hooks) {
       let depUrl = `${testRealmURL}prod-only-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [],
           production: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               deps: [depUrl],
@@ -2542,12 +2937,12 @@ module('Unit | index-writer', function (hooks) {
       let depUrl = `${testRealmURL}working-only-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: false,
@@ -2577,12 +2972,12 @@ module('Unit | index-writer', function (hooks) {
       let productionDep = `${testRealmURL}production-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: false,
@@ -2593,7 +2988,7 @@ module('Unit | index-writer', function (hooks) {
           production: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               deps: [productionDep],
@@ -2621,12 +3016,12 @@ module('Unit | index-writer', function (hooks) {
       let productionDep = `${testRealmURL}production-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: true,
@@ -2637,7 +3032,7 @@ module('Unit | index-writer', function (hooks) {
           production: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               deps: [productionDep],
@@ -2664,12 +3059,12 @@ module('Unit | index-writer', function (hooks) {
       let depUrl = `${testRealmURL}deleted-only-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: true,
@@ -2703,12 +3098,12 @@ module('Unit | index-writer', function (hooks) {
       let bothProductionDep = `${testRealmURL}mixed-both-production-dep.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url: workingOnlyUrl,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: false,
@@ -2717,7 +3112,7 @@ module('Unit | index-writer', function (hooks) {
             },
             {
               url: bothUrl,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: false,
@@ -2728,7 +3123,7 @@ module('Unit | index-writer', function (hooks) {
           production: [
             {
               url: productionOnlyUrl,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               deps: [productionOnlyDep],
@@ -2736,7 +3131,7 @@ module('Unit | index-writer', function (hooks) {
             },
             {
               url: bothUrl,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               deps: [bothProductionDep],
@@ -2782,12 +3177,12 @@ module('Unit | index-writer', function (hooks) {
       let url = `${testRealmURL}projection.json`;
       await setupIndex(
         adapter,
-        [{ realm_url: testRealmURL, current_version: 1 }],
+        [{ realm_url: testRealmURL, current_generation: 1 }],
         {
           working: [
             {
               url,
-              realm_version: 1,
+              generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
               is_deleted: false,
@@ -2820,5 +3215,105 @@ module('Unit | index-writer', function (hooks) {
         'row exposes only url, type, deps — no error_doc / has_error / is_deleted',
       );
     });
+  });
+});
+
+module('Unit | index-writer | error doc merge', function () {
+  function err(
+    message: string,
+    extra: Partial<SerializedError> = {},
+  ): SerializedError {
+    return { message, status: 500, additionalErrors: null, ...extra };
+  }
+
+  test('a higher-generation error doc supersedes a lower-generation one', function (assert) {
+    let recent = err('recent', {
+      id: 'x',
+      additionalErrors: [err('recent-dep')],
+    });
+    let stale = err('stale', { id: 'x', additionalErrors: [err('stale-dep')] });
+
+    assert.strictEqual(
+      mergeErrorsByGeneration(recent, 5, stale, 4).message,
+      'recent',
+      'the newer generation wins when it is the first argument',
+    );
+    assert.strictEqual(
+      mergeErrorsByGeneration(stale, 4, recent, 5).message,
+      'recent',
+      'the newer generation wins when it is the second argument',
+    );
+    assert.deepEqual(
+      mergeErrorsByGeneration(recent, 5, stale, 4).additionalErrors,
+      [err('recent-dep')],
+      'the stale document contributes nothing — it is not merged in',
+    );
+  });
+
+  test('equal-generation error docs merge their detail, keeping the primary message', function (assert) {
+    let primary = err('primary message', {
+      id: 'card',
+      deps: ['dep-a'],
+      additionalErrors: [err('existing-dep', { id: 'existing' })],
+    });
+    let secondary = err('secondary message', {
+      id: 'module',
+      deps: ['dep-b'],
+      additionalErrors: [err('missing middle-field', { id: 'middle' })],
+    });
+
+    let merged = mergeErrorsByGeneration(primary, 3, secondary, 3);
+
+    assert.strictEqual(
+      merged.message,
+      'primary message',
+      'the primary envelope message is preserved',
+    );
+    let messages = (merged.additionalErrors ?? []).map((e) => e.message);
+    assert.ok(
+      messages.includes('existing-dep'),
+      "the primary's own additionalErrors are kept",
+    );
+    assert.ok(
+      messages.includes('missing middle-field'),
+      "the secondary's nested dependency detail is folded in flat",
+    );
+    assert.ok(
+      messages.includes('secondary message'),
+      "the secondary's own top-level error is folded in as a flat entry",
+    );
+    assert.deepEqual(merged.deps, ['dep-a', 'dep-b'], 'deps are unioned');
+  });
+
+  test('merging an error doc identical to the primary adds nothing', function (assert) {
+    let primary = err('same failure', { id: 'x', status: 500 });
+    let secondary = err('same failure', { id: 'x', status: 500 });
+    assert.strictEqual(
+      mergeErrorDetail(primary, secondary).additionalErrors,
+      null,
+      'a secondary that matches the primary (id, message, status) is deduped away',
+    );
+  });
+
+  test("the secondary's nested detail is folded flat, not nested", function (assert) {
+    let primary = err('primary', { id: 'p' });
+    let secondary = err('secondary', {
+      id: 's',
+      additionalErrors: [err('leaf detail', { id: 'leaf' })],
+    });
+    let merged = mergeErrorDetail(primary, secondary);
+    assert.deepEqual(
+      (merged.additionalErrors ?? []).map((e) => e.message),
+      ['secondary', 'leaf detail'],
+      'both the secondary envelope and its nested detail sit at the top level',
+    );
+    let secondaryEntry = (merged.additionalErrors ?? []).find(
+      (e) => e.id === 's',
+    );
+    assert.strictEqual(
+      secondaryEntry.additionalErrors,
+      null,
+      'the folded secondary entry does not carry its own nested list',
+    );
   });
 });

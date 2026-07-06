@@ -159,10 +159,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('fields[search-entry]=item: full serializations, htmlQuery inert', async function (assert) {
+    test('fields[entry]=item: full serializations, htmlQuery inert', async function (assert) {
       let response = await postSearch({
         filter: personFilter({ htmlQuery: { eq: { format: 'embedded' } } }),
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       assert.strictEqual(response.status, 200);
       let json = response.body;
@@ -187,10 +187,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+    test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['item.firstName'] },
+        fields: { entry: ['item.firstName'] },
       });
       assert.strictEqual(response.status, 200);
       let item = response.body.included.find(
@@ -201,10 +201,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(item.meta.sparseFields, ['firstName']);
     });
 
-    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+    test('fields[entry]=html,item: both branches on every entry', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['html', 'item'] },
+        fields: { entry: ['html', 'item'] },
       });
       assert.strictEqual(response.status, 200);
       let entry = response.body.data.find(
@@ -219,8 +219,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('mixed index: fallback per the fieldset', async function (assert) {
+      // Clear the rendering from both channels: the engine dual-reads HTML from
+      // prerendered_html, falling back to boxel_index, so a rendering is absent
+      // only when neither carries it.
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
       // default mode: the fallback row carries item and omits html
       let response = await postSearch({ filter: personFilter() });
@@ -234,7 +240,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // a pinned html branch keeps membership visible with an empty array
       let pinned = await postSearch({
         filter: personFilter(),
-        fields: { 'search-entry': ['html'] },
+        fields: { entry: ['html'] },
       });
       let pinnedJane = pinned.body.data.find(
         (e: { id: string }) => e.id === janeId,

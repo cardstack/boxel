@@ -38,7 +38,7 @@ class VeryBasicField extends BasicField {
 export class Post extends CardDef {
   static displayName = 'Post';
   static icon = FileTextIcon;
-  @field author = linksTo(Person);
+  @field author = linksTo(Person, { searchable: ['pet', 'trips.countriesVisited'] });
   @field cardTitle = contains(StringField);
   @field body = contains(TextAreaField);
   @field titleRef = contains(VeryBasicField);

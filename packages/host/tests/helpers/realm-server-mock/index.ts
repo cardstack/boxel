@@ -56,6 +56,7 @@ function ensureRealmServerMockState(
     };
     state = {
       realmPermissions,
+      archivedRealms: new Map<string, { archivedAt: string }>(),
       handler,
       ensureSessionRoom: sessionRoomEnsurer,
     };
@@ -84,6 +85,15 @@ export function setupAuthEndpoints(
       permissions as RealmAction[],
     );
   }
+}
+
+// Simulate a trusted realm server going unreachable (or recovering) at its
+// `_realm-auth` endpoint, so boot-assembly graceful-degradation and retry can
+// be exercised deterministically.
+export function setRealmAuthFailure(shouldFail: boolean) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  state.failRealmAuth = shouldFail;
 }
 
 export function registerRealmAuthSessionRoomEnsurer(

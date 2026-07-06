@@ -20,7 +20,7 @@ import {
   makeCardTypeSummaryDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type SearchEntryCollectionDocument,
+  type EntryCollectionDocument,
 } from './document-types.ts';
 import type { CardResource, Relationship } from './resource-types.ts';
 import { clearReplacedArrayFieldMeta } from './resource-types.ts';
@@ -60,6 +60,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  isRealmArchived,
   baseRealm,
   maybeURL,
   insertPermissions,
@@ -93,7 +94,10 @@ import {
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
+  unresolveResourceInstanceURLs,
   type IndexedFile,
+  type LooseCardResource,
+  type FileMetaResource,
 } from './index.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
@@ -112,6 +116,7 @@ import {
 import { transpileJS } from './transpile.ts';
 import type { Method, RouteTable } from './router.ts';
 import {
+  ArchivedRealmError,
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
@@ -251,6 +256,13 @@ const CACHE_MISS_VALUE = 'miss';
 // a second transpile before the winner finishes.
 const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
 const COALESCE_NOTIFY_WAIT_MS = 180_000;
+// `localPath`s (no leading slash) exempt from the archived-realm seal: the
+// realm's public operational endpoints, which must keep working while a realm
+// is archived. `_readiness-check` is the health probe; `_session` is the
+// authentication endpoint. Matched on path rather than `Accept`/`Content-Type`
+// so the exemption holds for header-less probes too. Keep in sync with
+// `#publicEndpoints`.
+const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -266,7 +278,14 @@ const SOURCE_ETAG_VARIANT = 'source';
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
-const CARD_JSON_ETAG_VARIANT = 'card';
+//
+// Bump this variant whenever the served card-JSON representation changes so
+// caches revalidate instead of 304'ing a client to a stale body: neither
+// `indexed_at` nor the realm-info hash moves on a serialization change, so the
+// variant is the only signal that invalidates already-cached bodies. Bumped to
+// `card-rri` when the server began serving instance ids (`id`/`links.self`/
+// relationship ids) in canonical prefix (RRI) form for mapped realms.
+const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
@@ -2091,6 +2110,16 @@ export class Realm {
     return statuses.length > 0 ? Math.min(...statuses) : 400;
   }
 
+  // Atomic operation hrefs may arrive in canonical RRI (prefix) form, since
+  // that is the form this realm now serves instance ids in. Resolve those to a
+  // real URL before doing path math; plain URL / relative hrefs pass through
+  // unchanged (they are not registered prefixes).
+  #resolveAtomicHref(href: string): string {
+    return this.#virtualNetwork.isRegisteredPrefix(href)
+      ? this.#virtualNetwork.toURL(href).href
+      : href;
+  }
+
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<AtomicPayloadValidationError[]> {
@@ -2106,7 +2135,9 @@ export class Realm {
 
         let localPath: LocalPath;
         try {
-          localPath = this.paths.local(new URL(operation.href, this.paths.url));
+          localPath = this.paths.local(
+            new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+          );
         } catch (error: any) {
           errors.push({
             title: 'Invalid atomic:operations format',
@@ -2251,7 +2282,9 @@ export class Realm {
       for (let operation of operations) {
         let resource = operation.data;
         let href = operation.href;
-        let localPath = this.paths.local(new URL(href, this.paths.url));
+        let localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(href), this.paths.url),
+        );
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           return createResponse({
@@ -2370,7 +2403,11 @@ export class Realm {
       let results: AtomicOperationResult[] = writeResults.map(
         ({ path, created }) => ({
           data: {
-            id: this.paths.fileURL(path).href,
+            // Serve the created instance id in canonical RRI (prefix) form, to
+            // match getCard / create / patch (no-op for unmapped realms).
+            id: this.#virtualNetwork.unresolveURL(
+              this.paths.fileURL(path).href,
+            ),
           },
           meta: {
             created,
@@ -2767,6 +2804,32 @@ export class Realm {
     try {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
+        // An archived realm is sealed for everyone, owner included: once a
+        // caller is authorized, every external content request is
+        // short-circuited with 403 (archived). The seal runs AFTER
+        // checkPermission so an unauthenticated or unauthorized caller to a
+        // private realm gets the normal 401/403 and never learns the realm
+        // exists or is archived — only callers who could otherwise reach the
+        // content see the sealed response. A public realm's readers are
+        // authorized by checkPermission, so they do see the seal (the realm's
+        // existence is already public). The seal is method-agnostic, so reads
+        // and writes are blocked by this one check. The realm's public
+        // operational endpoints stay reachable while archived: the
+        // `_readiness-check` health probe (so health checks don't read an
+        // archived realm as down) and `_session` (so authentication still
+        // works). They're matched on `localPath`, independent of request
+        // headers, so a bare health probe that sends no `Accept` header is
+        // still exempt. The archive-management endpoints live on the realm
+        // SERVER router and never reach this boundary, so they stay reachable.
+        // Read fresh (no memoization) for the same reason createRequestContext
+        // does: a peer replica's archive/unarchive must take effect here
+        // without a restart.
+        if (
+          !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
+          (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+        ) {
+          throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -2786,6 +2849,34 @@ export class Realm {
           init: {
             status: 401,
             headers: {
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
+          },
+          requestContext,
+        });
+      }
+
+      if (e instanceof ArchivedRealmError) {
+        // 403 (not 404) carrying an "archived" marker — both a dedicated
+        // header and a JSON:API error with a stable `code` — so the client can
+        // distinguish a sealed realm from a generic forbidden response and
+        // render the right message.
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '403',
+                code: 'archived',
+                title: 'Realm Archived',
+                detail: e.message,
+              },
+            ],
+          }),
+          init: {
+            status: 403,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+              'X-Boxel-Realm-Archived': 'true',
               'X-Boxel-Realm-Url': requestContext.realm.url,
             },
           },
@@ -4205,6 +4296,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4300,6 +4392,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4476,6 +4569,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4653,6 +4747,7 @@ export class Realm {
           let etag = foreignDeps
             ? undefined
             : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+          this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
             init: {
@@ -4793,6 +4888,7 @@ export class Realm {
         entry && entry.type !== 'error' && !foreignDeps
           ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
           : undefined;
+      this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -4878,6 +4974,22 @@ export class Realm {
       ? 'public'
       : 'private';
     return `${cacheVisibility}, max-age=0, must-revalidate`;
+  }
+
+  // Serve instance ids in canonical RRI (prefix) form. Unresolves the primary
+  // resource's `id` / `links.self` / relationship ids and every loaded link
+  // from URL to registered-prefix form. Unmapped realms have no prefix
+  // mapping, so this is a no-op there (ids stay URL). The write handlers derive
+  // the on-disk path from the request path / `lid` (not `data.id`), so accepting
+  // a prefix-form id needs no change — only the responses are canonicalized.
+  #serveInstanceIdsAsRRI(doc: {
+    data: LooseCardResource | FileMetaResource;
+    included?: (LooseCardResource | FileMetaResource)[];
+  }): void {
+    unresolveResourceInstanceURLs(doc.data, this.#virtualNetwork);
+    for (let resource of doc.included ?? []) {
+      unresolveResourceInstanceURLs(resource, this.#virtualNetwork);
+    }
   }
 
   private async getCard(
@@ -5053,6 +5165,7 @@ export class Realm {
       }
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
+      this.#serveInstanceIdsAsRRI(card);
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the
@@ -5319,14 +5432,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  // The search: the parsed search-entry query (the item. membership
+  // The search: the parsed entry query (the item. membership
   // query + the applied htmlQuery + the sparse fieldset) against the
-  // search-entry projection engine. Same opts threading as `search` —
+  // entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.
   public async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: SearchOpts,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),

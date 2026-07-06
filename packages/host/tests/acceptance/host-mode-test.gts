@@ -425,7 +425,7 @@ module('Acceptance | host mode tests', function (hooks) {
     // The published page talks to its realm server directly (cookie creds), so
     // the head prefetch goes through the global fetch rather than the virtual
     // network. Intercept the head query, assert its shape, and answer with a
-    // search-entry doc whose `html` resource carries the head markup so the
+    // entry doc whose `html` resource carries the head markup so the
     // injection path is exercised end-to-end.
     let cardUrl = `${testHostModeRealmURL}Pet/mango`;
     let htmlId = `${cardUrl}#head#${testHostModeRealmURL}pet/Pet`;
@@ -441,7 +441,7 @@ module('Acceptance | host mode tests', function (hooks) {
             JSON.stringify({
               data: [
                 {
-                  type: 'search-entry',
+                  type: 'entry',
                   id: cardUrl,
                   relationships: {
                     html: { data: [{ type: 'html', id: htmlId }] },
@@ -486,7 +486,7 @@ module('Acceptance | host mode tests', function (hooks) {
       // htmlQuery, scoped to the visited card.
       assert.deepEqual(
         capturedHeadQuery?.fields,
-        { 'search-entry': ['html'] },
+        { entry: ['html'] },
         'requests only the html branch',
       );
       assert.strictEqual(

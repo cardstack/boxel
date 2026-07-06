@@ -142,19 +142,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
     assert.deepEqual(
       instance.relationships,
-      {
-        bestFriend: {
-          links: {
-            self: null,
-          },
-        },
-        friends: {
-          links: {
-            self: null,
-          },
-        },
-        'cardInfo.theme': { links: { self: null } },
-      },
+      undefined,
       'the relationships are correct',
     );
   });
@@ -212,19 +200,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
     assert.deepEqual(
       instance.relationships,
-      {
-        bestFriend: {
-          links: {
-            self: null,
-          },
-        },
-        friends: {
-          links: {
-            self: null,
-          },
-        },
-        'cardInfo.theme': { links: { self: null } },
-      },
+      undefined,
       'the relationships are correct',
     );
   });
@@ -400,12 +376,6 @@ module('Integration | commands | patch-instance', function (hooks) {
             self: `./jade`,
           },
         },
-        friends: {
-          links: {
-            self: null,
-          },
-        },
-        'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
     );
@@ -466,14 +436,8 @@ module('Integration | commands | patch-instance', function (hooks) {
     assert.deepEqual(
       instance.relationships,
       {
-        bestFriend: {
-          links: {
-            self: null,
-          },
-        },
         'friends.0': { links: { self: `./germaine` } },
         'friends.1': { links: { self: `./queenzy` } },
-        'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
     );
@@ -619,13 +583,6 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.relationships,
       {
         bestFriend: { links: { self: `./queenzy` } },
-        'cardInfo.cardThumbnail': { links: { self: null } },
-        'cardInfo.theme': { links: { self: null } },
-        friends: {
-          links: {
-            self: null,
-          },
-        },
       },
       'the relationships are correct',
     );
