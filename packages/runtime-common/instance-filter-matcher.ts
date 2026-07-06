@@ -315,7 +315,13 @@ function leafMatches(
   if (
     isReferenceFilterField(path) &&
     typeof leafValue === 'string' &&
-    typeof filterValue === 'string'
+    typeof filterValue === 'string' &&
+    // Only a registered-prefix RRI expands to alternate spellings; when neither
+    // side is one, `referenceForms` returns each value unchanged and the sets
+    // can only intersect on an exact match, which `isEqual` above already ruled
+    // out. Skip the allocation in that (common) case.
+    (virtualNetwork.isRegisteredPrefix(leafValue) ||
+      virtualNetwork.isRegisteredPrefix(filterValue))
   ) {
     let leafForms = new Set(referenceForms(leafValue, virtualNetwork));
     return referenceForms(filterValue, virtualNetwork).some((form) =>
