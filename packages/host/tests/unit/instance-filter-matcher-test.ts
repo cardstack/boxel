@@ -296,8 +296,8 @@ module('Unit | instance-filter-matcher', function (hooks) {
     // realm-prefix mapping so the same realm also has a canonical RRI spelling.
     api.virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
 
-    // A prefix-RRI `in` value must match the URL-form instance id — the client
-    // counterpart of the server's index-side `in` tolerance (CS-11733).
+    // A prefix-RRI `in` value must match the URL-form instance id — the
+    // client-side counterpart of the index query engine's `in` tolerance.
     assert.strictEqual(
       match(mango, { on: personRef, in: { id: ['@test/cards/mango'] } }),
       'match',

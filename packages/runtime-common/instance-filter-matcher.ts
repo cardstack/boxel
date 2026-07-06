@@ -301,8 +301,8 @@ function referenceForms(
 
 // Compare a resolved leaf value against a formatted filter value. For reference
 // leaves (`id` / `url`) the comparison is spelling-tolerant: a card whose id is
-// stored in URL form matches a filter value in canonical RRI (prefix) form, and
-// vice versa. Non-reference leaves use exact equality, as before.
+// in URL form matches a filter value in canonical RRI (prefix) form, and vice
+// versa. Non-reference leaves use exact equality.
 function leafMatches(
   leafValue: unknown,
   filterValue: unknown,

@@ -187,11 +187,12 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
 }
 
-// A filter path whose leaf is a card/file reference (`id` / `url`). Values on
-// these paths are compared with canonical-RRI tolerance (a reference matches
-// any of its equivalent RRI / real-URL / virtual-alias spellings) rather than
-// by exact string equality — applied both index-side (the query engine's
-// `expandReferenceFilterValues`) and client-side (the instance-filter matcher).
+// True when a filter path's leaf is a card/file reference (`id` / `url`). Such
+// leaves get canonical-RRI tolerance in `in` filters — a registered-prefix
+// value also matches its equivalent real-URL / virtual-alias spellings — while
+// `eq` and other operators stay exact. Both the index query engine and the
+// client-side instance-filter matcher key that tolerance off this predicate so
+// they agree on which paths it covers.
 export function isReferenceFilterField(path: string): boolean {
   let leaf = path.split('.').pop();
   return leaf === 'id' || leaf === 'url';
