@@ -347,6 +347,26 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('empty params mean unspecified, consistent with an omitted fields param', function (assert) {
+      // An empty `?format=` / `?renderType=` is "unspecified" (like an omitted
+      // param), not malformed — the universal query-string convention, and the
+      // same way an empty `?fields=` resolves to the default.
+      assert.deepEqual(htmlQueryFromParams({ format: '' }), {
+        eq: { format: 'fitted' },
+      });
+      assert.deepEqual(
+        htmlQueryFromParams({ format: 'atom', renderType: '' }),
+        {
+          eq: { format: 'atom' },
+        },
+      );
+      assert.deepEqual(fieldsetFromParam(''), {
+        html: true,
+        item: { kind: 'none' },
+        itemAsFallback: true,
+      });
+    });
+
     test('an invalid format is rejected as an invalid-render request', function (assert) {
       assert.throws(
         () => htmlQueryFromParams({ format: 'nonsense' }),

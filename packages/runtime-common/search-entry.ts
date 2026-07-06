@@ -676,7 +676,13 @@ export function htmlQueryFromParams(params: {
   format?: string | null;
   renderType?: string | null;
 }): HtmlQuery {
-  let format = params.format ?? DEFAULT_HTML_QUERY.eq.format;
+  // Empty or absent means "unspecified" for both dimensions, consistent with
+  // an omitted `?fields=` — the universal query-string convention. So an empty
+  // `?format=` falls back to fitted, and an empty `?renderType=` leaves only
+  // the native type in play (no predicate). A genuinely malformed value still
+  // fails: a bad format is rejected by `assertHtmlQuery` below, and a
+  // renderType that isn't a `<module>/<name>` key throws here.
+  let format = params.format || DEFAULT_HTML_QUERY.eq.format;
   let renderType: unknown;
   if (params.renderType) {
     renderType = parseUsedRenderType(params.renderType);
