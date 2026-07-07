@@ -31,8 +31,10 @@ stack boots in seconds instead of live-indexing every realm:
 
 1. Using the GitHub MCP Actions tools against cardstack/boxel:
    a. actions_list method=list_workflow_runs resource_id=ci.yaml
-      (filter: branch=main, status=completed) -> take the newest run whose
-      conclusion is "success" and note its run id.
+      (filter: branch=main, status=completed; pass per_page=2 — each run
+      object is ~40 KB, so larger pages overflow the MCP tool-result limit)
+      -> take the newest run whose conclusion is "success" and note its run
+      id; if neither run on the first page succeeded, page forward.
    b. actions_list method=list_workflow_run_artifacts resource_id=<run id>
       -> find the artifact named "boxel-index-cache" and note its artifact id.
    c. actions_get method=download_workflow_run_artifact
@@ -45,6 +47,10 @@ stack boots in seconds instead of live-indexing every realm:
      unzip -o /tmp/boxel-index-cache.zip -d "\$(dirname "$CACHE_FILE")"
 3. Start the stack: .devcontainer/claude-web-start.sh
    (its import step finds the cache at the path above automatically).
+   The stack is ready when https://localhost:4201/base/_readiness-check
+   returns 200 — readiness is per-realm (the realm-server logs the list of
+   realms it serves at boot); the bare / and /_readiness-check paths 404 by
+   design.
 
 If the fetch fails, just run .devcontainer/claude-web-start.sh anyway — the
 stack falls back to live indexing, which is slower but works.

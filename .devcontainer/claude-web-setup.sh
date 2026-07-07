@@ -88,14 +88,78 @@ if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "${NODE_EXTRA_CA_CERTS}" ]; then
   echo "Wrote combined CA bundle (proxy + mkcert) to $COMBINED"
 fi
 
+# Warm vite's dependency-optimizer cache (packages/host/node_modules/.vite)
+# so it rides into the snapshot. The host's dep graph takes the optimizer
+# ~3 minutes to bundle on a cold boot, during which the prerender's
+# wait-for-host-standby probe burns through repeated 30s navigation timeouts —
+# so pay that cost once here instead of in every fresh environment's first
+# session. `vite optimize` cannot do this (the embroider plugin pipeline hangs
+# under the bare CLI command), so boot the real dev server and wait for the
+# optimizer to commit its cache; the result is hash-identical to what a stack
+# boot produces, so sessions reuse it as-is. Best-effort: on timeout the first
+# stack start just optimizes live, as it would have anyway.
+VITE_METADATA="packages/host/node_modules/.vite/deps/_metadata.json"
+if [ ! -f "$VITE_METADATA" ]; then
+  echo "Warming vite dep-optimizer cache (boots the host once; ~3 minutes)…"
+  setsid mise exec -- pnpm --dir=packages/host start > /tmp/vite-warm.log 2>&1 &
+  for _ in $(seq 1 60); do
+    [ -f "$VITE_METADATA" ] && break
+    sleep 10
+  done
+  if [ -f "$VITE_METADATA" ]; then
+    # The optimizer can run a second discovery pass shortly after its first
+    # commit; wait for the metadata to go quiet before shutting down.
+    for _ in $(seq 1 10); do
+      BEFORE=$(stat -c %Y "$VITE_METADATA")
+      sleep 20
+      [ "$BEFORE" = "$(stat -c %Y "$VITE_METADATA")" ] && break
+    done
+    echo "vite dep cache warmed."
+  else
+    echo "vite dep cache did not appear within 10 minutes; first stack start will optimize live (see /tmp/vite-warm.log)." >&2
+  fi
+  # setsid ran the server in its own process group (setsid itself may fork
+  # and exit, so $! is not reliable); kill the whole group via the group id
+  # of the vite launcher.
+  WARM_PID=$(pgrep -f 'scripts/vite-serve.js' | head -1) || true
+  if [ -n "${WARM_PID:-}" ]; then
+    PGID=$(ps -o pgid= -p "$WARM_PID" | tr -d ' ') || true
+    if [ -n "${PGID:-}" ]; then
+      kill -- "-$PGID" 2>/dev/null || true
+    fi
+  fi
+fi
+
 # Source realms live in separate repos; clone over HTTPS (no SSH key in the VM).
 # Catalog is intentionally NOT cloned here — it's skipped at runtime to fit the
 # memory budget. Add `pnpm --dir=packages/catalog catalog:setup` if you need it.
 git config --global url."https://github.com/".insteadOf "git@github.com:"
 mise exec -- pnpm --dir=packages/skills-realm skills:setup
 
-# Note: the first `mise run dev` pulls the Synapse/Postgres Docker images; the
-# cloud snapshot caches them so later sessions start faster.
+# Pre-pull the stack's third-party Docker images so the snapshot caches them
+# and the first session's stack start doesn't spend time pulling. The daemon
+# isn't running during provisioning, so bring it up first (the start script
+# does the same per session). Image refs must track their sources:
+#   postgres            — mise-tasks/infra/ensure-pg
+#   matrixdotorg/synapse — packages/matrix/support/synapse/index.ts
+#   rnwood/smtp4dev     — packages/matrix/docker/smtp4dev.ts
+# Best-effort: on failure the images are simply pulled at first stack start,
+# as before.
+if ! docker info >/dev/null 2>&1; then
+  echo "Starting Docker daemon to pre-pull images…"
+  (dockerd >/tmp/dockerd-setup.log 2>&1 &)
+  for _ in $(seq 1 30); do
+    docker info >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+if docker info >/dev/null 2>&1; then
+  for image in postgres:16.3 matrixdotorg/synapse:v1.126.0 rnwood/smtp4dev:v3.1; do
+    docker pull "$image" || echo "Pre-pull of $image failed; it will be pulled at first stack start." >&2
+  done
+else
+  echo "Docker daemon unavailable; images will be pulled at first stack start (see /tmp/dockerd-setup.log)." >&2
+fi
 
 echo ""
 echo "Provisioning complete. Start the stack with:"
