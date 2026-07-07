@@ -127,9 +127,9 @@ import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
 import {
+  codeModeEntryPointSkillUrl,
   devSkillId,
   envSkillId,
-  codeModeEntryPointSkillUrl,
 } from '../lib/utils';
 import { importResource } from '../resources/import';
 
@@ -2796,19 +2796,6 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
-  // Enables the code-mode entry-point skill in a room. Every room gets it at
-  // creation: its body is small, and it routes code requests (load skills on
-  // demand, switch mode) from any submode.
-  async activateCodeModeEntryPoint(roomId: string) {
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
-    );
-    await updateRoomSkillsCommand.execute({
-      roomId,
-      skillCardIdsToActivate: [codeModeEntryPointSkillUrl],
-    });
-  }
-
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
@@ -2820,10 +2807,14 @@ export default class MatrixService extends Service {
     let defaultSkills = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills are still pushed in full;
-      // as they convert to markdown the pushed set shrinks. The entry-point
-      // skill needs nothing here — every room enables it at creation.
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills (pushed in full) activate
+      // alongside the code-mode entry-point skill, whose linked skills the
+      // bot loads on demand. As the card skills convert to markdown the
+      // pushed set shrinks.
+      skillCardIdsToActivate: [
+        ...defaultSkills.map((s) => s.id),
+        codeModeEntryPointSkillUrl,
+      ],
     });
   }
 

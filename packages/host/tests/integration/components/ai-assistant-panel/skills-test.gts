@@ -317,11 +317,10 @@ Instructions live in the markdown body.
       () =>
         document
           .querySelector('[data-test-active-skills-count]')
-          ?.textContent?.trim() === '2 Skills',
+          ?.textContent?.trim() === '1 Skill',
       {
         timeout: 5000,
-        timeoutMessage:
-          'Timed out waiting for the default skills (env + code editing) to be active',
+        timeoutMessage: 'Timed out waiting for env skill to be active',
       },
     );
     let roomId = document
@@ -338,16 +337,16 @@ Instructions live in the markdown body.
       `${testRealmURL}Person/fadhlan`,
     );
 
-    assert.dom('[data-test-active-skills-count]').containsText('2 Skills');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await waitUntil(() =>
       document
         .querySelector('[data-test-skill-menu]')
-        ?.textContent?.includes('Skills: 3 of 3 active'),
+        ?.textContent?.includes('Skills: 2 of 2 active'),
     );
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 3 of 3 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -417,7 +416,7 @@ Instructions live in the markdown body.
     assert
       .dom(`[data-test-skill-options-button="${skillId}"]`)
       .exists('selected skill is shown in the skill menu');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 3 of 3 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
   });
 
   test('skill picker can add a skill markdown file through the UI', async function (assert) {
@@ -756,9 +755,9 @@ Instructions live in the markdown body.
     );
 
     await waitFor('[data-test-room-settled]');
-    assert.dom('[data-test-active-skills-count]').containsText('2 Skills');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
