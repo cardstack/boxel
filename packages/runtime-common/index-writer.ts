@@ -214,11 +214,18 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   // Set by `copyFrom`. A copy sources the destination's prerendered HTML
-  // straight from the source realm's `prerendered_html` rows, so
-  // `applyBatchUpdates` must skip the `boxel_index_working` → working-table
-  // projection a fused index does — that projection reads HTML from the
-  // `boxel_index` columns and would clobber the directly-copied rows.
+  // straight from the source realm's `prerendered_html` rows. `applyBatchUpdates`
+  // must not run the `boxel_index_working` → working-table projection over those
+  // rows — that projection reads HTML from the `boxel_index` columns and would
+  // clobber the directly-copied rows — so it projects only the invalidations the
+  // direct copy did not cover (see `#copiedPrerenderedHtmlUrls`).
   #copiedPrerenderedHtml = false;
+  // Destination URLs the copy populated straight from the source realm's
+  // `prerendered_html`. The projection in `applyBatchUpdates` covers the
+  // remaining invalidations — copied rows whose source had no `prerendered_html`
+  // row — so a copy still fills every row (from `boxel_index`) and can't leave a
+  // stale destination row in place.
+  #copiedPrerenderedHtmlUrls = new Set<string>();
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -487,6 +494,10 @@ export class Batch {
       // rows, so `copyFrom` already seeded these into `#invalidations`; add
       // defensively so `applyBatchUpdates` promotes every copied HTML row.
       this.#invalidations.add(destURL);
+      // Record that this URL was copied straight from the source's
+      // `prerendered_html`, so `applyBatchUpdates` leaves it authoritative and
+      // does not re-project it from `boxel_index`.
+      this.#copiedPrerenderedHtmlUrls.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.file_alias = copyURL(entry.file_alias);
@@ -940,13 +951,18 @@ export class Batch {
       // also covers rows a resumed job wrote in a prior attempt that this
       // attempt never revisits, and rows written between the backfill migration
       // and the dual-write deploy, so the swap below can never silently skip a
-      // promoted URL. A copy skips this: `copyFrom` already populated
-      // prerendered_html_working straight from the source realm's
-      // `prerendered_html`, and this projection (which reads HTML from the
-      // boxel_index columns) would clobber it.
-      if (!this.#copiedPrerenderedHtml) {
-        await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
-      }
+      // promoted URL. A copy has already populated prerendered_html_working for
+      // the URLs it sourced from the source realm's `prerendered_html`; those
+      // are authoritative and excluded here (re-projecting from the boxel_index
+      // columns would clobber them). The projection still covers the rest — the
+      // copied rows whose source had no `prerendered_html` row — so the copy
+      // fills every row and can't leave a stale destination row behind.
+      let projectionUrls = this.#copiedPrerenderedHtml
+        ? [...this.#invalidations].filter(
+            (url) => !this.#copiedPrerenderedHtmlUrls.has(url),
+          )
+        : [...this.#invalidations];
+      await this.syncPrerenderedHtmlFromWorking(projectionUrls);
 
       // Swap the mirrored HTML rows into production in the same transaction,
       // keyed by the same invalidation set and generation. `prerendered_html`

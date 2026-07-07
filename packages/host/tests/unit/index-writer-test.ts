@@ -943,6 +943,85 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('copyFrom refreshes a destination prerendered_html row whose source has none', async function (assert) {
+    // Source row has boxel_index HTML but no prerendered_html row (e.g. indexed
+    // but not yet rendered). The destination already carries a stale
+    // prerendered_html row for the same URL. The copy must refresh it (via the
+    // boxel_index projection over the uncopied invalidations) rather than leave
+    // the stale rendering in place for the dual-read to prefer.
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          isolated_html: `<div class="isolated">SOURCE via boxel_index</div>`,
+          markdown: 'source boxel_index markdown',
+        },
+      ],
+    );
+    // Deliberately do NOT seed the source's prerendered_html — this row is a
+    // gap the copy fills from boxel_index. Pre-seed a stale destination
+    // prerendered_html row for the URL the copy will write.
+    await adapter.execute(
+      `INSERT INTO prerendered_html (url, file_alias, realm_url, type, isolated_html, markdown, generation, is_deleted, rendered_at)
+       VALUES ($1, $2, $3, 'instance', $4, $5, 1, false, $6)`,
+      {
+        bind: [
+          `${testRealmURL2}1.json`,
+          `${testRealmURL2}1`,
+          testRealmURL2,
+          `<div class="isolated">STALE destination</div>`,
+          'stale destination markdown',
+          String(Date.now()),
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown, generation FROM prerendered_html WHERE url = $1`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">SOURCE via boxel_index</div>`,
+      'the stale destination rendering is refreshed from the copied boxel_index HTML',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'source boxel_index markdown',
+      'markdown is refreshed too',
+    );
+    assert.strictEqual(
+      rendered?.generation,
+      2,
+      'the refreshed row is stamped at the dest-realm generation',
+    );
+  });
+
   test('promotes prerendered_html for rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
     // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
