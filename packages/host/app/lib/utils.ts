@@ -84,6 +84,18 @@ export function skillCardURL(skillId: string): string {
   return `@cardstack/skills/Skill/${skillId}`;
 }
 
+/**
+ * Constructs a universal @cardstack/skills/ reference to a `.md` skill file
+ * (`skills/<name>/SKILL.md`) — the markdown skill form, resolved as a
+ * `MarkdownDef` whose `boxel.kind: skill` frontmatter makes it a skill source.
+ *
+ * @example
+ * skillFileURL('source-code-editing')  // '@cardstack/skills/skills/source-code-editing/SKILL.md'
+ */
+export function skillFileURL(skillName: string): string {
+  return `@cardstack/skills/skills/${skillName}/SKILL.md`;
+}
+
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
 export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
 
