@@ -293,7 +293,16 @@ export function getBoxComponent(
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
-    private themeScopeId = guidFor(this);
+    // Scopes this card's theme stylesheet. Derived from the card id so the
+    // scope stays stable in persisted prerendered HTML — a per-process guid
+    // can repeat across prerender jobs, and since the scoped style rules are
+    // page-global, two cached cards with the same scope would capture each
+    // other's theme variables. The guid fallback only covers unsaved cards,
+    // which are never persisted.
+    private get themeScopeId() {
+      let value = model.value;
+      return (isCard(value) && value.id) || guidFor(this);
+    }
 
     // Compute merged configuration for this field based on the owning instance.
     // We intentionally do not expose the instance itself to templates.

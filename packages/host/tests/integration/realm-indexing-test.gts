@@ -2017,7 +2017,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
@@ -2054,7 +2053,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2073,7 +2071,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2170,7 +2167,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
@@ -2205,7 +2201,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
@@ -2224,7 +2219,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"

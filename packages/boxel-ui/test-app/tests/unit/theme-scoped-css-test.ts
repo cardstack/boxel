@@ -52,6 +52,37 @@ module('Unit | theme-scoped-css', function () {
     assert.strictEqual(themeScopedCss(SCOPE, '').toString(), '');
   });
 
+  test('a bare-declaration value cannot break out of the scoped block', function (assert) {
+    let css = themeScopedCss(
+      SCOPE,
+      '--primary: red} body{background:url(https://evil.example/x)',
+    ).toString();
+    assert.false(
+      css.includes('body{'),
+      'no rule escapes the scoped selector block',
+    );
+    let openBraces = css.split('{').length - 1;
+    let closeBraces = css.split('}').length - 1;
+    assert.strictEqual(openBraces, closeBraces, 'braces stay balanced');
+  });
+
+  test('drops declarations whose value contains block delimiters', function (assert) {
+    let css = themeScopedCss(
+      SCOPE,
+      ':root { --safe: blue; --evil: red{orange; }',
+    ).toString();
+    assert.true(css.includes('--safe: blue'), 'safe declaration is kept');
+    assert.false(
+      css.includes('--evil'),
+      'declaration with a block delimiter in its value is dropped',
+    );
+  });
+
+  test('drops declarations whose property name contains block delimiters', function (assert) {
+    let css = themeScopedCss(SCOPE, '--safe: blue; --x} body: red').toString();
+    assert.strictEqual(css, `${SELECTOR}{--safe: blue}`);
+  });
+
   test('sanitizes markup out of variable values', function (assert) {
     let css = themeScopedCss(
       SCOPE,
