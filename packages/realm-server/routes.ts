@@ -311,8 +311,8 @@ export function createRoutes(args: CreateRoutesArgs) {
   // inside the handler because the signature covers the request body.
   router.post('/_delegate-session', handleDelegateSession(args));
   // Handles a worker-originated request bridged in through the worker manager,
-  // dispatched on its `type` (CS-11808). Shared-secret authenticated (HMAC over
-  // body + timestamp), same as /_delegate-session — auth is inside the handler.
+  // dispatched on its `type`. Shared-secret authenticated (HMAC over body +
+  // timestamp), same as /_delegate-session — auth is inside the handler.
   router.post('/_worker-request', handleWorkerRequest(args));
   router.get(
     '/_check-boxel-domain-availability',

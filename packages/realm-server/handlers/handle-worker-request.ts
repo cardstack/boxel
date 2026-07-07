@@ -21,13 +21,13 @@ import {
 
 const log = logger('realm:worker-request');
 
-// Handles a worker-originated request bridged in through the worker manager
-// (CS-11808). A background job runs in a worker child that holds no matrix
-// client; it hands a typed request to its manager, which forwards it here over
-// this shared-secret (HMAC-over-body) authenticated endpoint. The request is
-// dispatched on its `type` — a generic seam so future worker-originated
-// requests add a handler here (and a manager-side forwarder) without changing
-// the transport. `broadcast-realm-event` is the first specialization.
+// Handles a worker-originated request bridged in through the worker manager.
+// A background job runs in a worker child that holds no matrix client; it hands
+// a typed request to its manager, which forwards it here over this shared-secret
+// (HMAC-over-body) authenticated endpoint. The request is dispatched on its
+// `type` — a generic seam so a worker-originated request adds a handler here
+// (and a manager-side forwarder) without changing the transport.
+// `broadcast-realm-event` is one such type.
 export default function handleWorkerRequest({
   realmSecretSeed,
   reconciler,

@@ -6948,11 +6948,11 @@ export class Realm {
     );
   }
 
-  // Public entry point for broadcasting a realm event that did not originate
+  // Public entry point for broadcasting a realm event that does not originate
   // from a request this Realm handled — a worker-originated event bridged in
-  // through the worker manager (CS-11808). Unlike the private
-  // broadcastRealmEvent (fire-and-forget), this awaits the adapter so the
-  // internal /_worker-request endpoint doesn't leave a dangling promise and can
+  // through the worker manager. Unlike the private broadcastRealmEvent
+  // (fire-and-forget), this awaits the adapter so the internal /_worker-request
+  // endpoint doesn't leave a dangling promise and can
   // surface a resolution/dispatch throw. Delivery itself is best-effort — the
   // adapter swallows per-room send failures the same way web-tier broadcasts do
   // — so a 200 means "resolved and dispatched," not "received by every host."

@@ -988,7 +988,7 @@ async function startWorker(
           // (e.g. broadcasting a realm event — it holds no matrix client). We
           // dispatch on the request type and forward to the realm server over
           // the authenticated /_worker-request endpoint. Routing every request
-          // through this single manager avoids per-replica fan-out (CS-11808).
+          // through this single manager avoids per-replica fan-out.
           // Fixed-offset substring (not split) so the JSON payload may contain
           // the `|` delimiter freely.
           let payload = message.substring('worker-request|'.length);

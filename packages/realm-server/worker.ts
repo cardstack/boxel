@@ -170,9 +170,9 @@ let autoMigrate = migrateDB || undefined;
 
   // Generic worker → manager request bridge. A worker child hands the manager
   // an arbitrary typed payload over the IPC channel; the manager dispatches on
-  // `type` and forwards it to the realm server. Adding a new worker-originated
-  // request is a new type here (and a matching handler on both the manager and
-  // the realm server) — the transport doesn't change.
+  // `type` and forwards it to the realm server. A worker-originated request is a
+  // `type` here plus a matching handler on the manager and the realm server —
+  // the transport doesn't change.
   function sendWorkerRequest(type: string, payload: unknown) {
     if (process.send) {
       process.send(`worker-request|${JSON.stringify({ type, payload })}`);

@@ -12,10 +12,10 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 //
 // The mechanism is generic: a worker request carries an arbitrary typed
 // payload, and both the manager and the realm server dispatch on `type`.
-// `broadcast-realm-event` is the first specialization — a worker asking the
-// realm server to broadcast a realm event it can't emit itself (it holds no
-// matrix client). Future worker-originated requests add a new `type` without
-// touching the transport.
+// `broadcast-realm-event` is one such type — a worker asking the realm server
+// to broadcast a realm event it can't emit itself (it holds no matrix client).
+// Another worker-originated request is a distinct `type` handled the same way,
+// without touching the transport.
 //
 // This module is the single source of truth for the signed-payload format and
 // the envelope shape, so the manager (signing) and the realm server (verifying)
@@ -102,10 +102,10 @@ export interface WorkerRequestBody<T = unknown> {
   payload: T;
 }
 
-// First specialization: ask the realm server to broadcast a realm event on the
-// worker's behalf. The payload is the event itself; its `realmURL` names the
-// target realm (the manager resolves it against its url mappings, the realm
-// server resolves the mounted realm from it).
+// The broadcast-realm-event request type: ask the realm server to broadcast a
+// realm event on the worker's behalf. The payload is the event itself; its
+// `realmURL` names the target realm (the manager resolves it against its url
+// mappings, the realm server resolves the mounted realm from it).
 export const BROADCAST_REALM_EVENT = 'broadcast-realm-event';
 export type BroadcastRealmEventPayload = RealmEventContent;
 
