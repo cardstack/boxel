@@ -1029,7 +1029,11 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Index all realms and dump tables
-        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        # pipefail so a nonzero exit from mise (e.g. the dump guard) fails the
+        # step instead of being masked by tee's exit code.
+        run: |
+          set -o pipefail
+          mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
