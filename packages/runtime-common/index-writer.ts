@@ -47,6 +47,7 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
+  type PrerenderedHtmlTable,
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -212,6 +213,12 @@ export class Batch {
   #currentInvalidationId: string;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  // Set by `copyFrom`. A copy sources the destination's prerendered HTML
+  // straight from the source realm's `prerendered_html` rows, so
+  // `applyBatchUpdates` must skip the `boxel_index_working` → working-table
+  // projection a fused index does — that projection reads HTML from the
+  // `boxel_index` columns and would clobber the directly-copied rows.
+  #copiedPrerenderedHtml = false;
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -437,6 +444,87 @@ export class Batch {
       ...upsertMultipleRows(
         'boxel_index_working',
         'boxel_index_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
+
+    await this.copyPrerenderedHtmlFrom(sourceRealmURL, now);
+  }
+
+  // Copy the source realm's `prerendered_html` rows into the destination's
+  // `prerendered_html_working`, so a copied realm keeps its prerendered HTML
+  // without re-rendering — sourced from the `prerendered_html` channel rather
+  // than the `boxel_index` HTML columns. Mirrors the `boxel_index` copy's
+  // transforms — URL rewrite (`url`, `realm_url`, `file_alias`),
+  // render-type-key rewrite of `fitted_html` / `embedded_html`, deps rewrite
+  // (scoped-CSS URLs ride in `deps`), and `error_doc` normalization — and
+  // stamps the destination generation so the copied instances read as fresh
+  // (`prerendered_html.generation == boxel_index.generation`). Tombstoned
+  // source rows are skipped, matching the `boxel_index` copy.
+  private async copyPrerenderedHtmlFrom(
+    sourceRealmURL: URL,
+    now: string,
+  ): Promise<void> {
+    // The direct copy owns `prerendered_html_working` for this batch — tell
+    // `applyBatchUpdates` to skip the `boxel_index` projection.
+    this.#copiedPrerenderedHtml = true;
+    let sources = (await this.#query([
+      `SELECT * FROM prerendered_html WHERE`,
+      ...every([
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [`realm_url =`, param(sourceRealmURL.href)],
+      ]),
+    ] as Expression)) as unknown as PrerenderedHtmlTable[];
+    let copyURL = (value: string) =>
+      this.isRegisteredPrefix(value)
+        ? value
+        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
+    let columns: string[][] | undefined;
+    let values = sources.map((entry) => {
+      let destURL = copyURL(entry.url);
+      // The source's `prerendered_html` rows are a subset of its `boxel_index`
+      // rows, so `copyFrom` already seeded these into `#invalidations`; add
+      // defensively so `applyBatchUpdates` promotes every copied HTML row.
+      this.#invalidations.add(destURL);
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.file_alias = copyURL(entry.file_alias);
+      entry.generation = this.generation;
+      entry.rendered_at = now;
+      entry.job_id = this.jobInfo?.jobId ?? null;
+      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
+      entry.last_known_good_deps = entry.last_known_good_deps
+        ? entry.last_known_good_deps.map(copyURL)
+        : entry.last_known_good_deps;
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
+        : entry.embedded_html;
+      if (entry.error_doc) {
+        entry.error_doc = this.normalizeErrorDoc(
+          entry.error_doc,
+          new URL(entry.url),
+          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
+        );
+      }
+      let { valueExpressions, nameExpressions } = asExpressions(entry);
+      columns = nameExpressions;
+      return valueExpressions;
+    });
+    if (!columns) {
+      // Source realm has no prerendered HTML to copy (e.g. never rendered);
+      // the destination's `boxel_index` HTML and the dual-read fallback serve
+      // it.
+      return;
+    }
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
         columns,
         values,
       ),
@@ -852,8 +940,13 @@ export class Batch {
       // also covers rows a resumed job wrote in a prior attempt that this
       // attempt never revisits, and rows written between the backfill migration
       // and the dual-write deploy, so the swap below can never silently skip a
-      // promoted URL.
-      await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+      // promoted URL. A copy skips this: `copyFrom` already populated
+      // prerendered_html_working straight from the source realm's
+      // `prerendered_html`, and this projection (which reads HTML from the
+      // boxel_index columns) would clobber it.
+      if (!this.#copiedPrerenderedHtml) {
+        await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+      }
 
       // Swap the mirrored HTML rows into production in the same transaction,
       // keyed by the same invalidation set and generation. `prerendered_html`
