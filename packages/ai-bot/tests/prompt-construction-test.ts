@@ -7325,6 +7325,28 @@ module('markdown skill commands', (hooks) => {
     );
   });
 
+  test('parseMarkdownSkill resolves root-relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "/commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
   test('getTools offers a command definition matched by a markdown skill', async () => {
     mockResponses.set('mxc://mock-server/switch-submode-def', {
       ok: true,

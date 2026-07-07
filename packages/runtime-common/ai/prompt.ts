@@ -572,7 +572,9 @@ function markdownSkillCommands(
       continue;
     }
     let module = codeRef.module;
-    if (module.startsWith('.') && skillUrl) {
+    // Match the host's isUrlLike semantics: both `.`- and `/`-prefixed
+    // modules resolve against the skill's own URL.
+    if ((module.startsWith('.') || module.startsWith('/')) && skillUrl) {
       try {
         module = new URL(module, skillUrl).href;
       } catch {
