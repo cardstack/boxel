@@ -453,6 +453,9 @@ export default class AiAssistantPanelService extends Service {
           }
 
           ({ roomId } = await createRoomCommand.execute(input));
+          // Every room advertises the entry-point skill; its linked skills
+          // load on demand.
+          await this.matrixService.activateCodeModeEntryPoint(roomId);
         }
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);

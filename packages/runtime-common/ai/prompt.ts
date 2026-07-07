@@ -66,6 +66,7 @@ import type {
 import type { ToolChoice } from '../helpers/ai.ts';
 import { logger } from '../log.ts';
 
+import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -423,7 +424,7 @@ function isTerminalCommandResultEventFor(
 async function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   client: MatrixClient,
-): Promise<LooseCardResource[]> {
+): Promise<EnabledSkill[]> {
   let skillsConfigEvent = findLast(
     eventlist,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -434,14 +435,93 @@ async function getEnabledSkills(
 
   let enabledSkillCards = skillsConfigEvent.content.enabledSkillCards;
   if (enabledSkillCards?.length) {
-    return await Promise.all(
-      enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
-        let cardContent = await downloadFile(client, cardFileDef);
-        return (JSON.parse(cardContent) as LooseSingleCardDocument)?.data;
-      }),
+    let skills = await Promise.all(
+      enabledSkillCards?.map(
+        async (
+          cardFileDef: SerializedFileDef,
+        ): Promise<EnabledSkill | undefined> => {
+          let content = await downloadFile(client, cardFileDef);
+          // Dual-path window: markdown skills, handled here, are the pull
+          // model — a SKILL.md is a plain file whose body is the
+          // instructions, and it only counts as a skill when its frontmatter
+          // declares boxel.kind: skill (the host gates enabling on the same
+          // rule; this is defense in depth). Other markdown files are
+          // skipped rather than fed to the card path below, which would
+          // choke on non-JSON. The JSON.parse fallthrough is the legacy
+          // pushed-card path; it is removed when the push model is retired.
+          if (isMarkdownSkillFile(cardFileDef)) {
+            let { title, body, kind } = parseMarkdownSkill(
+              content,
+              cardFileDef,
+            );
+            if (kind !== 'skill') {
+              return undefined;
+            }
+            return {
+              id: cardFileDef.sourceUrl,
+              attributes: { title, instructions: body },
+            };
+          }
+          return (JSON.parse(content) as LooseSingleCardDocument)?.data;
+        },
+      ),
     );
+    return skills.filter((skill): skill is EnabledSkill => Boolean(skill));
   }
   return [];
+}
+
+// The subset of a skill the prompt pipeline consumes — sourced either from a
+// legacy Skill card document or from a markdown SKILL.md file.
+export interface EnabledSkill {
+  id?: string;
+  attributes?: {
+    title?: string;
+    instructions?: string;
+    commands?: { functionName: string }[];
+    [key: string]: any;
+  };
+}
+
+// A skill enabled as a markdown file (SKILL.md), rather than a Skill card.
+export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
+  return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
+}
+
+// Splits a markdown skill into its instruction body, a title, and its
+// declared boxel.kind. The body is everything after the leading
+// `--- frontmatter ---` block (the frontmatter is metadata, not
+// instructions); the title is the frontmatter `name`, falling back to the
+// file name. Invalid frontmatter YAML degrades to the raw content as body —
+// prompt assembly must not crash on a malformed skill file.
+export function parseMarkdownSkill(
+  content: string,
+  fileDef: SerializedFileDef,
+): { title: string; body: string; kind?: string } {
+  let body = content;
+  let title: string | undefined;
+  let kind: string | undefined;
+  try {
+    let { data, body: parsedBody } = parseFrontmatter(content);
+    body = parsedBody;
+    if (typeof data.name === 'string' && data.name.trim()) {
+      title = data.name.trim();
+    }
+    let boxel =
+      data.boxel && typeof data.boxel === 'object' && !Array.isArray(data.boxel)
+        ? (data.boxel as Record<string, unknown>)
+        : undefined;
+    if (typeof boxel?.kind === 'string') {
+      kind = boxel.kind;
+    }
+  } catch {
+    // Malformed frontmatter: keep the full content as the body.
+  }
+  if (!title) {
+    let path = fileDef.sourceUrl ?? fileDef.name ?? '';
+    title = path.split('/').filter(Boolean).pop() ?? 'Skill';
+  }
+  return { title, body: body.trim(), kind };
 }
 
 export async function getDisabledSkillIds(
@@ -718,7 +798,7 @@ export function attachedFilesToMessage(
 
 export async function getTools(
   eventList: DiscreteMatrixEvent[],
-  enabledSkills: LooseCardResource[],
+  enabledSkills: EnabledSkill[],
   aiBotUserId: string,
   client: MatrixClient,
 ): Promise<Tool[]> {
@@ -1319,7 +1399,7 @@ export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
-  skillCards: LooseCardResource[] = [],
+  skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
   inputModalities?: string[],
@@ -2198,9 +2278,7 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessages = (
-  cards: Omit<LooseCardResource, 'meta'>[],
-) => {
+export const skillCardsToMessages = (cards: EnabledSkill[]) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
     if (card.attributes?.title) {

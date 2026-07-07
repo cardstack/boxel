@@ -6,4 +6,5 @@ MATRIX_URL="${MATRIX_URL_VAL}" \
   NODE_NO_WARNINGS=1 \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE}" \
+  AI_BOT_DELEGATION_SECRET="shhh! it's a secret" \
   exec node main.ts

@@ -126,7 +126,11 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import {
+  devSkillId,
+  envSkillId,
+  codeModeEntryPointSkillUrl,
+} from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -1913,11 +1917,12 @@ export default class MatrixService extends Service {
   async loadDefaultSkills(submode: Submode) {
     let interactModeDefaultSkills = [envSkillId];
 
-    let codeModeDefaultSkills = [
-      devSkillId,
-      envSkillId,
-      skillCardURL('source-code-editing'),
-    ];
+    // Code editing is covered by the code-mode entry-point skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
+    let codeModeDefaultSkills = [devSkillId, envSkillId];
 
     let defaultSkills;
 
@@ -2791,6 +2796,19 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
+  // Enables the code-mode entry-point skill in a room. Every room gets it at
+  // creation: its body is small, and it routes code requests (load skills on
+  // demand, switch mode) from any submode.
+  async activateCodeModeEntryPoint(roomId: string) {
+    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+      this.commandService.commandContext,
+    );
+    await updateRoomSkillsCommand.execute({
+      roomId,
+      skillCardIdsToActivate: [codeModeEntryPointSkillUrl],
+    });
+  }
+
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
@@ -2802,6 +2820,9 @@ export default class MatrixService extends Service {
     let defaultSkills = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
+      // Dual-path window: the legacy card skills are still pushed in full;
+      // as they convert to markdown the pushed set shrinks. The entry-point
+      // skill needs nothing here — every room enables it at creation.
       skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
   }
