@@ -7,6 +7,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
+import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
@@ -35,6 +36,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  ensureTrailingSlash,
   hasExecutableExtension,
   RealmPaths,
   SupportedMimeType,
@@ -42,6 +44,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { skillsRealmURL } from '@cardstack/host/lib/utils';
+import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -62,6 +66,14 @@ interface Signature {
     navIndex?: number;
   };
 }
+
+// How many files are copied concurrently while duplicating a workspace: high
+// enough to overlap request latency, low enough to stay clear of the
+// browser's per-origin connection limit.
+const DUPLICATE_COPY_BATCH_SIZE = 5;
+// Endpoint candidates tried before giving up (`skills-copy`, `skills-copy-2`,
+// …). Only ever exhausted by a user who already owns this many copies.
+const DUPLICATE_MAX_ENDPOINT_ATTEMPTS = 10;
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -376,6 +388,82 @@ export default class Workspace extends Component<Signature> {
               <span class='archive-modal__disclaimer'>
                 You can restore this workspace later
               </span>
+            </div>
+          </:footer>
+        </ModalContainer>
+      {{/if}}
+      {{#if this.showDuplicateModal}}
+        <ModalContainer
+          @title=''
+          @onClose={{this.closeDuplicateModal}}
+          @size='medium'
+          @cardContainerClass='workspace-chooser-duplicate-modal'
+          class='workspace-chooser-duplicate-modal-container'
+          aria-label='Duplicate Workspace'
+          data-test-duplicate-modal={{@realmIdentifier}}
+        >
+          <:content>
+            <div class='duplicate-modal__header'>
+              <CopyIcon class='duplicate-modal__icon' />
+              <h2 class='duplicate-modal__title'>Duplicate Workspace</h2>
+            </div>
+
+            <div class='duplicate-modal__workspace-card'>
+              <div class='duplicate-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='duplicate-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='duplicate-modal__workspace-info'>
+                <span
+                  class='duplicate-modal__workspace-name'
+                >{{this.name}}</span>
+              </div>
+            </div>
+
+            <div class='duplicate-modal__info-box'>
+              <p class='duplicate-modal__info-text'>
+                This copies every card and file in this workspace into a new
+                <strong>private workspace</strong>
+                that only you can see and edit. The original stays untouched.
+              </p>
+            </div>
+
+            {{#if this.duplicateError}}
+              <p
+                class='duplicate-modal__error'
+                data-test-duplicate-error
+              >{{this.duplicateError}}</p>
+            {{/if}}
+          </:content>
+          <:footer>
+            <div class='duplicate-modal__footer'>
+              <div class='duplicate-modal__actions'>
+                {{#if this.duplicateWorkspaceTask.isRunning}}
+                  <span
+                    class='duplicate-modal__progress'
+                    data-test-duplicate-progress
+                  >{{this.duplicateProgressLabel}}</span>
+                  <LoadingIndicator class='duplicate-modal__spinner' />
+                {{else}}
+                  <Button
+                    {{on 'click' this.closeDuplicateModal}}
+                    class='duplicate-modal__cancel'
+                    data-test-cancel-duplicate-button
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type='button'
+                    class='duplicate-modal__confirm'
+                    data-test-confirm-duplicate-button
+                    {{on 'click' (perform this.duplicateWorkspaceTask)}}
+                  >
+                    Duplicate this workspace
+                  </button>
+                {{/if}}
+              </div>
             </div>
           </:footer>
         </ModalContainer>
@@ -1098,6 +1186,172 @@ export default class Workspace extends Component<Signature> {
       .archive-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
       }
+      .workspace-chooser-duplicate-modal-container
+        > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.workspace-chooser-duplicate-modal) {
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__header) {
+        display: none;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content) {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+        overflow: visible;
+        height: auto;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__footer) {
+        height: auto;
+        flex: none;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        border-top: none;
+      }
+      .duplicate-modal__header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .duplicate-modal__icon {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .duplicate-modal__title {
+        font-size: 1.625rem;
+        font-weight: 700;
+        color: var(--boxel-dark);
+        margin: 0;
+      }
+      .duplicate-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
+      }
+      .duplicate-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
+        display: flex;
+      }
+      .duplicate-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .duplicate-modal__realm-icon {
+        --boxel-realm-icon-size: 2.625rem;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .duplicate-modal__workspace-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .duplicate-modal__workspace-name {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__info-box {
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .duplicate-modal__info-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__error {
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        margin: 0;
+      }
+      .duplicate-modal__footer {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .duplicate-modal__actions {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        align-items: center;
+      }
+      .duplicate-modal__progress {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__cancel {
+        background: none;
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 var(--boxel-sp-lg);
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .duplicate-modal__cancel:hover {
+        border-color: var(--boxel-550);
+        background: var(--boxel-light-100);
+      }
+      .duplicate-modal__confirm {
+        background: var(--boxel-dark);
+        border: none;
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 1.5rem;
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-light);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .duplicate-modal__confirm:hover {
+        background: var(--boxel-700);
+      }
+      .duplicate-modal__spinner {
+        --boxel-loading-indicator-size: 2rem;
+      }
     </style>
   </template>
 
@@ -1107,6 +1361,7 @@ export default class Workspace extends Component<Signature> {
     );
   }
 
+  @service declare private cardService: CardService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -1119,6 +1374,11 @@ export default class Workspace extends Component<Signature> {
   @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
   @tracked private showArchiveModal = false;
   @tracked private archiveError: string | undefined;
+  @tracked private showDuplicateModal = false;
+  @tracked private duplicateError: string | undefined;
+  @tracked private duplicateProgress:
+    | { copied: number; total: number }
+    | undefined;
   @tracked private isHostDropdownOpen = false;
   @tracked private reindexError: string | undefined;
 
@@ -1153,12 +1413,27 @@ export default class Workspace extends Component<Signature> {
         icon: this.isFavorited ? StarFilled : Star,
         action: this.toggleFavorite,
       }),
+    ];
+    // Duplicating is scoped to the skills realm: it is the one realm whose
+    // contents are all-relative references, which a file-by-file copy
+    // preserves intact. Generic realm cloning needs link rewriting and is
+    // deliberately not offered here.
+    if (this.canDuplicateWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Duplicate Workspace',
+          icon: CopyIcon,
+          action: this.openDuplicateModal,
+        }),
+      );
+    }
+    items.push(
       new MenuItem({
         label: 'Realm Settings',
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
       }),
-    ];
+    );
     // Re-index and Archive are owner-only and appear only on tiles the user
     // owns.
     if (this.canReindexWorkspace) {
@@ -1297,6 +1572,10 @@ export default class Workspace extends Component<Signature> {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
+  private get canDuplicateWorkspace() {
+    return ensureTrailingSlash(this.args.realmIdentifier) === skillsRealmURL;
+  }
+
   private get isReindexing() {
     return this.realmInfo.isIndexing;
   }
@@ -1362,6 +1641,30 @@ export default class Workspace extends Component<Signature> {
     this.showArchiveModal = true;
   }
 
+  @action openDuplicateModal() {
+    if (!this.canDuplicateWorkspace) {
+      return;
+    }
+    this.duplicateError = undefined;
+    this.showDuplicateModal = true;
+  }
+
+  @action closeDuplicateModal() {
+    if (this.duplicateWorkspaceTask.isRunning) {
+      return;
+    }
+    this.showDuplicateModal = false;
+    this.duplicateError = undefined;
+  }
+
+  private get duplicateProgressLabel() {
+    if (!this.duplicateProgress) {
+      return 'Preparing to copy…';
+    }
+    let { copied, total } = this.duplicateProgress;
+    return `Copying ${copied} of ${total} ${pluralize('file', total)}…`;
+  }
+
   @action closeArchiveModal() {
     if (this.archiveWorkspaceTask.isRunning) {
       return;
@@ -1400,6 +1703,114 @@ export default class Workspace extends Component<Signature> {
       this.archiveError = error.message;
     }
   });
+
+  private duplicateWorkspaceTask = dropTask(async () => {
+    this.duplicateError = undefined;
+    this.duplicateProgress = undefined;
+
+    try {
+      let sourceRealmURL = new URL(
+        ensureTrailingSlash(this.args.realmIdentifier),
+      );
+      let filePaths = await this.fetchSourceFilePaths(sourceRealmURL);
+      this.duplicateProgress = { copied: 0, total: filePaths.length };
+
+      let newRealmURL = await this.createDuplicateRealm();
+
+      for (let i = 0; i < filePaths.length; i += DUPLICATE_COPY_BATCH_SIZE) {
+        let batch = filePaths.slice(i, i + DUPLICATE_COPY_BATCH_SIZE);
+        await Promise.all(
+          batch.map((path) =>
+            this.cardService.copySource(
+              new URL(path, sourceRealmURL),
+              new URL(path, newRealmURL),
+            ),
+          ),
+        );
+        this.duplicateProgress = {
+          copied: i + batch.length,
+          total: filePaths.length,
+        };
+      }
+
+      // Surface the new workspace only once its contents are in place, so the
+      // tile the user clicks is never a half-copied realm.
+      await this.matrixService.appendRealmToAccountData(newRealmURL.href);
+
+      this.showDuplicateModal = false;
+    } catch (error: any) {
+      this.duplicateError = String(error?.message ?? error);
+    } finally {
+      this.duplicateProgress = undefined;
+    }
+  });
+
+  private async fetchSourceFilePaths(sourceRealmURL: URL) {
+    let response = await this.network.authedFetch(
+      `${sourceRealmURL.href}_mtimes`,
+      {
+        headers: {
+          Accept: SupportedMimeType.Mtimes,
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workspace contents: ${response.status}`);
+    }
+    let json = (await response.json()) as {
+      data: {
+        attributes: {
+          mtimes: Record<string, number>;
+        };
+      };
+    };
+    let realmPaths = new RealmPaths(sourceRealmURL);
+    return (
+      Object.keys(json.data.attributes.mtimes)
+        .map((fileURL) => realmPaths.local(new URL(fileURL)))
+        // The duplicate keeps its own realm.json: the source's config carries
+        // the source's name and catalog visibility, while the new realm's
+        // config (written at creation) is what makes the copy private.
+        .filter((path) => path !== 'realm.json')
+    );
+  }
+
+  private async createDuplicateRealm(): Promise<URL> {
+    let sourceEndpoint =
+      new URL(ensureTrailingSlash(this.args.realmIdentifier)).pathname
+        .split('/')
+        .filter(Boolean)
+        .at(-1) ?? 'workspace';
+    let { iconURL, backgroundURL } = this.realmInfo;
+    let name = `${this.name} (Copy)`;
+
+    for (
+      let attempt = 1;
+      attempt <= DUPLICATE_MAX_ENDPOINT_ATTEMPTS;
+      attempt++
+    ) {
+      let endpoint =
+        attempt === 1
+          ? `${sourceEndpoint}-copy`
+          : `${sourceEndpoint}-copy-${attempt}`;
+      try {
+        return await this.realmServer.createRealm({
+          endpoint,
+          name,
+          iconURL: iconURL ?? undefined,
+          backgroundURL: backgroundURL ?? undefined,
+        });
+      } catch (error: any) {
+        let message = String(error?.message ?? error);
+        if (!message.includes('already exists on this server')) {
+          throw error;
+        }
+      }
+    }
+    throw new Error(
+      `Could not find an available workspace endpoint to duplicate '${sourceEndpoint}' into`,
+    );
+  }
 
   private reindexWorkspaceTask = dropTask(async () => {
     this.clearReindexError();
