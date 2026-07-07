@@ -29,9 +29,18 @@ export function themeScopedCss(
   let light = extractCssVariables(cssVariables, ':root');
   let dark = extractCssVariables(cssVariables, '.dark');
   // Scopes are arbitrary strings (typically card URLs); escape the characters
-  // that could break out of the double-quoted attribute selector. The escaped
-  // selector still matches the literal attribute value.
-  let selector = `[data-boxel-theme-scope="${scope.replace(/[\\"]/g, '\\$&')}"]`;
+  // that could break out of the double-quoted attribute selector (`\`, `"`),
+  // terminate the surrounding <style> element once this markup is serialized
+  // and re-parsed (`<`, as in `</style`), or are invalid in a CSS string
+  // (control characters). CSS hex escapes keep the selector matching the
+  // literal attribute value.
+  // eslint-disable-next-line no-control-regex
+  let escapedScope = scope.replace(/[\\"<\u0000-\u001f]/g, (char) =>
+    char === '\\' || char === '"'
+      ? `\\${char}`
+      : `\\${char.codePointAt(0)!.toString(16)} `,
+  );
+  let selector = `[data-boxel-theme-scope="${escapedScope}"]`;
   let css = '';
   if (light) {
     css += `${selector}{${sanitizeDeclarations(light)}}`;

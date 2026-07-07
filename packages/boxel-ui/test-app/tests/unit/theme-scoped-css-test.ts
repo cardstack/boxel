@@ -92,4 +92,25 @@ module('Unit | theme-scoped-css', function () {
     assert.false(css.includes('<script>'), 'script tag is stripped');
     assert.notOk((window as any).hacked, 'script does not execute');
   });
+
+  test('a scope cannot terminate the surrounding style element', function (assert) {
+    let css = themeScopedCss(
+      'x"]</style><script>window.hacked = true</script>',
+      ':root { --primary: blue; }',
+    ).toString();
+    assert.false(css.includes('<'), 'markup delimiters are CSS-escaped');
+    assert.true(
+      css.includes('[data-boxel-theme-scope="x\\"]\\3c /style>'),
+      'quote and < are escaped but the selector still targets the literal scope',
+    );
+  });
+
+  test('an escaped scope selector still matches its element', function (assert) {
+    let scope = 'https://example.test/card"</style>';
+    let css = themeScopedCss(scope, ':root { --primary: blue; }').toString();
+    let selector = css.slice(0, css.indexOf('{'));
+    let el = document.createElement('div');
+    el.setAttribute('data-boxel-theme-scope', scope);
+    assert.true(el.matches(selector), 'escaped selector matches the element');
+  });
 });
