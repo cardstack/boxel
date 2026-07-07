@@ -31,7 +31,7 @@ class Isolated extends Component<typeof StyleReference> {
   <template>
     <ThemeDashboard
       class='style-reference'
-      style={{if this.isDarkMode @model.darkModeStyles}}
+      @themeCss={{@model.cssVariables}}
       @isDarkMode={{this.isDarkMode}}
     >
       <:header>
