@@ -944,11 +944,12 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('copyFrom refreshes a destination prerendered_html row whose source has none', async function (assert) {
-    // Source row has boxel_index HTML but no prerendered_html row (e.g. indexed
-    // but not yet rendered). The destination already carries a stale
+    // Source row has boxel_index HTML but no prerendered_html row (an indexed
+    // row without a rendering). The destination already carries a stale
     // prerendered_html row for the same URL. The copy must refresh it (via the
-    // boxel_index projection over the uncopied invalidations) rather than leave
-    // the stale rendering in place for the dual-read to prefer.
+    // boxel_index projection, which the prerendered_html overlay leaves in place
+    // for a row the source lacks) rather than leave the stale rendering for the
+    // dual-read to prefer.
     let resource: CardResource = {
       id: testRRI('1'),
       type: 'card',
@@ -1019,6 +1020,92 @@ module('Unit | index-writer', function (hooks) {
       rendered?.generation,
       2,
       'the refreshed row is stamped at the dest-realm generation',
+    );
+  });
+
+  test('copyFrom fills every (url, type) even when the source prerendered_html covers only one type', async function (assert) {
+    // The same URL can carry both an instance and a file boxel_index row. If the
+    // source's prerendered_html has a row for only one of them, the copy must
+    // still land a prerendered_html row for both — the covered type sourced from
+    // prerendered_html, the other filled from the boxel_index projection — so no
+    // type is left without a rendering.
+    let resource: LooseCardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          type: 'instance',
+          generation: 1,
+          realm_url: testRealmURL,
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          deps: [`${testRealmURL}person`],
+          isolated_html: `<div class="isolated">instance boxel_index</div>`,
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          type: 'file',
+          generation: 1,
+          realm_url: testRealmURL,
+          search_doc: { name: '1.json' },
+          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
+        },
+      ],
+    );
+    // Source prerendered_html covers only the instance row: mirror both, drop
+    // the file row, and diverge the instance rendering with a sentinel.
+    await mirrorPrerenderedHtml(adapter, testRealmURL);
+    await adapter.execute(
+      `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2 AND type = 'file'`,
+      { bind: [`${testRealmURL}1.json`, testRealmURL] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 AND realm_url = $3 AND type = 'instance'`,
+      {
+        bind: [
+          `<div class="isolated">INSTANCE from prerendered_html</div>`,
+          `${testRealmURL}1.json`,
+          testRealmURL,
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT type, isolated_html, generation FROM prerendered_html WHERE url = $1 ORDER BY type COLLATE "POSIX"`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.deepEqual(
+      rows,
+      [
+        {
+          type: 'file',
+          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
+          generation: 2,
+        },
+        {
+          type: 'instance',
+          isolated_html: `<div class="isolated">INSTANCE from prerendered_html</div>`,
+          generation: 2,
+        },
+      ],
+      'both types land a prerendered_html row: instance sourced from prerendered_html, file from the boxel_index projection',
     );
   });
 
