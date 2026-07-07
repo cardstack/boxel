@@ -4810,26 +4810,31 @@ function getStore(instance: BaseDef): CardStore {
 // real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
 // AI source-file reader's `new URL(...)`) use this rather than reaching for the
 // VirtualNetwork object directly — they get back a URL, not the network itself.
-// Resolves through the active Loader's VirtualNetwork (the network boundary);
-// returns undefined when none is available (detached / static-parse contexts)
-// so callers can degrade to URL math.
+// Resolves through the instance's own store's VirtualNetwork, which may carry
+// realm mappings the module loader's does not (e.g. a card deserialized with an
+// explicit store). Returns undefined when none is available, or when the
+// reference can't be resolved, so callers can degrade to URL math.
 export function resolveInstanceURL(
   instance: CardDef,
   reference: string,
 ): URL | undefined {
   let virtualNetwork: VirtualNetwork | undefined;
   try {
-    virtualNetwork = myLoader().getVirtualNetwork();
+    virtualNetwork = getStore(instance).virtualNetwork;
   } catch {
     return undefined;
   }
   if (!virtualNetwork) {
     return undefined;
   }
-  return virtualNetwork.resolveURL(
-    reference,
-    instance.id ?? instance[relativeTo],
-  );
+  try {
+    return virtualNetwork.resolveURL(
+      reference,
+      instance.id ?? instance[relativeTo],
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 // Resolve a (possibly relative) reference to its absolute canonical RRI,
