@@ -1060,9 +1060,9 @@ module(basename(import.meta.filename), function () {
         'file entry for a card instance json is marked _isCardInstance',
       );
       assert.strictEqual(
-        entry?.searchDoc?.cardTitle,
+        entry?.searchDoc?._title,
         'mango.json',
-        'file entry cardTitle is the file name',
+        'file entry _title is the file name',
       );
     });
 
@@ -1112,9 +1112,9 @@ module(basename(import.meta.filename), function () {
         'search_doc includes contentSize',
       );
       assert.strictEqual(
-        searchDoc.cardTitle,
+        searchDoc._title,
         'random-file.txt',
-        'search_doc cardTitle is the file name',
+        'search_doc _title is the file name',
       );
       assert.false(
         '_isCardInstance' in searchDoc,

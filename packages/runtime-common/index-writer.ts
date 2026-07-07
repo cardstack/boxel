@@ -649,15 +649,23 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'file-error':
+      case 'file-error': {
+        let production: Record<string, any> =
+          (await this.getProductionVersion(url, baseTypeFromError(entry))) ??
+          {};
         entryPayload = {
           types: entry.types,
-          search_doc: entry.searchData,
           // favor the last known good types over the types derived from the error state
-          ...((await this.getProductionVersion(
-            url,
-            baseTypeFromError(entry),
-          )) ?? {}),
+          ...production,
+          // Assign search_doc AFTER the production spread so the freshly-stamped
+          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // rather than being clobbered by the last-known-good doc. Overlaying
+          // the current searchData onto that doc keeps an instance's rich fields
+          // when it degrades to a sparse error searchData, while a file /
+          // dependency-error row (full searchData) wins outright.
+          search_doc: entry.searchData
+            ? { ...(production.search_doc ?? {}), ...entry.searchData }
+            : (production.search_doc ?? null),
           // preserve last_known_good_deps through error cycles (may have been cleared
           // by getProductionVersion if it returned undefined, so we explicitly preserve it)
           last_known_good_deps: await this.getLastKnownGoodDeps(
@@ -670,6 +678,7 @@ export class Batch {
           diagnostics: diagnostics,
         };
         break;
+      }
       default:
         throw new Error(
           `Unsupported index entry type: ${(entry as { type: string }).type}`,

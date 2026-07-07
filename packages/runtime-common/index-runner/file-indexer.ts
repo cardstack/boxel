@@ -176,11 +176,11 @@ export async function performFileIndexing({
   //   appears via its `instance` row). It rides on the dependency-error entry
   //   too, so a card .json whose card is in an error state stays out of file
   //   search. Stamped only when true; plain file docs don't carry the key.
-  // - `cardTitle` on a file doc is NOT a claim that the file is a card: it is
-  //   the file's display title (its name) aliased under the key card docs use
-  //   (CardDef's title field is named `cardTitle`), so one mixed query can
-  //   substring-match (`contains: {cardTitle}`) and A-Z sort
-  //   (`search_doc->>'cardTitle'`, NULLS LAST) cards and files uniformly.
+  // - `_title` is the row's display title (a file's is its name) under a
+  //   neutral key that card docs also carry (stamped alongside `_cardType`
+  //   during card render), so one mixed query can substring-match
+  //   (`contains: {_title}`) and A-Z sort (`search_doc->>'_title'`, NULLS
+  //   LAST) cards and files uniformly.
   let searchData = {
     url: fileURL,
     sourceUrl: fileURL,
@@ -188,7 +188,7 @@ export async function performFileIndexing({
     contentType,
     ...(extractResult.searchDoc ?? {}),
     ...(isCardInstance ? { _isCardInstance: true } : {}),
-    cardTitle: name,
+    _title: name,
   };
 
   // Runtime deps are the source of truth. Use index-backed lookup only to

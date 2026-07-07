@@ -211,6 +211,11 @@ export default class RenderMetaRoute extends Route<Model> {
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
     searchDoc._cardType = friendlyCardType(Klass);
+    // `_title` is the neutral, cross-type display-title key that file docs also
+    // carry (see file-indexer), so a mixed cards+files query can substring-match
+    // and A-Z sort both row types on a single key. For a card it mirrors the
+    // `cardTitle` computed already present in the search doc.
+    searchDoc._title = searchDoc.cardTitle;
 
     let diagnostics: PrerenderMetaDiagnostics = {
       ...(passSnapshot

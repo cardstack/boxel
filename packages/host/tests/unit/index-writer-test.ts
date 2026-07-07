@@ -1562,6 +1562,56 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('error entry keeps freshly-stamped synthetic search keys over the last-known-good doc', async function (assert) {
+    // Rollout case: a `file` row indexed before `_isCardInstance` / `_title`
+    // existed, then hit by a dependency-error reindex. The fresh searchData
+    // carries the synthetic keys and must survive rather than being clobbered
+    // by the production doc, while last-known-good fields (here `extra`) still
+    // carry forward.
+    let timestamp = Date.now();
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: '1.json', extra: 'keep-me' },
+          last_modified: String(timestamp),
+          resource_created_at: String(timestamp),
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'file-error',
+      error: { message: 'dep in error', status: 500, additionalErrors: [] },
+      searchData: { name: '1.json', _isCardInstance: true, _title: '1.json' },
+    });
+    await batch.done();
+
+    let [row] = (await adapter.execute(
+      "SELECT search_doc FROM boxel_index WHERE generation = 2 AND type = 'file' AND has_error = TRUE",
+      { coerceTypes },
+    )) as unknown as BoxelIndexTable[];
+    assert.deepEqual(
+      row.search_doc,
+      {
+        name: '1.json',
+        extra: 'keep-me',
+        _isCardInstance: true,
+        _title: '1.json',
+      },
+      'error row merges freshly-stamped synthetic keys onto the last-known-good doc',
+    );
+  });
+
   test('strips jsonb-illegal code points from error_doc and diagnostics on write', async function (assert) {
     await setupIndex(
       adapter,

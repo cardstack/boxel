@@ -83,6 +83,7 @@ function diffValue(
     let keys = new Set([...Object.keys(lv), ...Object.keys(gv)]);
     keys.delete('_cardType');
     keys.delete('_isCardInstance');
+    keys.delete('_title');
     for (let key of keys) {
       diffValue(
         path ? `${path}.${key}` : key,
@@ -116,8 +117,9 @@ function diffValue(
 }
 
 // Compare two search docs and return a list of human-readable divergences
-// (empty when equivalent). `_cardType` (appended by the prerender meta route,
-// not the generator) is ignored; object key order is normalized.
+// (empty when equivalent). Synthetic keys stamped after generation
+// (`_cardType`, `_title`, `_isCardInstance`) are ignored; object key order is
+// normalized.
 export function diffDoc(
   live: SearchDoc,
   generated: SearchDoc,
