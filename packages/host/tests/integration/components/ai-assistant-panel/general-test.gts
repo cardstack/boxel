@@ -825,6 +825,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       () =>
         matrixService.currentUserEventReadReceipts.has(eventId2) &&
         matrixService.currentUserEventReadReceipts.has(eventId3),
+      // Room creation also enables the default skills (including the
+      // code-editing entry point), so give the receipts more than the
+      // default 1s to land behind that work.
+      { timeout: 10000 },
     );
     assert.deepEqual(
       Array.from(matrixService.currentUserEventReadReceipts.keys()),
