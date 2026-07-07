@@ -74,6 +74,9 @@ echo "All realms ready. Dumping index tables..."
 # pattern matches no table, so a renamed/removed table would silently drop
 # out of the cache — the guard below turns that into a hard failure.
 CACHE_TABLES=(boxel_index realm_generations realm_meta)
+# TEMP(index-cache-fix-cs-11814): sentinel table that does not exist, to prove
+# the guard below fails the job when a table drops out of the dump. Revert before merge.
+CACHE_TABLES+=(__guard_demo_missing_table)
 
 DUMP_ARGS=()
 for t in "${CACHE_TABLES[@]}"; do
