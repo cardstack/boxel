@@ -142,7 +142,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
   <template>
     <ThemeDashboard
-      style={{if this.isDarkMode @model.darkModeStyles}}
+      @themeCss={{@model.cssVariables}}
       @title={{@model.cardTitle}}
       @description={{@model.cardDescription}}
       @sections={{this.sectionsWithContent}}

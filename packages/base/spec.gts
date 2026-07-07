@@ -821,8 +821,8 @@ class Edit extends Component<typeof Spec> {
     <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
-        --boxel-spec-code-ref-background-color: #e2e2e2;
-        --boxel-spec-code-ref-text-color: #646464;
+        --boxel-spec-code-ref-background-color: var(--boxel-300);
+        --boxel-spec-code-ref-text-color: var(--boxel-500);
 
         height: 100%;
         min-height: max-content;
@@ -830,7 +830,7 @@ class Edit extends Component<typeof Spec> {
         background-color: var(--boxel-spec-background-color);
       }
       :deep(.add-new) {
-        border: 1px solid var(--border, var(--boxel-border-color));
+        --boxel-button-color: var(--border);
       }
     </style>
   </template>
@@ -1080,7 +1080,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill @variant='muted' class='spec-tag-pill' ...attributes>
+      <Pill @variant='accent' class='spec-tag-pill' ...attributes>
         <:iconLeft>
           <this.icon width='18px' height='18px' />
         </:iconLeft>
@@ -1092,9 +1092,6 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{/if}}
     <style scoped>
       .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
-        --pill-icon-size: 18px;
         word-break: initial;
         text-transform: uppercase;
       }
