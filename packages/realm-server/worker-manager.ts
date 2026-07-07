@@ -80,6 +80,8 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import { forwardWorkerRealmEvent } from './lib/worker-realm-event-forwarder.ts';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 /* About the Worker Manager
  *
@@ -978,6 +980,33 @@ async function startWorker(
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith('realm-event|')
+        ) {
+          // A worker child asked us to broadcast a realm event it can't emit
+          // itself (it holds no matrix client). Forward it to the realm server
+          // over the authenticated /_worker-event endpoint. Routing through
+          // this single manager gives exactly-once delivery (CS-11808).
+          let payload = message.substring('realm-event|'.length);
+          let event: RealmEventContent;
+          try {
+            event = JSON.parse(payload) as RealmEventContent;
+          } catch (e) {
+            log.error(`Failed to parse realm event from worker ${name}: ${e}`);
+            return;
+          }
+          forwardWorkerRealmEvent({
+            event,
+            urlMappings,
+            secret: REALM_SECRET_SEED!,
+          }).catch((e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: failed forwarding realm event for ${event.realmURL}`,
+              e,
+            );
+          });
         }
       });
     }),

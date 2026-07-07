@@ -36,6 +36,7 @@ import {
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import {
@@ -166,6 +167,17 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  // A worker child holds no matrix client, so it can't broadcast a realm
+  // event itself. It hands the event to the worker manager over the IPC
+  // channel; the manager forwards it to the realm server, which broadcasts it
+  // through the realm's matrix session rooms. The task requests the event via
+  // the `reportRealmEvent` callback in TaskArgs without knowing this transport.
+  function reportRealmEvent(event: RealmEventContent) {
+    if (process.send) {
+      process.send(`realm-event|${JSON.stringify(event)}`);
+    }
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let worker = new Worker({
@@ -176,6 +188,7 @@ let autoMigrate = migrateDB || undefined;
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),

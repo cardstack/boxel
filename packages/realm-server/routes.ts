@@ -42,6 +42,7 @@ import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
+import handleWorkerEvent from './handlers/handle-worker-event.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
@@ -309,6 +310,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
   // inside the handler because the signature covers the request body.
   router.post('/_delegate-session', handleDelegateSession(args));
+  // Broadcasts a worker-originated realm event bridged in through the worker
+  // manager (CS-11808). Shared-secret authenticated (HMAC over body +
+  // timestamp), same as /_delegate-session — auth is inside the handler.
+  router.post('/_worker-event', handleWorkerEvent(args));
   router.get(
     '/_check-boxel-domain-availability',
     jwtMiddleware(args.realmSecretSeed),

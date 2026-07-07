@@ -315,6 +315,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/incoming-webhook-test',
   './server-endpoints/webhook-commands-test',
   './server-endpoints/webhook-receiver-test',
+  './server-endpoints/worker-event-test',
   './transpile-test',
   './types-endpoint-test',
   './virtual-network-test',
@@ -355,6 +356,8 @@ const ALL_TEST_FILES: string[] = [
   './session-room-queries-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',
+  './worker-realm-event-signature-test',
+  './worker-realm-event-forwarder-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful
