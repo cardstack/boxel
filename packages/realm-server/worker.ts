@@ -37,6 +37,7 @@ import {
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import { BROADCAST_REALM_EVENT } from '@cardstack/runtime-common/worker-request';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import {
@@ -167,15 +168,23 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
-  // A worker child holds no matrix client, so it can't broadcast a realm
-  // event itself. It hands the event to the worker manager over the IPC
-  // channel; the manager forwards it to the realm server, which broadcasts it
-  // through the realm's matrix session rooms. The task requests the event via
-  // the `reportRealmEvent` callback in TaskArgs without knowing this transport.
-  function reportRealmEvent(event: RealmEventContent) {
+  // Generic worker → manager request bridge. A worker child hands the manager
+  // an arbitrary typed payload over the IPC channel; the manager dispatches on
+  // `type` and forwards it to the realm server. Adding a new worker-originated
+  // request is a new type here (and a matching handler on both the manager and
+  // the realm server) — the transport doesn't change.
+  function sendWorkerRequest(type: string, payload: unknown) {
     if (process.send) {
-      process.send(`realm-event|${JSON.stringify(event)}`);
+      process.send(`worker-request|${JSON.stringify({ type, payload })}`);
     }
+  }
+
+  // A worker child holds no matrix client, so it can't broadcast a realm event
+  // itself. It requests one through the manager, which broadcasts it through the
+  // realm's matrix session rooms. The task calls the `reportRealmEvent` callback
+  // in TaskArgs without knowing this transport.
+  function reportRealmEvent(event: RealmEventContent) {
+    sendWorkerRequest(BROADCAST_REALM_EVENT, event);
   }
 
   let dbAdapter = new PgAdapter({ autoMigrate });

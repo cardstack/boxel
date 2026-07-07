@@ -2,22 +2,22 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
-  workerRealmEventSignature,
-  verifyWorkerRealmEventRequest,
-  WORKER_REALM_EVENT_TIMESTAMP_WINDOW_MS,
-} from '@cardstack/runtime-common/worker-realm-event';
+  workerRequestSignature,
+  verifyWorkerRequest,
+  WORKER_REQUEST_TIMESTAMP_WINDOW_MS,
+} from '@cardstack/runtime-common/worker-request';
 
 const secret = "shhh! it's a secret";
 
 module(basename(import.meta.filename), function () {
-  module('worker-realm-event signature', function () {
+  module('worker-request signature', function () {
     test('a freshly signed request verifies', function (assert) {
       let now = 1_000_000;
-      let rawBody = JSON.stringify({ event: { hello: 'world' } });
+      let rawBody = JSON.stringify({ type: 'x', payload: { hello: 'world' } });
       let timestamp = String(now);
-      let signature = workerRealmEventSignature(secret, timestamp, rawBody);
+      let signature = workerRequestSignature(secret, timestamp, rawBody);
 
-      let result = verifyWorkerRealmEventRequest({
+      let result = verifyWorkerRequest({
         secret,
         timestamp,
         signature,
@@ -30,17 +30,17 @@ module(basename(import.meta.filename), function () {
     test('the signature covers the body — a tampered body is rejected', function (assert) {
       let now = 1_000_000;
       let timestamp = String(now);
-      let signature = workerRealmEventSignature(
+      let signature = workerRequestSignature(
         secret,
         timestamp,
-        JSON.stringify({ event: { hello: 'world' } }),
+        JSON.stringify({ type: 'x', payload: { hello: 'world' } }),
       );
 
-      let result = verifyWorkerRealmEventRequest({
+      let result = verifyWorkerRequest({
         secret,
         timestamp,
         signature,
-        rawBody: JSON.stringify({ event: { hello: 'tampered' } }),
+        rawBody: JSON.stringify({ type: 'x', payload: { hello: 'tampered' } }),
         now,
       });
       assert.false(result.ok, 'tampered body fails verification');
@@ -49,14 +49,14 @@ module(basename(import.meta.filename), function () {
     test('a signature made with the wrong secret is rejected', function (assert) {
       let now = 1_000_000;
       let timestamp = String(now);
-      let rawBody = JSON.stringify({ event: {} });
-      let signature = workerRealmEventSignature(
+      let rawBody = JSON.stringify({ type: 'x', payload: {} });
+      let signature = workerRequestSignature(
         'not-the-shared-secret',
         timestamp,
         rawBody,
       );
 
-      let result = verifyWorkerRealmEventRequest({
+      let result = verifyWorkerRequest({
         secret,
         timestamp,
         signature,
@@ -67,9 +67,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('missing timestamp or signature is rejected', function (assert) {
-      let rawBody = JSON.stringify({ event: {} });
+      let rawBody = JSON.stringify({ type: 'x', payload: {} });
       assert.false(
-        verifyWorkerRealmEventRequest({
+        verifyWorkerRequest({
           secret,
           timestamp: undefined,
           signature: 'x',
@@ -79,7 +79,7 @@ module(basename(import.meta.filename), function () {
         'missing timestamp rejected',
       );
       assert.false(
-        verifyWorkerRealmEventRequest({
+        verifyWorkerRequest({
           secret,
           timestamp: '0',
           signature: undefined,
@@ -91,13 +91,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a malformed (non-numeric) timestamp is rejected', function (assert) {
-      let rawBody = JSON.stringify({ event: {} });
-      let signature = workerRealmEventSignature(
-        secret,
-        'not-a-number',
-        rawBody,
-      );
-      let result = verifyWorkerRealmEventRequest({
+      let rawBody = JSON.stringify({ type: 'x', payload: {} });
+      let signature = workerRequestSignature(secret, 'not-a-number', rawBody);
+      let result = verifyWorkerRequest({
         secret,
         timestamp: 'not-a-number',
         signature,
@@ -109,14 +105,14 @@ module(basename(import.meta.filename), function () {
 
     test('a timestamp outside the ±window is rejected in both directions', function (assert) {
       let now = 10_000_000;
-      let rawBody = JSON.stringify({ event: {} });
+      let rawBody = JSON.stringify({ type: 'x', payload: {} });
       for (let skew of [
-        WORKER_REALM_EVENT_TIMESTAMP_WINDOW_MS + 1_000,
-        -(WORKER_REALM_EVENT_TIMESTAMP_WINDOW_MS + 1_000),
+        WORKER_REQUEST_TIMESTAMP_WINDOW_MS + 1_000,
+        -(WORKER_REQUEST_TIMESTAMP_WINDOW_MS + 1_000),
       ]) {
         let timestamp = String(now + skew);
-        let signature = workerRealmEventSignature(secret, timestamp, rawBody);
-        let result = verifyWorkerRealmEventRequest({
+        let signature = workerRequestSignature(secret, timestamp, rawBody);
+        let result = verifyWorkerRequest({
           secret,
           timestamp,
           signature,
@@ -129,10 +125,10 @@ module(basename(import.meta.filename), function () {
 
     test('a timestamp at the edge of the window is accepted', function (assert) {
       let now = 10_000_000;
-      let rawBody = JSON.stringify({ event: {} });
-      let timestamp = String(now - WORKER_REALM_EVENT_TIMESTAMP_WINDOW_MS);
-      let signature = workerRealmEventSignature(secret, timestamp, rawBody);
-      let result = verifyWorkerRealmEventRequest({
+      let rawBody = JSON.stringify({ type: 'x', payload: {} });
+      let timestamp = String(now - WORKER_REQUEST_TIMESTAMP_WINDOW_MS);
+      let signature = workerRequestSignature(secret, timestamp, rawBody);
+      let result = verifyWorkerRequest({
         secret,
         timestamp,
         signature,

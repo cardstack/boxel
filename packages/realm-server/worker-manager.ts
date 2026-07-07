@@ -80,8 +80,8 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
-import { forwardWorkerRealmEvent } from './lib/worker-realm-event-forwarder.ts';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import { dispatchWorkerRequest } from './lib/worker-request-forwarder.ts';
+import type { WorkerRequestBody } from '@cardstack/runtime-common/worker-request';
 
 /* About the Worker Manager
  *
@@ -982,28 +982,33 @@ async function startWorker(
           }
         } else if (
           typeof message === 'string' &&
-          message.startsWith('realm-event|')
+          message.startsWith('worker-request|')
         ) {
-          // A worker child asked us to broadcast a realm event it can't emit
-          // itself (it holds no matrix client). Forward it to the realm server
-          // over the authenticated /_worker-event endpoint. Routing through
-          // this single manager gives exactly-once delivery (CS-11808).
-          let payload = message.substring('realm-event|'.length);
-          let event: RealmEventContent;
+          // A worker child handed us a typed request it can't service itself
+          // (e.g. broadcasting a realm event — it holds no matrix client). We
+          // dispatch on the request type and forward to the realm server over
+          // the authenticated /_worker-request endpoint. Routing every request
+          // through this single manager avoids per-replica fan-out (CS-11808).
+          // Fixed-offset substring (not split) so the JSON payload may contain
+          // the `|` delimiter freely.
+          let payload = message.substring('worker-request|'.length);
+          let request: WorkerRequestBody;
           try {
-            event = JSON.parse(payload) as RealmEventContent;
+            request = JSON.parse(payload) as WorkerRequestBody;
           } catch (e) {
-            log.error(`Failed to parse realm event from worker ${name}: ${e}`);
+            log.error(
+              `Failed to parse worker request from worker ${name}: ${e}`,
+            );
             return;
           }
-          forwardWorkerRealmEvent({
-            event,
+          dispatchWorkerRequest(request, {
             urlMappings,
             secret: REALM_SECRET_SEED!,
+            workerName: name,
           }).catch((e) => {
             Sentry.captureException(e);
             log.error(
-              `worker: failed forwarding realm event for ${event.realmURL}`,
+              `worker: failed dispatching worker request '${request.type}' from ${name}`,
               e,
             );
           });

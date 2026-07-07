@@ -6951,10 +6951,13 @@ export class Realm {
   // Public entry point for broadcasting a realm event that did not originate
   // from a request this Realm handled — a worker-originated event bridged in
   // through the worker manager (CS-11808). Unlike the private
-  // broadcastRealmEvent (fire-and-forget by design), this awaits delivery so
-  // the internal /_worker-event endpoint can report success or failure back to
-  // the manager. The adapter stamps this realm's canonical url on the event, so
-  // it reaches subscribed hosts exactly as a web-tier-originated event does.
+  // broadcastRealmEvent (fire-and-forget), this awaits the adapter so the
+  // internal /_worker-request endpoint doesn't leave a dangling promise and can
+  // surface a resolution/dispatch throw. Delivery itself is best-effort — the
+  // adapter swallows per-room send failures the same way web-tier broadcasts do
+  // — so a 200 means "resolved and dispatched," not "received by every host."
+  // The adapter stamps this realm's canonical url on the event, so it reaches
+  // subscribed hosts exactly as a web-tier-originated event does.
   async broadcastEvent(event: RealmEventContent): Promise<void> {
     await this.#adapter.broadcastRealmEvent(
       event,

@@ -15,10 +15,11 @@ import {
   waitForRealmEvent,
 } from '../helpers/index.ts';
 import {
-  WORKER_REALM_EVENT_SIGNATURE_HEADER,
-  WORKER_REALM_EVENT_TIMESTAMP_HEADER,
-  workerRealmEventSignature,
-} from '@cardstack/runtime-common/worker-realm-event';
+  BROADCAST_REALM_EVENT,
+  WORKER_REQUEST_SIGNATURE_HEADER,
+  WORKER_REQUEST_TIMESTAMP_HEADER,
+  workerRequestSignature,
+} from '@cardstack/runtime-common/worker-request';
 
 function signedPost(
   request: SuperTest<Test>,
@@ -34,25 +35,25 @@ function signedPost(
   let timestamp = String(opts.timestamp ?? Date.now());
   let signature =
     opts.signature ??
-    workerRealmEventSignature(
-      opts.secret ?? realmSecretSeed,
-      timestamp,
-      rawBody,
-    );
+    workerRequestSignature(opts.secret ?? realmSecretSeed, timestamp, rawBody);
   let req = request
-    .post('/_worker-event')
+    .post('/_worker-request')
     .set('Content-Type', 'application/json');
   if (!opts.omitTimestamp) {
-    req = req.set(WORKER_REALM_EVENT_TIMESTAMP_HEADER, timestamp);
+    req = req.set(WORKER_REQUEST_TIMESTAMP_HEADER, timestamp);
   }
   if (!opts.omitSignature) {
-    req = req.set(WORKER_REALM_EVENT_SIGNATURE_HEADER, signature);
+    req = req.set(WORKER_REQUEST_SIGNATURE_HEADER, signature);
   }
   return req.send(rawBody);
 }
 
+function broadcastBody(event: unknown): string {
+  return JSON.stringify({ type: BROADCAST_REALM_EVENT, payload: event });
+}
+
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
-  module('POST /_worker-event', function (hooks) {
+  module('POST /_worker-request', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let serverRequest: SuperTest<Test>;
@@ -97,8 +98,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
-    test('broadcasts a worker-originated realm event to subscribed hosts exactly once', async function (assert) {
-      let clientRequestId = `worker-event-test-${Date.now()}`;
+    test('broadcasts a worker-originated realm event to subscribed hosts', async function (assert) {
+      let clientRequestId = `worker-request-test-${Date.now()}`;
       let event = {
         eventName: 'index',
         indexType: 'incremental',
@@ -108,7 +109,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       };
       let since = Date.now();
 
-      let response = await signedPost(serverRequest, JSON.stringify({ event }));
+      let response = await signedPost(serverRequest, broadcastBody(event));
       assert.strictEqual(response.status, 200, 'HTTP 200');
       assert.deepEqual(response.body, { ok: true }, 'endpoint reports ok');
 
@@ -135,7 +136,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'event is stamped with the resolved realm url',
       );
 
-      // Exactly-once: only one event in the room carries our unique id.
+      // A single POST produces a single broadcast (no per-replica fan-out).
       let messages = await getMessagesSince(since);
       let matching = messages.filter(
         (m) => (m.content as any)?.clientRequestId === clientRequestId,
@@ -143,20 +144,44 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(
         matching.length,
         1,
-        'the event is delivered exactly once (no per-replica fan-out)',
+        'one POST broadcasts the event once',
+      );
+    });
+
+    test('canonicalizes the realmURL — a trailing-slash-less realm still resolves', async function (assert) {
+      let clientRequestId = `worker-request-canon-${Date.now()}`;
+      let event = {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        clientRequestId,
+        realmURL: testRealmHref.replace(/\/$/, ''), // drop the trailing slash
+      };
+      let since = Date.now();
+
+      let response = await signedPost(serverRequest, broadcastBody(event));
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+
+      let realmEvent = await waitForRealmEvent(getMessagesSince, since, {
+        predicate: (e) =>
+          (e.content as any).clientRequestId === clientRequestId,
+        timeoutMessage: 'timed out waiting for the canonicalized realm event',
+      });
+      assert.strictEqual(
+        realmEvent.content.realmURL,
+        testRealmHref,
+        'event is stamped with the canonical realm url',
       );
     });
 
     test('rejects a request with no signature or timestamp (401)', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({
-          event: {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [],
-            realmURL: testRealmHref,
-          },
+        broadcastBody({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: testRealmHref,
         }),
         { omitSignature: true, omitTimestamp: true },
       );
@@ -166,13 +191,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     test('rejects a request with an invalid signature (401)', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({
-          event: {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [],
-            realmURL: testRealmHref,
-          },
+        broadcastBody({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: testRealmHref,
         }),
         { signature: 'deadbeef'.repeat(8) },
       );
@@ -182,13 +205,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     test('rejects a request signed with the wrong secret (401)', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({
-          event: {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [],
-            realmURL: testRealmHref,
-          },
+        broadcastBody({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: testRealmHref,
         }),
         { secret: 'not-the-shared-secret' },
       );
@@ -198,13 +219,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     test('rejects a stale timestamp outside the ±60s window (401)', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({
-          event: {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [],
-            realmURL: testRealmHref,
-          },
+        broadcastBody({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: testRealmHref,
         }),
         { timestamp: Date.now() - 61_000 },
       );
@@ -214,22 +233,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     test('returns 404 for a realm not hosted on this server', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({
-          event: {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [],
-            realmURL: 'http://127.0.0.1:9999/does-not-exist/',
-          },
+        broadcastBody({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: 'http://127.0.0.1:9999/does-not-exist/',
         }),
       );
       assert.strictEqual(response.status, 404, 'HTTP 404');
     });
 
-    test('returns 400 for a body missing the event realmURL', async function (assert) {
+    test('returns 400 for an unknown worker request type', async function (assert) {
       let response = await signedPost(
         serverRequest,
-        JSON.stringify({ event: { eventName: 'index' } }),
+        JSON.stringify({ type: 'not-a-real-type', payload: {} }),
+      );
+      assert.strictEqual(response.status, 400, 'HTTP 400');
+    });
+
+    test('returns 400 for a broadcast payload missing the realmURL', async function (assert) {
+      let response = await signedPost(
+        serverRequest,
+        broadcastBody({ eventName: 'index' }),
       );
       assert.strictEqual(response.status, 400, 'HTTP 400');
     });
