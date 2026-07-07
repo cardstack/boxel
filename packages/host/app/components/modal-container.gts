@@ -6,6 +6,7 @@ import {
   Header,
   IconButton,
   Modal,
+  Tooltip,
 } from '@cardstack/boxel-ui/components';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -21,6 +22,11 @@ interface Signature {
     isOpen?: boolean;
     isCloseDisabled?: boolean;
     layer?: 'urgent';
+    // When a shortcut is supplied, the close button gets a styled tooltip
+    // (label + key badge). Opt-in, so the many modals that don't wire a close
+    // shortcut render the plain close button unchanged.
+    closeButtonLabel?: string;
+    closeButtonShortcut?: string;
   };
   Blocks: {
     content: [];
@@ -36,6 +42,9 @@ export default class ModalContainer extends Component<Signature> {
   }
   get isOpen() {
     return this.args.isOpen ?? true;
+  }
+  get closeButtonLabel() {
+    return this.args.closeButtonLabel ?? 'Close';
   }
 
   <template>
@@ -61,16 +70,45 @@ export default class ModalContainer extends Component<Signature> {
           </aside>
         {{/if}}
         <Header @size='large' @title={{@title}} class='dialog-box__header'>
-          <IconButton
-            @icon={{IconX}}
-            @width='12'
-            @height='12'
-            {{on 'click' @onClose}}
-            class='dialog-box__close'
-            aria-label='close modal'
-            disabled={{@isCloseDisabled}}
-            data-test-close-modal
-          />
+          {{#if @closeButtonShortcut}}
+            <Tooltip
+              @placement='bottom'
+              @disabled={{@isCloseDisabled}}
+              class='dialog-box__close-tooltip'
+            >
+              <:trigger>
+                <IconButton
+                  @icon={{IconX}}
+                  @width='12'
+                  @height='12'
+                  {{on 'click' @onClose}}
+                  class='dialog-box__close dialog-box__close--in-tooltip'
+                  aria-label='close modal'
+                  disabled={{@isCloseDisabled}}
+                  data-test-close-modal
+                />
+              </:trigger>
+              <:content>
+                <span class='close-tooltip'>
+                  <span
+                    class='close-tooltip__label'
+                  >{{this.closeButtonLabel}}</span>
+                  <kbd class='shortcut-key'>{{@closeButtonShortcut}}</kbd>
+                </span>
+              </:content>
+            </Tooltip>
+          {{else}}
+            <IconButton
+              @icon={{IconX}}
+              @width='12'
+              @height='12'
+              {{on 'click' @onClose}}
+              class='dialog-box__close'
+              aria-label='close modal'
+              disabled={{@isCloseDisabled}}
+              data-test-close-modal
+            />
+          {{/if}}
           {{yield to='header'}}
         </Header>
         <div class='dialog-box__content'>
@@ -153,6 +191,42 @@ export default class ModalContainer extends Component<Signature> {
       .dialog-box__close:disabled {
         --icon-color: var(--boxel-300);
         cursor: default;
+      }
+
+      /* When the close button carries a tooltip, the Tooltip's trigger wrapper
+         takes over the absolute placement so it (and the anchored overlay) hug
+         the top-right corner; the button itself sits statically inside it. */
+      .dialog-box__close-tooltip {
+        position: absolute;
+        top: 1px;
+        right: 1px;
+        z-index: 1;
+      }
+
+      .dialog-box__close--in-tooltip {
+        position: static;
+      }
+
+      /* Tooltip content: label at left, key badge at right. Lives in the shared
+         #tooltip-overlay, but scoped CSS keys off the class, not DOM position. */
+      .close-tooltip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .shortcut-key {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.4em;
+        padding: 0 var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-xs, 4px);
+        background: rgb(0 0 0 / 35%);
+        color: #939393;
+        font-family: inherit;
+        font-size: 0.9em;
+        line-height: 1.5;
       }
 
       .dialog-box__footer {

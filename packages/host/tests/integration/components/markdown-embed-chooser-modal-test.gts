@@ -3,6 +3,8 @@ import {
   click,
   fillIn,
   render,
+  triggerEvent,
+  triggerKeyEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -208,6 +210,69 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     await click('[data-test-close-modal]');
     let result = await pending;
     assert.strictEqual(result, undefined, 'cancelling resolves with undefined');
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+  });
+
+  test('the close button shows an ESC tooltip and Escape closes the modal', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.chooseCardOrFile();
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // Hovering the close button reveals a styled tooltip: label + ESC badge.
+    let trigger = document
+      .querySelector('[data-test-close-modal]')
+      ?.closest('[data-tooltip-trigger]');
+    assert.ok(trigger, 'close button is wrapped in a tooltip trigger');
+    await triggerEvent(trigger as Element, 'mouseenter');
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .includesText('close', 'tooltip shows the close label');
+    assert
+      .dom('[data-test-tooltip-content] .shortcut-key')
+      .hasText('ESC', 'tooltip shows the ESC key badge');
+    await triggerEvent(trigger as Element, 'mouseleave');
+
+    // The modal owns Escape: it must not bubble to the document-level
+    // operator-mode handler (which would flip the card out of edit format).
+    let escapeReachedDocument = false;
+    let docListener = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') escapeReachedDocument = true;
+    };
+    document.addEventListener('keydown', docListener);
+
+    // Pressing Escape closes the modal and resolves the deferred with undefined.
+    try {
+      await triggerKeyEvent(
+        '[data-test-markdown-embed-chooser-modal]',
+        'keydown',
+        'Escape',
+      );
+    } finally {
+      document.removeEventListener('keydown', docListener);
+    }
+    assert.false(
+      escapeReachedDocument,
+      'Escape is stopped at the modal and does not reach the document',
+    );
+    let result = await pending;
+    assert.strictEqual(
+      result,
+      undefined,
+      'pressing Escape resolves with undefined',
+    );
     await waitUntil(
       () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
     );
