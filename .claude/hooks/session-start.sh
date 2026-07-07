@@ -47,10 +47,14 @@ stack boots in seconds instead of live-indexing every realm:
      unzip -o /tmp/boxel-index-cache.zip -d "\$(dirname "$CACHE_FILE")"
 3. Start the stack: .devcontainer/claude-web-start.sh
    (its import step finds the cache at the path above automatically).
-   The stack is ready when https://localhost:4201/base/_readiness-check
-   returns 200 — readiness is per-realm (the realm-server logs the list of
-   realms it serves at boot); the bare / and /_readiness-check paths 404 by
-   design.
+   The stack is ready when
+     curl -sk -H 'Accept: application/vnd.api+json' \\
+       https://localhost:4201/base/_readiness-check
+   returns 200. The Accept header is required — without it (curl's default
+   Accept: */*) the endpoint 404s even on a fully booted stack, which looks
+   like a hung boot. Readiness is per-realm (the realm-server logs the list
+   of realms it serves at boot); the bare / and /_readiness-check paths 404
+   by design.
 
 If the fetch fails, just run .devcontainer/claude-web-start.sh anyway — the
 stack falls back to live indexing, which is slower but works.

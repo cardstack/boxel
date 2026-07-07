@@ -86,9 +86,11 @@ if "$REPO_ROOT/.devcontainer/claude-web-import-index.sh"; then
 fi
 
 echo "[start] Launching the stack (mise run dev-all)…"
-echo "[start] Ready when https://localhost:4201/base/_readiness-check returns 200"
-echo "[start] (readiness is per-realm — the realm-server logs the realms it"
-echo "[start] serves at boot; the bare / and /_readiness-check paths 404)."
+echo "[start] Ready when this returns 200:"
+echo "[start]   curl -sk -H 'Accept: application/vnd.api+json' https://localhost:4201/base/_readiness-check"
+echo "[start] (the Accept header is required — without it the endpoint 404s even"
+echo "[start] when ready; readiness is per-realm — the realm-server logs the realms"
+echo "[start] it serves at boot; the bare / and /_readiness-check paths 404)."
 exec env \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
