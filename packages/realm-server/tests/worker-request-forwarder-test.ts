@@ -3,9 +3,12 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import {
+  decodeWorkerRequestIpc,
   dispatchWorkerRequest,
+  encodeWorkerRequestIpc,
   forwardWorkerRealmEvent,
   resolveWorkerRealmEventTarget,
+  WORKER_REQUEST_IPC_PREFIX,
 } from '../lib/worker-request-forwarder.ts';
 import {
   BROADCAST_REALM_EVENT,
@@ -311,6 +314,49 @@ module(basename(import.meta.filename), function () {
 
       assert.false(delivered, 'unknown type reports non-delivery');
       assert.strictEqual(calls.length, 0, 'no HTTP call for an unknown type');
+    });
+  });
+
+  module('worker-request IPC codec', function () {
+    test('encode → decode round-trips the envelope', function (assert) {
+      let event = incrementalEvent('https://cardstack.com/base/');
+      let message = encodeWorkerRequestIpc(BROADCAST_REALM_EVENT, event);
+      assert.true(
+        message.startsWith(WORKER_REQUEST_IPC_PREFIX),
+        'message carries the shared prefix',
+      );
+      let decoded = decodeWorkerRequestIpc(message);
+      assert.strictEqual(decoded?.type, BROADCAST_REALM_EVENT);
+      assert.deepEqual(decoded?.payload, event);
+    });
+
+    test('decodes a payload that itself contains the `|` delimiter', function (assert) {
+      let event = {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: ['https://cardstack.com/base/a|b.json'],
+        realmURL: 'https://cardstack.com/base/',
+      } as RealmEventContent;
+      let decoded = decodeWorkerRequestIpc(
+        encodeWorkerRequestIpc(BROADCAST_REALM_EVENT, event),
+      );
+      assert.deepEqual(
+        (decoded?.payload as any).invalidations,
+        ['https://cardstack.com/base/a|b.json'],
+        'the JSON payload may contain the delimiter',
+      );
+    });
+
+    test('returns undefined for a non-worker-request message', function (assert) {
+      assert.strictEqual(decodeWorkerRequestIpc('progress|{}'), undefined);
+      assert.strictEqual(decodeWorkerRequestIpc('ready:abc'), undefined);
+    });
+
+    test('returns undefined for a malformed payload', function (assert) {
+      assert.strictEqual(
+        decodeWorkerRequestIpc(`${WORKER_REQUEST_IPC_PREFIX}not json`),
+        undefined,
+      );
     });
   });
 });

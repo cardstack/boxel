@@ -38,6 +38,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import { BROADCAST_REALM_EVENT } from '@cardstack/runtime-common/worker-request';
+import { encodeWorkerRequestIpc } from './lib/worker-request-forwarder.ts';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import {
@@ -175,7 +176,7 @@ let autoMigrate = migrateDB || undefined;
   // the transport doesn't change.
   function sendWorkerRequest(type: string, payload: unknown) {
     if (process.send) {
-      process.send(`worker-request|${JSON.stringify({ type, payload })}`);
+      process.send(encodeWorkerRequestIpc(type, payload));
     }
   }
 

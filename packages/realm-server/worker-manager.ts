@@ -80,8 +80,11 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
-import { dispatchWorkerRequest } from './lib/worker-request-forwarder.ts';
-import type { WorkerRequestBody } from '@cardstack/runtime-common/worker-request';
+import {
+  decodeWorkerRequestIpc,
+  dispatchWorkerRequest,
+  WORKER_REQUEST_IPC_PREFIX,
+} from './lib/worker-request-forwarder.ts';
 
 /* About the Worker Manager
  *
@@ -982,23 +985,16 @@ async function startWorker(
           }
         } else if (
           typeof message === 'string' &&
-          message.startsWith('worker-request|')
+          message.startsWith(WORKER_REQUEST_IPC_PREFIX)
         ) {
           // A worker child handed us a typed request it can't service itself
           // (e.g. broadcasting a realm event — it holds no matrix client). We
           // dispatch on the request type and forward to the realm server over
           // the authenticated /_worker-request endpoint. Routing every request
           // through this single manager avoids per-replica fan-out.
-          // Fixed-offset substring (not split) so the JSON payload may contain
-          // the `|` delimiter freely.
-          let payload = message.substring('worker-request|'.length);
-          let request: WorkerRequestBody;
-          try {
-            request = JSON.parse(payload) as WorkerRequestBody;
-          } catch (e) {
-            log.error(
-              `Failed to parse worker request from worker ${name}: ${e}`,
-            );
+          let request = decodeWorkerRequestIpc(message);
+          if (!request) {
+            log.error(`Failed to parse worker request from worker ${name}`);
             return;
           }
           dispatchWorkerRequest(request, {

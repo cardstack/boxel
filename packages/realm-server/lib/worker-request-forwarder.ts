@@ -9,6 +9,37 @@ import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 const log = logger('worker-manager');
 
+// The worker child and the worker manager exchange worker requests over the
+// Node IPC channel as a prefixed string, alongside the existing `ready:` /
+// `status|` / `progress|` messages. The prefix constant and the encode/decode
+// pair are shared so the two sides can't drift on the wire shape.
+export const WORKER_REQUEST_IPC_PREFIX = 'worker-request|';
+
+export function encodeWorkerRequestIpc(type: string, payload: unknown): string {
+  return `${WORKER_REQUEST_IPC_PREFIX}${JSON.stringify({
+    type,
+    payload,
+  } satisfies WorkerRequestBody)}`;
+}
+
+// Decode an IPC message into a worker request, or undefined if it isn't one /
+// is malformed. A fixed-length slice (not split) keeps the JSON payload free to
+// contain the `|` delimiter.
+export function decodeWorkerRequestIpc(
+  message: string,
+): WorkerRequestBody | undefined {
+  if (!message.startsWith(WORKER_REQUEST_IPC_PREFIX)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(
+      message.slice(WORKER_REQUEST_IPC_PREFIX.length),
+    ) as WorkerRequestBody;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface WorkerRealmEventTarget {
   // The realm-server origin to POST to (reachable — the `--toUrl` origin).
   origin: string;
@@ -73,6 +104,10 @@ export async function forwardWorkerRealmEvent({
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }): Promise<boolean> {
+  if (!event || typeof event.realmURL !== 'string' || !event.realmURL) {
+    log.warn('dropping worker realm event with no realmURL');
+    return false;
+  }
   let target = resolveWorkerRealmEventTarget(urlMappings, event.realmURL);
   if (!target) {
     log.warn(
@@ -103,6 +138,9 @@ export async function forwardWorkerRealmEvent({
         now: now(),
       });
       if (response.ok) {
+        // Drain the body so undici returns the socket to the keep-alive pool
+        // rather than pinning it until the Response is GC'd.
+        await response.text().catch(() => {});
         return true;
       }
       let detail = await response.text().catch(() => '');

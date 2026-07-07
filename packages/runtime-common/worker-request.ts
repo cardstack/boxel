@@ -6,9 +6,10 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 // /_worker-request endpoint. A worker container's worker manager and the realm
 // server hold a shared secret (REALM_SECRET_SEED); the manager signs each
 // forwarded worker request with it and the realm server verifies it. The secret
-// never crosses the wire — only an HMAC over the request — so TLS plus the
-// timestamp window below give meaningful replay protection, and rotating the
-// shared secret is the defense against it leaking from configuration.
+// never crosses the wire — only an HMAC over the request — and the ±window
+// below bounds replay: a captured request can't be replayed outside that window
+// or altered without the secret. Rotating the shared secret is the defense
+// against it leaking from configuration.
 //
 // The mechanism is generic: a worker request carries an arbitrary typed
 // payload, and both the manager and the realm server dispatch on `type`.
