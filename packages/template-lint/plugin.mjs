@@ -1,5 +1,6 @@
 import requireScopedStyle from './lib/require-scoped-style.mjs';
 import noDataTestSelector from './lib/no-data-test-selector.mjs';
+import noUnusedBlockParamsExceptUnderscore from './lib/no-unused-block-params-except-underscore.mjs';
 
 export default {
   name: '@cardstack/template-lint',
@@ -7,6 +8,8 @@ export default {
   rules: {
     'require-scoped-style': requireScopedStyle,
     'no-data-test-selector': noDataTestSelector,
+    'no-unused-block-params-except-underscore':
+      noUnusedBlockParamsExceptUnderscore,
   },
 
   configurations: {
@@ -15,6 +18,12 @@ export default {
       rules: {
         'require-scoped-style': true,
         'no-data-test-selector': true,
+
+        // Replace core `no-unused-block-params` with an underscore-aware
+        // variant so `|_i|`-style intentionally-unused params are allowed,
+        // matching the `^_` convention we already use in TS/JS lint.
+        'no-unused-block-params': false,
+        'no-unused-block-params-except-underscore': true,
 
         'require-button-type': false,
         'no-negated-condition': false,
