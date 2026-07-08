@@ -7,6 +7,7 @@ import {
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+import { stripTrailingSeparatorMarker } from '../lib/search-replace-block-parsing';
 
 let standardErrorMessage =
   'Unable to process the code patch due to invalid code coming from AI';
@@ -114,10 +115,15 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       /^[\n\r]*/,
       '',
     );
+    // A malformed block can carry a stray extra separator line right before the
+    // REPLACE marker; without this it would be written into the file verbatim.
+    const replacePatternWithoutStraySeparator = stripTrailingSeparatorMarker(
+      replacePatternWithoutLeadingNewline,
+    );
 
     return {
       searchPattern,
-      replacePattern: replacePatternWithoutLeadingNewline.replace(/\n$/, ''),
+      replacePattern: replacePatternWithoutStraySeparator.replace(/\n$/, ''),
     };
   }
 

@@ -9,6 +9,18 @@ interface SearchReplaceResult {
   replaceContent: string | null;
 }
 
+// A well-formed block carries a single SEPARATOR_MARKER between its search and
+// replace halves. A model occasionally emits a stray extra separator right
+// before the REPLACE marker; left in, it lands in the replace content and gets
+// written into the file as a line of box-drawing characters. Drop any trailing
+// separator (with surrounding whitespace) so the slip self-heals into the
+// intended content. The marker is distinctive enough that real code/JSON never
+// legitimately ends with it.
+export function stripTrailingSeparatorMarker(content: string): string {
+  let escaped = SEPARATOR_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return content.replace(new RegExp(`(?:\\s*${escaped})+\\s*$`), '');
+}
+
 /**
  * Parses a string containing search and replace content in a specific format.
  * It tries to detect the search and replace content even if the markers are missing or incomplete.
@@ -78,7 +90,7 @@ export function parseSearchReplace(input: string): SearchReplaceResult {
         content = content.substring(1);
       }
 
-      content = content.trimEnd();
+      content = stripTrailingSeparatorMarker(content).trimEnd();
 
       result.replaceContent = content;
     } else {
