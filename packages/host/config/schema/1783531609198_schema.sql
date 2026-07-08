@@ -167,6 +167,7 @@
  CREATE TABLE IF NOT EXISTS realm_generations (
    realm_url TEXT NOT NULL,
    current_generation INTEGER NOT NULL,
+   loader_epoch TEXT DEFAULT '0' NOT NULL,
    PRIMARY KEY ( realm_url ) 
 );
 

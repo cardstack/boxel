@@ -275,6 +275,10 @@ export class Batch {
   // `seedPrerenderedHtmlInvalidations`).
   #prerenderHtmlOnly: boolean;
   #explicitGeneration: number | undefined;
+  #priorLoaderEpoch = '0';
+  #mintedLoaderEpoch: string | undefined;
+  #hasExecutableInvalidation = false;
+  #scannedInvalidationCount = 0;
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -315,6 +319,31 @@ export class Batch {
   // index event and the spawned `prerender_html` job can carry it.
   get currentGeneration(): number {
     return this.generation;
+  }
+
+  // The loader epoch this batch's renders thread into the /render route:
+  // a freshly minted token when the invalidation set includes executable
+  // modules (their bytes changed, so warm prerender-tab loaders are stale),
+  // otherwise the epoch already committed for the realm. The route resets
+  // its loader when a render's epoch differs from the one the tab last
+  // cleared for, so module edits cost one loader reset per tab while
+  // instance-only passes keep every loader warm. The invalidation set only
+  // grows, so the executable scan memoizes: once an executable is seen the
+  // answer is final, and unchanged set sizes skip re-scanning.
+  get loaderEpoch(): string {
+    if (
+      !this.#hasExecutableInvalidation &&
+      this.#invalidations.size !== this.#scannedInvalidationCount
+    ) {
+      this.#hasExecutableInvalidation = [...this.#invalidations].some((url) =>
+        hasExecutableExtension(url),
+      );
+      this.#scannedInvalidationCount = this.#invalidations.size;
+    }
+    if (this.#hasExecutableInvalidation) {
+      return (this.#mintedLoaderEpoch ??= uuidv4());
+    }
+    return this.#priorLoaderEpoch;
   }
 
   private isRegisteredPrefix(reference: string): boolean {
@@ -1296,6 +1325,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_generation: this.generation,
+      loader_epoch: this.loaderEpoch,
     } as RealmGenerationsTable);
     await this.#query([
       ...upsert(
@@ -1488,13 +1518,15 @@ export class Batch {
 
   private async setNextGeneration() {
     let [row] = (await this.#query([
-      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      'SELECT current_generation, loader_epoch FROM realm_generations WHERE realm_url =',
       param(this.realmURL.href),
-    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    ])) as Pick<RealmGenerationsTable, 'current_generation' | 'loader_epoch'>[];
+    this.#priorLoaderEpoch = row?.loader_epoch ?? '0';
     if (!row) {
       let { nameExpressions, valueExpressions } = asExpressions({
         realm_url: this.realmURL.href,
         current_generation: 0,
+        loader_epoch: '0',
       } as RealmGenerationsTable);
       // Make the batch updates live
       await this.#query([

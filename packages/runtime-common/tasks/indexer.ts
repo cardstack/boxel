@@ -368,12 +368,13 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // Fire-and-forget: the index pass must not block on — or fail with —
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
-      onInvalidationsReady: ({ changes, generation }) => {
+      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
           changes: changes.map(({ url, operation }) => ({ url, operation })),
           generation,
+          loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
@@ -471,7 +472,11 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       reportStatus,
       onProgress: reportProgress,
       // See fromScratchIndex — same fire-and-forget early enqueue.
-      onInvalidationsReady: ({ changes: htmlChanges, generation }) => {
+      onInvalidationsReady: ({
+        changes: htmlChanges,
+        generation,
+        loaderEpoch,
+      }) => {
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
@@ -480,6 +485,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             operation,
           })),
           generation,
+          loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,

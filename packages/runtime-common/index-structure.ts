@@ -87,6 +87,12 @@ export interface PrerenderedHtmlTable {
 export interface RealmGenerationsTable {
   realm_url: string;
   current_generation: number;
+  // Opaque token identifying the realm's loader epoch: re-minted by any
+  // index pass whose invalidation set includes executable modules. The
+  // /render route resets its loader when a render's threaded epoch differs
+  // from the one the tab last cleared for. '0' is the no-epoch-yet
+  // sentinel (a realm no pass with executables has committed against).
+  loader_epoch: string;
 }
 
 export interface CardTypeSummary {

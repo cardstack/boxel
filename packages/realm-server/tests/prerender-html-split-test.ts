@@ -28,6 +28,7 @@ function prerenderHtmlArgs(
     realmUsername: 'test_realm',
     changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
     generation: 1,
+    loaderEpoch: 'epoch-a',
     spawningJobId: 100,
     ...overrides,
   };
@@ -86,6 +87,7 @@ module(basename(import.meta.filename), function () {
           { url: `${testRealm}2.json`, operation: 'update' },
         ],
         generation: 3,
+        loaderEpoch: 'epoch-old',
         spawningJobId: 100,
       });
       let incoming = prerenderHtmlArgs({
@@ -94,6 +96,7 @@ module(basename(import.meta.filename), function () {
           { url: `${testRealm}3.json`, operation: 'update' },
         ],
         generation: 4,
+        loaderEpoch: 'epoch-new',
         spawningJobId: 200,
       });
       let decision = coalesce(
@@ -122,6 +125,11 @@ module(basename(import.meta.filename), function () {
         mergedArgs.generation,
         4,
         'generation is the max across publishes',
+      );
+      assert.strictEqual(
+        mergedArgs.loaderEpoch,
+        'epoch-new',
+        'the loader epoch rides with the max generation',
       );
       assert.strictEqual(
         mergedArgs.spawningJobId,
@@ -185,6 +193,46 @@ module(basename(import.meta.filename), function () {
     test('inserts rather than joining an in-flight job at an older generation', function (assert) {
       let inFlight = prerenderHtmlArgs({ generation: 4 });
       let incoming = prerenderHtmlArgs({ generation: 5 });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming),
+          inFlightCandidates: [candidate(9, inFlight)],
+        }),
+      );
+      assert.deepEqual(decision, { type: 'insert' });
+    });
+
+    test('a pending join keeps the existing epoch when the existing publish is newer', function (assert) {
+      let existing = prerenderHtmlArgs({
+        generation: 6,
+        loaderEpoch: 'epoch-new',
+      });
+      let incoming = prerenderHtmlArgs({
+        generation: 5,
+        loaderEpoch: 'epoch-old',
+      });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming),
+          candidates: [candidate(11, existing)],
+        }),
+      );
+      assert.strictEqual(decision.type, 'join');
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.strictEqual(mergedArgs.generation, 6);
+      assert.strictEqual(
+        mergedArgs.loaderEpoch,
+        'epoch-new',
+        'the loader epoch stays with the newest generation',
+      );
+    });
+
+    test('inserts rather than joining an in-flight job whose loader epoch differs', function (assert) {
+      let inFlight = prerenderHtmlArgs({ loaderEpoch: 'epoch-a' });
+      let incoming = prerenderHtmlArgs({ loaderEpoch: 'epoch-b' });
       let decision = coalesce(
         context({
           incoming: spec(incoming),
@@ -474,6 +522,89 @@ module(basename(import.meta.filename), function () {
         row.isolated_html,
         '<h1>attempt 1</h1>',
         'the resumed row is promoted by the retry’s swap',
+      );
+    });
+
+    test('loaderEpoch: instance-only invalidations carry the stored epoch; executable invalidations mint a fresh one', async function (assert) {
+      // Brand-new realm: no pass has committed an epoch yet.
+      let instanceBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await instanceBatch.invalidate([new URL(`${testRealm}1.json`)]);
+      assert.strictEqual(
+        instanceBatch.loaderEpoch,
+        '0',
+        'an instance-only pass carries the no-epoch-yet sentinel',
+      );
+      await instanceBatch.done();
+
+      let moduleBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await moduleBatch.invalidate([new URL(`${testRealm}some-module.gts`)]);
+      let minted = moduleBatch.loaderEpoch;
+      assert.notStrictEqual(
+        minted,
+        '0',
+        'an executable invalidation mints a fresh epoch',
+      );
+      assert.strictEqual(
+        moduleBatch.loaderEpoch,
+        minted,
+        'the minted epoch is stable across reads within the batch',
+      );
+      await moduleBatch.done();
+
+      let followupBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await followupBatch.invalidate([new URL(`${testRealm}2.json`)]);
+      assert.strictEqual(
+        followupBatch.loaderEpoch,
+        minted,
+        'a later instance-only pass carries the committed epoch forward',
+      );
+      await followupBatch.done();
+
+      let laterModuleBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await laterModuleBatch.invalidate([new URL(`${testRealm}other.gts`)]);
+      assert.notStrictEqual(
+        laterModuleBatch.loaderEpoch,
+        minted,
+        'the next module change mints a different epoch',
+      );
+    });
+
+    test('loaderEpoch: an uncommitted mint never becomes the stored epoch', async function (assert) {
+      let moduleBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await moduleBatch.invalidate([new URL(`${testRealm}some-module.gts`)]);
+      assert.notStrictEqual(moduleBatch.loaderEpoch, '0');
+      // No done() — the pass dies before its swap.
+
+      let nextBatch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      await nextBatch.invalidate([new URL(`${testRealm}1.json`)]);
+      assert.strictEqual(
+        nextBatch.loaderEpoch,
+        '0',
+        'the stored epoch only moves when the minting pass commits',
       );
     });
 

@@ -24,6 +24,7 @@ export interface PrerenderHtmlEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   generation: number;
+  loaderEpoch: string;
   spawningJobId: number | null;
   spawningPriority: number;
   timeoutSec: number;
@@ -41,6 +42,7 @@ export async function enqueuePrerenderHtmlJob(
     realmUsername,
     changes,
     generation,
+    loaderEpoch,
     spawningJobId,
     spawningPriority,
     timeoutSec,
@@ -51,6 +53,7 @@ export async function enqueuePrerenderHtmlJob(
     realmUsername,
     changes,
     generation,
+    loaderEpoch,
     spawningJobId,
   };
   return await queuePublisher.publish({

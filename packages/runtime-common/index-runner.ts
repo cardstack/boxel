@@ -118,6 +118,7 @@ export class IndexRunner {
   #onInvalidationsReady?: (args: {
     changes: PrerenderedHtmlChange[];
     generation: number;
+    loaderEpoch: string;
   }) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -176,6 +177,7 @@ export class IndexRunner {
     onInvalidationsReady?(args: {
       changes: PrerenderedHtmlChange[];
       generation: number;
+      loaderEpoch: string;
     }): void;
   }) {
     this.#indexWriter = indexWriter;
@@ -566,6 +568,7 @@ export class IndexRunner {
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
       generation: this.batch.currentGeneration,
+      loaderEpoch: this.batch.loaderEpoch,
     });
   }
 

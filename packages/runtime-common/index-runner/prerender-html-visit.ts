@@ -34,6 +34,10 @@ export interface PrerenderHtmlPassArgs {
   // every row this pass writes; the monotonic swap guard uses it to reject
   // out-of-order zombie writes.
   generation: number;
+  // The realm's loader epoch the spawning pass renders under. Threaded on
+  // every visit so each prerender tab this pass touches resets its loader
+  // exactly once when the realm's module surface changed.
+  loaderEpoch: string;
   indexWriter: IndexWriter;
   virtualNetwork: VirtualNetwork;
   reader: Reader;
@@ -62,6 +66,7 @@ export async function runPrerenderHtmlPass({
   realmURL,
   changes,
   generation,
+  loaderEpoch,
   indexWriter,
   virtualNetwork,
   reader,
@@ -126,13 +131,6 @@ export async function runPrerenderHtmlPass({
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;
   let tombstoned = 0;
-  // One-shot loader reset on the pass's first visit, mirroring
-  // IndexRunner's clear-cache-for-next-render semantics. The job may land
-  // on a warm tab whose loader still caches state from before the change
-  // that spawned this pass (e.g. the 404 of a module that has since been
-  // created); rendering through that stale loader would persist an error
-  // row at this pass's generation.
-  let clearCacheForNextRender = true;
   try {
     for (let [href, operation] of operations) {
       if (operation === 'delete') {
@@ -145,8 +143,6 @@ export async function runPrerenderHtmlPass({
         // authoritative for this job.
         resumedSkipped++;
       } else {
-        let clearCache = clearCacheForNextRender;
-        clearCacheForNextRender = false;
         await visitForPrerenderedHtml({
           url: new URL(href),
           realmURL,
@@ -159,7 +155,7 @@ export async function runPrerenderHtmlPass({
           batchId,
           jobInfo,
           jobPriority,
-          clearCache,
+          loaderEpoch,
           stats,
           log,
         });
@@ -227,7 +223,7 @@ async function visitForPrerenderedHtml({
   batchId,
   jobInfo,
   jobPriority,
-  clearCache,
+  loaderEpoch,
   stats,
   log,
 }: {
@@ -242,7 +238,7 @@ async function visitForPrerenderedHtml({
   batchId: string;
   jobInfo: JobInfo;
   jobPriority?: number;
-  clearCache: boolean;
+  loaderEpoch: string;
   stats: Stats;
   log: ReturnType<typeof logger>;
 }): Promise<void> {
@@ -301,7 +297,7 @@ async function visitForPrerenderedHtml({
     // via the extract pass — no chaining off a prior index visit, no
     // boxel_index read.
     fileExtract: true,
-    ...(clearCache ? { clearCache } : {}),
+    loaderEpoch,
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),

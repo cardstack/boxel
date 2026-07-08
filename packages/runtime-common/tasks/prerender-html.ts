@@ -33,6 +33,12 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // job writes; the monotonic swap guard keys off it, so correctness never
   // depends on the index pass having committed — or committing at all.
   generation: number;
+  // The realm's loader epoch the spawning pass renders under (minted fresh
+  // when its invalidation set includes executable modules). Threaded into
+  // every render so each prerender tab resets its loader exactly once per
+  // module change; carried in args rather than read from the DB because the
+  // job can run before its spawning pass commits the epoch.
+  loaderEpoch: string;
   // The index job that computed this invalidation set. Dashboard/log
   // correlation only.
   spawningJobId: number | null;
@@ -50,12 +56,20 @@ function parsePrerenderHtmlArgsForCoalesce(
   if (!isObjectLike(args)) {
     return undefined;
   }
-  let { realmURL, realmUsername, changes, generation, spawningJobId } = args;
+  let {
+    realmURL,
+    realmUsername,
+    changes,
+    generation,
+    loaderEpoch,
+    spawningJobId,
+  } = args;
   if (
     typeof realmURL !== 'string' ||
     typeof realmUsername !== 'string' ||
     !Array.isArray(changes) ||
-    typeof generation !== 'number'
+    typeof generation !== 'number' ||
+    typeof loaderEpoch !== 'string'
   ) {
     return undefined;
   }
@@ -64,6 +78,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     realmUsername,
     changes: changes as IncrementalChange[],
     generation,
+    loaderEpoch,
     spawningJobId: typeof spawningJobId === 'number' ? spawningJobId : null,
   };
 }
@@ -97,6 +112,14 @@ function choosePrerenderHtmlCoalesceDecision(
         },
       };
     }
+    // The loader epoch is an unordered token, so it rides with the
+    // generation that carried it: the merged job renders every URL from
+    // current source — the newest module world — so its renders must
+    // synchronize tabs to the newest pass's epoch.
+    let newest =
+      incomingArgs.generation >= existingArgs.generation
+        ? incomingArgs
+        : existingArgs;
     return {
       type: 'join',
       jobId: sameTypeCandidate.id,
@@ -108,10 +131,8 @@ function choosePrerenderHtmlCoalesceDecision(
             existingArgs.changes,
             incomingArgs.changes,
           ),
-          generation: Math.max(
-            existingArgs.generation,
-            incomingArgs.generation,
-          ),
+          generation: newest.generation,
+          loaderEpoch: newest.loaderEpoch,
           spawningJobId:
             incomingArgs.spawningJobId ?? existingArgs.spawningJobId,
         },
@@ -131,6 +152,7 @@ function choosePrerenderHtmlCoalesceDecision(
       }
       if (
         existingArgs.generation >= incomingArgs.generation &&
+        existingArgs.loaderEpoch === incomingArgs.loaderEpoch &&
         incrementalChangesCover(existingArgs.changes, incomingArgs.changes)
       ) {
         return { type: 'join', jobId: candidate.id };
@@ -161,7 +183,8 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   createPrerenderAuth,
 }) =>
   async function (args) {
-    let { jobInfo, realmUsername, realmURL, changes, generation } = args;
+    let { jobInfo, realmUsername, realmURL, changes, generation, loaderEpoch } =
+      args;
     log.debug(
       `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} at generation ${generation} (${changes.length} changes, spawned by job ${args.spawningJobId})`,
     );
@@ -180,6 +203,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       realmURL: new URL(realmURL),
       changes,
       generation,
+      loaderEpoch,
       indexWriter,
       virtualNetwork,
       reader,

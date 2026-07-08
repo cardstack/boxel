@@ -211,9 +211,14 @@ export async function visitFileForIndexing({
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };
 
-  // The index visit runs first and carries the one-shot clearCache.
+  // The index visit runs first and carries the one-shot clearCache. Every
+  // visit also threads the pass's loader epoch, so each prerender tab this
+  // pass touches resets its loader exactly once when the realm's module
+  // surface changed — the one-shot boolean can only sanitize the single tab
+  // its visit lands on.
   let indexRenderOptions: RenderRouteOptions = {
     fileDefCodeRef,
+    loaderEpoch: batch.loaderEpoch,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
@@ -259,6 +264,7 @@ export async function visitFileForIndexing({
   ) {
     let htmlRenderOptions: RenderRouteOptions = {
       fileDefCodeRef,
+      loaderEpoch: batch.loaderEpoch,
       ...(needCardRender ? { cardRender: true } : {}),
       ...(needFileHtml ? { fileRender: true } : {}),
     };
