@@ -2441,7 +2441,12 @@ export function setupPermissionedRealmCached(
   }
   let acquiredTemplateDatabase: string | undefined;
 
-  hooks.before(async function () {
+  hooks.before(async function (assert) {
+    // The first template acquisition builds the fixture realm's index — a
+    // full boot whose queue drains the whole-realm prerender_html job. That
+    // build runs inside the module's first test's budget, so extend it past
+    // the suite-wide per-test timeout.
+    assert.timeout(300_000);
     let { templateDatabaseName } =
       await acquirePermissionedRealmTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
@@ -2884,7 +2889,10 @@ export function setupPermissionedRealmsCached(
   }
   let acquiredTemplateDatabase: string | undefined;
 
-  hooks.before(async function () {
+  hooks.before(async function (assert) {
+    // See setupPermissionedRealmCached: the first acquisition builds the
+    // fixture realms' indexes, whole-realm prerender_html jobs included.
+    assert.timeout(300_000);
     let { templateDatabaseName } =
       await acquirePermissionedRealmsTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
