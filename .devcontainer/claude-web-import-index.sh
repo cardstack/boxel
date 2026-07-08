@@ -2,9 +2,9 @@
 # Restore the realm index from a CI-built cache instead of indexing live.
 #
 # CI's `cache-index` job (.github/workflows/ci.yaml) indexes every realm and
-# uploads a `pg_dump --data-only` of boxel_index / realm_generations /
-# realm_meta as the `boxel-index-cache` artifact. Importing it turns the
-# multi-minute prerender indexing into a seconds-long SQL restore.
+# uploads a `pg_dump --data-only` of boxel_index / prerendered_html /
+# realm_generations / realm_meta as the `boxel-index-cache` artifact. Importing
+# it turns the multi-minute prerender indexing into a seconds-long SQL restore.
 #
 # This is the gh-free sibling of scripts/import-cached-index.sh: this cloud
 # session cannot reach api.github.com directly (it 403s — only the Claude

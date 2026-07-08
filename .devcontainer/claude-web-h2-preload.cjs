@@ -23,12 +23,14 @@
 'use strict';
 const http2 = require('http2');
 
+const RESPOND_PATCHED = Symbol.for('boxel.http2.respond.patched');
+
 function patchServer(server) {
-  let patched = false;
   server.on('stream', (stream) => {
-    if (patched) return;
-    patched = true;
     const proto = Object.getPrototypeOf(stream);
+    if (proto[RESPOND_PATCHED]) return;
+    proto[RESPOND_PATCHED] = true;
+
     const origRespond = proto.respond;
     proto.respond = function (headers, options) {
       if (options && options.waitForTrailers) {

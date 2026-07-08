@@ -121,7 +121,7 @@ if [ ! -f "$VITE_METADATA" ]; then
   # setsid ran the server in its own process group (setsid itself may fork
   # and exit, so $! is not reliable); kill the whole group via the group id
   # of the vite launcher.
-  WARM_PID=$(pgrep -f 'scripts/vite-serve.js' | head -1) || true
+  WARM_PID=$(pgrep -n -f 'scripts/vite-serve.js' 2>/dev/null) || true
   if [ -n "${WARM_PID:-}" ]; then
     PGID=$(ps -o pgid= -p "$WARM_PID" | tr -d ' ') || true
     if [ -n "${PGID:-}" ]; then
