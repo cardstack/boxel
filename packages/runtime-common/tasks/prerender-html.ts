@@ -41,6 +41,11 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // The index job that computed this invalidation set. Dashboard/log
   // correlation only.
   spawningJobId: number | null;
+  // How many publishes were merged into this job while it sat pending.
+  // Dashboard/log correlation only; absent means none. In-flight piggyback
+  // joins can't be counted here — a running worker holds its args in memory,
+  // so the queue never writes an update for them.
+  coalescedPublishes?: number;
 }
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
@@ -62,6 +67,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     generation,
     loaderEpoch,
     spawningJobId,
+    coalescedPublishes,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -79,6 +85,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     generation,
     loaderEpoch,
     spawningJobId: typeof spawningJobId === 'number' ? spawningJobId : null,
+    ...(typeof coalescedPublishes === 'number' ? { coalescedPublishes } : {}),
   };
 }
 
@@ -162,6 +169,10 @@ function choosePrerenderHtmlCoalesceDecision(
             newest.spawningJobId ??
             (newest === incomingArgs ? existingArgs : incomingArgs)
               .spawningJobId,
+          coalescedPublishes:
+            (existingArgs.coalescedPublishes ?? 0) +
+            (incomingArgs.coalescedPublishes ?? 0) +
+            1,
         },
       },
     };

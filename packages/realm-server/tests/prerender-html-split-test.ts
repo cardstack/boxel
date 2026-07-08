@@ -147,6 +147,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(byUrl.get(`${testRealm}2.json`), 'update');
       assert.strictEqual(byUrl.get(`${testRealm}3.json`), 'update');
       assert.strictEqual(mergedArgs.changes.length, 3, 'URLs are deduped');
+      assert.strictEqual(
+        mergedArgs.coalescedPublishes,
+        1,
+        'the merged job counts the publish folded into it',
+      );
+    });
+
+    test('a pending join accumulates the coalesced-publish count across merges', function (assert) {
+      let existing = prerenderHtmlArgs({
+        generation: 3,
+        spawningJobId: 100,
+        coalescedPublishes: 2,
+      });
+      let incoming = prerenderHtmlArgs({
+        generation: 4,
+        spawningJobId: 200,
+      });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming),
+          candidates: [candidate(42, existing)],
+        }),
+      );
+      assert.strictEqual(decision.type, 'join');
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.strictEqual(
+        mergedArgs.coalescedPublishes,
+        3,
+        'earlier merges stay counted when another publish folds in',
+      );
     });
 
     test('a pending merge keeps update over a later delete: the visit consults disk truth', function (assert) {
