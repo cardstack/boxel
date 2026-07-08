@@ -1991,6 +1991,15 @@ export default class StoreService extends Service implements StoreInterface {
     if (!resource.id) {
       throw new Error('resource must have an id');
     }
+    // One-shot boundary canonicalization: search `item` resources carry the
+    // index's URL-form ids, while instance and file-meta GET responses arrive
+    // canonical (RRI prefix form for mapped realms). Fold the id to canonical
+    // form here so an instance's identity — and everything keyed off it, like
+    // the markdown pill slots — doesn't depend on which path hydrated it.
+    let canonicalId = this.network.virtualNetwork.unresolveURL(resource.id);
+    if (canonicalId !== resource.id) {
+      (resource as { id: string }).id = canonicalId;
+    }
 
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
