@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 
 import { ri } from '@cardstack/runtime-common';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
@@ -323,6 +324,30 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       attemptedNames,
       ['Boxel Skills (Copy)', 'Boxel Skills (Copy 2)'],
       "the workspace name carries the same number as the endpoint, so a second copy isn't named like the first",
+    );
+  });
+
+  test('a failed source read rejects instead of writing the error body', async function (assert) {
+    let { adapter: copyRealmAdapter } = await setupCopyTargetRealm();
+
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    await assert.rejects(
+      cardService.copySource(
+        new URL(`${skillsRealmURL}skills/does-not-exist/SKILL.md`),
+        new URL(`${copyRealmURL}skills/does-not-exist/SKILL.md`),
+      ),
+      /Could not read .*does-not-exist.*404/,
+      'copying an unreadable source fails instead of succeeding',
+    );
+
+    let copiedFile = await copyRealmAdapter.openFile(
+      'skills/does-not-exist/SKILL.md',
+    );
+    assert.notOk(
+      copiedFile,
+      'nothing is written to the destination when the source read fails',
     );
   });
 

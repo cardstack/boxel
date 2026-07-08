@@ -302,6 +302,15 @@ export default class CardService extends Service {
         Accept: 'application/vnd.card+source',
       },
     });
+    // Without this guard an error response's body would be written into the
+    // destination as file content and the copy would appear to succeed.
+    if (!response.ok) {
+      throw new Error(
+        `Could not read ${fromUrl.href} for copying: ${
+          response.status
+        } - ${(await response.text()).slice(0, 500)}`,
+      );
+    }
 
     const content = await response.text();
     return await this.saveSource(toUrl, content, 'copy');
