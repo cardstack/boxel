@@ -75,9 +75,6 @@ echo "All realms ready. Dumping index tables..."
 # TRUNCATE list in scripts/import-cached-index.sh in sync. The *_working
 # tables are deliberately excluded — they are transient UNLOGGED scratch space.
 CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
-# TEMP(index-cache-fix-cs-11814): sentinel table that does not exist, to prove
-# the verify step fails the job when a table drops out of the dump. Revert before merge.
-CACHE_TABLES+=(__guard_demo_missing_table)
 
 DUMP_ARGS=()
 for t in "${CACHE_TABLES[@]}"; do

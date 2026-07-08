@@ -162,8 +162,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    # TEMP(index-cache-fix-cs-11814): last term forces the build on this branch so cache-index has its artifact. Revert before merge.
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true' || github.head_ref == 'index-cache-fix-cs-11814'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
@@ -1009,8 +1008,7 @@ jobs:
   cache-index:
     name: Cache realm index
     needs: [change-check, test-web-assets]
-    # TEMP(index-cache-fix-cs-11814): also run on this branch to demo the guard. Revert before merge.
-    if: github.ref == 'refs/heads/main' || github.head_ref == 'index-cache-fix-cs-11814'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: cache-index-${{ github.run_id }}
