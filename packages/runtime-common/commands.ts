@@ -149,13 +149,22 @@ export function buildCommandFunctionName(
     virtualNetwork,
   ) as ResolvedCodeRef;
 
-  const hashed = simpleHash(
-    `${absoluteCodeRef.module}#${absoluteCodeRef.name}`,
-  );
-  let name =
-    absoluteCodeRef.name === 'default'
-      ? friendlyModuleName(absoluteCodeRef.module)
-      : absoluteCodeRef.name;
+  return buildCommandFunctionNameFromResolvedRef(absoluteCodeRef);
+}
+
+// The name-construction half of buildCommandFunctionName, for callers that
+// already hold an absolute code ref (registered package prefixes resolve
+// verbatim, so e.g. ai-bot can produce identical names without a
+// VirtualNetwork).
+export function buildCommandFunctionNameFromResolvedRef(ref: {
+  module: string;
+  name: string;
+}): string {
+  if (!ref?.module || !ref?.name) {
+    return '';
+  }
+  const hashed = simpleHash(`${ref.module}#${ref.name}`);
+  let name = ref.name === 'default' ? friendlyModuleName(ref.module) : ref.name;
   return `${name}_${hashed.slice(0, 4)}`;
 }
 
