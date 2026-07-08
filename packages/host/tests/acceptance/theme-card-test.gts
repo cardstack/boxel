@@ -444,6 +444,30 @@ module('Acceptance | theme-card-test', function (hooks) {
               },
             },
           },
+          'checkbox-forest-green-2.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: false,
+                cardInfo: {
+                  name: 'Second Forest Green Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}forest-green-theme`,
+                  },
+                },
+              },
+            },
+          },
           'checkbox-forest-green.json': {
             data: {
               meta: {
@@ -1081,6 +1105,56 @@ module('Acceptance | theme-card-test', function (hooks) {
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '16px',
         'checkbox size matches --theme-body-font-size',
+      );
+    });
+
+    test('cards sharing a theme emit identical scoped stylesheets', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-forest-green`;
+      let otherCardId = `${testRealmURL}checkbox-forest-green-2`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: cardId, format: 'isolated' }],
+          [{ id: otherCardId, format: 'isolated' }],
+        ],
+      });
+
+      let themeStyleText = (id: string) => {
+        let container = document.querySelector(`[data-test-card="${id}"]`);
+        return [...container!.querySelectorAll('style')]
+          .map((style) => style.textContent?.trim())
+          .filter((text) => text?.includes('data-boxel-theme-scope'))
+          .join('');
+      };
+
+      let scope = document
+        .querySelector(`[data-test-card="${cardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      let otherScope = document
+        .querySelector(`[data-test-card="${otherCardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.ok(scope, 'theme scope is set');
+      assert.true(
+        scope!.startsWith(`${testRealmURL}forest-green-theme-`),
+        'scope derives from the theme card id plus a content hash',
+      );
+      assert.strictEqual(
+        scope,
+        otherScope,
+        'cards sharing a theme share a scope',
+      );
+      assert.ok(
+        themeStyleText(cardId).length,
+        'theme stylesheet is rendered within the card container',
+      );
+      assert.strictEqual(
+        themeStyleText(cardId),
+        themeStyleText(otherCardId),
+        'cards sharing a theme emit byte-identical theme stylesheets',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the second card still resolves the theme variables',
       );
     });
   });

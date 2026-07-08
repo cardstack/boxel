@@ -18,7 +18,12 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import {
+  bool,
+  cn,
+  themeScope,
+  themeScopedCss,
+} from '@cardstack/boxel-ui/helpers';
 
 import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
 
@@ -1076,7 +1081,16 @@ export class ThemeDashboard extends GlimmerComponent<{
   Blocks: { default: []; header: []; navBar: [] };
   Element: HTMLElement;
 }> {
-  private themeScopeId = guidFor(this);
+  // Content-derived rather than guidFor: this markup can be persisted as
+  // prerendered HTML, where the scoped rules are page-global. Equal scopes
+  // are only safe when their declarations are equal too, which the content
+  // hash guarantees; a per-process guid can repeat across prerender jobs
+  // with different themes. The guid fallback is never stamped (the scope
+  // renders only when @themeCss is present) — it just keeps the value
+  // defined.
+  private get themeScopeId() {
+    return themeScope('theme-dashboard', this.args.themeCss) ?? guidFor(this);
+  }
 
   // The data-theme wrapper drives the preview's light/dark toggle through the
   // ambient `--boxel-color-scheme` signal, flipping the semantic tokens to the

@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
 
 const SCOPE = 'ember123';
 const SELECTOR = `[data-boxel-theme-scope="${SCOPE}"]`;
@@ -112,5 +112,41 @@ module('Unit | theme-scoped-css', function () {
     let el = document.createElement('div');
     el.setAttribute('data-boxel-theme-scope', scope);
     assert.true(el.matches(selector), 'escaped selector matches the element');
+  });
+});
+
+module('Unit | theme-scope', function () {
+  const THEME_ID = 'https://example.test/starry-night-theme';
+  const CSS = ':root { --primary: #112233; }';
+
+  test('is deterministic for the same theme id and css', function (assert) {
+    assert.strictEqual(themeScope(THEME_ID, CSS), themeScope(THEME_ID, CSS));
+  });
+
+  test('starts with the theme id', function (assert) {
+    assert.true(themeScope(THEME_ID, CSS)!.startsWith(`${THEME_ID}-`));
+  });
+
+  test('changes when the css changes', function (assert) {
+    assert.notStrictEqual(
+      themeScope(THEME_ID, CSS),
+      themeScope(THEME_ID, ':root { --primary: #445566; }'),
+    );
+  });
+
+  test('differs across themes with identical css', function (assert) {
+    assert.notStrictEqual(
+      themeScope(THEME_ID, CSS),
+      themeScope('https://example.test/other-theme', CSS),
+    );
+  });
+
+  test('returns undefined without a theme id or css', function (assert) {
+    assert.strictEqual(themeScope(undefined, CSS), undefined);
+    assert.strictEqual(themeScope(null, CSS), undefined);
+    assert.strictEqual(themeScope('', CSS), undefined);
+    assert.strictEqual(themeScope(THEME_ID, undefined), undefined);
+    assert.strictEqual(themeScope(THEME_ID, null), undefined);
+    assert.strictEqual(themeScope(THEME_ID, ''), undefined);
   });
 });
