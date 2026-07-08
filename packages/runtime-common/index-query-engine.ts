@@ -1912,11 +1912,16 @@ async function getField(
     return await definitionLookup.lookupDefinition(codeRef);
   });
   if (!field) {
-    if (currentField(pathTraveled) === '_cardType') {
-      // this is a little awkward--we have the need to treat '_cardType' as a
-      // type of string field that we can query against from the index (e.g. the
-      // cards grid sorts by the card's display name). index-runner is injecting
-      // this into the searchDoc during index time.
+    if (
+      currentField(pathTraveled) === '_cardType' ||
+      currentField(pathTraveled) === '_title'
+    ) {
+      // this is a little awkward--we have the need to treat '_cardType' and
+      // '_title' as string fields that we can query against from the index
+      // (e.g. the cards grid sorts by the card's display name; a mixed
+      // cards+files search sorts/filters both row types on '_title'). the
+      // index-runner / prerender meta route inject these into the searchDoc
+      // during index time.
       return {
         type: 'contains',
         isPrimitive: true,

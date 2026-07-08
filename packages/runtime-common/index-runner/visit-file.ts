@@ -66,6 +66,9 @@ interface VisitFileOptions {
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
+    // True when this file is a card-instance .json (the same fact that
+    // triggers the additional `instance` row in this fused visit).
+    isCardInstance?: boolean;
     extractResult?: RenderVisitResponse['fileExtract'];
     renderResult?: RenderVisitResponse['fileRender'];
     diagnostics?: Diagnostics;
@@ -330,6 +333,7 @@ export async function visitFileForIndexing({
     lastModified,
     resourceCreatedAt,
     hasModulePrerender: isModule,
+    isCardInstance: Boolean(parsedCardResource),
     extractResult: indexResponse.fileExtract,
     renderResult: fileRenderResult,
     diagnostics,
