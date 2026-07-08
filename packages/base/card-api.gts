@@ -182,6 +182,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
   propagateRealmContext,
@@ -355,8 +356,8 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  // The search rendering surface: renders the heterogeneous `search-entry`
-  // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
+  // The search rendering surface: renders the heterogeneous `entry`
+  // stream for an `entry`-rooted query — prerendered HTML inert (hydrated
   // lazily) or a live card — so a card author renders results without ever
   // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.
   searchResultsComponent: typeof GlimmerComponent<SearchResultsComponentSignature>;
@@ -1980,14 +1981,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (!Array.isArray(values.data)) {
-        return [];
+        // A `{ links: { self: null } }` relationship (no `data` array) is an
+        // authored empty — no members. Fall through with an empty relationship
+        // list so the shared WatchedArray path below wraps (and tags) it the
+        // same as an empty `{ data: [] }`: a mutable, reactive backing array,
+        // not a bare `[]` (which would hand a later push/splice a plain array
+        // and skip the WatchedArray subscriber).
+        relationships = [];
+      } else {
+        relationships = values.data.map((entry) => ({
+          links: {
+            self: entry && 'id' in entry ? (entry.id ?? null) : null,
+          },
+          data: entry,
+        }));
       }
-      relationships = values.data.map((entry) => ({
-        links: {
-          self: entry && 'id' in entry ? (entry.id ?? null) : null,
-        },
-        data: entry,
-      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
@@ -2063,7 +2071,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return deserialized;
       });
 
-    return new WatchedArray(
+    let resolved = await Promise.all(resources);
+    let watched = new WatchedArray(
       (oldValue, value) =>
         instancePromise.then((instance) => {
           applySubscribersToInstanceValue(
@@ -2075,9 +2084,18 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifySubscribers(instance, this.name, value);
           notifyCardTracking(instance);
         }),
-      await Promise.all(resources),
+      resolved,
       { hideSlot: isNonPresentLink },
     );
+    // An authored-empty plural relationship (`{ data: [] }` or
+    // `{ links: { self: null } }` in the source) deserializes to an empty
+    // array — tag it authored so serialization keeps it as `{ self: null }`
+    // rather than dropping it like a never-set link. A computed field's
+    // emptiness is derived, never authored, so it is never tagged.
+    if (resolved.length === 0 && !this.computeVia) {
+      markAuthoredEmptyLink(watched);
+    }
+    return watched;
   }
 
   emptyValue(instance: BaseDef) {
@@ -4787,15 +4805,33 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
-// The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the instance is
-// detached (no store, no loader-attached VN) — callers handle that by
-// degrading to URL math or throwing.
-export function virtualNetworkFor(
-  instance: BaseDef,
-): VirtualNetwork | undefined {
+// Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
+// relative to the instance's own location. Card definitions that must hand a
+// real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
+// AI source-file reader's `new URL(...)`) use this rather than reaching for the
+// VirtualNetwork object directly — they get back a URL, not the network itself.
+// Resolves through the instance's own store's VirtualNetwork, which may carry
+// realm mappings the module loader's does not (e.g. a card deserialized with an
+// explicit store). Returns undefined when none is available, or when the
+// reference can't be resolved, so callers can degrade to URL math.
+export function resolveInstanceURL(
+  instance: CardDef,
+  reference: string,
+): URL | undefined {
+  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    return getStore(instance).virtualNetwork;
+    virtualNetwork = getStore(instance).virtualNetwork;
+  } catch {
+    return undefined;
+  }
+  if (!virtualNetwork) {
+    return undefined;
+  }
+  try {
+    return virtualNetwork.resolveURL(
+      reference,
+      instance.id ?? instance[relativeTo],
+    );
   } catch {
     return undefined;
   }

@@ -116,7 +116,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           {{#if permissions.canWrite}}
             <Button
               class='add-new'
-              @kind='muted'
+              @kind='secondary'
               @size='tall'
               @rectangular={{true}}
               {{on 'click' this.add}}
@@ -193,7 +193,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .add-new {
         width: fit-content;
-        letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
   </template>

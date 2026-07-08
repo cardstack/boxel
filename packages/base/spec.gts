@@ -3,12 +3,11 @@ import {
   field,
   Component,
   CardDef,
-  relativeTo,
   linksToMany,
   FieldDef,
   containsMany,
   getCardMeta,
-  virtualNetworkFor,
+  resolveInstanceURL,
   type CardOrFieldTypeIcon,
   BaseDef,
   type CardContext,
@@ -81,20 +80,20 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
-    let vn = virtualNetworkFor(card);
-    if (!vn) {
-      return [];
-    }
+    // The attached-file identifier is read as a fetchable source URL (the AI
+    // source-file reader does `new URL(...)`), so the card's type module must
+    // resolve to a real URL — a scoped RRI can't be fetched.
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      vn.toURL(card.id!),
+      card.id,
       undefined,
-      vn,
     )! as ResolvedCodeRef;
-    let cardOrFieldModuleURL = codeRef.module
-      ? ensureExtension(codeRef.module, { default: '.gts' })
+    let moduleURL = codeRef.module
+      ? resolveInstanceURL(card, codeRef.module)
       : undefined;
-    return cardOrFieldModuleURL ? [cardOrFieldModuleURL] : [];
+    return moduleURL
+      ? [ensureExtension(moduleURL.href, { default: '.gts' })]
+      : [];
   }
 }
 
@@ -659,15 +658,10 @@ class Isolated extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -783,15 +777,10 @@ class Edit extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let vn = virtualNetworkFor(this.args.model);
-    if (!vn) {
-      return undefined;
-    }
     let ref = codeRefWithAbsoluteIdentifier(
       this.args.model.ref,
-      vn.toURL(this.args.model.id),
+      this.args.model.id,
       undefined,
-      vn,
     );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
@@ -828,8 +817,8 @@ class Edit extends Component<typeof Spec> {
     <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
-        --boxel-spec-code-ref-background-color: #e2e2e2;
-        --boxel-spec-code-ref-text-color: #646464;
+        --boxel-spec-code-ref-background-color: var(--boxel-300);
+        --boxel-spec-code-ref-text-color: var(--boxel-500);
 
         height: 100%;
         min-height: max-content;
@@ -837,7 +826,7 @@ class Edit extends Component<typeof Spec> {
         background-color: var(--boxel-spec-background-color);
       }
       :deep(.add-new) {
-        border: 1px solid var(--border, var(--boxel-border-color));
+        --boxel-button-color: var(--border);
       }
     </style>
   </template>
@@ -946,11 +935,11 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      let vn = virtualNetworkFor(this);
-      if (!vn) {
-        return undefined;
-      }
-      return vn.resolveURL(this.ref.module, this.id ?? this[relativeTo]).href;
+      // `moduleHref` is consumed as a fetchable / absolute URL (source reader's
+      // `new URL(...)`, and URL-form comparisons in the code submode), so it
+      // must resolve to a real URL — RRI space would leave a scoped prefix that
+      // those readers can't use.
+      return resolveInstanceURL(this, this.ref.module)?.href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
@@ -992,18 +981,11 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: (() => {
-                let vn = virtualNetworkFor(this);
-                if (!vn) {
-                  throw new Error('No VirtualNetwork available');
-                }
-                return codeRefWithAbsoluteIdentifier(
-                  this.ref,
-                  vn.toURL(this.id),
-                  undefined,
-                  vn,
-                ) as ResolvedCodeRef;
-              })(),
+              codeRef: codeRefWithAbsoluteIdentifier(
+                this.ref,
+                this.id,
+                undefined,
+              ) as ResolvedCodeRef,
               realm: this[realmURL]?.href,
               exampleCard: this,
             });
@@ -1090,7 +1072,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill @variant='muted' class='spec-tag-pill' ...attributes>
+      <Pill @variant='accent' class='spec-tag-pill' ...attributes>
         <:iconLeft>
           <this.icon width='18px' height='18px' />
         </:iconLeft>
@@ -1102,9 +1084,6 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{/if}}
     <style scoped>
       .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
-        --pill-icon-size: 18px;
         word-break: initial;
         text-transform: uppercase;
       }

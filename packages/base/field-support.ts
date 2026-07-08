@@ -194,7 +194,15 @@ export function getter<CardT extends BaseDefConstructor>(
       return deserialized.get(field.name);
     }
     let value = field.emptyValue(instance);
-    deserialized.set(field.name, value);
+    // Don't persist a nullish empty value (an unset `linksTo`): writing it would
+    // fabricate a bucket entry for a link the caller merely read, making an
+    // unset link indistinguishable from an authored `{ self: null }` when the
+    // card serializes. Recomputing the nullish empty on the next read is free;
+    // identity only matters for the mutable empties (arrays / composite fields),
+    // which are non-null and still persist for reactivity.
+    if (value != null) {
+      deserialized.set(field.name, value);
+    }
     return value;
   }
 }
@@ -350,13 +358,14 @@ export function getFieldOverrides<T extends BaseDef>(
 // per serialize, per searchDoc, per getDeps/findInstances recursion — and
 // `computeFields` walks the prototype chain and resolves every field on each
 // call. The result is determined by the prototype chain plus, for an instance,
-// its polymorphic field overrides (and, with `usedLinksToFieldsOnly`, its
-// populated field set). A read-only render only ever GROWS those, so their
-// sizes are a sound validity token: an unchanged token means an identical
-// result. Gated to the render context so the live app — where instances mutate
-// freely (same-size override swaps, field clears) — is never served a memoized
-// map. Keyed on the instance/class via a WeakMap so entries fall away with
-// their subjects; the token guards reuse across passes.
+// its polymorphic field overrides and — under `usedLinksToFieldsOnly` — the set
+// of links it has (authored or set): a link joins the map as its data-bucket
+// entry appears. A read-only render only ever GROWS both, so their sizes are a
+// sound validity token: an unchanged token means an identical result. Gated to
+// the render context so the live app — where
+// instances mutate freely (same-size override swaps, field clears) — is never
+// served a memoized map. Keyed on the instance/class via a WeakMap so entries
+// fall away with their subjects; the token guards reuse across passes.
 const renderFieldsCache = new WeakMap<
   object,
   Map<
@@ -380,8 +389,14 @@ function renderFieldsCacheToken(
   }
   let overrideSize = fieldOverrides.get(subject as BaseDef)?.size ?? 0;
   if (!usedLinksToFieldsOnly) {
+    // The full field map lists every declared field, so it depends only on the
+    // prototype chain and polymorphic overrides — not on what the instance set.
     return `o${overrideSize}`;
   }
+  // A link is kept only when the card actually has it (authored or set), so
+  // this map — unlike the full map — also depends on the instance's data. The
+  // data bucket only grows within a render pass, so its size is a sound
+  // validity token for that dependency.
   let usedSize = deserializedData.get(subject as BaseDef)?.size ?? 0;
   return `o${overrideSize}:u${usedSize}`;
 }
@@ -432,11 +447,11 @@ function computeFields(
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
-  let usedFields: string[] = [];
+  let instance: BaseDef | undefined;
   if (isCardOrField(cardInstanceOrClass)) {
     // this is a card instance
+    instance = cardInstanceOrClass;
     obj = Reflect.getPrototypeOf(cardInstanceOrClass);
-    usedFields = getUsedFields(cardInstanceOrClass);
   } else {
     // this is a card class
     obj = (cardInstanceOrClass as typeof BaseDef).prototype;
@@ -460,9 +475,15 @@ function computeFields(
         maybeField.computeVia ||
         !['contains', 'containsMany'].includes(maybeField.fieldType)
       ) {
+        // `usedLinksToFieldsOnly` keeps only the link fields the card actually
+        // has — an authored empty (`{ self: null }`) or a set target — and drops
+        // never-authored links. This is a property of the card's data, not of
+        // searchability (searchable annotations drive the search doc, not this
+        // serialization). Callers wanting every declared link pass
+        // `includeUnrenderedFields`; contained fields are always kept.
         if (
           opts?.usedLinksToFieldsOnly &&
-          !usedFields.includes(maybeFieldName) &&
+          !isFieldUsed(instance, maybeFieldName) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
           return [];
@@ -483,10 +504,61 @@ function computeFields(
   return fields;
 }
 
-function getUsedFields(instance: BaseDef): string[] {
-  // getDataBucket always returns a Map (it creates one if absent), so the spread
-  // is safe without optional chaining.
-  return [...getDataBucket(instance).keys()];
+// Empty `linksToMany` backing arrays that came from an authored-empty
+// relationship (`{ self: null }` / `{ data: [] }` in the source), tagged by
+// `LinksToMany.deserialize`. An empty array in the data bucket is ambiguous —
+// it may be an authored empty or one a mere render fabricated (the plural
+// getter persists a backing array on read, unlike `linksTo`) — so this tag is
+// what lets serialization keep the authored empty and drop the fabricated one.
+const authoredEmptyLinks = new WeakSet<object>();
+
+// Tag an empty `linksToMany` backing array as an authored empty so serialization
+// treats it as a relationship the card has (`isFieldUsed`). No-op for a
+// non-empty array (already "had" by length) or a non-array value.
+export function markAuthoredEmptyLink(value: unknown): void {
+  if (Array.isArray(value) && value.length === 0) {
+    authoredEmptyLinks.add(value);
+  }
+}
+
+// Whether a link field is "used" for `usedLinksToFieldsOnly` serialization: the
+// card actually has the relationship. A link enters the data bucket only when
+// it was authored (deserialized from the source — a set target, or an empty
+// `{ self: null }` that lands as a `null` entry) or set on the instance; a
+// never-authored `linksTo` has no bucket entry, because the getter skips
+// persisting its nullish empty value, so a mere render can't mark it "used".
+//
+// A `linksToMany` getter must persist its (mutable) backing array even when
+// empty, so a never-set plural link merely read fabricates an empty array in
+// the bucket. An empty array is therefore ambiguous: authored empty vs.
+// render-fabricated. `LinksToMany.deserialize` disambiguates by tagging the
+// arrays it produces from an authored-empty relationship
+// (`markAuthoredEmptyLink`); an untagged empty array is treated as never-set
+// and omitted. So an authored empty plural link round-trips as `{ self: null }`
+// while a never-set one stays off the wire — matching the `linksTo` fidelity.
+//
+// This is pure card data, independent of searchability. Contained fields never
+// reach here (always kept).
+function isFieldUsed(
+  instance: BaseDef | undefined,
+  fieldName: string,
+): boolean {
+  if (!instance) {
+    return false;
+  }
+  let bucket = getDataBucket(instance);
+  if (!bucket.has(fieldName)) {
+    return false;
+  }
+  let value = bucket.get(fieldName);
+  // A non-empty array is a set plural link. An empty array is "had" only when
+  // `deserialize` tagged it as an authored empty; a render-fabricated empty
+  // (an unset plural link merely read) is untagged and dropped. `null` is an
+  // authored empty `linksTo` and is kept.
+  if (Array.isArray(value)) {
+    return value.length > 0 || authoredEmptyLinks.has(value);
+  }
+  return true;
 }
 
 export function isArrayOfCardOrField(
@@ -807,7 +879,8 @@ export interface BrokenLinkFinding {
 // planted a sentinel there), and an unmaterialized field holds neither a broken
 // link nor a nested card — so skipping absent fields loses nothing and avoids
 // the getter's side effect of initializing them with `emptyValue` (which would
-// pollute `getUsedFields` / serialization). Relationship state is then read
+// pollute the data-bucket-driven `isFieldUsed` signal / serialization).
+// Relationship state is then read
 // through `getRelationshipMembershipState`, which never triggers `lazilyLoadLink`, so a
 // recursed value surfaces only states that genuinely failed during this render.
 // `'present'`, `'not-loaded'`, and `'not-set'` are not terminal failures; a
@@ -859,19 +932,6 @@ export function getBrokenLinks(
       );
       for (let entry of membership ?? []) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
-          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Read
-          // only fields that won't initialize bucket entries via the
-          // field getter (constructor name + the entry's own reference);
-          // reading `instance.id` here would write the `id` field's
-          // emptyValue into the bucket and violate the pure-read contract
-          // the surrounding `getBrokenLinks` upholds.
-          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
-            ownerType: instance?.constructor?.name,
-            fieldName,
-            fieldType: field.fieldType,
-            kind: entry.kind,
-            reference: entry.reference,
-          });
           findings.push({
             fieldName,
             kind: entry.kind,

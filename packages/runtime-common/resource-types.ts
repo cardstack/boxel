@@ -23,7 +23,7 @@ export interface QueryFieldMeta {
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
 export const CssResourceType = 'css';
-export const SearchEntryResourceType = 'search-entry';
+export const EntryResourceType = 'entry';
 export const HtmlResourceType = 'html';
 export const IconResourceType = 'icon';
 // resource
@@ -31,7 +31,7 @@ export type Resource =
   | ModuleResource
   | CardResource
   | CssResource
-  | SearchEntryResource
+  | EntryResource
   | HtmlResource
   | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
@@ -99,6 +99,11 @@ export type CardResourceMeta = Meta & {
   // consumer falls through to the host error component (the terminal rung of
   // the resolution chain) and never deposits the resource into the Store.
   error?: ErrorEntry;
+  // The index-data generation the row was written at (`boxel_index.generation`).
+  // Stamped on a single-card `card+json` GET so a consumer can tell fresh index
+  // data from stale. Additive — absent when the serialization did not come off
+  // the index (e.g. a freshly-built resource that has not been persisted).
+  generation?: number;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -158,7 +163,7 @@ export interface CssResource {
 // it rides as its own deduped resource rather than repeated on each rendering.
 // Its `id` is the type's internal key (the `<module>/<name>` form already
 // carried as a row's `types[0]`), so identical types collapse to one
-// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// `(type, id)` in `included`. Reached from the `entry` (not the `html`)
 // so item-only / no-HTML rows resolve their type descriptor too.
 export interface IconResource {
   id: string;
@@ -173,7 +178,7 @@ export interface IconResource {
   };
 }
 
-// The synthesized rendering-selection query bound on a `search-entry` (the
+// The synthesized rendering-selection query bound on an `entry` (the
 // "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
 // leaves composed with `every`/`any`/`not`, with real boolean semantics
 // (`not(not(q))` selects exactly what `q` selects). It selects which of an
@@ -202,9 +207,9 @@ export interface HtmlQueryLeaf {
 // `item` points at the live serialization. Which branches appear is governed
 // by the query's sparse fieldset (default: the selected renderings, falling
 // back to `item` — with the `html` relationship omitted — where none match).
-export interface SearchEntryResource {
+export interface EntryResource {
   id: string;
-  type: typeof SearchEntryResourceType;
+  type: typeof EntryResourceType;
   relationships: {
     html?: {
       data: { type: typeof HtmlResourceType; id: string }[];
@@ -221,6 +226,13 @@ export interface SearchEntryResource {
     icon?: {
       data: { type: typeof IconResourceType; id: string };
     };
+  };
+  // The entry's index-data generation (`boxel_index.generation`) — the
+  // generation the row's search doc / serialization was written at. Lets a
+  // consumer tell fresh index data from stale and pair it against the `html`
+  // resource's own generation (the two channels advance independently).
+  meta?: {
+    generation: number;
   };
 }
 
@@ -247,6 +259,13 @@ export interface HtmlResource {
     styles: {
       data: { type: typeof CssResourceType; id: string }[];
     };
+  };
+  // The generation this rendering was produced at
+  // (`prerendered_html.generation`). Independent of the owning entry's
+  // index-data generation: HTML lands on its own channel and can lag the
+  // index, so a consumer compares the two to tell fresh HTML from stale.
+  meta?: {
+    generation: number;
   };
 }
 
@@ -281,7 +300,7 @@ export {
   isRelationship,
   isCssResource,
   isIconResource,
-  isSearchEntryResource,
+  isEntryResource,
   isHtmlResource,
   isSparseItemResource,
 } from './card-document-shape.ts';

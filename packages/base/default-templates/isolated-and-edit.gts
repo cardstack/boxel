@@ -118,7 +118,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         align-self: center;
       }
       .card-info-header :deep(.add-new) {
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
         grid-column: -1 / 1;
       }
       .own-display-fields {

@@ -8,11 +8,11 @@ import {
   type HtmlResource,
   type IconResource,
   type Saved,
-  type SearchEntryResource,
+  type EntryResource,
   type Unsaved,
   isCardResource,
   isFileMetaResource,
-  isSearchEntryResource,
+  isEntryResource,
 } from './resource-types.ts';
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
@@ -25,21 +25,21 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   meta: QueryResultsMeta;
 }
 
-// The search response: heterogeneous `search-entry` resources in `data`,
+// The search response: heterogeneous `entry` resources in `data`,
 // with everything they compose — `html` renderings (plus their deduped `css`
 // stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
 // `included`. Which branches appear per entry is governed by the query's
 // sparse fieldset (default: prefer `html`, fall back to `item`).
-export type SearchEntryIncludedResource =
+export type EntryIncludedResource =
   | HtmlResource
   | CssResource
   | IconResource
   | CardResource<Saved>
   | FileMetaResource;
 
-export interface SearchEntryCollectionDocument {
-  data: SearchEntryResource[];
-  included?: SearchEntryIncludedResource[];
+export interface EntryCollectionDocument {
+  data: EntryResource[];
+  included?: EntryIncludedResource[];
   meta: QueryResultsMeta & {
     // The applied (bound or defaulted) htmlQuery, echoed once at the document
     // level — it cannot vary across entries, so it is never repeated per
@@ -48,9 +48,19 @@ export interface SearchEntryCollectionDocument {
   };
 }
 
-// The public-API name for the raw search-entry wire format a programmatic
+// The single-instance entry response (the card+html / file-meta+html GET): one
+// `entry` sourced by URL rather than by a query, with everything it composes
+// riding in `included`. The collection's document-level `meta` (page total,
+// htmlQuery echo) drops away — the single `entry` carries its own
+// `meta.generation`, and the caller named the format/renderType in the request.
+export interface EntrySingleDocument {
+  data: EntryResource;
+  included?: EntryIncludedResource[];
+}
+
+// The public-API name for the raw entry wire format a programmatic
 // `searchEntries` caller receives.
-export type SearchEntryResults = SearchEntryCollectionDocument;
+export type SearchEntryResults = EntryCollectionDocument;
 
 export interface SingleFileMetaDocument {
   data: FileMetaResource;
@@ -113,9 +123,9 @@ export function isFileMetaCollectionDocument(
   return data.every((resource) => isFileMetaResource(resource));
 }
 
-export function isSearchEntryCollectionDocument(
+export function isEntryCollectionDocument(
   doc: any,
-): doc is SearchEntryCollectionDocument {
+): doc is EntryCollectionDocument {
   if (typeof doc !== 'object' || doc == null) {
     return false;
   }
@@ -147,7 +157,7 @@ export function isSearchEntryCollectionDocument(
       }
     }
   }
-  return data.every((resource) => isSearchEntryResource(resource));
+  return data.every((resource) => isEntryResource(resource));
 }
 
 export type CardTypeSummaryKind = 'instance' | 'file';

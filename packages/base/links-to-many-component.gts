@@ -325,7 +325,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{#if permissions.canWrite}}
         <Button
           class={{cn 'add-new' no-items=this.noItems}}
-          @kind='muted'
+          @kind='secondary'
           @size='tall'
           @rectangular={{true}}
           {{on 'click' @add}}
@@ -385,9 +385,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           var(--boxel-box-shadow);
       }
       .add-new {
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         width: fit-content;
-        letter-spacing: var(--boxel-lsp-xs);
         margin-left: calc(var(--boxel-icon-med) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }
@@ -546,7 +545,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         --pill-border-color: var(--muted-foreground, var(--boxel-600));
       }
       .compact-add-new {
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
       }
     </style>
   </template>

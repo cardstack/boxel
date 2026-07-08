@@ -26,18 +26,27 @@ export async function retrieveScopedCSS({
     return null;
   }
 
+  // Dual-read: the scoped-CSS URLs needed to serve a card's HTML ride on the
+  // prerendered_html `deps` / `last_known_good_deps`, falling back to the
+  // boxel_index columns only when no prerendered_html row exists (a present row
+  // is authoritative, matching the query engine's `ph.url IS NULL` guard).
   let scopedCSSQuery: Expression = [
     `
-      SELECT deps, last_known_good_deps, realm_version
-      FROM boxel_index
-      WHERE type = 'instance'
-        AND is_deleted IS NOT TRUE
-        AND (deps IS NOT NULL OR last_known_good_deps IS NOT NULL)
+      SELECT CASE WHEN ph.url IS NULL THEN i.deps ELSE ph.deps END AS deps,
+             CASE WHEN ph.url IS NULL THEN i.last_known_good_deps ELSE ph.last_known_good_deps END AS last_known_good_deps,
+             i.generation
+      FROM boxel_index AS i
+      LEFT JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.type = 'instance'
+        AND i.is_deleted IS NOT TRUE
+        AND ((CASE WHEN ph.url IS NULL THEN i.deps ELSE ph.deps END) IS NOT NULL
+             OR (CASE WHEN ph.url IS NULL THEN i.last_known_good_deps ELSE ph.last_known_good_deps END) IS NOT NULL)
         AND
     `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY realm_version DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ];
@@ -60,7 +69,7 @@ export async function retrieveScopedCSS({
     | {
         deps?: string[] | string | null;
         last_known_good_deps?: string[] | string | null;
-        realm_version?: string | number;
+        generation?: string | number;
       }
     | undefined;
 

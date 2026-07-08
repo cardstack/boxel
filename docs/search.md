@@ -198,7 +198,7 @@ let { data: matching, meta } = await indexer.search({
 
 ## HTTP API
 
-The TypeScript API described above is exposed by the realm server over HTTP as the `search-entry` API: `/_search` at a realm root (a single realm) and `/_federated-search` on the realm server (across realms). Both speak the `search-entry` wire query — build one from an ordinary `Query` with `searchEntryWireQueryFromQuery` — sent as the request body with the `QUERY` method. An Accept header of `application/vnd.card+json` must be sent.
+The TypeScript API described above is exposed by the realm server over HTTP as the `entry` API: `/_search` at a realm root (a single realm) and `/_federated-search` on the realm server (across realms). Both speak the `entry` wire query — build one from an ordinary `Query` with `searchEntryWireQueryFromQuery` — sent as the request body with the `QUERY` method. An Accept header of `application/vnd.card+json` must be sent.
 
 ### Example
 
@@ -228,4 +228,4 @@ let response = await request
   .send(searchEntryWireQueryFromQuery(query, { fields: ['item'] }));
 ```
 
-The response is a `search-entry` collection document: each entry resolves to prerendered HTML (the fast path) or a live serialization, and `fields: ['item']` asks for the full card/file serialization in `included`.
+The response is an `entry` collection document: each entry resolves to prerendered HTML (the fast path) or a live serialization, and `fields: ['item']` asks for the full card/file serialization in `included`.

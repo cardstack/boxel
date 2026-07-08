@@ -2,7 +2,12 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
-import { query, type Query, type Expression } from '@cardstack/runtime-common';
+import {
+  query,
+  param,
+  type Query,
+  type Expression,
+} from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 import { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 
@@ -24,7 +29,7 @@ function makeDoc(label: string): string {
   return JSON.stringify(
     {
       data: [{ type: 'card', id: `${realmA}${label}` }],
-      meta: { page: { total: 1, realmVersion: 1 } },
+      meta: { page: { total: 1, generation: 1 } },
     },
     null,
     2,
@@ -561,6 +566,95 @@ module(basename(import.meta.filename), function (hooks) {
         'realm order is part of the key',
       );
       assert.notStrictEqual(base, diffOpts, 'opts change → new ETag');
+    });
+
+    test('realmGenerations reads index + prerendered-HTML state per realm', async function (assert) {
+      let cache = new JobScopedSearchCache(dbAdapter);
+      let seedGeneration = async (realm: string, generation: number) => {
+        await query(dbAdapter, [
+          `INSERT INTO realm_generations (realm_url, current_generation) VALUES (`,
+          param(realm),
+          `,`,
+          param(generation),
+          `)`,
+        ] as Expression);
+      };
+      let seedPrerendered = async (
+        realm: string,
+        url: string,
+        generation: number,
+      ) => {
+        await query(dbAdapter, [
+          `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation) VALUES (`,
+          param(url),
+          `,`,
+          param(url),
+          `,`,
+          param(realm),
+          `,`,
+          param('instance'),
+          `,`,
+          param(generation),
+          `)`,
+        ] as Expression);
+      };
+
+      // realmA: index at generation 5, HTML published across generations 3 & 4.
+      await seedGeneration(realmA, 5);
+      await seedPrerendered(realmA, `${realmA}A/1`, 3);
+      await seedPrerendered(realmA, `${realmA}A/2`, 4);
+      // realmB: index at generation 2, no prerendered HTML yet.
+      await seedGeneration(realmB, 2);
+
+      let gens = await cache.realmGenerations([realmA, realmB]);
+      assert.deepEqual(
+        gens[realmA],
+        { index: 5, html: 4 },
+        'index = current_generation; html = MAX(prerendered_html.generation)',
+      );
+      assert.deepEqual(
+        gens[realmB],
+        { index: 2, html: 0 },
+        'a realm with no prerendered rows reads html = 0',
+      );
+
+      // A realm absent from realm_generations reads as a stable zero.
+      let unknown = 'http://localhost:4201/nope/';
+      let missing = await cache.realmGenerations([unknown]);
+      assert.deepEqual(missing[unknown], { index: 0, html: 0 });
+    });
+
+    test('computeETag: changes when either the index or the prerendered-HTML generation advances', function (assert) {
+      let cache = new JobScopedSearchCache(dbAdapter);
+      // Mirror the handler: the per-realm generation fingerprint is folded into
+      // the cache-key opts, so the ETag advances when either channel does.
+      let etag = (generations: unknown) =>
+        cache.computeETag({
+          jobId: '42.1',
+          realms: [realmA],
+          query: makeQuery(),
+          opts: { generations },
+        });
+
+      let base = etag({ [realmA]: { index: 5, html: 4 } });
+      let indexAdvanced = etag({ [realmA]: { index: 6, html: 4 } });
+      let htmlAdvanced = etag({ [realmA]: { index: 5, html: 5 } });
+
+      assert.notStrictEqual(
+        base,
+        indexAdvanced,
+        'index generation advance → new ETag',
+      );
+      assert.notStrictEqual(
+        base,
+        htmlAdvanced,
+        'prerendered-HTML generation advance → new ETag (no stale 304)',
+      );
+      assert.strictEqual(
+        base,
+        etag({ [realmA]: { index: 5, html: 4 } }),
+        'identical generation state → stable ETag',
+      );
     });
   });
 });

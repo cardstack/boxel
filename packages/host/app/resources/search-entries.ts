@@ -28,7 +28,7 @@ import {
   type IconResource,
   type ResolvedCodeRef,
   type Saved,
-  type SearchEntryCollectionDocument,
+  type EntryCollectionDocument,
   type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -51,7 +51,7 @@ const waiter = buildWaiter('search-entries-resource:search-waiter');
 // here because this resource builds it and call sites import it from here.
 export type { SearchEntryRendering };
 
-// One search result, joined from the wire document: the `search-entry`
+// One search result, joined from the wire document: the `entry`
 // resource plus the `html` renderings and/or `item` serialization it
 // references in `included`. An empty `html` array means the entry matched but
 // no rendering satisfies the query's htmlQuery yet — the invalidation re-run
@@ -89,7 +89,7 @@ export class SearchEntriesResource extends Resource<Args> {
   private realmsToSearch: string[] = [];
   private subscriptions: { realm: string; unsubscribe: () => void }[] = [];
   private _entries = new TrackedArray<SearchEntry>();
-  @tracked private _meta: SearchEntryCollectionDocument['meta'] = {
+  @tracked private _meta: EntryCollectionDocument['meta'] = {
     page: { total: 0 },
   };
   @tracked private _errors: ErrorEntry[] | undefined;
@@ -369,7 +369,7 @@ export class SearchEntriesResource extends Resource<Args> {
   // The `css` resources base64-embed their whole stylesheet in the href; the
   // loader import is what registers each scoped stylesheet with the document,
   // so entries are paint-ready when exposed.
-  private async loadStylesheets(doc: SearchEntryCollectionDocument) {
+  private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
       .map((resource) => resource.attributes.href);
@@ -378,7 +378,7 @@ export class SearchEntriesResource extends Resource<Args> {
     );
   }
 
-  private buildEntries(doc: SearchEntryCollectionDocument): SearchEntry[] {
+  private buildEntries(doc: EntryCollectionDocument): SearchEntry[] {
     let htmlById = new Map<string, HtmlResource>();
     let cssHrefById = new Map<string, string>();
     let iconById = new Map<string, IconResource['attributes']>();
@@ -475,7 +475,7 @@ function buildRendering(
   };
 }
 
-// The one host live-search resource: issues the `search-entry` wire query
+// The one host live-search resource: issues the `entry` wire query
 // through `StoreService.searchEntries`, subscribes to each searched realm,
 // and re-runs on incremental index events with a per-realm partial refresh.
 // Realms ride in the query's `realms` member; omitted, every available realm

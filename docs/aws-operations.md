@@ -69,8 +69,8 @@ This rolls the running tasks one at a time; expect a 1–2 minute window where s
 
 Before promoting to prod, run a synthetic saturating workload on staging:
 
-- Concurrent catalog full reindex (priority 0)
-- Simulated user-driven incremental reindex on a different realm (priority 10)
+- Concurrent catalog full reindex (`systemInitiatedPriority`)
+- Simulated user-driven incremental reindex on a different realm (`userInitiatedPriority`)
 - Both for ~5 minutes
 
 **Pass criteria:**

@@ -133,7 +133,11 @@ function friendlyModuleName(fullModuleUrl: string) {
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
+  // `functionName` is a recomputed `computeVia` field (never persisted), and
+  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // every command name self-consistent.
+  virtualNetwork?: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
@@ -145,13 +149,22 @@ export function buildCommandFunctionName(
     virtualNetwork,
   ) as ResolvedCodeRef;
 
-  const hashed = simpleHash(
-    `${absoluteCodeRef.module}#${absoluteCodeRef.name}`,
-  );
-  let name =
-    absoluteCodeRef.name === 'default'
-      ? friendlyModuleName(absoluteCodeRef.module)
-      : absoluteCodeRef.name;
+  return buildCommandFunctionNameFromResolvedRef(absoluteCodeRef);
+}
+
+// The name-construction half of buildCommandFunctionName, for callers that
+// already hold an absolute code ref (registered package prefixes resolve
+// verbatim, so e.g. ai-bot can produce identical names without a
+// VirtualNetwork).
+export function buildCommandFunctionNameFromResolvedRef(ref: {
+  module: string;
+  name: string;
+}): string {
+  if (!ref?.module || !ref?.name) {
+    return '';
+  }
+  const hashed = simpleHash(`${ref.module}#${ref.name}`);
+  let name = ref.name === 'default' ? friendlyModuleName(ref.module) : ref.name;
   return `${name}_${hashed.slice(0, 4)}`;
 }
 

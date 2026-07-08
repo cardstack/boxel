@@ -11,7 +11,7 @@ import {
   SupportedMimeType,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
-  type SearchEntryCollectionDocument,
+  type EntryCollectionDocument,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
@@ -301,6 +301,9 @@ function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
+      if (state.failRealmAuth) {
+        return new Response('realm server unreachable', { status: 503 });
+      }
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
@@ -509,7 +512,7 @@ async function handleArchiveToggle(
   );
 }
 
-// The search-entry searchable-realm resolver. In-process registry
+// The entry searchable-realm resolver. In-process registry
 // realms expose `searchEntries` directly; a live remote realm (base, skills,
 // catalog on localhost:4201) is reached by passing the original wire payload
 // through to its per-realm `_search` endpoint — the parsed query the
@@ -523,7 +526,7 @@ function getSearchEntrySearchableRealmForURL(
       url?: string;
       searchEntries: (
         searchEntryQuery: SearchEntryQuery,
-      ) => Promise<SearchEntryCollectionDocument>;
+      ) => Promise<EntryCollectionDocument>;
     }
   | undefined {
   let registry = getTestRealmRegistry();
@@ -561,7 +564,7 @@ function getSearchEntrySearchableRealmForURL(
           `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
         );
       }
-      return (await response.json()) as SearchEntryCollectionDocument;
+      return (await response.json()) as EntryCollectionDocument;
     },
   };
 }

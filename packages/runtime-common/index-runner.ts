@@ -42,7 +42,7 @@ import {
   discoverInvalidations,
   type DiscoverInvalidationsResult,
 } from './index-runner/discover-invalidations.ts';
-import { visitFileForIndexingFused } from './index-runner/visit-file.ts';
+import { visitFileForIndexing } from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
 
@@ -520,7 +520,7 @@ export class IndexRunner {
 
   private async tryToVisit(url: URL) {
     try {
-      await visitFileForIndexingFused({
+      await visitFileForIndexing({
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,
@@ -966,7 +966,7 @@ export class IndexRunner {
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
-    // Render result produced by the fused visit's cardRender pass.
+    // Merged card result from the file's index + prerender-html visits.
     renderResult: NonNullable<
       Parameters<typeof performCardIndexing>[0]['precomputedRenderResult']
     >;
@@ -1014,6 +1014,7 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     hasModulePrerender,
+    isCardInstance,
     extractResult,
     renderResult,
     diagnostics,
@@ -1022,9 +1023,10 @@ export class IndexRunner {
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
-    // Extract/render results produced by the fused visit's fileExtract /
-    // fileRender passes. Either may be undefined if the visit chose not to
-    // run that pass (e.g. fileRender is skipped for module files).
+    isCardInstance?: boolean;
+    // Extract result from the index visit and merged render result from the
+    // index + prerender-html visits. Either may be undefined if the visits
+    // short-circuited before producing it.
     extractResult?: Parameters<
       typeof performFileIndexing
     >[0]['precomputedExtractResult'];
@@ -1040,6 +1042,7 @@ export class IndexRunner {
       lastModified,
       resourceCreatedAt,
       hasModulePrerender,
+      isCardInstance,
       realmURL: this.#realmURL,
       auth: this.#auth,
       jobInfo: this.#jobInfo,

@@ -13,12 +13,12 @@ const CardDefRef = {
   name: 'CardDef',
 };
 
-describe('searchEntryRequestBody — card-rooted query → search-entry wire grammar', () => {
+describe('searchEntryRequestBody — card-rooted query → entry wire grammar', () => {
   it('always requests the data-only fieldset and the given realms', () => {
     let body = searchEntryRequestBody({}, ['https://realm/a/']);
     expect(body).toEqual({
       realms: ['https://realm/a/'],
-      fields: { 'search-entry': ['item'] },
+      fields: { entry: ['item'] },
     });
   });
 
@@ -105,7 +105,7 @@ describe('searchEntryRequestBody — card-rooted query → search-entry wire gra
   });
 });
 
-describe('itemsFromSearchEntryDoc — flatten a data-only search-entry doc to items', () => {
+describe('itemsFromSearchEntryDoc — flatten a data-only entry doc to items', () => {
   it("resolves each entry's item from included, in entry order", () => {
     let doc = {
       data: [

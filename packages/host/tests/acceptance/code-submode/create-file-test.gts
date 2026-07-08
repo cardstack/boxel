@@ -605,18 +605,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         );
         assert.deepEqual(
           json.data.relationships,
-          {
-            pet: {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
+          undefined,
           'relationships data is correct',
         );
         deferred.fulfill();

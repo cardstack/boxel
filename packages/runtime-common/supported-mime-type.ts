@@ -5,6 +5,12 @@
 // the same wire value intentionally (the `application/vnd.api+json` group).
 export const SupportedMimeType = {
   CardJson: 'application/vnd.card+json',
+  // The single-instance card+html GET: one `entry` sourced by URL (the
+  // single-instance counterpart to `_search`), carrying the card's selected
+  // rendering (`html`) plus its `item` serialization. `.file-meta` is the file
+  // counterpart — a file rendering + its `file-meta` serialization.
+  CardHtml: 'application/vnd.card+html',
+  FileMetaHtml: 'application/vnd.card.file-meta+html',
   CardSource: 'application/vnd.card+source',
   FileMeta: 'application/vnd.card.file-meta+json',
   DirectoryListing: 'application/vnd.api+json',

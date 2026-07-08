@@ -156,11 +156,6 @@ module('Acceptance | file def', function (hooks) {
                   id: './env-indexing-operations.md',
                 },
               },
-              'cardInfo.theme': {
-                links: {
-                  self: null,
-                },
-              },
             },
             meta: {
               adoptsFrom: {

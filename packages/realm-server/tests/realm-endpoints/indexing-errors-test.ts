@@ -208,7 +208,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // the .json was treated as instance-only). Upsert the (url, file) row.
       await dbAdapter.execute(
         `INSERT INTO boxel_index
-           (url, file_alias, type, realm_version, realm_url,
+           (url, file_alias, type, generation, realm_url,
             has_error, error_doc, is_deleted)
          VALUES ($1, $2, 'file', 1, $3, TRUE, $4::jsonb, FALSE)
          ON CONFLICT (url, realm_url, type) DO UPDATE
@@ -419,7 +419,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // the cached realm.
       await dbAdapter.execute(
         `INSERT INTO boxel_index
-           (url, file_alias, type, realm_version, realm_url,
+           (url, file_alias, type, generation, realm_url,
             has_error, error_doc, diagnostics, is_deleted)
          VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
          ON CONFLICT (url, realm_url, type) DO UPDATE
@@ -508,7 +508,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // findings at once. Neither should mask the other.
       await dbAdapter.execute(
         `INSERT INTO boxel_index
-           (url, file_alias, type, realm_version, realm_url,
+           (url, file_alias, type, generation, realm_url,
             has_error, error_doc, diagnostics, is_deleted)
          VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
          ON CONFLICT (url, realm_url, type) DO UPDATE

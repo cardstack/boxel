@@ -6,11 +6,7 @@ import { service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  type ResolvedCodeRef,
-  getClass,
-  isCardInstance,
-} from '@cardstack/runtime-common';
+import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -34,6 +30,10 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  getSkillSourceCommands,
+  loadSkillSource,
+} from '@cardstack/host/lib/skill-commands';
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -52,7 +52,6 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';
@@ -362,16 +361,17 @@ export default class MessageBuilder {
       );
     }
 
-    // Find command in skills
+    // Find command in skills. loadSkillSource handles both legacy Skill
+    // cards and markdown skills (commands in boxel.commands frontmatter).
     let skillCommand:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = await this.store.get<Skill>(skill.cardId);
-      if (!skillCard || !isCardInstance(skillCard)) {
+      let source = await loadSkillSource(this.store, skill.cardId);
+      if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of skillCard.commands) {
+      for (let candidateSkillCommand of getSkillSourceCommands(source)) {
         if (commandRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;

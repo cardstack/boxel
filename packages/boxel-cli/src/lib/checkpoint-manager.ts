@@ -1,5 +1,6 @@
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs/promises';
+import { readFileSync } from 'fs';
 import * as path from 'path';
 import { isProtectedFile } from './realm-sync-base.ts';
 
@@ -612,11 +613,30 @@ export class CheckpointManager {
     );
   }
 
+  // Ephemeral checkpoint repos never benefit from git's background
+  // housekeeping. Left enabled, a commit forks a detached
+  // `git maintenance run --auto` that races the next command's ref/object
+  // reads on the same repo, surfacing intermittently as
+  // "fatal: could not parse HEAD" partway through a rapid commit loop. Passing
+  // these per invocation (rather than writing them at init) applies them to
+  // every repo however it is initialized and overrides any inherited
+  // global/system git config.
+  private static readonly gitConfigArgs = [
+    '-c',
+    'gc.auto=0',
+    '-c',
+    'maintenance.auto=false',
+  ];
+
   private git(...args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn('git', args, {
-        cwd: this.gitDir,
-      });
+      const child = spawn(
+        'git',
+        [...CheckpointManager.gitConfigArgs, ...args],
+        {
+          cwd: this.gitDir,
+        },
+      );
 
       let stdout = '';
       let stderr = '';
@@ -632,11 +652,88 @@ export class CheckpointManager {
 
       child.on('close', (code) => {
         if (code !== 0 && !args.includes('status')) {
-          reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+          reject(
+            new Error(
+              `git ${args.join(' ')} failed: ${stderr.trim()}` +
+                this.describeHeadState(),
+            ),
+          );
           return;
         }
         resolve(stdout);
       });
     });
+  }
+
+  // Best-effort snapshot of what HEAD points to and whether that commit object
+  // exists, to make a "could not parse HEAD" recurrence diagnosable from the CI
+  // log alone. Only ever runs after a git command has already failed, so it
+  // must never throw. `object=absent` means the store does not hold the commit
+  // HEAD names — the crux of that failure; `object=present` points at a
+  // ref/index problem instead; `object=unknown` if the existence check itself
+  // could not run.
+  private describeHeadState(): string {
+    try {
+      const gitInternalDir = path.join(this.gitDir, '.git');
+      const head = readFileSync(
+        path.join(gitInternalDir, 'HEAD'),
+        'utf-8',
+      ).trim();
+      let oid = head;
+      if (head.startsWith('ref:')) {
+        const ref = head.slice('ref:'.length).trim();
+        oid = this.resolveRef(gitInternalDir, ref) ?? '(unresolved)';
+      }
+      let object = 'n/a';
+      if (/^[0-9a-f]{40}$/.test(oid)) {
+        object = this.objectExists(oid);
+      }
+      return ` [head-state: HEAD=${JSON.stringify(head)} oid=${oid} object=${object}]`;
+    } catch (err) {
+      return ` [head-state unavailable: ${(err as Error).message}]`;
+    }
+  }
+
+  // `git cat-file -e` is authoritative across both loose and packed storage,
+  // unlike a bare loose-object file check — a commit may live in a pack rather
+  // than as a loose object. Kept synchronous and bounded so the failure path
+  // stays best-effort: a spawn error or timeout reads as "unknown" rather than
+  // throwing.
+  private objectExists(oid: string): 'present' | 'absent' | 'unknown' {
+    try {
+      const res = spawnSync(
+        'git',
+        [...CheckpointManager.gitConfigArgs, 'cat-file', '-e', oid],
+        { cwd: this.gitDir, timeout: 5000 },
+      );
+      if (res.error) {
+        return 'unknown';
+      }
+      return res.status === 0 ? 'present' : 'absent';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  private resolveRef(gitInternalDir: string, ref: string): string | null {
+    try {
+      return readFileSync(path.join(gitInternalDir, ref), 'utf-8').trim();
+    } catch {
+      // Loose ref absent — fall back to packed-refs.
+      try {
+        const packed = readFileSync(
+          path.join(gitInternalDir, 'packed-refs'),
+          'utf-8',
+        );
+        for (const line of packed.split('\n')) {
+          if (line.endsWith(` ${ref}`)) {
+            return line.slice(0, 40);
+          }
+        }
+      } catch {
+        // No packed-refs file; nothing more to try.
+      }
+      return null;
+    }
   }
 }

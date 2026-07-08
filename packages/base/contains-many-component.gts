@@ -138,7 +138,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         {{#if permissions.canWrite}}
           <Button
             class={{cn 'add-new' no-items=this.noItems}}
-            @kind='muted'
+            @kind='secondary'
             @size='tall'
             @rectangular={{true}}
             {{on 'click' this.add}}
@@ -154,9 +154,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     <style scoped>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-med);
-      }
-      .contains-many-editor :deep(.compound-field.edit-format .add-new) {
-        border: 1px solid var(--border, var(--boxel-border-color));
       }
       .list {
         list-style: none;
@@ -210,9 +207,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         box-shadow: var(--boxel-box-shadow-hover);
       }
       .add-new {
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         width: fit-content;
-        letter-spacing: var(--boxel-lsp-xs);
         margin-left: calc(var(--boxel-icon-med) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }

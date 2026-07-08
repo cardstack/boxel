@@ -1,6 +1,7 @@
 import '../src/styles/global.css';
 import '../src/styles/fonts.css';
 import '../src/styles/variables.css';
+import '../src/styles/theme.css';
 
 import EmberRouter from '@ember/routing/router';
 import EmberFreestyleService from 'ember-freestyle/services/ember-freestyle';

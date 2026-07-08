@@ -3,6 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
 import { sanitizeHtml } from '../../helpers/sanitize-html.ts';
+import { themeScopedCss } from '../../helpers/theme-scoped-css.ts';
 
 interface Signature {
   Args: {
@@ -10,6 +11,14 @@ interface Signature {
     displayBoundaries?: boolean;
     isThemed?: boolean;
     tag?: keyof HTMLElementTagNameMap;
+    // Raw theme CSS variable definitions (`:root` + optional `.dark`). Scoped to
+    // this container via `themeScope` so light/dark switches with the ambient
+    // `--boxel-color-scheme` signal — no inline styles, no JS. The scope
+    // attribute is only stamped when theme CSS is present: it also triggers the
+    // theme.css boundary reset that stops ambient/outer-theme token values from
+    // inheriting in, which unthemed cards rely on to follow the chrome scheme.
+    themeCss?: string | null;
+    themeScope?: string;
   };
   Blocks: {
     default: [];
@@ -26,6 +35,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         boxel-card-container--themed=@isThemed
       }}
       data-boxel-card-container
+      data-boxel-theme-scope={{if @themeCss @themeScope}}
       data-test-boxel-card-container
       ...attributes
     >
@@ -36,6 +46,13 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
           {{#each @cssImports as |url|}}
             @import url('{{sanitizeHtml url}}');
           {{/each}}
+        </style>
+        {{! template-lint-enable require-scoped-style  }}
+      {{/if}}
+      {{#if @themeCss}}
+        {{! template-lint-disable require-scoped-style  }}
+        <style>
+          {{themeScopedCss @themeScope @themeCss}}
         </style>
         {{! template-lint-enable require-scoped-style  }}
       {{/if}}
@@ -114,13 +131,25 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--_boxel-scale));
 
       /* border-radius */
-      --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
-      --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
-      --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
-      --boxel-border-radius: var(--boxel-radius); /* base */
-      --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
-      --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
-      --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+      --boxel-border-radius-2xs: calc(
+        var(--boxel-border-radius) * 0.5
+      ); /* 1.5px */
+      --boxel-border-radius-xs: calc(
+        var(--boxel-border-radius) * 0.4
+      ); /* 4px */
+      --boxel-border-radius-sm: calc(
+        var(--boxel-border-radius) * 0.6
+      ); /* 6px */
+      --boxel-border-radius: var(--boxel-radius); /* 10px - base */
+      --boxel-border-radius-lg: calc(
+        var(--boxel-border-radius) * 1.2
+      ); /* 12px */
+      --boxel-border-radius-xl: calc(
+        var(--boxel-border-radius) * 1.5
+      ); /* 15px */
+      --boxel-border-radius-2xl: calc(
+        var(--boxel-border-radius) * 2
+      ); /* 20px */
       --boxel-form-control-border-radius: var(--boxel-border-radius);
 
       /* h1 */
@@ -205,42 +234,40 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       line-height: var(--boxel-body-line-height);
     }
 
+    /* Element reset + typography roles, contained to card content: bare
+       :global(h1) etc. would restyle the entire document once a single card
+       renders. Still :global (with an ancestor guard) for the cached-HTML
+       safety described above. */
     @layer reset {
-      :global(h1),
-      :global(h2),
-      :global(h3),
-      :global(h4),
-      :global(h5),
-      :global(h6),
-      :global(p) {
+      :global(.boxel-card-container :is(h1, h2, h3, h4, h5, h6, p)) {
         margin-inline-start: 0;
         margin-inline-end: 0;
         margin-block-start: 0;
         margin-block-end: 0;
       }
 
-      :global(h1) {
+      :global(.boxel-card-container h1) {
         font-family: var(--boxel-heading-font-family);
         font-size: var(--boxel-heading-font-size);
         font-weight: var(--boxel-heading-font-weight);
         line-height: var(--boxel-heading-line-height);
       }
-      :global(h2) {
+      :global(.boxel-card-container h2) {
         font-family: var(--boxel-section-heading-font-family);
         font-size: var(--boxel-section-heading-font-size);
         font-weight: var(--boxel-section-heading-font-weight);
         line-height: var(--boxel-section-heading-line-height);
       }
-      :global(h3) {
+      :global(.boxel-card-container h3) {
         font-family: var(--boxel-subheading-font-family);
         font-size: var(--boxel-subheading-font-size);
         font-weight: var(--boxel-subheading-font-weight);
         line-height: var(--boxel-subheading-line-height);
       }
-      :global(h4, h5, h6) {
+      :global(.boxel-card-container :is(h4, h5, h6)) {
         font-size: inherit;
       }
-      :global(small) {
+      :global(.boxel-card-container small) {
         font-size: var(--boxel-caption-font-size);
         line-height: var(--boxel-caption-line-height);
       }

@@ -775,19 +775,15 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           hassan.doc.data.relationships,
           {
+            // Only `pet` appears: it is the relationship this card actually
+            // has (a set target). The base-card `cardInfo.theme` /
+            // `cardInfo.cardThumbnail` links are never authored here, so they
+            // drop from the pristine doc — this filtering is data-driven, not
+            // searchable-driven (they still appear in the search doc, which
+            // enumerates every declared field).
             pet: {
               links: {
                 self: './ringo',
-              },
-            },
-            'cardInfo.cardThumbnail': {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
               },
             },
           },
@@ -1059,6 +1055,15 @@ module(basename(import.meta.filename), function () {
         'number',
         'file entry includes contentSize',
       );
+      assert.true(
+        entry?.searchDoc?._isCardInstance,
+        'file entry for a card instance json is marked _isCardInstance',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?._title,
+        'mango.json',
+        'file entry _title is the file name',
+      );
     });
 
     test('keeps instance entries when indexing card json files as file entries', async function (assert) {
@@ -1105,6 +1110,15 @@ module(basename(import.meta.filename), function () {
         typeof searchDoc.contentSize,
         'number',
         'search_doc includes contentSize',
+      );
+      assert.strictEqual(
+        searchDoc._title,
+        'random-file.txt',
+        'search_doc _title is the file name',
+      );
+      assert.false(
+        '_isCardInstance' in searchDoc,
+        'non-card file search_doc does not carry _isCardInstance',
       );
     });
 
@@ -1509,7 +1523,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `realm_version` —
+        // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
         // same URL. Any column NOT in the tombstone upsert's SET list keeps
         // its previous value. Before this guard, `has_error` and `error_doc`

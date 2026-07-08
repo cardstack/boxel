@@ -9,6 +9,7 @@ import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
+import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
@@ -27,6 +28,7 @@ import {
   Group,
   IconGlobe,
   IconTrash,
+  IconX,
   Lock,
   Star,
   StarFilled,
@@ -75,6 +77,23 @@ export default class Workspace extends Component<Signature> {
         {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
+        {{#if this.reindexError}}
+          <div class='reindex-error' role='alert' data-test-reindex-error>
+            <span
+              class='reindex-error__message'
+              title={{this.reindexError}}
+            >{{this.reindexError}}</span>
+            <button
+              type='button'
+              class='reindex-error__dismiss'
+              aria-label='Dismiss error'
+              data-test-reindex-error-dismiss
+              {{on 'click' this.clearReindexError}}
+            >
+              <IconX width='11' height='11' />
+            </button>
+          </div>
+        {{/if}}
         <ItemContainer
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
@@ -91,6 +110,7 @@ export default class Workspace extends Component<Signature> {
               <RealmIcon
                 class='workspace-realm-icon'
                 @realmInfo={{this.realmInfo}}
+                @canAnimate={{true}}
               />
             </div>
           </div>
@@ -486,6 +506,51 @@ export default class Workspace extends Component<Signature> {
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
         max-width: var(--boxel-xxs-container);
+      }
+      .reindex-error {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: var(--boxel-xxs-container);
+        box-sizing: border-box;
+        z-index: 21;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-xs);
+      }
+      .reindex-error__message {
+        flex: 1;
+        overflow-wrap: anywhere;
+        /* Cap a long server error at a few lines so the banner never grows to
+        cover the whole tile; the full text stays available via the title. */
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+      }
+      .reindex-error__dismiss {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 2px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        --icon-color: currentColor;
+        cursor: pointer;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .reindex-error__dismiss:hover {
+        background: rgba(255 255 255 / 25%);
       }
       .info > span {
         text-overflow: ellipsis;
@@ -1055,10 +1120,16 @@ export default class Workspace extends Component<Signature> {
   @tracked private showArchiveModal = false;
   @tracked private archiveError: string | undefined;
   @tracked private isHostDropdownOpen = false;
+  @tracked private reindexError: string | undefined;
 
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask.perform();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.clearReindexError();
   }
 
   private loadRealmTask = task(async () => {
@@ -1088,7 +1159,23 @@ export default class Workspace extends Component<Signature> {
         action: this.openRealmConfig,
       }),
     ];
-    // Archive is owner-only and appears only on tiles the user owns.
+    // Re-index and Archive are owner-only and appear only on tiles the user
+    // owns.
+    if (this.canReindexWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Re-index',
+          icon: RefreshIcon,
+          action: this.reindexWorkspaceTask.perform,
+          // Gate on the live indexing flag, not reindexWorkspaceTask.isRunning:
+          // the task resolves the instant the 204 lands (sub-second), while the
+          // reindex itself runs much longer. isIndexing stays true for the whole
+          // pass. Repeat clicks are server-safe regardless (the reindex queue
+          // coalesces them), so this guard is purely a UX nicety.
+          disabled: this.isReindexing,
+        }),
+      );
+    }
     if (this.canArchiveWorkspace) {
       items.push(
         new MenuItem({
@@ -1206,6 +1293,14 @@ export default class Workspace extends Component<Signature> {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
+  private get canReindexWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get isReindexing() {
+    return this.realmInfo.isIndexing;
+  }
+
   private get deleteSummaryText() {
     if (!this.deleteSummary) {
       return null;
@@ -1305,6 +1400,21 @@ export default class Workspace extends Component<Signature> {
       this.archiveError = error.message;
     }
   });
+
+  private reindexWorkspaceTask = dropTask(async () => {
+    this.clearReindexError();
+    try {
+      await this.realm.fullReindex(this.args.realmIdentifier);
+    } catch (error: any) {
+      // The error stays put until the user dismisses it or retries the
+      // reindex, so a failed pass never disappears before it's noticed.
+      this.reindexError = String(error?.message ?? error);
+    }
+  });
+
+  @action private clearReindexError() {
+    this.reindexError = undefined;
+  }
 
   private loadDeleteSummaryTask = dropTask(async () => {
     try {

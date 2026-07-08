@@ -113,7 +113,7 @@ export default class SearchResultTile extends Component<Signature> {
     return this.args.newCard != null;
   }
 
-  // The type name shown in the Adorn type-label tab. Search-entry rows carry it
+  // The type name shown in the Adorn type-label tab. Entry rows carry it
   // on their deduped `icon` resource (no live instance needed); the URL-paste
   // live card supplies it in-memory. The "Create New" row has no label.
   private get adornTypeName(): string | undefined {
@@ -127,7 +127,7 @@ export default class SearchResultTile extends Component<Signature> {
     return undefined;
   }
 
-  // Type-name precedence mirrored for the icon: search-entry rows carry icon
+  // Type-name precedence mirrored for the icon: entry rows carry icon
   // HTML on the `icon` resource; the live card supplies a component in-memory.
   private get adornTypeIcon(): unknown {
     if (!this.args.adorn || this.isNewCard) return undefined;

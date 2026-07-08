@@ -783,6 +783,7 @@ module(basename(import.meta.filename), function () {
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
         delete json.data.meta.resourceCreatedAt;
+        delete json.data.meta.generation;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmHref,
@@ -814,18 +815,6 @@ module(basename(import.meta.filename), function () {
             },
             links: {
               self: newCardId,
-            },
-            relationships: {
-              'cardInfo.cardThumbnail': {
-                links: {
-                  self: null,
-                },
-              },
-              'cardInfo.theme': {
-                links: {
-                  self: null,
-                },
-              },
             },
           },
         });

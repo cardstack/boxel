@@ -2622,8 +2622,14 @@ module(basename(import.meta.filename), function () {
         let alternate = url.endsWith('.json')
           ? url.replace(/\.json$/, '')
           : `${url}.json`;
+        // The isolated-HTML injection dual-reads from prerendered_html (falling
+        // back to boxel_index), so override both channels for the row.
         await dbAdapter.execute(
           `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
+          { bind: [html, url, alternate] },
+        );
+        await dbAdapter.execute(
+          `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 OR url = $3`,
           { bind: [html, url, alternate] },
         );
       }
@@ -7419,6 +7425,216 @@ module(basename(import.meta.filename), function () {
       assert.notOk(
         result.response.fileRender?.error,
         `fileRender completed without error: ${JSON.stringify(result.response.fileRender?.error)}`,
+      );
+    });
+
+    // The bifurcated visits split the fused visit's output along the
+    // search-doc/HTML seam. The indexing job runs the index visit then the
+    // prerender-html visit and merges the halves into the same writes a
+    // fused visit produces — so the two halves must partition the fused
+    // output exactly: no field produced by both, none produced by neither,
+    // and every field byte-identical to its fused counterpart.
+    test('index and prerender-html visits partition the fused output losslessly', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      const fileDefCodeRef = {
+        module: baseRRI('json-file-def'),
+        name: 'JsonFileDef',
+      };
+      let visitArgs = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+      };
+      const htmlFields = [
+        'isolatedHTML',
+        'headHTML',
+        'atomHTML',
+        'embeddedHTML',
+        'fittedHTML',
+        'markdown',
+      ] as const;
+
+      let fused = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+        })
+      ).response;
+      let index = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          visitType: 'index',
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+        })
+      ).response;
+      assert.ok(
+        index.fileExtract?.resource,
+        'index visit extract produced a resource to chain into the prerender-html visit',
+      );
+      let html = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          visitType: 'prerender-html',
+          renderOptions: {
+            cardRender: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+          fileData: {
+            resource: index.fileExtract!.resource!,
+            fileDefCodeRef,
+          },
+          types: index.fileExtract!.types ?? undefined,
+          cardTypes: index.card!.types ?? undefined,
+        })
+      ).response;
+
+      // The index visit produces only the search-doc side.
+      assert.notOk(
+        index.card?.error,
+        `index visit card completed without error: ${JSON.stringify(index.card?.error?.error ?? null)}`,
+      );
+      assert.ok(index.card?.serialized, 'index visit serializes the card');
+      assert.ok(index.card?.searchDoc, 'index visit builds the search doc');
+      assert.ok(index.card?.types?.length, 'index visit reports types');
+      assert.ok(index.card?.deps?.length, 'index visit reports deps');
+      assert.ok(index.card?.iconHTML, 'index visit renders the card icon');
+      assert.ok(
+        index.fileRender?.iconHTML,
+        'index visit renders the file icon',
+      );
+      for (let field of htmlFields) {
+        assert.strictEqual(
+          index.card?.[field],
+          null,
+          `index visit leaves card ${field} null`,
+        );
+        assert.strictEqual(
+          index.fileRender?.[field],
+          null,
+          `index visit leaves file ${field} null`,
+        );
+      }
+
+      // The prerender-html visit produces only the HTML side.
+      assert.notOk(
+        html.card?.error,
+        `prerender-html visit card completed without error: ${JSON.stringify(html.card?.error?.error ?? null)}`,
+      );
+      assert.notOk(html.fileExtract, 'prerender-html visit skips the extract');
+      assert.strictEqual(
+        html.card?.serialized,
+        null,
+        'prerender-html visit does not serialize the card',
+      );
+      assert.strictEqual(
+        html.card?.searchDoc,
+        null,
+        'prerender-html visit does not build a search doc',
+      );
+      assert.strictEqual(
+        html.card?.types,
+        null,
+        'prerender-html visit does not report types',
+      );
+      assert.strictEqual(
+        html.card?.iconHTML,
+        null,
+        'prerender-html visit does not render the card icon',
+      );
+      assert.strictEqual(
+        html.fileRender?.iconHTML,
+        null,
+        'prerender-html visit does not render the file icon',
+      );
+      assert.ok(
+        html.card?.deps?.length,
+        'prerender-html visit reports the deps its renders pulled in',
+      );
+
+      // Merging the two halves reproduces the fused output. The file's
+      // isolated HTML is captured as raw innerHTML (card HTML goes through
+      // the ember-id scrub, file isolated does not), so auto-generated
+      // `id="emberNN"` values vary per render and are normalized away
+      // before comparing.
+      let scrubEmberIds = (value: unknown) =>
+        typeof value === 'string'
+          ? value.replace(/id="ember\d+"/g, 'id="ember"')
+          : value;
+      for (let field of htmlFields) {
+        assert.deepEqual(
+          html.card?.[field],
+          fused.card?.[field],
+          `card ${field} matches the fused visit`,
+        );
+        assert.deepEqual(
+          scrubEmberIds(html.fileRender?.[field]),
+          scrubEmberIds(fused.fileRender?.[field]),
+          `file ${field} matches the fused visit`,
+        );
+      }
+      assert.deepEqual(
+        index.card?.iconHTML,
+        fused.card?.iconHTML,
+        'card icon matches the fused visit',
+      );
+      assert.deepEqual(
+        index.fileRender?.iconHTML,
+        fused.fileRender?.iconHTML,
+        'file icon matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.serialized,
+        fused.card?.serialized,
+        'serialized doc matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.searchDoc,
+        fused.card?.searchDoc,
+        'search doc matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.displayNames,
+        fused.card?.displayNames,
+        'display names match the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.types,
+        fused.card?.types,
+        'types match the fused visit',
+      );
+      {
+        let { deps: fusedDeps, nonce: _n1, ...fusedRest } = fused.fileExtract!;
+        let { deps: indexDeps, nonce: _n2, ...indexRest } = index.fileExtract!;
+        assert.deepEqual(
+          indexRest,
+          fusedRest,
+          'file extract matches the fused visit',
+        );
+        assert.deepEqual(
+          [...new Set(indexDeps)].sort(),
+          [...new Set(fusedDeps)].sort(),
+          'file extract deps match the fused visit as a set',
+        );
+      }
+      assert.deepEqual(
+        [
+          ...new Set([...(index.card?.deps ?? []), ...(html.card?.deps ?? [])]),
+        ].sort(),
+        [...new Set(fused.card?.deps ?? [])].sort(),
+        'union of the two visits card deps matches the fused deps as a set',
       );
     });
 

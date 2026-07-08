@@ -288,6 +288,49 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
   });
 
+  // -- reference (id/url) canonical-RRI tolerance -----------------------------
+
+  test('in filter matches a URL-form instance against a prefix-form value', function (assert) {
+    let { mango, ringo } = cards;
+    // The cards' ids are URL form (`http://test-realm/test/mango`). Register a
+    // realm-prefix mapping so the same realm also has a canonical RRI spelling.
+    api.virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+
+    // A prefix-RRI `in` value must match the URL-form instance id — the
+    // client-side counterpart of the index query engine's `in` tolerance.
+    assert.strictEqual(
+      match(mango, { on: personRef, in: { id: ['@test/cards/mango'] } }),
+      'match',
+      'prefix-form `in` value matches the URL-form id',
+    );
+    // A different card's prefix-form id must not match.
+    assert.strictEqual(
+      match(ringo, { on: personRef, in: { id: ['@test/cards/mango'] } }),
+      'no-match',
+      'a non-matching prefix-form id is still rejected',
+    );
+    // The URL form continues to match (no regression).
+    assert.strictEqual(
+      match(mango, { on: personRef, in: { id: [`${testRealmURL}mango`] } }),
+      'match',
+      'URL-form `in` value still matches the URL-form id',
+    );
+    // `eq` on a reference field keeps EXACT semantics, mirroring the server's
+    // `fieldEqFilter` (tolerance is applied to `in` only). A prefix-form `eq`
+    // value therefore does NOT match a URL-form id — matching a tolerant `eq`
+    // here would diverge from the authoritative search response.
+    assert.strictEqual(
+      match(mango, { on: personRef, eq: { id: '@test/cards/mango' } }),
+      'no-match',
+      'prefix-form `eq` value does not match (eq stays exact)',
+    );
+    assert.strictEqual(
+      match(mango, { on: personRef, eq: { id: `${testRealmURL}mango` } }),
+      'match',
+      'exact URL-form `eq` value matches',
+    );
+  });
+
   // -- contains ---------------------------------------------------------------
 
   test('contains is a case-insensitive substring match', function (assert) {

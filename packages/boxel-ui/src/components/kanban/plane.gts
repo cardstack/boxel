@@ -117,28 +117,16 @@ export class KanbanPlane extends Component<{
       .kanban-plane {
         --_kanban-bg: var(
           --boxel-kanban-bg,
-          var(--background, var(--boxel-100))
+          color-mix(in oklch, var(--foreground) 1%, transparent)
         );
-        --_kanban-fg: var(
-          --boxel-kanban-fg,
-          var(--foreground, var(--boxel-700))
-        );
-        --_kanban-card-bg: var(
-          --boxel-kanban-card-bg,
-          var(--card, var(--boxel-light))
-        );
-        --_kanban-card-fg: var(
-          --boxel-kanban-card-fg,
-          var(--card-foreground, var(--boxel-dark))
-        );
+        --_kanban-fg: var(--boxel-kanban-fg, var(--foreground));
+        --_kanban-card-bg: var(--boxel-kanban-card-bg, var(--card));
+        --_kanban-card-fg: var(--boxel-kanban-card-fg, var(--card-foreground));
         --_kanban-col-bg: var(
           --boxel-kanban-col-bg,
-          var(--sidebar, var(--boxel-200))
+          color-mix(in oklch, var(--foreground) 7%, transparent)
         );
-        --_kanban-col-fg: var(
-          --boxel-kanban-col-fg,
-          var(--sidebar-foreground, var(--boxel-dark))
-        );
+        --_kanban-col-fg: var(--boxel-kanban-col-fg, var(--foreground));
         --_kanban-ring: var(
           --boxel-kanban-ring,
           var(--ring, var(--boxel-highlight))

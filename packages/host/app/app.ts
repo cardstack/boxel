@@ -10,6 +10,7 @@ import config from './config/environment';
 import '@cardstack/boxel-ui/styles/global.css';
 import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
+import '@cardstack/boxel-ui/styles/theme.css';
 import 'katex/dist/katex.min.css';
 
 import compatModules from '@embroider/virtual/compat-modules';

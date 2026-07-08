@@ -6,6 +6,7 @@ import {
   primitive,
   relativeTo,
   routesForField,
+  type SerializedError,
 } from '@cardstack/runtime-common';
 import {
   getDataBucket,
@@ -15,6 +16,8 @@ import {
   isNonPresentLink,
   isNotLoadedValue,
   peekAtField,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
 } from './field-support';
 import {
   createFromSerialized,
@@ -81,36 +84,73 @@ function seedSearchableRoutes(cardClass: typeof BaseDef): string[] {
   return routes;
 }
 
+// Outcome of loading a searchable link target: the deserialized card, or the
+// terminal sentinel a failed load resolves to. A broken searchable link is
+// captured as `{ id }` in the doc AND recorded so the caller can plant the
+// sentinel on the owner's field — the diagnostic `getBrokenLinks` reads.
+type SearchableTargetResult =
+  | { status: 'loaded'; card: CardDef }
+  | { status: 'broken'; sentinel: LinkErrorValue | LinkNotFoundValue };
+
+// Build the terminal sentinel a broken link resolves to, mirroring the shape
+// `lazilyLoadLink` plants: HTTP 404 → `link-not-found`, anything else →
+// `link-error`. `reference` is the resolved (absolute) target url.
+function brokenLinkSentinel(
+  reference: string,
+  err: unknown,
+): LinkErrorValue | LinkNotFoundValue {
+  let status = Number((err as { status?: unknown })?.status);
+  let message =
+    (err as { message?: unknown })?.message != null
+      ? String((err as { message?: unknown }).message)
+      : `unable to load ${reference}`;
+  let isMissing =
+    status === 404 || /not found/i.test(message) || /missing/i.test(message);
+  let errorDoc: SerializedError = {
+    status: Number.isFinite(status) ? status : isMissing ? 404 : 500,
+    title: isMissing ? 'Link Not Found' : 'Link Error',
+    message,
+    additionalErrors: null,
+  };
+  return isMissing
+    ? { type: 'link-not-found', reference, errorDoc }
+    : { type: 'link-error', reference, errorDoc };
+}
+
 // Targeted load of a link target by reference: reuse a fully-deserialized
 // resident instance when present, else load + deserialize the document (the
 // same load path the lazy link getter uses). The store load is not itself
 // dependency-tracked; callers record each expanded target in the `dependencies`
-// set instead. Returns undefined if the target errors.
+// set instead. A missing / broken target resolves to a terminal sentinel; the
+// store may surface that either as a returned `CardError` or a thrown rejection
+// (e.g. a 404 / invalid-URL on the load path), so both are captured.
 async function loadSearchableTarget(
   store: CardStore,
   reference: string,
-): Promise<CardDef | undefined> {
+): Promise<SearchableTargetResult> {
   let resident = store.getCard(reference);
   if (resident && (resident as any)[isSavedInstance] === true) {
-    return resident;
+    return { status: 'loaded', card: resident };
   }
-  // A missing / broken target (or one that can't be loaded) degrades to
-  // `{ id }` upstream. The
-  // store may surface that either as a returned `CardError` or a thrown
-  // rejection (e.g. a 404 / invalid-URL on the load path), so guard both.
   try {
     let cardDoc = await store.loadCardDocument(reference);
     if (isCardError(cardDoc)) {
-      return undefined;
+      return {
+        status: 'broken',
+        sentinel: brokenLinkSentinel(reference, cardDoc),
+      };
     }
-    return (await createFromSerialized(
-      cardDoc.data,
-      cardDoc,
-      cardDoc.data.id!,
-      { store },
-    )) as CardDef;
-  } catch {
-    return undefined;
+    return {
+      status: 'loaded',
+      card: (await createFromSerialized(
+        cardDoc.data,
+        cardDoc,
+        cardDoc.data.id!,
+        { store },
+      )) as CardDef,
+    };
+  } catch (err) {
+    return { status: 'broken', sentinel: brokenLinkSentinel(reference, err) };
   }
 }
 
@@ -227,6 +267,7 @@ async function searchableQueryableValue(
         entries.push([
           fieldName,
           await searchableLink(
+            value,
             field!,
             rawValue,
             matched,
@@ -264,6 +305,7 @@ async function searchableQueryableValue(
 // broken / cannot be loaded); the expanded declared-type target when a route names
 // it. Mirrors `LinksTo.queryableValue` + the `{ id }` sentinel handling.
 async function searchableLink(
+  owner: any,
   field: Field<BaseDefConstructor>,
   rawValue: any,
   matched: boolean,
@@ -277,8 +319,17 @@ async function searchableLink(
     return null;
   }
   // A broken / not-found link can't be expanded — keep its reference as `{ id }`.
+  // A searchable target stays a dependency even when broken: recording it
+  // reindexes the card (clearing the `{ id }` / brokenLinks diagnostic) once the
+  // target becomes reachable, mirroring the successful-expansion dep below. This
+  // branch also covers a prior settle pass having planted the sentinel, so the
+  // authoritative generation reaches it here instead of the load branch below.
   if (isLinkError(rawValue) || isLinkNotFound(rawValue)) {
-    return { id: makeAbsoluteURL(rawValue.reference) };
+    let reference = makeAbsoluteURL(rawValue.reference);
+    if (matched) {
+      dependencies.add(reference);
+    }
+    return { id: reference };
   }
   if (!matched) {
     return {
@@ -296,11 +347,20 @@ async function searchableLink(
     // getter. The store can't `toURL` a relative string, which would otherwise
     // degrade an expandable searchable link to `{ id }`.
     let resolvedRef = makeAbsoluteURL(rawValue.reference);
-    let loaded = await loadSearchableTarget(store, resolvedRef);
-    if (loaded == null) {
+    let result = await loadSearchableTarget(store, resolvedRef);
+    if (result.status === 'broken') {
+      // Plant the terminal sentinel on the owner's field so `getBrokenLinks`
+      // (which reads terminal sentinels from the data bucket) records this
+      // broken searchable link. This mirrors the sentinel `lazilyLoadLink`
+      // plants during a template render; search-doc generation plants its own
+      // because it drives the link load directly rather than through a template.
+      getDataBucket(owner).set(field.name, result.sentinel);
+      // A broken searchable target is still a dependency — see the sentinel
+      // branch above.
+      dependencies.add(resolvedRef);
       return { id: resolvedRef };
     }
-    target = loaded;
+    target = result.card;
   }
   // The expanded target's data is now in the doc, so it is a dependency of the
   // indexed card.
@@ -318,7 +378,9 @@ async function searchableLink(
 }
 
 // A `linksToMany` value: per-slot `{ id }` / expansion, with the absolute-URL
-// id normalization `LinksToMany.queryableValue` applies.
+// id normalization `LinksToMany.queryableValue` applies. A broken searchable
+// slot is planted back into the backing array (which lives in the owner's data
+// bucket) so `getBrokenLinks` records it — see `searchableLink`.
 async function searchableLinksToMany(
   field: Field<BaseDefConstructor>,
   rawValue: any,
@@ -335,12 +397,18 @@ async function searchableLinksToMany(
     return null;
   }
   let out: any[] = [];
-  for (let item of rawArrayValues(rawValue)) {
+  let backing = rawArrayValues(rawValue);
+  for (let [index, item] of backing.entries()) {
     if (item == null) {
       continue;
     }
     if (isLinkError(item) || isLinkNotFound(item)) {
-      out.push({ id: makeAbsoluteURL(item.reference) });
+      let reference = makeAbsoluteURL(item.reference);
+      // A broken searchable element stays a dependency — see `searchableLink`.
+      if (matched) {
+        dependencies.add(reference);
+      }
+      out.push({ id: reference });
       continue;
     }
     if (!matched) {
@@ -355,12 +423,19 @@ async function searchableLinksToMany(
     if (isNotLoadedValue(item)) {
       // Resolve a relative reference before the load — see `searchableLink`.
       let resolvedRef = makeAbsoluteURL(item.reference);
-      let loaded = await loadSearchableTarget(store, resolvedRef);
-      if (loaded == null) {
+      let result = await loadSearchableTarget(store, resolvedRef);
+      if (result.status === 'broken') {
+        // Plant the sentinel into the failed slot so `getBrokenLinks` records
+        // this broken searchable element (see `searchableLink`). Assign through
+        // the proxy so the mutation reaches the data bucket the diagnostic
+        // reads.
+        rawValue[index] = result.sentinel;
+        // A broken searchable element stays a dependency — see `searchableLink`.
+        dependencies.add(resolvedRef);
         out.push({ id: resolvedRef });
         continue;
       }
-      target = loaded;
+      target = result.card;
     }
     // The expanded target's data is now in the doc, so it is a dependency of
     // the indexed card.

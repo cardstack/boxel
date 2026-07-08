@@ -10,7 +10,14 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { archiveRealm, baseCardRef, rri } from '@cardstack/runtime-common';
+import {
+  archiveRealm,
+  baseCardRef,
+  rri,
+  query,
+  param,
+  type Expression,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
@@ -174,7 +181,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         .send(body);
     }
 
-    test('QUERY /_federated-search federates search-entry results across realms', async function (assert) {
+    test('QUERY /_federated-search federates entry results across realms', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
         realms: [testRealm.url, secondaryRealm.url],
@@ -329,7 +336,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       let differentFields = await post({
         ...baseBody,
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       assert.notStrictEqual(
         differentFields.headers['etag'],
@@ -352,7 +359,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       // an inert htmlQuery (fieldset without html) does not key the cache:
       // equivalent bodies share one entry + ETag
-      let itemFields = { 'search-entry': ['item'] };
+      let itemFields = { entry: ['item'] };
       let inertA = await post({ ...baseBody, fields: itemFields });
       let inertB = await post({
         ...baseBody,
@@ -373,6 +380,84 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         uncached.headers['etag'],
         undefined,
         'non-indexer traffic carries no ETag',
+      );
+    });
+
+    test('entries and html renderings carry meta.generation on the wire', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+      });
+      assert.strictEqual(response.status, 200);
+      let json = response.body;
+      for (let entry of json.data) {
+        let generation = entry.meta?.generation;
+        assert.strictEqual(
+          typeof generation,
+          'number',
+          `${entry.id} carries meta.generation`,
+        );
+        assert.ok(generation > 0, `${entry.id} generation is positive`);
+      }
+      let htmlResources = (json.included ?? []).filter(
+        (resource: { type: string }) => resource.type === 'html',
+      );
+      assert.ok(htmlResources.length > 0, 'the default fieldset returns html');
+      for (let html of htmlResources) {
+        let generation = html.meta?.generation;
+        assert.strictEqual(
+          typeof generation,
+          'number',
+          `${html.id} carries meta.generation`,
+        );
+        assert.ok(generation > 0, `${html.id} generation is positive`);
+      }
+    });
+
+    test('the _search ETag advances when either the index or the prerendered-HTML channel does', async function (assert) {
+      let cacheable = (body: Record<string, unknown>) =>
+        postSearch(body)
+          .set('x-boxel-job-id', '77.1')
+          .set('x-boxel-consuming-realm', testRealm.url);
+      let body = { filter: personFilter(), realms: [testRealm.url] };
+      let realmURL = new URL(testRealm.url).href;
+
+      let base = (await cacheable(body)).headers['etag'];
+      assert.true(Boolean(base), 'cacheable request carries an ETag');
+
+      // Publish HTML at a higher generation than any existing row: the realm's
+      // prerendered-HTML channel advances, so a cached 304 must not pin the
+      // older result.
+      await query(dbAdapter, [
+        `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation) VALUES (`,
+        param(`${testRealm.url}__gen_probe__`),
+        `,`,
+        param(`${testRealm.url}__gen_probe__`),
+        `,`,
+        param(realmURL),
+        `,`,
+        param('instance'),
+        `,`,
+        param(999999),
+        `)`,
+      ] as Expression);
+      let afterHtml = (await cacheable(body)).headers['etag'];
+      assert.notStrictEqual(
+        afterHtml,
+        base,
+        'a newer prerendered-HTML generation → a new ETag',
+      );
+
+      // Advance the index channel: the realm's authoritative current generation.
+      await query(dbAdapter, [
+        `UPDATE realm_generations SET current_generation = 999999 WHERE realm_url =`,
+        param(realmURL),
+      ] as Expression);
+      let afterIndex = (await cacheable(body)).headers['etag'];
+      assert.notStrictEqual(
+        afterIndex,
+        afterHtml,
+        'a newer index generation → a new ETag',
       );
     });
   });

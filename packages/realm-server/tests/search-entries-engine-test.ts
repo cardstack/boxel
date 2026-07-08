@@ -11,8 +11,8 @@ import {
   type HtmlResource,
   type IconResource,
   type Realm,
-  type SearchEntryCollectionDocument,
-  type SearchEntryResource,
+  type EntryCollectionDocument,
+  type EntryResource,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -21,7 +21,7 @@ import {
 } from './helpers/index.ts';
 
 function htmlIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): HtmlResource | undefined {
   return doc.included?.find(
@@ -37,7 +37,7 @@ function normalizedHtml(resource: HtmlResource): string {
 }
 
 function itemIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): CardResource | FileMetaResource | undefined {
   return doc.included?.find(
@@ -47,30 +47,30 @@ function itemIn(
   );
 }
 
-function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
+function cssIn(doc: EntryCollectionDocument): CssResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is CssResource => resource.type === 'css',
   );
 }
 
-function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+function iconsIn(doc: EntryCollectionDocument): IconResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is IconResource => resource.type === 'icon',
   );
 }
 
-function iconIdOf(entry: SearchEntryResource): string | undefined {
+function iconIdOf(entry: EntryResource): string | undefined {
   return entry.relationships.icon?.data.id;
 }
 
 function entryFor(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
-): SearchEntryResource | undefined {
+): EntryResource | undefined {
   return doc.data.find((entry) => entry.id === id);
 }
 
-function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
+function htmlIdsOf(entry: EntryResource): string[] | undefined {
   return entry.relationships.html?.data.map((member) => member.id);
 }
 
@@ -205,6 +205,36 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(html.attributes.cardType, 'Person');
     });
 
+    test('entries and html renderings carry meta.generation from their own channels', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      let entry = entryFor(doc, johnId)!;
+      let entryGeneration = entry.meta?.generation;
+      assert.strictEqual(
+        typeof entryGeneration,
+        'number',
+        'entry carries its index-data generation',
+      );
+      assert.ok(entryGeneration! > 0, `entry generation is positive`);
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      let htmlGeneration = html.meta?.generation;
+      assert.strictEqual(
+        typeof htmlGeneration,
+        'number',
+        'html rendering carries its own generation',
+      );
+      assert.ok(htmlGeneration! > 0, 'html generation is positive');
+      // The index visit and the prerender-html visit still run fused, so a
+      // freshly-indexed row's two channels sit at the same generation — but
+      // they are threaded from separate columns (boxel_index.generation vs.
+      // prerendered_html.generation), ready to diverge once the split lands.
+      assert.strictEqual(
+        htmlGeneration,
+        entryGeneration,
+        'fused indexing leaves both channels at the same generation',
+      );
+    });
+
     test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
       // The realm has no registered prefix by default; register one so a
       // canonical-RRI value resolves, and remove it afterward so the cached
@@ -321,7 +351,7 @@ module(basename(import.meta.filename), function () {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
           filterEq: { htmlQuery: { eq: { format: 'head' } } },
-          fields: { 'search-entry': ['html'] },
+          fields: { entry: ['html'] },
         }),
       );
       assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'head' } });
@@ -344,7 +374,7 @@ module(basename(import.meta.filename), function () {
         parseSearchEntryQueryFromPayload({
           cardUrls: [`${johnId}.json`],
           filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
-          fields: { 'search-entry': ['html'] },
+          fields: { entry: ['html'] },
         }),
       );
       assert.strictEqual(
@@ -411,13 +441,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('fields[search-entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
+    test('fields[entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
           // an htmlQuery alongside an item-only fieldset is inert, not an
           // error
           filterEq: { htmlQuery: { eq: { format: 'embedded' } } },
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
         }),
       );
       let entry = entryFor(doc, johnId)!;
@@ -449,18 +479,18 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+    test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['item.firstName'] } }),
+        personQuery({ fields: { entry: ['item.firstName'] } }),
       );
       let item = itemIn(doc, johnId)!;
       assert.deepEqual(item.attributes, { firstName: 'John' });
       assert.deepEqual(item.meta.sparseFields, ['firstName']);
     });
 
-    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+    test('fields[entry]=html,item: both branches on every entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html', 'item'] } }),
+        personQuery({ fields: { entry: ['html', 'item'] } }),
       );
       let entry = entryFor(doc, johnId)!;
       let htmlId = `${johnId}#fitted#${personKey}`;
@@ -487,8 +517,14 @@ module(basename(import.meta.filename), function () {
     });
 
     test('mixed index: a row with no matching rendering falls back per the fieldset', async function (assert) {
+      // Clear the rendering from both channels: the engine dual-reads HTML from
+      // prerendered_html, falling back to boxel_index, so a rendering is absent
+      // only when neither carries it.
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
       // default mode: the fallback row carries item and omits the html
       // relationship entirely
@@ -524,7 +560,7 @@ module(basename(import.meta.filename), function () {
 
       // a pinned html branch keeps membership visible with an empty array
       let pinned = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html'] } }),
+        personQuery({ fields: { entry: ['html'] } }),
       );
       let pinnedJane = entryFor(pinned, janeId)!;
       assert.deepEqual(
@@ -542,6 +578,11 @@ module(basename(import.meta.filename), function () {
       // html — at the format the htmlQuery names and the row's own type.
       await dbAdapter.execute(
         `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      // The renderings the engine reads live on prerendered_html; clear them
+      // there too so nothing renderable remains for the error row.
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
       );
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
@@ -567,7 +608,7 @@ module(basename(import.meta.filename), function () {
           'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
           eq: { 'item.url': fileUrl },
         },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(query);
       let entry = entryFor(doc, fileUrl)!;

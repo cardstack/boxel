@@ -95,6 +95,7 @@ export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
   resetCatalogRealmURL,
+  setRealmAuthFailure,
   setupAuthEndpoints,
   setCatalogRealmURL,
 } from './realm-server-mock';
@@ -123,6 +124,7 @@ export {
   catalogRealmURL,
   skillsRealmURL,
   skillCardURL,
+  skillFileURL,
   devSkillId,
   envSkillId,
 } from '@cardstack/host/lib/utils';
@@ -1026,13 +1028,6 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         toolsSupported: true,
         reasoningEffort: 'minimal',
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
           module: '@cardstack/base/system-card',
@@ -1054,13 +1049,6 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         modelId: 'anthropic/claude-sonnet-4.6',
         toolsSupported: true,
-      },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
       },
       meta: {
         adoptsFrom: {
@@ -1084,13 +1072,6 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-sonnet-4.5',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
           module: '@cardstack/base/system-card',
@@ -1112,13 +1093,6 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         modelId: 'anthropic/claude-3.7-sonnet',
         toolsSupported: true,
-      },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
       },
       meta: {
         adoptsFrom: {

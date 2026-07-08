@@ -159,7 +159,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
       .boxel-multi-select__dropdown--rounded.ember-power-select-dropdown {
-        border: 1px solid var(--boxel-border-color);
+        border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: var(--boxel-border-radius-sm);
       }
     </style>
@@ -169,7 +169,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         display: flex;
         align-items: stretch;
         overflow: hidden;
-        border: 1px solid var(--boxel-border-color);
+        border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: var(--boxel-border-radius-sm);
         max-width: 100%;
         width: 100%;

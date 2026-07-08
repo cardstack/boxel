@@ -7,7 +7,10 @@ import type { VirtualNetwork } from './virtual-network.ts';
 export function isRealmIndexCardId(
   cardId: string | undefined,
   realm: string | URL | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to compare in URL space (no VirtualNetwork). A card's id is
+  // URL form, so `new URL(cardId)` resolves it without realm mappings; a
+  // prefix-form id (which `new URL` rejects) falls through to `false`.
+  virtualNetwork?: VirtualNetwork,
 ): boolean {
   if (!cardId || !realm) {
     return false;
@@ -17,7 +20,9 @@ export function isRealmIndexCardId(
       typeof realm === 'string' ? new URL(realm) : realm,
       virtualNetwork,
     );
-    let cardURL = virtualNetwork.toURL(cardId);
+    let cardURL = virtualNetwork
+      ? virtualNetwork.toURL(cardId)
+      : new URL(cardId);
     return realmPaths.inRealm(cardURL) && realmPaths.local(cardURL) === 'index';
   } catch {
     return false;
@@ -26,7 +31,7 @@ export function isRealmIndexCardId(
 
 export function isRealmIndexCard(
   card: CardDef | undefined,
-  virtualNetwork: VirtualNetwork,
+  virtualNetwork?: VirtualNetwork,
 ): boolean {
   let cardId = typeof card?.id === 'string' ? card.id : undefined;
   return isRealmIndexCardId(cardId, card?.[realmURL], virtualNetwork);

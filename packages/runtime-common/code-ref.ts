@@ -22,7 +22,11 @@ import { CardError } from './error.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { LooseCardResource, FileMetaResource } from './index.ts';
-import { isUrlLike, trimExecutableExtension } from './index.ts';
+import {
+  isUrlLike,
+  trimExecutableExtension,
+  resolveRRIReference,
+} from './index.ts';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker.ts';
 
 export type ResolvedCodeRef = {
@@ -155,14 +159,19 @@ export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   opts: { trimExecutableExtension?: true } | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: when a VirtualNetwork is supplied the module is resolved through
+  // it (legacy callers). When omitted, the module is resolved in RRI space via
+  // `resolveRRIReference` — no VirtualNetwork — since code refs are canonical
+  // RRI; relative modules join against `relativeTo`, absolute/prefix modules
+  // pass through unchanged.
+  virtualNetwork?: VirtualNetwork,
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveModuleHref(
-        ref.module,
-        relativeTo,
-        virtualNetwork,
+      let moduleHref = (
+        virtualNetwork
+          ? resolveModuleHref(ref.module, relativeTo, virtualNetwork)
+          : resolveRRIReference(ref.module, relativeTo)
       ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
         moduleHref = trimExecutableExtension(moduleHref);
@@ -493,7 +502,9 @@ export function resolveAdoptedCodeRef(
 
 export function resolveAdoptsFrom(
   card: CardDef,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to resolve in RRI space (no VirtualNetwork). The card's id
+  // is the canonical base; relative `adoptsFrom` modules join against it.
+  virtualNetwork?: VirtualNetwork,
 ): ResolvedCodeRef | undefined {
   let metadata = (card as any)[meta];
   let adoptsFrom = metadata?.adoptsFrom as CodeRef | undefined;
@@ -501,6 +512,9 @@ export function resolveAdoptsFrom(
     let id = (card as any).id;
     if (typeof id !== 'string') {
       return undefined;
+    }
+    if (!virtualNetwork) {
+      return id as RealmResourceIdentifier;
     }
     try {
       return virtualNetwork.toURL(id);

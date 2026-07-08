@@ -126,18 +126,18 @@ module('Integration | store search public API', function (hooks) {
     );
   });
 
-  test('searchEntries returns the raw search-entry wire format without hydrating', async function (assert) {
+  test('searchEntries returns the raw entry wire format without hydrating', async function (assert) {
     let doc = await storeService.searchEntries(
       {
         filter: { 'item.on': bookRef },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       },
       [testRealmURL],
     );
 
     assert.strictEqual(doc.data.length, 2, 'both books are returned');
     for (let entry of doc.data) {
-      assert.strictEqual(entry.type, 'search-entry');
+      assert.strictEqual(entry.type, 'entry');
       assert.strictEqual(
         entry.relationships.item?.data.type,
         'card',
@@ -173,7 +173,7 @@ module('Integration | store search public API', function (hooks) {
     let doc = await storeService.searchEntries(
       {
         filter: { 'item.on': bookRef },
-        fields: { 'search-entry': ['item.title'] },
+        fields: { entry: ['item.title'] },
       },
       [testRealmURL],
     );
@@ -200,7 +200,7 @@ module('Integration | store search public API', function (hooks) {
     let doc = await storeService.searchEntries(
       {
         filter: { 'item.on': baseFileRef },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       },
       [testRealmURL],
     );

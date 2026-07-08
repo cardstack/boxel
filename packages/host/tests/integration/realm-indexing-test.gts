@@ -160,9 +160,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardDescription: null,
           cardThumbnailURL: null,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: rri('@cardstack/base/card-api'),
@@ -437,7 +434,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `../Person/owner`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -529,14 +525,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardInfo,
         },
-        relationships: {
-          owner: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`${testModuleRealm}pet`),
@@ -584,14 +572,6 @@ module(`Integration | realm indexing`, function (hooks) {
             cardTitle: 'Van Gogh',
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -904,7 +884,6 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1000,7 +979,6 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1090,10 +1068,6 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           containedExamples: [],
           cardInfo,
-        },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1221,10 +1195,6 @@ module(`Integration | realm indexing`, function (hooks) {
           containedExamples: [],
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: rri('@cardstack/base/spec'),
@@ -1298,9 +1268,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardTitle: null,
           cardInfo,
-        },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: skillCardRef,
@@ -1425,9 +1392,20 @@ module(`Integration | realm indexing`, function (hooks) {
             entry.error.errorDetail.message,
             'Encountered error rendering HTML for card: intentional error',
           );
-          assert.deepEqual(entry.error.errorDetail.deps, [
-            `${testRealmURL}boom`,
-          ]);
+          // An errored card records its full render closure as deps, not just
+          // its own module: any change to a transitive dependency could be the
+          // one that fixes the render, so the errored card must reindex when
+          // any of them changes. Assert the meaningful members rather than the
+          // whole (large, churn-prone) closure.
+          let errorDeps = entry.error.errorDetail.deps ?? [];
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}boom`),
+            "error deps include the card's own module",
+          );
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}@cardstack/base/card-api`),
+            'error deps include transitive render dependencies (the full closure)',
+          );
         } else {
           assert.ok('false', 'expected search entry to be an error document');
         }
@@ -1819,13 +1797,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardTitle: 'Untitled Card',
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`./person`),
@@ -2046,7 +2017,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
@@ -2083,7 +2053,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2102,7 +2071,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2199,7 +2167,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
@@ -2234,7 +2201,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
@@ -2253,7 +2219,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"
@@ -2367,7 +2332,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'appointment.contact.pet': {
           links: { self: `./mango` },
         },
-        'cardInfo.theme': { links: { self: null } },
       });
     } else {
       assert.ok(
@@ -2506,7 +2470,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `../Chain/2`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2549,9 +2512,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardThumbnailURL: `Ethereum Mainnet-icon.png`,
               cardInfo,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: rri(`${testModuleRealm}chain`),
@@ -2588,9 +2548,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: `Chain 137`,
               cardThumbnailURL: `Polygon-icon.png`,
               cardInfo,
-            },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -3047,11 +3004,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardInfo,
         },
         relationships: {
-          friend: {
-            links: {
-              self: null,
-            },
-          },
           'pets.0': {
             links: { self: `../Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -3060,7 +3012,6 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: `../Pet/vanGogh` },
             data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -3100,10 +3051,6 @@ module(`Integration | realm indexing`, function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
-          relationships: {
-            owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
-          },
           meta: {
             adoptsFrom: {
               module: testModuleRRI('pet'),
@@ -3137,10 +3084,6 @@ module(`Integration | realm indexing`, function (hooks) {
             cardTitle: 'Van Gogh',
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3225,10 +3168,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'PetPerson/burcu.json': {
           data: {
             attributes: { firstName: 'Burcu' },
-            relationships: {
-              pets: { links: { self: null } },
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
@@ -3260,11 +3199,6 @@ module(`Integration | realm indexing`, function (hooks) {
             cardDescription: 'A person with pets',
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            pets: { links: { self: null } },
-            friend: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3402,10 +3336,6 @@ module(`Integration | realm indexing`, function (hooks) {
           isField: false,
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: rri('@cardstack/base/spec'),
@@ -3528,13 +3458,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Dog friend',
               cardThumbnailURL: 'van-gogh.jpg',
             },
-            relationships: {
-              friend: {
-                links: {
-                  self: null,
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}friend`,
@@ -3569,7 +3492,6 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `./mango`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -3721,7 +3643,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/mango`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3771,7 +3692,6 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/hassan`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -3869,7 +3789,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3919,7 +3838,6 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/mango`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -4047,7 +3965,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -4201,7 +4118,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './vanGogh' },
               data: { type: 'card', id: vanGoghID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4246,7 +4162,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4285,7 +4200,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4377,7 +4291,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4425,7 +4338,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4464,7 +4376,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4562,7 +4473,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4610,7 +4520,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4649,7 +4558,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4793,6 +4701,7 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/number/components/stat',
         '@cardstack/base/number/util/index',
         '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
         '@cardstack/base/shared-state',
         '@cardstack/base/string',
         '@cardstack/base/text-input-validator',
@@ -4958,6 +4867,7 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/number/components/stat',
         '@cardstack/base/number/util/index',
         '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
         '@cardstack/base/shared-state',
         '@cardstack/base/spec',
         '@cardstack/base/string',

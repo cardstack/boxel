@@ -107,19 +107,13 @@
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
 
   /* border-radius */
-  --boxel-border-radius-2xs: calc(
-    var(--boxel-border-radius-xs) - 2.5px
-  ); /* 1.5px */
-  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 2px); /* 4px */
-  --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 4px); /* 6px */
+  --boxel-border-radius-2xs: calc(var(--boxel-border-radius) * 0.5); /* 1.5px */
+  --boxel-border-radius-xs: calc(var(--boxel-border-radius) * 0.4); /* 4px */
+  --boxel-border-radius-sm: calc(var(--boxel-border-radius) * 0.6); /* 6px */
   --boxel-border-radius: var(--boxel-radius); /* 10px - base */
-  --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px); /* 12px */
-  --boxel-border-radius-xl: calc(
-    var(--boxel-border-radius-lg) + 3px
-  ); /* 15px */
-  --boxel-border-radius-2xl: calc(
-    var(--boxel-border-radius-xl) + 5px
-  ); /* 20px */
+  --boxel-border-radius-lg: calc(var(--boxel-border-radius) * 1.2); /* 12px */
+  --boxel-border-radius-xl: calc(var(--boxel-border-radius) * 1.5); /* 15px */
+  --boxel-border-radius-2xl: calc(var(--boxel-border-radius) * 2); /* 20px */
 
   /* animations */
   --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;
@@ -152,7 +146,17 @@
   --boxel-xl-container: 65rem; /* 1040px */
   --boxel-xxl-container: 83.76rem; /* 1340px */
 
-  /* COLOR PALETTE */
+  /* COLOR PALETTE
+   *
+   * INTERNAL — these raw palette values are an implementation detail, not the
+   * public theming API. Component styles and cards should consume the semantic
+   * tokens defined in theme.css (--primary, --foreground, --background, --muted,
+   * --border, --destructive, etc.), which are mapped onto this palette in the
+   * default theme. Referencing a raw --boxel-<shade> for a semantic color role
+   * bypasses theming and breaks under custom themes / dark mode; reach for the
+   * semantic token instead. Keep a raw palette reference only when a specific
+   * fixed shade is genuinely intended, independent of the active theme.
+   */
 
   /**** Revisited Colors BOXEL-UI ****/
   --boxel-50: #f5f5f5;
@@ -190,9 +194,13 @@
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
-  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
-  --boxel-darker-hover: rgba(0, 0, 0, 0.5);
-  --boxel-light-hover-35: rgba(255, 255, 255, 0.35);
+  --boxel-light-35: rgba(255, 255, 255, 0.35);
+  --boxel-dark-10: rgba(0, 0, 0, 0.1);
+  --boxel-dark-50: rgba(0, 0, 0, 0.5);
+  --boxel-dark-80: rgba(0, 0, 0, 0.8);
+  --boxel-dark-hover: var(--boxel-dark-10);
+  --boxel-darker-hover: var(--boxel-dark-50);
+  --boxel-light-hover-35: var(--boxel-light-35);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);

@@ -1024,7 +1024,11 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Index all realms and dump tables
-        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        # pipefail so a nonzero exit from the index/dump task fails the step
+        # instead of being masked by tee's exit code.
+        run: |
+          set -o pipefail
+          mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1033,6 +1037,11 @@ jobs:
           name: cache-index-log
           path: /tmp/cache-index.log
           retention-days: 7
+      # Separate step so an incomplete cache (a table dropped out of the dump)
+      # surfaces as its own short, clearly-labeled failure with an error
+      # annotation, rather than an exit code buried in the dump log above.
+      - name: Verify index cache is complete
+        run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

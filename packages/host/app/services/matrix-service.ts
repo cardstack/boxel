@@ -7,7 +7,13 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { dropTask, task, timeout } from 'ember-concurrency';
+import {
+  dropTask,
+  rawTimeout,
+  restartableTask,
+  task,
+  timeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash-es';
 
@@ -31,7 +37,6 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
@@ -120,7 +125,11 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import {
+  codeModeEntryPointSkillUrl,
+  devSkillId,
+  envSkillId,
+} from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -156,6 +165,10 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
+// Backoff for retrying trusted servers that were unreachable at boot. Bounded
+// so a persistently-down server doesn't spin forever.
+const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
+const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -451,17 +464,7 @@ export default class MatrixService extends Service {
                 // start(); here we log and leave the available-realms list as
                 // it was.
                 try {
-                  let realmURLs =
-                    await this.realmServer.fetchUserRealmsFromTrustedServers(
-                      realmServers,
-                    );
-                  await this.realmServer.setAvailableRealmIdentifiers(
-                    realmURLs.map(ri),
-                  );
-                  if (this.postLoginCompleted) {
-                    await this.loginToRealms();
-                    await this.loadMoreAuthRooms(realmURLs);
-                  }
+                  await this.applyTrustedRealmServersAccountData(realmServers);
                 } catch (err) {
                   console.error(
                     'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
@@ -1041,7 +1044,24 @@ export default class MatrixService extends Service {
 
           if (isTesting())
             console.warn('[start-phase] authenticateToAllAccessibleRealms');
-          await this.realmServer.authenticateToAllAccessibleRealms();
+          try {
+            await this.realmServer.authenticateToAllAccessibleRealms();
+          } catch (e) {
+            // A trusted server being unreachable must not fail boot: assembly
+            // recorded it in `unreachableRealmServers`, a retry is scheduled
+            // below, and realms from reachable servers still authenticate
+            // individually via `loginToRealms`. But only swallow when there's
+            // actually an unreachable server to blame — otherwise this is an
+            // unrelated auth failure and boot must fail loudly (logout) rather
+            // than proceed to `postLoginCompleted` while unauthenticated.
+            if (this.realmServer.unreachableRealmServers.length === 0) {
+              throw e;
+            }
+            console.error(
+              'Failed to authenticate to all accessible realms because a trusted server is unreachable',
+              e,
+            );
+          }
         }
         // Login here triggers other setup code that needs to happen after
         // otherwise we don't have the realm info.
@@ -1051,6 +1071,11 @@ export default class MatrixService extends Service {
 
         this.postLoginCompleted = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
+
+        // If any trusted server was unreachable during boot assembly, keep
+        // the reachable realms and retry the unreachable ones in the
+        // background so they load (and the notice clears) once they recover.
+        this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -1176,6 +1201,96 @@ export default class MatrixService extends Service {
       }),
     );
   }
+
+  // Re-assemble the available-realms list from a runtime
+  // `app.boxel.realm-servers` account-data event. Unlike the fail-loud boot
+  // assembly, an event-time refresh must be conservative: because
+  // `fetchUserRealmsFromTrustedServers` now returns a partial list when a
+  // trusted server is unreachable (rather than throwing), replacing the list
+  // with that partial result would erase the realms served by a server that's
+  // only transiently down. So when any server was unreachable this round we
+  // merge (add newly-discovered realms, never remove) and let the retry
+  // reconcile; only a fully reachable assembly is authoritative enough to
+  // remove realms. Called by the AccountData listener and directly by tests.
+  async applyTrustedRealmServersAccountData(realmServers: string[]) {
+    let realmURLs =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(realmServers);
+    if (this.realmServer.unreachableRealmServers.length > 0) {
+      await this.realmServer.setAvailableRealmIdentifiers([
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...realmURLs.map(ri),
+        ]),
+      ]);
+    } else {
+      await this.realmServer.setAvailableRealmIdentifiers(realmURLs.map(ri));
+    }
+    if (this.postLoginCompleted) {
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(realmURLs);
+    }
+    this.scheduleUnreachableRealmServerRetry();
+  }
+
+  // Re-attempt the trusted servers that were unreachable during boot
+  // assembly. On success their realms are merged into the available list and
+  // authenticated so they appear without a reload; the "couldn't reach
+  // <server>" notice clears as `unreachableRealmServers` empties. Returns true
+  // once every previously-unreachable server has recovered. Public so tests
+  // can drive recovery deterministically rather than waiting on the background
+  // timer.
+  async retryUnreachableRealmServers(): Promise<boolean> {
+    let toRetry = [...this.realmServer.unreachableRealmServers];
+    if (toRetry.length === 0) {
+      return true;
+    }
+    let recovered =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(toRetry);
+    if (recovered.length > 0) {
+      let merged = [
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...recovered.map(ri),
+        ]),
+      ];
+      await this.realmServer.setAvailableRealmIdentifiers(merged);
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(recovered);
+    }
+    return this.realmServer.unreachableRealmServers.length === 0;
+  }
+
+  private scheduleUnreachableRealmServerRetry() {
+    if (isTesting()) {
+      // Tests drive recovery via `retryUnreachableRealmServers()` directly so
+      // the assertions are deterministic; skip the background timer loop, which
+      // would otherwise keep firing while a stubbed server stays down.
+      return;
+    }
+    if (this.realmServer.unreachableRealmServers.length === 0) {
+      return;
+    }
+    this.retryUnreachableRealmServersTask.perform();
+  }
+
+  private retryUnreachableRealmServersTask = restartableTask(async () => {
+    for (
+      let attempt = 0;
+      attempt < MAX_UNREACHABLE_RETRY_ATTEMPTS &&
+      this.realmServer.unreachableRealmServers.length > 0;
+      attempt++
+    ) {
+      await rawTimeout(UNREACHABLE_RETRY_INTERVAL_MS);
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      try {
+        await this.retryUnreachableRealmServers();
+      } catch (err) {
+        console.error('Failed to retry unreachable realm servers', err);
+      }
+    }
+  });
 
   async createRealmSession(realmURL: URL) {
     await this.#clientReadyDeferred.promise;
@@ -1798,31 +1913,34 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [envSkillId];
-
-    let codeModeDefaultSkills = [
-      devSkillId,
-      envSkillId,
-      skillCardURL('source-code-editing'),
-    ];
-
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists any default skills — legacy `Skill` cards, `.md` skill
+  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
+  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
+  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = [
+      ...(this.systemCard?.defaultSkillCards ?? []),
+      ...(this.systemCard?.defaultSkillFiles ?? []),
+    ]
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
     }
 
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    let interactModeDefaultSkills = [envSkillId];
+
+    // Code editing is covered by the code-mode entry-point skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
+    let codeModeDefaultSkills = [devSkillId, envSkillId];
+
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -2687,10 +2805,14 @@ export default class MatrixService extends Service {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills (pushed in full) activate
+      // alongside the code-mode entry-point skill, whose linked skills the
+      // bot loads on demand. As the card skills convert to markdown the
+      // pushed set shrinks.
+      skillCardIdsToActivate: [...defaultSkillIds, codeModeEntryPointSkillUrl],
     });
   }
 

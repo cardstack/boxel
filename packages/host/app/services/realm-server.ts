@@ -110,6 +110,11 @@ export default class RealmServerService extends Service {
   ]);
   private archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
   private archivedRealmsFetched = false;
+  // Trusted servers whose `_realm-auth` call failed at boot assembly (network
+  // error, timeout, or non-2xx). Tracked so the UI can surface an unobtrusive
+  // "couldn't reach <server>" notice; entries clear as a retry recovers each
+  // server.
+  private unreachableRealmServersList = new TrackedArray<string>([]);
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
@@ -142,6 +147,10 @@ export default class RealmServerService extends Service {
     // reference) is what makes the getter recompute to the empty list.
     this.archivedRealmsList.splice(0, this.archivedRealmsList.length);
     this.archivedRealmsFetched = false;
+    this.unreachableRealmServersList.splice(
+      0,
+      this.unreachableRealmServersList.length,
+    );
     this.eventSubscribers = new Map();
     this._ready = new Deferred<void>();
     this._ready.fulfill();
@@ -326,6 +335,10 @@ export default class RealmServerService extends Service {
       type: 'base',
       url: baseRealm.url,
     });
+    this.unreachableRealmServersList.splice(
+      0,
+      this.unreachableRealmServersList.length,
+    );
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
@@ -375,31 +388,74 @@ export default class RealmServerService extends Service {
     // TODO: remove once multi-realm-server federation lands.
     this.assertOwnRealmServer(trustedServerURLs);
     await this.login();
-    let perServerRealmURLs = await Promise.all(
-      trustedServerURLs.map(async (serverURL) => {
-        let normalizedServerURL = ensureTrailingSlash(serverURL);
-        let response = await this.network.fetch(
-          `${normalizedServerURL}_realm-auth`,
-          {
-            method: 'POST',
-            headers: {
-              Accept: SupportedMimeType.JSONAPI,
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.token}`,
-            },
-          },
-        );
-        if (!response.ok) {
-          let responseText = await response.text();
-          throw new Error(
-            `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
-          );
-        }
-        let tokens = (await response.json()) as Record<string, string>;
-        return Object.keys(tokens);
-      }),
+    // A trusted server that's unreachable (network error, timeout, or a
+    // non-2xx `_realm-auth`) must never block boot or hide the realms served
+    // by the servers that *are* reachable. `allSettled` lets us assemble from
+    // the reachable servers, record the unreachable ones so a notice can name
+    // them, and (via matrix-service) schedule a retry.
+    let results = await Promise.allSettled(
+      trustedServerURLs.map((serverURL) =>
+        this.fetchUserRealmsFromServer(serverURL),
+      ),
     );
-    return [...new Set(perServerRealmURLs.flat())];
+    let realmURLs: string[] = [];
+    results.forEach((result, index) => {
+      let normalizedServerURL = ensureTrailingSlash(trustedServerURLs[index]);
+      if (result.status === 'fulfilled') {
+        realmURLs.push(...result.value);
+        this.markRealmServerReachable(normalizedServerURL);
+      } else {
+        this.markRealmServerUnreachable(normalizedServerURL);
+        console.error(
+          `Failed to fetch user realms from trusted server ${normalizedServerURL}`,
+          result.reason,
+        );
+      }
+    });
+    return [...new Set(realmURLs)];
+  }
+
+  private async fetchUserRealmsFromServer(
+    serverURL: string,
+  ): Promise<string[]> {
+    let normalizedServerURL = ensureTrailingSlash(serverURL);
+    let response = await this.network.fetch(
+      `${normalizedServerURL}_realm-auth`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch user realms from trusted server ${normalizedServerURL}: ${response.status} - ${responseText}`,
+      );
+    }
+    let tokens = (await response.json()) as Record<string, string>;
+    return Object.keys(tokens);
+  }
+
+  @cached
+  get unreachableRealmServers(): string[] {
+    return [...this.unreachableRealmServersList];
+  }
+
+  private markRealmServerUnreachable(serverURL: string) {
+    if (!this.unreachableRealmServersList.includes(serverURL)) {
+      this.unreachableRealmServersList.push(serverURL);
+    }
+  }
+
+  private markRealmServerReachable(serverURL: string) {
+    let index = this.unreachableRealmServersList.indexOf(serverURL);
+    if (index >= 0) {
+      this.unreachableRealmServersList.splice(index, 1);
+    }
   }
 
   @cached

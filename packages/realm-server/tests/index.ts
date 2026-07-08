@@ -220,6 +220,7 @@ const ALL_TEST_FILES: string[] = [
   './billing-test',
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
+  './card-html-endpoints-test',
   './card-source-endpoints-test',
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
@@ -314,6 +315,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/incoming-webhook-test',
   './server-endpoints/webhook-commands-test',
   './server-endpoints/webhook-receiver-test',
+  './server-endpoints/worker-request-test',
   './transpile-test',
   './types-endpoint-test',
   './virtual-network-test',
@@ -354,6 +356,8 @@ const ALL_TEST_FILES: string[] = [
   './session-room-queries-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',
+  './worker-request-signature-test',
+  './worker-request-forwarder-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

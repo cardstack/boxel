@@ -12,7 +12,9 @@ import {
   type CodeRef,
   type Filter,
   type getCard,
+  type SearchEntryWireFilter,
   type SearchEntryWireQuery,
+  baseCardRef,
   GetCardContextName,
   internalKeyFor,
   searchEntryWireQueryFromQuery,
@@ -139,7 +141,7 @@ interface Signature {
 // The results pane of the search sheet / card chooser. Renders through the
 // `<SearchResults>` component family: one instance for the realm search, a
 // nested one for recents (with the live-recents fallback layered in), then hands
-// their yielded `search-entry` streams to `<SheetResults>`, which lays them out
+// their yielded `entry` streams to `<SheetResults>`, which lays them out
 // into realm / recents / URL-paste sections (with the header, multiselect, the
 // Adorn treatment, pagination, and the result count). Resources are
 // construct-once: the two `<SearchResults>` own their live-search resources
@@ -183,11 +185,13 @@ export default class PanelContent extends Component<Signature> {
     return this.cardResource?.isLoaded ?? false;
   }
 
-  // The `search-entry` query for the main realm search, built from the
+  // The `entry` query for the main realm search, built from the
   // shared `Query` builder via `searchEntryWireQueryFromQuery`. Fitted is the
-  // default rendering, so no `htmlQuery` override is needed; realms ride
-  // alongside. Undefined leaves the search idle (the skip cases: empty search
-  // key or a URL paste, handled separately).
+  // default rendering, so no `htmlQuery` override is needed in the default
+  // variant; the mini variant pins it to the uniform CardDef fitted tile
+  // (see `withMiniHtmlQuery`). Realms ride alongside. Undefined leaves the
+  // search idle (the skip cases: empty search key or a URL paste, handled
+  // separately).
   get mainSearchQuery(): SearchEntryWireQuery | undefined {
     if (shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)) {
       return undefined;
@@ -195,7 +199,7 @@ export default class PanelContent extends Component<Signature> {
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
       internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
-    return {
+    return this.withMiniHtmlQuery({
       ...searchEntryWireQueryFromQuery(
         buildSearchQuery(
           this.args.searchKey,
@@ -212,7 +216,31 @@ export default class PanelContent extends Component<Signature> {
       // the result-count summary), so this only trims rows the sheet would
       // never render — a large payload reduction on broad queries.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
+    });
+  }
+
+  // In the mini card chooser every result row renders as the uniform CardDef
+  // fitted tile instead of each card's own fitted template. Bind that
+  // rendering through the wire filter's top-level `eq` htmlQuery — fitted
+  // format at the CardDef render type, served from the per-ancestor
+  // `fitted_html` entries the index already carries. The `eq` carries only the
+  // htmlQuery binding, which the entry engine lifts out and then
+  // dissolves the now-empty `eq`, so the rest of the filter is untouched;
+  // `buildSearchQuery`/`buildRecentsQuery` never emit a top-level `eq`, so
+  // there is nothing to collide with. Non-mini variants pass through unchanged
+  // and keep the native fitted default.
+  private withMiniHtmlQuery(wire: SearchEntryWireQuery): SearchEntryWireQuery {
+    if (this.args.variant !== 'mini') {
+      return wire;
+    }
+    const filter: SearchEntryWireFilter = {
+      ...wire.filter,
+      eq: {
+        ...wire.filter?.eq,
+        htmlQuery: { eq: { format: 'fitted', renderType: baseCardRef } },
+      },
     };
+    return { ...wire, filter };
   }
 
   get recentCardUrls(): string[] {
@@ -257,11 +285,11 @@ export default class PanelContent extends Component<Signature> {
       return undefined;
     }
     if (this.args.isCompact) {
-      return {
+      return this.withMiniHtmlQuery({
         ...searchEntryWireQueryFromQuery({}),
         realms: this.realms,
         cardUrls: this.recentCardUrls,
-      };
+      });
     }
     // No selected realm hosts a recent card. The search treats an empty
     // `realms` array as "search every realm", which — with the `cardUrls`
@@ -274,7 +302,7 @@ export default class PanelContent extends Component<Signature> {
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
       internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
-    return {
+    return this.withMiniHtmlQuery({
       ...searchEntryWireQueryFromQuery(
         buildRecentsQuery(
           this.searchTerm,
@@ -285,7 +313,7 @@ export default class PanelContent extends Component<Signature> {
       ),
       realms: this.recentsSearchRealms,
       cardUrls: this.recentCardUrls,
-    };
+    });
   }
 
   get shouldSkipQuery() {

@@ -10,6 +10,7 @@ import type {
   VirtualNetwork,
 } from '../index.ts';
 import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
@@ -35,6 +36,13 @@ export interface TaskArgs {
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
+  // Request that a realm event be broadcast to subscribed hosts. A task runs
+  // in a worker child that holds no matrix client; this callback bridges the
+  // event to the realm server (through the worker manager), which broadcasts
+  // it through the realm's matrix session rooms so it reaches subscribed hosts
+  // exactly as a web-tier-originated event does. Transport-agnostic: the task
+  // names its realm via the event's `realmURL` and does not know the wire path.
+  reportRealmEvent?(event: RealmEventContent): void;
 }
 
 export type Task<T, K> = (

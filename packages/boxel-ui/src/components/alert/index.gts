@@ -70,8 +70,8 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
       --icon-background-color: var(--boxel-error-400);
     }
     .failure-icon {
-      --icon-background-color: var(--destructive, var(--boxel-error-400));
-      --icon-color: var(--destructive-foreground, var(--boxel-light));
+      --icon-background-color: var(--boxel-error-400);
+      --icon-color: var(--boxel-light);
     }
     .message {
       align-self: center;
@@ -131,15 +131,21 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       padding: var(--boxel-sp-sm);
       font: 500 var(--boxel-font-xs);
       letter-spacing: var(--boxel-lsp-sm);
-      border-radius: var(--boxel-border-radius-xxl);
+      border-radius: var(--boxel-border-radius-2xl);
+      background-color: var(--boxel-650);
+      color: var(--boxel-light);
     }
     .error-container {
-      background-color: var(--destructive-foreground, var(--boxel-650));
-      color: var(--destructive, var(--boxel-light));
+      background-color: var(--boxel-650);
+      color: var(--boxel-light);
+    }
+    .error-container--destructive {
+      background-color: var(--destructive, var(--boxel-650));
+      color: var(--destructive-foreground, var(--boxel-light));
     }
     .warning-container {
-      background-color: var(--accent, var(--boxel-warning-200));
-      color: var(--accent-foreground, var(--boxel-dark));
+      background-color: var(--boxel-warning-200);
+      color: var(--boxel-dark);
     }
 
     .alert-container > :deep(* + *) {

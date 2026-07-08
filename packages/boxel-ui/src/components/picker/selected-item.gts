@@ -91,6 +91,7 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
     <Pill
       class='picker-selected-item'
       @size='small'
+      @variant='secondary'
       data-test-boxel-picker-selected-item={{this.text}}
     >
       <:iconLeft>
@@ -144,8 +145,6 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
 
     <style scoped>
       .picker-selected-item {
-        --pill-background-color: var(--background, var(--boxel-300));
-        --pill-border-color: var(--border, var(--boxel-300));
         --pill-gap: var(--boxel-sp-4xs);
         padding-right: 0;
       }

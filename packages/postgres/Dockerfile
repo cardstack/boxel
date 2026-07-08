@@ -23,11 +23,8 @@ RUN CI=1 pnpm install -r --offline
 
 WORKDIR /boxel/packages/postgres
 
-# --ignore-pattern keeps node-pg-migrate from treating non-migration files in
-# the migrations directory (the `{ "type": "commonjs" }` package.json that
-# pins migrations to CommonJS, plus .eslintrc.js) as migrations. Without it,
-# package.json is loaded as a migration, has no `up` export, and the whole `up`
-# run errors and rolls back — so no migrations apply. Mirrors the `migrate`
-# script in package.json. (.eslintrc.js is a dotfile and ignored by default;
-# package.json is not, so it must be listed explicitly.)
-CMD node ./scripts/fix-migration-names.ts && ./node_modules/.bin/node-pg-migrate --check-order false --migrations-table migrations --ignore-pattern '.*\.eslintrc\.js|package\.json' up && sleep infinity
+# Run the migrations (see scripts/run-migrations.sh), then keep the container
+# alive so the long-lived ECS service stays up after a successful migrate. The
+# deploy runs the same script as a one-shot task and gates on its exit code;
+# `&& sleep infinity` runs only when the migrate exited 0.
+CMD ./scripts/run-migrations.sh && sleep infinity

@@ -35,8 +35,8 @@ import {
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
 
-// The federated search: the search-entry wire model over every requested
-// realm. Parses the search-entry-rooted query (the `item.` membership query,
+// The federated search: the entry wire model over every requested
+// realm. Parses the entry-rooted query (the `item.` membership query,
 // the `htmlQuery` binding, the sparse fieldset), fans out to each realm's
 // `searchEntries`, and merges the per-realm documents (`included` deduped by
 // `(type, id)`). Cache + ETag ride the job-scoped search-cache protocol; the
@@ -151,7 +151,7 @@ export default function handleSearch(opts: {
         ? await timings.time('resolveRealms', resolveRealms)
         : await resolveRealms();
       let doc = await searchEntryRealms(realmInstances, parsed, runSearchOpts);
-      // Serialize compact: a search-entry doc can run to many MB, so indentation
+      // Serialize compact: an entry doc can run to many MB, so indentation
       // whitespace is pure wire overhead the consumer parses straight back off.
       let stringify = async () => JSON.stringify(doc);
       return timings ? await timings.time('stringify', stringify) : stringify();
@@ -223,17 +223,23 @@ async function respondWithJobScopedSearchCache(
     emitTimeline?: () => void;
   },
 ): Promise<void> {
-  let { searchCache, jobId, consumingRealm, realms, query, opts, runSearch } =
-    args;
+  let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
   let emitTimeline = args.emitTimeline ?? (() => {});
   let cacheable = searchCache && jobId && consumingRealm;
 
   if (cacheable) {
+    // Fold each realm's generation fingerprint (index + prerendered-HTML) into
+    // the cache key so the ETag advances when either channel does — a cached
+    // `304` can't pin an HTML-less or older-rendering result after newer HTML
+    // lands. Purely a key change: it only fragments the cache, and the body a
+    // miss produces reflects the current DB state.
+    let generations = await searchCache!.realmGenerations(realms);
+    let keyOpts = { ...(args.opts as Record<string, unknown>), generations };
     let expectedEtag = searchCache!.computeETag({
       jobId: jobId!,
       realms,
       query,
-      opts,
+      opts: keyOpts,
     });
     let ifNoneMatch = ctxt.get('If-None-Match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
@@ -245,7 +251,7 @@ async function respondWithJobScopedSearchCache(
         jobId: jobId!,
         realms,
         query,
-        opts,
+        opts: keyOpts,
       });
       if (cached !== undefined) {
         ctxt.status = 304;
@@ -258,7 +264,7 @@ async function respondWithJobScopedSearchCache(
       jobId: jobId!,
       realms,
       query,
-      opts,
+      opts: keyOpts,
       populate: runSearch,
     });
     await setContextResponse(

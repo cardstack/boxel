@@ -297,6 +297,76 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     );
   });
 
+  // A stray lone backtick (here in `Mod-\``) must not pair — across a blank
+  // line — with the backtick fence below: that would form a spurious
+  // inline-code region hiding every directive in between, leaving their
+  // toolbar stuck on "+". The caret in each embed must show the Edit pencil.
+  test('caret inside a directive after a lone backtick still swaps to Edit', async function (assert) {
+    let harness = new ContentHarness();
+    let content = [
+      '- Keyboard shortcuts (Mod-`)',
+      '',
+      `Inline card reference: :card[${mango}]`,
+      '',
+      `::card[${mango}]`,
+      '',
+      '```typescript',
+      'let greeting = "hi";',
+      '```',
+    ].join('\n');
+    harness.content = content;
+    await renderEditorAndModal({ CodeMirrorEditor, harness });
+
+    await waitFor('[data-test-codemirror-editor] .cm-content', {
+      timeout: 5000,
+    });
+
+    let editor = document.querySelector(
+      '[data-test-codemirror-editor] .cm-editor',
+    ) as HTMLElement | null;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
+    view?.focus();
+
+    let inlineStart = content.indexOf(`:card[${mango}]`);
+    let blockStart = content.indexOf(`::card[${mango}]`);
+
+    let placeCaret = async (head: number) => {
+      view?.dispatch({ selection: { anchor: head, head } });
+      await settled();
+    };
+
+    // Start of the inline directive.
+    await placeCaret(inlineStart);
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-toolbar="edit-embed"]')
+      .exists('Edit pencil at the start of the 2nd (inline) embed');
+    assert.dom('[data-test-toolbar="add-embed"]').doesNotExist();
+
+    // Mid-URL of the inline directive.
+    await placeCaret(inlineStart + ':card['.length + 5);
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-toolbar="edit-embed"]')
+      .exists('Edit pencil mid-URL of the 2nd (inline) embed');
+
+    // Mid-URL of the block directive.
+    await placeCaret(blockStart + '::card['.length + 5);
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-toolbar="edit-embed"]')
+      .exists('Edit pencil mid-URL of the 3rd (block) embed');
+    assert.dom('[data-test-toolbar="add-embed"]').doesNotExist();
+
+    // Caret in prose between embeds falls back to the Add popover.
+    await placeCaret(content.indexOf('Inline card reference') + 3);
+    await waitFor('[data-test-toolbar="add-embed"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-toolbar="add-embed"]')
+      .exists('caret in prose shows the Add button, not the pencil');
+    assert.dom('[data-test-toolbar="edit-embed"]').doesNotExist();
+  });
+
   test('Remove saves exactly once (no duplicate debounced save)', async function (assert) {
     let harness = new ContentHarness();
     harness.content = `:card[${mango}]`;

@@ -4,16 +4,18 @@ import { basename } from 'path';
 import {
   buildHtmlResource,
   buildIconResource,
-  buildSearchEntryResource,
+  buildEntryResource,
   buildSparseItemResource,
+  fieldsetFromParam,
+  htmlQueryFromParams,
   htmlResourceId,
   cssResourceId,
   htmlQueryHasRenderTypePredicate,
   htmlQueryMatches,
   isHtmlResource,
   isIconResource,
-  isSearchEntryCollectionDocument,
-  isSearchEntryResource,
+  isEntryCollectionDocument,
+  isEntryResource,
   isSparseItemResource,
   parseSearchEntryQueryFromPayload,
   resolveHtmlQuery,
@@ -81,8 +83,8 @@ const universe: RenderingCandidate[] = [
 ];
 
 module(basename(import.meta.filename), function () {
-  module('search-entry query parser', function () {
-    test('translates the canonical search-entry query', function (assert) {
+  module('entry query parser', function () {
+    test('translates the canonical entry query', function (assert) {
       let htmlQuery: HtmlQuery = {
         every: [
           { eq: { format: 'embedded' } },
@@ -100,7 +102,7 @@ module(basename(import.meta.filename), function () {
         sort: [{ by: 'item.title', direction: 'asc' }],
         page: { size: 20 },
         realms: ['http://localhost:4201/test'],
-        fields: { 'search-entry': ['html'] },
+        fields: { entry: ['html'] },
       });
       assert.deepEqual(parsed.itemQuery, {
         filter: { on: authorRef, eq: { status: 'ready' } },
@@ -258,13 +260,13 @@ module(basename(import.meta.filename), function () {
     test('sparse fieldsets parse to the item selection', function (assert) {
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
         }).fieldset,
         { html: false, item: { kind: 'full' }, itemAsFallback: false },
       );
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['item.title', 'item.status'] },
+          fields: { entry: ['item.title', 'item.status'] },
         }).fieldset,
         {
           html: false,
@@ -274,7 +276,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         parseSearchEntryQueryFromPayload({
-          fields: { 'search-entry': ['html', 'item'] },
+          fields: { entry: ['html', 'item'] },
         }).fieldset,
         { html: true, item: { kind: 'full' }, itemAsFallback: false },
       );
@@ -287,22 +289,22 @@ module(basename(import.meta.filename), function () {
         'bare field path',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': ['item', 'item.title'] } }).code,
+        parseError({ fields: { entry: ['item', 'item.title'] } }).code,
         'invalid-query',
         'full item cannot combine with item.<field>',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': ['html.cardType'] } }).code,
+        parseError({ fields: { entry: ['html.cardType'] } }).code,
         'invalid-query',
         'html does not dot deeper in a fieldset',
       );
       assert.strictEqual(
         parseError({ fields: { card: ['title'] } }).code,
         'invalid-query',
-        'only the search-entry type is selectable',
+        'only the entry type is selectable',
       );
       assert.strictEqual(
-        parseError({ fields: { 'search-entry': [] } }).code,
+        parseError({ fields: { entry: [] } }).code,
         'invalid-query',
         'empty fieldset',
       );
@@ -320,6 +322,100 @@ module(basename(import.meta.filename), function () {
         parseError({ sort: [{ by: 'item.title', on: authorRef }] }).code,
         'invalid-query',
         'sort anchor is addressed as item.on',
+      );
+    });
+  });
+
+  // The single-instance GET's query-string surface: `?format=` / `?renderType=`
+  // → an htmlQuery, `?fields=` → a fieldset. The same HtmlQuery /
+  // SearchEntryFieldset the wire body produces, sourced from the URL.
+  module('single-instance query params', function () {
+    test('format defaults to fitted; an explicit format is honored', function (assert) {
+      assert.deepEqual(htmlQueryFromParams({}), { eq: { format: 'fitted' } });
+      assert.deepEqual(htmlQueryFromParams({ format: 'embedded' }), {
+        eq: { format: 'embedded' },
+      });
+    });
+
+    test('a renderType param is parsed into the eq leaf alongside the format', function (assert) {
+      assert.deepEqual(
+        htmlQueryFromParams({
+          format: 'fitted',
+          renderType: `${realmURL}author/Author`,
+        }),
+        { eq: { format: 'fitted', renderType: authorRef } },
+      );
+    });
+
+    test('empty params mean unspecified, consistent with an omitted fields param', function (assert) {
+      // An empty `?format=` / `?renderType=` is "unspecified" (like an omitted
+      // param), not malformed — the universal query-string convention, and the
+      // same way an empty `?fields=` resolves to the default.
+      assert.deepEqual(htmlQueryFromParams({ format: '' }), {
+        eq: { format: 'fitted' },
+      });
+      assert.deepEqual(
+        htmlQueryFromParams({ format: 'atom', renderType: '' }),
+        {
+          eq: { format: 'atom' },
+        },
+      );
+      assert.deepEqual(fieldsetFromParam(''), {
+        html: true,
+        item: { kind: 'none' },
+        itemAsFallback: true,
+      });
+    });
+
+    test('an invalid format is rejected as an invalid-render request', function (assert) {
+      assert.throws(
+        () => htmlQueryFromParams({ format: 'nonsense' }),
+        (e: any) =>
+          e instanceof SearchRequestError && e.code === 'invalid-render',
+      );
+    });
+
+    test('a renderType with no <module>/<name> separator is rejected', function (assert) {
+      assert.throws(
+        () => htmlQueryFromParams({ renderType: 'noseparator' }),
+        (e: any) =>
+          e instanceof SearchRequestError && e.code === 'invalid-render',
+      );
+    });
+
+    test('an absent fields param is the default resolution policy', function (assert) {
+      for (let fields of [undefined, null, '']) {
+        assert.deepEqual(
+          fieldsetFromParam(fields),
+          { html: true, item: { kind: 'none' }, itemAsFallback: true },
+          `fields=${JSON.stringify(fields)} → default`,
+        );
+      }
+    });
+
+    test('fields=html / item / html,item pin the branches (no fallback)', function (assert) {
+      assert.deepEqual(fieldsetFromParam('html'), {
+        html: true,
+        item: { kind: 'none' },
+        itemAsFallback: false,
+      });
+      assert.deepEqual(fieldsetFromParam('item'), {
+        html: false,
+        item: { kind: 'full' },
+        itemAsFallback: false,
+      });
+      assert.deepEqual(fieldsetFromParam('html,item'), {
+        html: true,
+        item: { kind: 'full' },
+        itemAsFallback: false,
+      });
+    });
+
+    test('an unknown fields entry is rejected as an invalid query', function (assert) {
+      assert.throws(
+        () => fieldsetFromParam('html,bogus'),
+        (e: any) =>
+          e instanceof SearchRequestError && e.code === 'invalid-query',
       );
     });
   });
@@ -442,39 +538,38 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('search-entry collection document guard', function () {
-    let entry = () =>
-      buildSearchEntryResource({ url: cardUrl, itemType: 'card' });
+  module('entry collection document guard', function () {
+    let entry = () => buildEntryResource({ url: cardUrl, itemType: 'card' });
     let meta = { page: { total: 1 } };
 
     test('accepts a well-formed document, with and without included', function (assert) {
-      assert.true(isSearchEntryCollectionDocument({ data: [entry()], meta }));
+      assert.true(isEntryCollectionDocument({ data: [entry()], meta }));
       assert.true(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: [{ type: 'card', id: cardUrl, attributes: {}, meta: {} }],
           meta,
         }),
       );
-      assert.true(isSearchEntryCollectionDocument({ data: [], meta }));
+      assert.true(isEntryCollectionDocument({ data: [], meta }));
     });
 
     test('rejects malformed data and included members', function (assert) {
-      assert.false(isSearchEntryCollectionDocument(null));
-      assert.false(isSearchEntryCollectionDocument({ data: [entry()] }));
+      assert.false(isEntryCollectionDocument(null));
+      assert.false(isEntryCollectionDocument({ data: [entry()] }));
       assert.false(
-        isSearchEntryCollectionDocument({ data: 'nope', meta }),
+        isEntryCollectionDocument({ data: 'nope', meta }),
         'data must be an array',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [{ type: 'card', id: cardUrl }],
           meta,
         }),
-        'data members must be search-entry resources',
+        'data members must be entry resources',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: 'nope',
           meta,
@@ -482,7 +577,7 @@ module(basename(import.meta.filename), function () {
         'a present included must be an array',
       );
       assert.false(
-        isSearchEntryCollectionDocument({
+        isEntryCollectionDocument({
           data: [entry()],
           included: [{ attributes: {} }],
           meta,
@@ -633,21 +728,21 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('search-entry builders', function () {
-    test('buildSearchEntryResource links the requested branches', function (assert) {
+  module('entry builders', function () {
+    test('buildEntryResource links the requested branches', function (assert) {
       let htmlId = htmlResourceId({
         url: cardUrl,
         format: 'fitted',
         renderType: authorRef,
       });
-      let both = buildSearchEntryResource({
+      let both = buildEntryResource({
         url: cardUrl,
         htmlIds: [htmlId],
         itemType: 'card',
         iconId: `${authorRef.module}/${authorRef.name}`,
       });
       assert.deepEqual(both, {
-        type: 'search-entry',
+        type: 'entry',
         id: cardUrl,
         relationships: {
           html: { data: [{ type: 'html', id: htmlId }] },
@@ -660,20 +755,20 @@ module(basename(import.meta.filename), function () {
           },
         },
       });
-      assert.true(isSearchEntryResource(both));
+      assert.true(isEntryResource(both));
 
       // a pinned html branch with no matching rendering: empty array
-      let empty = buildSearchEntryResource({ url: cardUrl, htmlIds: [] });
+      let empty = buildEntryResource({ url: cardUrl, htmlIds: [] });
       assert.deepEqual(empty.relationships.html, { data: [] });
-      assert.true(isSearchEntryResource(empty));
+      assert.true(isEntryResource(empty));
 
       // the default mode's fallback rows omit the relationship entirely
-      let itemOnly = buildSearchEntryResource({
+      let itemOnly = buildEntryResource({
         url: cardUrl,
         itemType: 'card',
       });
       assert.deepEqual(Object.keys(itemOnly.relationships), ['item']);
-      assert.true(isSearchEntryResource(itemOnly));
+      assert.true(isEntryResource(itemOnly));
     });
 
     test('buildHtmlResource carries the rendering attributes and styles', function (assert) {
@@ -740,6 +835,44 @@ module(basename(import.meta.filename), function () {
       assert.false('html' in resource.attributes);
       assert.true(resource.attributes.isError);
       assert.true(isHtmlResource(resource));
+    });
+
+    test('generation rides in meta.generation, independently per channel', function (assert) {
+      // The entry's index-data generation and the rendering's own generation
+      // are threaded separately, so they can differ per row.
+      let entry = buildEntryResource({
+        url: cardUrl,
+        htmlIds: [htmlResourceId({ url: cardUrl, format: 'fitted' })],
+        itemType: 'card',
+        generation: 42,
+      });
+      assert.deepEqual(entry.meta, { generation: 42 });
+      assert.true(isEntryResource(entry));
+
+      let html = buildHtmlResource({
+        url: cardUrl,
+        format: 'fitted',
+        renderType: authorRef,
+        html: '<div>hi</div>',
+        cardType: 'Author',
+        cssIds: [],
+        generation: 40,
+      });
+      assert.deepEqual(html.meta, { generation: 40 });
+      assert.true(isHtmlResource(html));
+
+      // Omitting generation omits meta entirely (additive: existing callers
+      // that don't supply it are unaffected).
+      let bare = buildEntryResource({ url: cardUrl, itemType: 'card' });
+      assert.strictEqual(bare.meta, undefined);
+      let bareHtml = buildHtmlResource({
+        url: cardUrl,
+        format: 'fitted',
+        html: '<div/>',
+        cardType: 'Author',
+        cssIds: [],
+      });
+      assert.strictEqual(bareHtml.meta, undefined);
     });
 
     test('buildSparseItemResource projects the requested fields and stamps the marker', function (assert) {

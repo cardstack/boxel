@@ -29,7 +29,7 @@ import {
   isFileMetaResource,
   isSingleCardDocument,
   isSingleFileMetaDocument,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   isSparseItemResource,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
@@ -137,22 +137,22 @@ const storeLogger = logger('store');
 //
 // 1. Inside a prerender tab: forward the worker job's priority as-is.
 //    The render-runner injects `__boxelJobPriority` alongside
-//    `__boxelJobId` on each visit — a priority of 0 is meaningful
-//    (the originating job is system-initiated background indexing)
+//    `__boxelJobId` on each visit — a low priority is meaningful
+//    (the originating job is system-initiated background work)
 //    and must be preserved, not upgraded. Sub-`prerenderModule`
 //    calls fired by the federated search for a `lookupDefinition`
 //    cache miss inherit this priority so they don't outrun the
 //    parent. If `__boxelJobPriority` is missing here (older
 //    render-runner build, test fixture, etc.) treat as 0 — the
-//    safe default for prerender-context work.
+//    lowest tier, the safe default for prerender-context work.
 //
 // 2. Outside a prerender tab (the host SPA in a real user's browser):
-//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    stamp `userInitiatedPriority`. User clicks driving a
 //    search are by definition user-initiated work and should outrank
 //    background indexing on the realm-server's PagePool. Without
 //    this, a user search whose definition lookup misses the modules
-//    cache would fire its sub-prerender at priority 0 and queue
-//    behind concurrent indexing fan-out.
+//    cache would fire its sub-prerender at background priority and
+//    queue behind concurrent indexing fan-out.
 //
 // External (non-host) HTTP callers — anything that doesn't run in
 // the host SPA's JS runtime — bypass this helper entirely and set
@@ -1027,7 +1027,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   // Instances only: the query runs against the search requesting full
   // `item` serializations, the results hydrate into the store, and the caller
-  // gets instances back. For the raw search-entry wire format (HTML
+  // gets instances back. For the raw entry wire format (HTML
   // renderings, field-limited serializations, the document itself) use
   // `searchEntries` — that surface lives on this service only, never on the
   // `Store` interface cards receive.
@@ -1053,7 +1053,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
       throw new Error(
-        `store.search returns instances only — use store.searchEntries for the raw search-entry wire format`,
+        `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
       );
     }
     let searchRealms = this.normalizeSearchRealms(realms);
@@ -1070,8 +1070,8 @@ export default class StoreService extends Service implements StoreInterface {
     return opts?.includeMeta ? result : result.instances;
   }
 
-  // The raw wire format: heterogeneous `search-entry` resources with the
-  // `html` / `item` branches the query's `fields[search-entry]` selects.
+  // The raw wire format: heterogeneous `entry` resources with the
+  // `html` / `item` branches the query's `fields[entry]` selects.
   // Nothing is hydrated into the store.
   async searchEntries(
     query: SearchEntryWireQuery,
@@ -1091,7 +1091,7 @@ export default class StoreService extends Service implements StoreInterface {
   // the instance and could clobber a correctly-loaded full one — so the call
   // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
   // which stands in for a card that failed to render and is not a real
-  // instance. `search-entry`s carry no serialization to deposit. Idempotent:
+  // instance. `entry`s carry no serialization to deposit. Idempotent:
   // depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
@@ -1123,7 +1123,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms);
 
-    // Hydrate each result into the store. The data-only search-entry doc
+    // Hydrate each result into the store. The data-only entry doc
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
     // `included`, reached through the entry's `item` relationship.
     let items = this.itemResourcesFromSearchEntries(collectionDoc);
@@ -1151,7 +1151,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   // The instances path's resolved-document layer: the `Query` runs against
   // the search requesting full `item` serializations, and the resulting
-  // search-entry document (one `item` per entry in `included`) is what the
+  // entry document (one `item` per entry in `included`) is what the
   // hydration pipeline and the caches below consume.
   // Sits between `store.search` and `_federated-search`.
   //
@@ -1268,7 +1268,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // Extract the per-entry `item` (`card`/`file-meta`) serializations from a
-  // data-only search-entry document, in entry order: each entry's `item`
+  // data-only entry document, in entry order: each entry's `item`
   // relationship names a `(type, id)` resolved against `included`.
   private itemResourcesFromSearchEntries(
     doc: SearchEntryResults,
@@ -1330,9 +1330,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isSearchEntryCollectionDocument(json)) {
+    if (!isEntryCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a valid search-entry collection document:
+        `The realm search response was not a valid entry collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
@@ -2240,6 +2240,13 @@ export default class StoreService extends Service implements StoreInterface {
         },
       );
       this.setIdentityContext(fileInstance as unknown as FileDef, 'file-meta');
+      // The realm may serve the doc id in canonical prefix form (e.g.
+      // `@cardstack/skills/...`) while the caller asked by URL. Register the
+      // requested id as an alias — mirroring the card path — so later lookups
+      // by either form find this instance instead of silently missing.
+      if (fileMetaDoc.data.id && fileMetaDoc.data.id !== id) {
+        this.store.setFileMeta(id, fileInstance as unknown as FileDef);
+      }
       deferred.fulfill(fileInstance as T);
       return fileInstance as T;
     } catch (error: any) {
