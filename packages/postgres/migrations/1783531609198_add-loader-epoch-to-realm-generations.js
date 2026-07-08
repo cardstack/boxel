@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // An opaque token identifying the realm's current "loader epoch": any index

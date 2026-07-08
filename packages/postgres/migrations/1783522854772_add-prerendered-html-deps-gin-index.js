@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // The invalidation fan-out (`itemsThatReference`) scans
