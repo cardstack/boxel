@@ -1106,6 +1106,14 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
+        // Surface the failure reason to the model — without it a failed (or
+        // partially fulfilled, e.g. a multi-file read where one file 404ed)
+        // tool call reads as a bare status with nothing to act on.
+        // Check-correctness results fold their reason in above.
+        let failureReason = commandResult.content.failureReason;
+        if (!isCheckCorrectnessRequest && failureReason) {
+          content = `${content}${failureReason}\n`;
+        }
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
           commandResult,

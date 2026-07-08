@@ -42,14 +42,22 @@ function toCommandRequest(
   }
   // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
   // it in the timeline but never runs it, and give it a human label the
-  // timeline indicator can show ("Read file: <name>") since the raw arguments
-  // carry no description of their own.
+  // timeline indicator can show ("Read files: <names>") since the raw
+  // arguments carry no description of their own.
   if (result.name === READ_REALM_FILE_TOOL_NAME) {
     result.executedBy = AI_BOT_EXECUTOR;
-    let label = fileLabelFromUrl(result.arguments?.url);
+    let urls: unknown = result.arguments?.urls;
+    let labels = (Array.isArray(urls) ? urls : [])
+      .map((url) => (typeof url === 'string' ? fileLabelFromUrl(url) : url))
+      .filter(Boolean);
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: label ? `Read file: ${label}` : 'Read file',
+      description:
+        labels.length === 0
+          ? 'Read files'
+          : labels.length === 1
+            ? `Read file: ${labels[0]}`
+            : `Read files: ${labels.join(', ')}`,
     };
   }
   return result;

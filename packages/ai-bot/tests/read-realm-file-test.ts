@@ -76,9 +76,14 @@ module('readRealmFile tool definition', () => {
     assert.strictEqual(readRealmFileTool.type, 'function');
     let required = (readRealmFileTool.function.parameters as any)
       .required as string[];
-    assert.deepEqual(required, ['url'], 'only url is required');
+    assert.deepEqual(required, ['urls'], 'only urls is required');
     let properties = (readRealmFileTool.function.parameters as any)
-      .properties as Record<string, unknown>;
+      .properties as Record<string, any>;
+    assert.strictEqual(
+      properties['urls']?.type,
+      'array',
+      'many files read in one call — a per-turn trickle of single reads is the latency we are avoiding',
+    );
     assert.notOk(
       properties['realm'],
       'realm is discovered, not asked of the model',
@@ -93,10 +98,11 @@ module('executeReadRealmFile', () => {
       () => new Response('# Trip Planner\n\ninstructions', { status: 200 }),
     );
 
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
 
     assert.strictEqual(sessions.calls.length, 0, 'no token minted');
     assert.strictEqual(calls.length, 1, 'a single fetch');
@@ -121,10 +127,11 @@ module('executeReadRealmFile', () => {
         : new Response('# Gated\n\ninstructions', { status: 200 });
     });
 
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
 
     assert.deepEqual(
       sessions.calls,
@@ -152,10 +159,11 @@ module('executeReadRealmFile', () => {
     let { fetch } = recordingFetch(
       () => new Response('unauthorized', { status: 401 }),
     );
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
     assert.false(result.ok);
     assert.true(
       (result as { ok: false; error: string }).error.includes('which realm'),
@@ -175,10 +183,11 @@ module('executeReadRealmFile', () => {
           headers: { 'x-boxel-realm-url': 'https://other.example/user/mary/' },
         }),
     );
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
     assert.false(result.ok, 'result not ok');
     assert.true(
       (result as { ok: false; error: string }).error.includes(
@@ -195,10 +204,11 @@ module('executeReadRealmFile', () => {
     let { fetch } = recordingFetch(
       () => new Response('not found', { status: 404 }),
     );
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
     assert.false(result.ok, 'result not ok');
     assert.true(
       (result as { ok: false; error: string }).error.includes('404'),
@@ -212,10 +222,11 @@ module('executeReadRealmFile', () => {
       throws: new DelegatedUserRealmSessionError('disabled', 'off'),
     });
     let { fetch } = recordingFetch(() => gated());
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
     assert.false(result.ok);
     assert.true(
       (result as { ok: false; error: string }).error.includes('unavailable'),
@@ -228,10 +239,11 @@ module('executeReadRealmFile', () => {
       throws: new DelegatedUserRealmSessionError('forbidden', 'nope', 403),
     });
     let { fetch } = recordingFetch(() => gated(403));
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
     assert.false(result.ok);
     assert.true(
       (result as { ok: false; error: string }).error.includes('no read access'),
@@ -253,10 +265,11 @@ module('executeReadRealmFile', () => {
       return n === 2 ? gated() : new Response('# Fresh', { status: 200 });
     });
 
-    let result = await executeReadRealmFile(
-      { url: FILE_URL },
-      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
-    );
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
 
     assert.true(result.ok, 'succeeds on the retry');
     assert.strictEqual(calls.length, 3, 'probe, stale authed, fresh authed');
@@ -285,7 +298,7 @@ module('classifyToolCalls', () => {
   test('splits readRealmFile (bot) from everything else (host)', () => {
     let { botToolCalls, hostToolCalls } = classifyToolCalls(
       assistantMessage([
-        fnCall('c1', READ_REALM_FILE_TOOL_NAME, { url: FILE_URL }),
+        fnCall('c1', READ_REALM_FILE_TOOL_NAME, { urls: [FILE_URL] }),
         fnCall('c2', 'SomeHostCommand'),
       ]),
     );

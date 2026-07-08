@@ -12,41 +12,49 @@ let log = logger('ai-bot:read-realm-file');
 
 export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
 
-// On-demand file reading. The model calls `readRealmFile` to pull a file's
-// contents only when it needs them — most often a skill's SKILL.md or a file it
-// references, but it works for any file in the realm. ai-bot executes it
-// in-process: it mints a delegated, user-scoped realm token and fetches the
-// file over HTTP, so the bot can only read what the requesting human can
-// already read, and the content is always live (no Matrix snapshots, no host
-// round-trip).
+// On-demand file reading. The model calls `readRealmFile` to pull files'
+// contents only when it needs them — most often a skill's SKILL.md or the
+// references it lists, but it works for any file in the realm. One call reads
+// any number of files: each model turn that requests reads costs a full
+// round-trip (fulfillment + a fresh generation), so the tool takes a list and
+// the description pushes the model to batch everything it already knows it
+// needs. ai-bot executes it in-process: it mints a delegated, user-scoped
+// realm token and fetches each file over HTTP, so the bot can only read what
+// the requesting human can already read, and the content is always live (no
+// Matrix snapshots, no host round-trip).
 export const readRealmFileTool: Tool = {
   type: 'function',
   function: {
     name: READ_REALM_FILE_TOOL_NAME,
     description:
-      "Read a file from a realm on demand — e.g. a skill's SKILL.md, or a " +
-      "file it references. Use this to get a skill's full instructions, or a " +
-      'reference it cites, when you only have it listed.',
+      "Read files from a realm on demand — e.g. a skill's SKILL.md, or the " +
+      'reference files it lists. Reads all the given URLs at once, so when ' +
+      'you already know several files you need (a skill’s reference ' +
+      'list usually tells you), request them all in a single call rather ' +
+      'than a few at a time — every extra round of reads delays your answer.',
     parameters: {
       type: 'object',
       properties: {
-        url: {
-          type: 'string',
+        urls: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string' },
           description:
-            'Full URL of the file to read, exactly as it appears in the ' +
-            "skill (a link there is already absolute — don't shorten or " +
-            'rewrite it). The realm it lives in is worked out for you.',
+            'Full URLs of the files to read, each exactly as it appears in ' +
+            "the skill (a link there is already absolute — don't shorten " +
+            'or rewrite it). The realm each file lives in is worked out ' +
+            'for you.',
         },
       },
-      required: ['url'],
+      required: ['urls'],
     },
   },
 };
 
 export interface ReadRealmFileArgs {
-  // Full URL of the file to read. The realm it belongs to is discovered from
-  // the realm server's response, so the caller supplies only the URL.
-  url: string;
+  // Full URLs of the files to read. The realm each belongs to is discovered
+  // from the realm server's response, so the caller supplies only URLs.
+  urls: string[];
 }
 
 // Realm servers echo the owning realm's root on every response — success or
@@ -59,16 +67,16 @@ export type ReadRealmFileResult =
   | { ok: true; url: string; content: string }
   | { ok: false; error: string };
 
-// Executes a readRealmFile tool call inside the bot process: GETs the file as
-// raw source, discovering the owning realm from the response so a delegated,
-// read-only token can be minted for `onBehalfOf` only when the realm actually
-// gates the file. A public file (e.g. anything in the skills realm) is returned
-// from the first unauthenticated fetch with no token at all. Never throws —
-// returns a result the caller hands back to the model as the tool result, so a
-// missing file or a permission failure becomes information the model can act on
-// rather than a crashed turn.
+// Reads one of a readRealmFile call's files inside the bot process: GETs the
+// file as raw source, discovering the owning realm from the response so a
+// delegated, read-only token can be minted for `onBehalfOf` only when the
+// realm actually gates the file. A public file (e.g. anything in the skills
+// realm) is returned from the first unauthenticated fetch with no token at
+// all. Never throws — returns a result the caller hands back to the model as
+// part of the tool result, so a missing file or a permission failure becomes
+// information the model can act on rather than a crashed turn.
 export async function executeReadRealmFile(
-  args: ReadRealmFileArgs,
+  url: string,
   {
     onBehalfOf,
     delegatedUserRealmSessions,
@@ -82,8 +90,6 @@ export async function executeReadRealmFile(
     fetch?: typeof globalThis.fetch;
   },
 ): Promise<ReadRealmFileResult> {
-  let url = args.url;
-
   // `redirect: 'manual'` keeps a stray redirect from being silently followed
   // (it surfaces as a non-2xx instead). No Authorization on the first try:
   // public files (the skills realm) come back 200, and a gated file comes back
