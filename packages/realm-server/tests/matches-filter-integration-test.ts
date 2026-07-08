@@ -78,6 +78,19 @@ async function seedRow(
     param(markdown),
     `)`,
   ]);
+  // The full-text `matches` predicate reads `prerendered_html.markdown` (the
+  // `boxel_index.markdown` fallback disappears once the dual paths are dropped).
+  // Project the just-seeded row's markdown onto `prerendered_html` — mirroring
+  // the production backfill + dual-write — so these tests exercise the real
+  // read path. `indexed_at` seeds `rendered_at`.
+  await query(dbAdapter, [
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, rendered_at)`,
+    `SELECT url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, indexed_at`,
+    `FROM boxel_index WHERE url =`,
+    param(url),
+    `AND realm_url =`,
+    param(testRealmURL),
+  ]);
 }
 
 async function countBoxelIndexRows(dbAdapter: PgAdapter): Promise<number> {

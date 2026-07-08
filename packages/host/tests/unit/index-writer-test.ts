@@ -100,31 +100,6 @@ const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
   };
 };
 
-// Seed a realm's `prerendered_html` rows from its `boxel_index` rows, matching
-// the backfill + dual-write that populate `prerendered_html` in production.
-// `setupIndex` only writes `boxel_index`, so a copy — which sources the
-// destination's HTML from the source realm's `prerendered_html` — needs the
-// source's `prerendered_html` seeded to have anything to copy.
-const mirrorPrerenderedHtml = async (
-  adapter: SQLiteAdapter,
-  realmURL: string,
-) =>
-  adapter.execute(
-    `INSERT INTO prerendered_html (
-       url, file_alias, realm_url, type,
-       fitted_html, embedded_html, atom_html, head_html, isolated_html,
-       markdown, deps, last_known_good_deps,
-       generation, is_deleted, error_doc, rendered_at
-     )
-     SELECT
-       url, file_alias, realm_url, type,
-       fitted_html, embedded_html, atom_html, head_html, isolated_html,
-       markdown, deps, last_known_good_deps,
-       generation, is_deleted, error_doc, indexed_at
-     FROM boxel_index WHERE realm_url = $1`,
-    { bind: [realmURL] },
-  );
-
 module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexWriter: IndexWriter;
@@ -877,10 +852,8 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // The copy sources the destination's HTML from the source realm's
-    // prerendered_html channel, so seed it (as backfill + dual-write do in
-    // production).
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
+    // setupIndex seeds the source realm's prerendered_html (as the backfill +
+    // dual-write do in production), so the copy has a rendering to source.
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL2),
       virtualNetwork,
@@ -958,10 +931,10 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // Seed the source realm's prerendered_html (backfill + dual-write do this in
-    // production), then diverge its rendering from the boxel_index column with a
-    // sentinel a boxel_index-sourced copy could never produce.
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
+    // setupIndex seeds the source realm's prerendered_html (backfill +
+    // dual-write do this in production); diverge its rendering from the
+    // boxel_index column with a sentinel a boxel_index-sourced copy could never
+    // produce.
     await adapter.execute(
       `UPDATE prerendered_html SET isolated_html = $1, markdown = $2 WHERE url = $3 AND realm_url = $4`,
       {
@@ -1076,9 +1049,13 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // Deliberately do NOT seed the source's prerendered_html — this row is a
-    // gap the copy fills from boxel_index. Pre-seed a stale destination
+    // Drop the source's prerendered_html row that setupIndex seeded so this row
+    // is a gap the copy must fill from boxel_index. Pre-seed a stale destination
     // prerendered_html row for the URL the copy will write.
+    await adapter.execute(
+      `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2`,
+      { bind: [`${testRealmURL}1.json`, testRealmURL] },
+    );
     await adapter.execute(
       `INSERT INTO prerendered_html (url, file_alias, realm_url, type, isolated_html, markdown, generation, is_deleted, rendered_at)
        VALUES ($1, $2, $3, 'instance', $4, $5, 1, false, $6)`,
@@ -1161,9 +1138,9 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // Source prerendered_html covers only the instance row: mirror both, drop
-    // the file row, and diverge the instance rendering with a sentinel.
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
+    // setupIndex seeds prerendered_html for both types; drop the file row so the
+    // source covers only the instance, then diverge the instance rendering with
+    // a sentinel.
     await adapter.execute(
       `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2 AND type = 'file'`,
       { bind: [`${testRealmURL}1.json`, testRealmURL] },
@@ -1213,10 +1190,12 @@ module('Unit | index-writer', function (hooks) {
     // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
     // (with HTML) but never mirrored it onto prerendered_html_working — the
     // crash-window / pre-dual-write-deploy case. prerendered_html_working is
-    // left empty. A resuming batch re-adds the URL to the invalidation set but
-    // never re-runs updateEntry, so the batch-commit projection must source
-    // from boxel_index_working or the row lands in boxel_index but is silently
-    // skipped in prerendered_html.
+    // left empty (prerenderedHtml: false), so the batch-commit projection is the
+    // only thing that can promote the row: a resuming batch re-adds the URL to
+    // the invalidation set but never re-runs updateEntry, so the projection must
+    // source from boxel_index_working or the row lands in boxel_index but is
+    // silently skipped in prerendered_html. Auto-seeding prerendered_html_working
+    // here would mask a regression in that projection.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1238,6 +1217,7 @@ module('Unit | index-writer', function (hooks) {
         ],
         production: [],
       },
+      { prerenderedHtml: false },
     );
 
     let batch = await indexWriter.createBatch(
