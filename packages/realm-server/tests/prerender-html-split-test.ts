@@ -206,10 +206,12 @@ module(basename(import.meta.filename), function () {
       let existing = prerenderHtmlArgs({
         generation: 6,
         loaderEpoch: 'epoch-new',
+        spawningJobId: 300,
       });
       let incoming = prerenderHtmlArgs({
         generation: 5,
         loaderEpoch: 'epoch-old',
+        spawningJobId: 400,
       });
       let decision = coalesce(
         context({
@@ -227,6 +229,11 @@ module(basename(import.meta.filename), function () {
         mergedArgs.loaderEpoch,
         'epoch-new',
         'the loader epoch stays with the newest generation',
+      );
+      assert.strictEqual(
+        mergedArgs.spawningJobId,
+        300,
+        'correlation stays with the newest generation too',
       );
     });
 

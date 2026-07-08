@@ -133,8 +133,12 @@ function choosePrerenderHtmlCoalesceDecision(
           ),
           generation: newest.generation,
           loaderEpoch: newest.loaderEpoch,
+          // Correlation follows the same newest-wins rule as the
+          // generation/epoch it attributes.
           spawningJobId:
-            incomingArgs.spawningJobId ?? existingArgs.spawningJobId,
+            newest.spawningJobId ??
+            (newest === incomingArgs ? existingArgs : incomingArgs)
+              .spawningJobId,
         },
       },
     };
