@@ -497,29 +497,69 @@ module(basename(import.meta.filename), function () {
     // false; the from-scratch job below is produced by the `isNewIndex`
     // branch in Realm.start(), not by the env-var-driven branch.
     test('newly-created realm full-indexes on first boot', async function (assert) {
-      let jobs = await testDbAdapter.execute('select * from jobs');
+      let jobs = await testDbAdapter.execute('select * from jobs order by id');
       assert.strictEqual(
         jobs.length,
-        1,
-        'there is one job that was run in the queue',
+        2,
+        'the boot produced an index job and its spawned prerender_html job',
       );
-      let [job] = jobs;
+      let [indexJob, prerenderJob] = jobs;
       assert.strictEqual(
-        job.job_type,
+        indexJob.job_type,
         'from-scratch-index',
-        'the job is a from scratch index job',
+        'the first job is a from scratch index job',
       );
       assert.strictEqual(
-        job.concurrency_group,
+        indexJob.concurrency_group,
         `indexing:${testRealm}`,
         'the job is an index of the test realm',
       );
       assert.strictEqual(
-        job.status,
+        indexJob.status,
         'resolved',
         'the job completed successfully',
       );
-      assert.ok(job.finished_at, 'the job was marked with a finish time');
+      assert.ok(indexJob.finished_at, 'the job was marked with a finish time');
+      assert.strictEqual(
+        prerenderJob.job_type,
+        'prerender_html',
+        'the index pass spawned an HTML prerender job',
+      );
+      assert.strictEqual(
+        prerenderJob.concurrency_group,
+        `prerender-html:${testRealm}`,
+        'HTML work runs in its own per-realm concurrency group',
+      );
+      assert.strictEqual(
+        prerenderJob.status,
+        'resolved',
+        'the prerender_html job completed successfully',
+      );
+      let prerenderArgs = prerenderJob.args as {
+        generation: number;
+        spawningJobId: number | null;
+        changes: { url: string; operation: string }[];
+      };
+      assert.strictEqual(
+        prerenderArgs.generation,
+        1,
+        'the job carries the generation the index pass anticipated',
+      );
+      assert.strictEqual(
+        prerenderArgs.spawningJobId,
+        indexJob.id,
+        'the job is correlated back to the index pass that spawned it',
+      );
+      assert.true(
+        prerenderArgs.changes.every((change) => change.operation === 'update'),
+        'the job carries the invalidation set as update operations',
+      );
+      assert.true(
+        prerenderArgs.changes.some(
+          (change) => change.url === `${testRealm}mango.json`,
+        ),
+        'the invalidation set covers the realm content',
+      );
     });
 
     test('can store card pre-rendered html in the index', async function (assert) {

@@ -237,6 +237,8 @@ const ALL_TEST_FILES: string[] = [
   './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
+  './prerender-html-split-test',
+  './prerender-html-split-integration-test',
   './prerender-server-test',
   './prerender-manager-test',
   './prerender-host-shell-recycle-test',

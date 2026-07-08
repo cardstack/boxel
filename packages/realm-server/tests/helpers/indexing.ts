@@ -155,6 +155,106 @@ export async function expectIncrementalIndexEvent(
   return incrementalEventContent;
 }
 
+export interface PrerenderedHtmlRow {
+  url: string;
+  type: 'instance' | 'file';
+  isolated_html: string | null;
+  head_html: string | null;
+  atom_html: string | null;
+  embedded_html: Record<string, string> | null;
+  fitted_html: Record<string, string> | null;
+  markdown: string | null;
+  deps: string[] | null;
+  generation: number;
+  is_deleted: boolean | null;
+  error_doc: unknown | null;
+}
+
+// Fetch a production `prerendered_html` row for assertions. Returns
+// undefined when the URL has no row of that type (e.g. HTML that has not
+// been rendered).
+export async function prerenderedHtmlRowFor(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<PrerenderedHtmlRow | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT * FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+  ] as Expression)) as unknown as PrerenderedHtmlRow[];
+  return rows[0];
+}
+
+// HTML lands on its own channel: the index pass fires a `prerender_html`
+// job (fire-and-forget) and completes without waiting for it, so a test
+// that writes and then asserts prerendered HTML must settle that channel
+// first. Waits until the realm's `prerender-html:<realm>` concurrency
+// group has no unfulfilled jobs and no active reservations, and fails
+// loudly if any of its jobs rejected — a broken render should fail the
+// test, not silently satisfy the wait.
+export async function settlePrerenderHtmlJobs(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+  opts?: { timeout?: number },
+): Promise<void> {
+  let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
+  let lastState = '';
+  await waitUntil(
+    async () => {
+      let rows = (await query(dbAdapter, [
+        `SELECT j.id, j.status,
+           (SELECT COUNT(*)::int FROM job_reservations r
+             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations
+         FROM jobs j WHERE`,
+        ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+      ] as Expression)) as {
+        id: number;
+        status: string;
+        active_reservations: number;
+      }[];
+      let rejected = rows.filter((row) => row.status === 'rejected');
+      if (rejected.length > 0) {
+        throw new Error(
+          `prerender_html job(s) rejected for ${concurrencyGroup}: ${rejected
+            .map((row) => row.id)
+            .join(', ')}`,
+        );
+      }
+      lastState = JSON.stringify(rows);
+      return rows.every(
+        (row) => row.status === 'resolved' && row.active_reservations === 0,
+      );
+    },
+    {
+      timeout: opts?.timeout ?? 30000,
+      interval: 50,
+      timeoutMessage: () =>
+        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; last state: ${lastState}`,
+    },
+  );
+}
+
+// The generation the realm's index channel is at — the value a fresh
+// `prerendered_html` row's `generation` should equal.
+export async function currentRealmGeneration(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+): Promise<number | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT current_generation FROM realm_generations WHERE`,
+    ...every([
+      [
+        'realm_url =',
+        param(typeof realmURL === 'string' ? realmURL : realmURL.href),
+      ],
+    ]),
+  ] as Expression)) as { current_generation: number }[];
+  return rows[0]?.current_generation;
+}
+
 export async function depsForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,
