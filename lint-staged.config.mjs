@@ -7,8 +7,14 @@
 // edit here. All routing goes through scripts/lint-autofix.mjs, which applies
 // fixes, re-stages, and warns without ever blocking the commit.
 import { getFileInfo } from 'prettier';
-import { dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// pnpm owns these files: it (re)writes them with its own serializer, so no
+// lint tool usefully applies — prettier reformatting pnpm-workspace.yaml just
+// fights pnpm's next rewrite, and pnpm-lock.yaml is prettier-ignored anyway.
+// Drop them before routing so they're never scanned or handed to any tool.
+const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 
 // Resolve .prettierignore next to this config (repo root) rather than relying
 // on cwd, so getFileInfo's `ignored` verdict matches what the prettier CLI in
@@ -40,6 +46,7 @@ export default async (stagedFiles) => {
   const prettierFiles = [];
 
   for (const file of stagedFiles) {
+    if (PNPM_OWNED_FILES.has(basename(file))) continue;
     const ext = extname(file);
     let routed = false;
     if (ESLINT_EXTENSIONS.has(ext)) {
