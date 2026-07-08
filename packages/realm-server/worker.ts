@@ -36,6 +36,9 @@ import {
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import { BROADCAST_REALM_EVENT } from '@cardstack/runtime-common/worker-request';
+import { encodeWorkerRequestIpc } from './lib/worker-request-forwarder.ts';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import {
@@ -166,6 +169,25 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  // Generic worker → manager request bridge. A worker child hands the manager
+  // an arbitrary typed payload over the IPC channel; the manager dispatches on
+  // `type` and forwards it to the realm server. A worker-originated request is a
+  // `type` here plus a matching handler on the manager and the realm server —
+  // the transport doesn't change.
+  function sendWorkerRequest(type: string, payload: unknown) {
+    if (process.send) {
+      process.send(encodeWorkerRequestIpc(type, payload));
+    }
+  }
+
+  // A worker child holds no matrix client, so it can't broadcast a realm event
+  // itself. It requests one through the manager, which broadcasts it through the
+  // realm's matrix session rooms. The task calls the `reportRealmEvent` callback
+  // in TaskArgs without knowing this transport.
+  function reportRealmEvent(event: RealmEventContent) {
+    sendWorkerRequest(BROADCAST_REALM_EVENT, event);
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let worker = new Worker({
@@ -176,6 +198,7 @@ let autoMigrate = migrateDB || undefined;
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),

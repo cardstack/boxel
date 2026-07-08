@@ -6948,6 +6948,25 @@ export class Realm {
     );
   }
 
+  // Public entry point for broadcasting a realm event that does not originate
+  // from a request this Realm handled — a worker-originated event bridged in
+  // through the worker manager. Unlike the private broadcastRealmEvent
+  // (fire-and-forget), this awaits the adapter so the internal /_worker-request
+  // endpoint doesn't leave a dangling promise and can
+  // surface a resolution/dispatch throw. Delivery itself is best-effort — the
+  // adapter swallows per-room send failures the same way web-tier broadcasts do
+  // — so a 200 means "resolved and dispatched," not "received by every host."
+  // The adapter stamps this realm's canonical url on the event, so it reaches
+  // subscribed hosts exactly as a web-tier-originated event does.
+  async broadcastEvent(event: RealmEventContent): Promise<void> {
+    await this.#adapter.broadcastRealmEvent(
+      event,
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
+  }
+
   // CS-11126: no memoization. `realm_permissions` is indexed by
   // realm_url and a permissions PATCH from a peer replica must take
   // effect here without a restart, so every read-path callsite fetches
