@@ -1091,10 +1091,12 @@ module('Unit | index-writer', function (hooks) {
     // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
     // (with HTML) but never mirrored it onto prerendered_html_working — the
     // crash-window / pre-dual-write-deploy case. prerendered_html_working is
-    // left empty. A resuming batch re-adds the URL to the invalidation set but
-    // never re-runs updateEntry, so the batch-commit projection must source
-    // from boxel_index_working or the row lands in boxel_index but is silently
-    // skipped in prerendered_html.
+    // left empty (prerenderedHtml: false), so the batch-commit projection is the
+    // only thing that can promote the row: a resuming batch re-adds the URL to
+    // the invalidation set but never re-runs updateEntry, so the projection must
+    // source from boxel_index_working or the row lands in boxel_index but is
+    // silently skipped in prerendered_html. Auto-seeding prerendered_html_working
+    // here would mask a regression in that projection.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1116,6 +1118,7 @@ module('Unit | index-writer', function (hooks) {
         ],
         production: [],
       },
+      { prerenderedHtml: false },
     );
 
     let batch = await indexWriter.createBatch(
