@@ -81,8 +81,15 @@ export class IndexWriter {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
+    opts?: { splitPrerenderHtml?: boolean },
   ) {
-    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo);
+    let batch = new Batch(
+      this.#dbAdapter,
+      realmURL,
+      virtualNetwork,
+      jobInfo,
+      opts,
+    );
     await batch.ready;
     return batch;
   }
@@ -217,6 +224,22 @@ export class Batch {
   // uses it to overlay the destination's prerendered HTML from the source
   // realm's `prerendered_html` rows after the `boxel_index` projection runs.
   #copyFromSourceRealm: URL | undefined;
+  // When true (the server/Postgres path), HTML prerendering runs as a separate
+  // `prerender_html` job, so this index batch writes only `boxel_index` and
+  // leaves the `prerendered_html` channel to that job. When false (the fused
+  // path — the SQLite in-browser/test realm, which has no separate worker), the
+  // batch keeps projecting HTML into `prerendered_html` inline. Defaults to
+  // `dbAdapter.kind === 'pg'`; a copy batch keeps the projection either way
+  // (guarded by `#copyFromSourceRealm` in `applyBatchUpdates`).
+  #splitPrerenderHtml: boolean;
+  // When true, this batch is the `prerender_html` job's batch: it writes only
+  // the `prerendered_html` channel (not `boxel_index`), stamps the carried
+  // generation without advancing `realm_generations`, and its swap carries a
+  // monotonic guard. The tombstone / last-known-good / resume / write logic is
+  // otherwise identical to an index batch — the fan-out is not recomputed here
+  // (it ran once in the index pass and is seeded via `seedPrerenderInvalidations`).
+  #prerenderHtmlOnly: boolean;
+  #explicitGeneration: number | undefined;
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -227,13 +250,36 @@ export class Batch {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
+    opts?: {
+      splitPrerenderHtml?: boolean;
+      prerenderHtmlOnly?: boolean;
+      generation?: number;
+    },
   ) {
     this.realmURL = realmURL;
     this.virtualNetwork = virtualNetwork;
     this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
+    this.#splitPrerenderHtml =
+      opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
+    this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
+    this.#explicitGeneration = opts?.generation;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
+  }
+
+  // Whether this batch defers HTML to the `prerender_html` job (server) rather
+  // than projecting it inline (fused / SQLite). Read by the index-runner visit
+  // loop (to skip the inline prerender-html visit) and the enqueue callback.
+  get splitPrerenderHtml(): boolean {
+    return this.#splitPrerenderHtml;
+  }
+
+  // The realm generation this batch stamps on every row it writes
+  // (`current_generation + 1`, computed at batch start). Threaded out so the
+  // index event and the spawned `prerender_html` job can carry it.
+  get currentGeneration(): number {
+    return this.generation;
   }
 
   private isRegisteredPrefix(reference: string): boolean {
@@ -956,56 +1002,64 @@ export class Batch {
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
 
-      // Mirror every invalidated URL's HTML onto prerendered_html_working in one
-      // projection from boxel_index_working — the authoritative, complete source
-      // for the invalidation set. Doing it here (rather than per updateEntry)
-      // also covers rows a resumed job wrote in a prior attempt that this
-      // attempt never revisits, and rows written between the backfill migration
-      // and the dual-write deploy, so the swap below can never silently skip a
-      // promoted URL.
-      await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+      // Populate `prerendered_html` from this pass, UNLESS this is a split-mode
+      // index pass — in which case HTML flows only through the `prerender_html`
+      // job and the index visit produced no HTML columns, so projecting them
+      // would clobber good rows with empty HTML. A copy always runs this block
+      // (it produces HTML via `copyFrom` + the overlay below); the fused path
+      // (SQLite) always runs it (it renders HTML inline).
+      if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
+        // Mirror every invalidated URL's HTML onto prerendered_html_working in one
+        // projection from boxel_index_working — the authoritative, complete source
+        // for the invalidation set. Doing it here (rather than per updateEntry)
+        // also covers rows a resumed job wrote in a prior attempt that this
+        // attempt never revisits, and rows written between the backfill migration
+        // and the dual-write deploy, so the swap below can never silently skip a
+        // promoted URL.
+        await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
 
-      // For a copy, overlay the source realm's `prerendered_html` on top of the
-      // projection: a rendering the source has in `prerendered_html` overwrites
-      // the `boxel_index`-projected row (matched per `(url, type)`), and a row
-      // the source lacks there keeps the projected HTML — so the copy sources
-      // HTML from `prerendered_html` and also fills every row, leaving no
-      // stale destination row behind.
-      if (this.#copyFromSourceRealm) {
-        await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
-      }
+        // For a copy, overlay the source realm's `prerendered_html` on top of the
+        // projection: a rendering the source has in `prerendered_html` overwrites
+        // the `boxel_index`-projected row (matched per `(url, type)`), and a row
+        // the source lacks there keeps the projected HTML — so the copy sources
+        // HTML from `prerendered_html` and also fills every row, leaving no
+        // stale destination row behind.
+        if (this.#copyFromSourceRealm) {
+          await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
+        }
 
-      // Swap the mirrored HTML rows into production in the same transaction,
-      // keyed by the same invalidation set and generation. `prerendered_html`
-      // has no `job_id` column, so getColumnNames yields the production
-      // projection and the SELECT drops `job_id` from prerendered_html_working.
-      let prerenderedColumns = (
-        await this.#dbAdapter.getColumnNames('prerendered_html')
-      ).map((c) => [c]);
-      let prerenderedNames = flattenDeep(prerenderedColumns);
-      await this.#query([
-        'INSERT INTO prerendered_html',
-        ...addExplicitParens(separatedByCommas(prerenderedColumns)),
-        'SELECT',
-        ...separatedByCommas(prerenderedColumns),
-        'FROM prerendered_html_working',
-        'WHERE',
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          [
-            'url in',
-            ...addExplicitParens(
-              separatedByCommas(
-                [...this.#invalidations].map((i) => [param(i)]),
+        // Swap the mirrored HTML rows into production in the same transaction,
+        // keyed by the same invalidation set and generation. `prerendered_html`
+        // has no `job_id` column, so getColumnNames yields the production
+        // projection and the SELECT drops `job_id` from prerendered_html_working.
+        let prerenderedColumns = (
+          await this.#dbAdapter.getColumnNames('prerendered_html')
+        ).map((c) => [c]);
+        let prerenderedNames = flattenDeep(prerenderedColumns);
+        await this.#query([
+          'INSERT INTO prerendered_html',
+          ...addExplicitParens(separatedByCommas(prerenderedColumns)),
+          'SELECT',
+          ...separatedByCommas(prerenderedColumns),
+          'FROM prerendered_html_working',
+          'WHERE',
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            [
+              'url in',
+              ...addExplicitParens(
+                separatedByCommas(
+                  [...this.#invalidations].map((i) => [param(i)]),
+                ),
               ),
-            ),
-          ],
-        ]),
-        'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
-        ...separatedByCommas(
-          prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
-        ),
-      ] as Expression);
+            ],
+          ]),
+          'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
+          ...separatedByCommas(
+            prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
+          ),
+        ] as Expression);
+      }
     }
   }
 
