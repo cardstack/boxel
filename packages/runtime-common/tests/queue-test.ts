@@ -113,7 +113,6 @@ const tests = Object.freeze({
     assert,
     { publisher, runner },
   ) => {
-    runner.register('echo', async (arg: { value: number }) => arg);
     let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
       let candidate = candidates[0];
       if (!candidate) {
@@ -122,6 +121,10 @@ const tests = Object.freeze({
       return { type: 'join', jobId: candidate.id } as const;
     };
     registerQueueJobDefinition({ jobType: 'echo', coalesce });
+    // Both jobs are published before their handler is registered: a runner
+    // never claims a job type it has no handler for, so the first job is
+    // guaranteed to still be pending when the second publish coalesces —
+    // registering first would race the runner's claim of the first job.
     let first = await publisher.publish<{ value: number; waiter: string }>({
       jobType: 'echo',
       concurrencyGroup: 'echo-group',
@@ -144,6 +147,19 @@ const tests = Object.freeze({
     });
 
     assert.strictEqual(first.id, second.id, 'both waiters share canonical job');
+
+    runner.register('echo', async (arg: { value: number }) => arg);
+    // Registration alone doesn't wake a polling runner — a publish does.
+    // Nudge with a no-op job so the canonical job runs promptly instead of
+    // waiting out the poll interval.
+    runner.register('wake', async () => null);
+    await publisher.publish({
+      jobType: 'wake',
+      concurrencyGroup: 'wake-group',
+      timeout: 5,
+      args: null,
+    });
+
     let [firstResult, secondResult] = await Promise.all([
       first.done,
       second.done,
@@ -156,9 +172,6 @@ const tests = Object.freeze({
 
   'coalesce can join pending jobs and map waiter-specific rejected results':
     async (assert, { publisher, runner }) => {
-      runner.register('boom-echo', async (arg: { value: number }) => {
-        throw { reason: 'boom', value: arg.value };
-      });
       let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
         let candidate = candidates[0];
         if (!candidate) {
@@ -201,6 +214,21 @@ const tests = Object.freeze({
         second.id,
         'both waiters share canonical job',
       );
+
+      // Same deterministic shape as the resolved-results test above: the
+      // handler is registered only after both publishes joined, then a
+      // no-op publish wakes the runner.
+      runner.register('boom-echo', async (arg: { value: number }) => {
+        throw { reason: 'boom', value: arg.value };
+      });
+      runner.register('wake', async () => null);
+      await publisher.publish({
+        jobType: 'wake',
+        concurrencyGroup: 'wake-group',
+        timeout: 5,
+        args: null,
+      });
+
       let [firstResult, secondResult] = await Promise.allSettled([
         first.done,
         second.done,
