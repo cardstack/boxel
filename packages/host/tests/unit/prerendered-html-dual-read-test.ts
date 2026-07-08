@@ -208,6 +208,11 @@ module('Unit | prerendered-html dual-read', function (hooks) {
           markdown: 'Readme markdown body',
         },
       ],
+      // This suite exercises the dual-read itself — the boxel_index fallback,
+      // the prerendered_html mirror, and the mix — so it seeds prerendered_html
+      // by hand (the local mirrorPrerenderedHtml helper) rather than via
+      // setupIndex.
+      { prerenderedHtml: false },
     );
   });
 
