@@ -148,9 +148,9 @@ ${REPLACE_MARKER}`;
     });
 
     test('strips a stray extra separator the model emits before the REPLACE marker', async function (assert) {
-      // Regression: a duplicated separator right before REPLACE_MARKER used to
-      // land in replaceContent and get written into the file as a line of
-      // box-drawing characters.
+      // Models sometimes duplicate the separator right before REPLACE_MARKER;
+      // parsing must drop it rather than include it in replaceContent, where
+      // it would reach the file as a line of box-drawing characters.
       let block = `game-1.json
 ${SEARCH_MARKER}
 { "old": true }

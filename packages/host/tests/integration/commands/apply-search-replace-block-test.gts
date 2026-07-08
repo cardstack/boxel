@@ -778,9 +778,9 @@ ${REPLACE_MARKER}`;
   });
 
   test('does not write a stray extra separator into the file', async function (assert) {
-    // Regression: a model emitted a duplicated separator right before the
-    // REPLACE marker, which was applied verbatim as a trailing line of
-    // box-drawing characters in the resulting file.
+    // Models sometimes duplicate the separator right before the REPLACE
+    // marker; applying the block must strip it rather than write it into the
+    // file as a trailing line of box-drawing characters.
     let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
