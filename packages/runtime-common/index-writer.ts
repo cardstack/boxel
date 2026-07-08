@@ -575,12 +575,14 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
-    let diagnostics: Diagnostics = sanitizeForJsonb({
+    // jsonb-illegal bytes are stripped once at the write boundary below
+    // (see the sanitizeForJsonb call before asExpressions), so this and every
+    // other content column is covered in one place.
+    let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    });
+    };
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -665,7 +667,7 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
+          error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
           diagnostics: diagnostics,
         };
@@ -720,11 +722,24 @@ export class Batch {
       );
     }
 
-    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
-      jsonFields: [...Object.entries(coerceTypes)]
-        .filter(([_, type]) => type === 'JSON')
-        .map(([column]) => column),
-    });
+    // Strip jsonb-illegal code points from the entire row before persisting.
+    // Postgres rejects the NUL character and unpaired UTF-16 surrogate halves
+    // inside a jsonb value's text (22P05); a single such code point anywhere in
+    // the row aborts the whole upsert batch and, during a from-scratch index,
+    // strands every other card in the realm behind it. Sanitizing the prepared
+    // row here — rather than per-field — covers every content column
+    // (pristine_doc, search_doc, markdown, the *_html columns, deps,
+    // display_names, diagnostics, error_doc) in one place, including rendered
+    // card content that can carry a split emoji surrogate or a stray NUL folded
+    // in from an upstream resolver.
+    let { nameExpressions, valueExpressions } = asExpressions(
+      sanitizeForJsonb(preparedEntry),
+      {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      },
+    );
 
     await this.#query([
       ...upsert(

@@ -551,6 +551,105 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('sanitizes jsonb-illegal code points in content columns before write', async function (assert) {
+    // Postgres rejects the NUL character and unpaired UTF-16 surrogate halves
+    // inside a jsonb value's text (22P05), which aborts the whole upsert batch
+    // — a single bad card strands an entire realm's from-scratch index. These
+    // code points reach the writer inside rendered card content: a stray NUL
+    // folded in from an upstream resolver, or a valid astral-plane emoji whose
+    // surrogate pair was split by an upstream truncation. updateEntry must
+    // strip them from every content column while leaving valid content intact.
+    const NUL = '\u0000';
+    const LONE_HIGH = '\uD83E'; // high surrogate with no trailing low
+    const LONE_LOW = '\uDDE9'; // low surrogate with no leading high
+    const VALID_EMOJI = '🧩'; // 🧩 — a well-formed surrogate pair
+    const REPLACEMENT = '\uFFFD';
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: {
+        name: `Van${NUL}Gogh`,
+        bio: `high:${LONE_HIGH} emoji:${VALID_EMOJI} low:${LONE_LOW}`,
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri(`./person`),
+          name: 'Person',
+        },
+      },
+    };
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: {
+        name: `Van${NUL}Gogh`,
+        bio: `high:${LONE_HIGH} emoji:${VALID_EMOJI} low:${LONE_LOW}`,
+      },
+      markdown: `# Title${NUL} ${LONE_HIGH} keep ${VALID_EMOJI}`,
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: [`Person${NUL}`],
+      types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+        (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+      ),
+    });
+
+    let [row] = await adapter.execute(
+      `SELECT pristine_doc, search_doc, display_names, markdown FROM boxel_index_working WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: {
+          pristine_doc: 'JSON',
+          search_doc: 'JSON',
+          display_names: 'JSON',
+        },
+      },
+    );
+
+    let pristine = row.pristine_doc as LooseCardResource;
+    let search = row.search_doc as Record<string, string>;
+    let displayNames = row.display_names as string[];
+
+    assert.strictEqual(
+      pristine.attributes?.name,
+      `Van${REPLACEMENT}Gogh`,
+      'NUL in pristine_doc string is replaced',
+    );
+    assert.strictEqual(
+      search.name,
+      `Van${REPLACEMENT}Gogh`,
+      'NUL in search_doc string is replaced',
+    );
+    assert.strictEqual(
+      search.bio,
+      `high:${REPLACEMENT} emoji:${VALID_EMOJI} low:${REPLACEMENT}`,
+      'lone surrogates are replaced while the valid emoji pair is preserved',
+    );
+    assert.strictEqual(
+      row.markdown,
+      `# Title${REPLACEMENT} ${REPLACEMENT} keep ${VALID_EMOJI}`,
+      'markdown column is sanitized and keeps the valid emoji',
+    );
+    assert.deepEqual(
+      displayNames,
+      [`Person${REPLACEMENT}`],
+      'display_names entries are sanitized',
+    );
+  });
+
   test('dual-writes prerendered HTML on index and swaps it into production on done', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
