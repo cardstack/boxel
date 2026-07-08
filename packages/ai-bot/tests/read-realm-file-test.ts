@@ -8,6 +8,7 @@ import {
   readRealmFileTool,
   classifyToolCalls,
   fileLabelFromUrl,
+  readFilesLabel,
   READ_REALM_FILE_TOOL_NAME,
 } from '../lib/read-realm-file.ts';
 
@@ -340,5 +341,52 @@ module('fileLabelFromUrl', () => {
 
   test('undefined url → undefined label', () => {
     assert.strictEqual(fileLabelFromUrl(undefined), undefined);
+  });
+});
+
+module('readFilesLabel', () => {
+  test('no urls → generic label', () => {
+    assert.strictEqual(readFilesLabel(undefined), 'Read files');
+    assert.strictEqual(readFilesLabel([]), 'Read files');
+  });
+
+  test('one url → singular label', () => {
+    assert.strictEqual(
+      readFilesLabel([FILE_URL]),
+      'Read file: trip-planner/SKILL.md',
+    );
+  });
+
+  test('several urls → names joined', () => {
+    assert.strictEqual(
+      readFilesLabel([
+        'https://localhost:4201/user/jane/a.md',
+        'https://localhost:4201/user/jane/b.md',
+      ]),
+      'Read files: a.md, b.md',
+    );
+  });
+
+  test('caps the number of names and counts the rest', () => {
+    let urls = Array.from(
+      { length: 8 },
+      (_, i) => `https://localhost:4201/user/jane/f${i}.md`,
+    );
+    assert.strictEqual(
+      readFilesLabel(urls),
+      'Read files: f0.md, f1.md, f2.md, f3.md, f4.md, and 3 more',
+    );
+  });
+
+  test('drops non-string entries', () => {
+    assert.strictEqual(
+      readFilesLabel([
+        'https://localhost:4201/user/jane/a.md',
+        42,
+        null,
+        { url: 'x' },
+      ]),
+      'Read file: a.md',
+    );
   });
 });

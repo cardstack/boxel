@@ -3,7 +3,7 @@ import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   READ_REALM_FILE_TOOL_NAME,
-  fileLabelFromUrl,
+  readFilesLabel,
 } from '../read-realm-file.ts';
 import { thinkingMessage } from '../../constants.ts';
 import type ResponseState from '../response-state.ts';
@@ -46,18 +46,9 @@ function toCommandRequest(
   // arguments carry no description of their own.
   if (result.name === READ_REALM_FILE_TOOL_NAME) {
     result.executedBy = AI_BOT_EXECUTOR;
-    let urls: unknown = result.arguments?.urls;
-    let labels = (Array.isArray(urls) ? urls : [])
-      .map((url) => (typeof url === 'string' ? fileLabelFromUrl(url) : url))
-      .filter(Boolean);
     result.arguments = {
       ...(result.arguments ?? {}),
-      description:
-        labels.length === 0
-          ? 'Read files'
-          : labels.length === 1
-            ? `Read file: ${labels[0]}`
-            : `Read files: ${labels.join(', ')}`,
+      description: readFilesLabel(result.arguments?.urls),
     };
   }
   return result;

@@ -253,3 +253,28 @@ export function fileLabelFromUrl(url: string | undefined): string | undefined {
     return url;
   }
 }
+
+// A readRealmFile call can batch many urls; cap how many we name in the
+// timeline label so the description (and the event payload it rides in) stays
+// bounded no matter how many files the model requests at once.
+const READ_FILES_LABEL_MAX = 5;
+
+// Build the human-readable timeline label ("Read file: <name>" /
+// "Read files: <names>") from a readRealmFile call's `urls` argument. Non-string
+// entries are dropped so a malformed argument never leaks into the label.
+export function readFilesLabel(urls: unknown): string {
+  let labels = (Array.isArray(urls) ? urls : [])
+    .filter((url): url is string => typeof url === 'string')
+    .map((url) => fileLabelFromUrl(url))
+    .filter((label): label is string => Boolean(label));
+  if (labels.length === 0) {
+    return 'Read files';
+  }
+  if (labels.length === 1) {
+    return `Read file: ${labels[0]}`;
+  }
+  let shown = labels.slice(0, READ_FILES_LABEL_MAX);
+  let remaining = labels.length - shown.length;
+  let suffix = remaining > 0 ? `, and ${remaining} more` : '';
+  return `Read files: ${shown.join(', ')}${suffix}`;
+}
