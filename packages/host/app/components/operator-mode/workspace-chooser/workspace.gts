@@ -454,14 +454,14 @@ export default class Workspace extends Component<Signature> {
                   >
                     Cancel
                   </Button>
-                  <button
-                    type='button'
-                    class='duplicate-modal__confirm'
+                  <Button
+                    @kind='primary'
+                    @size='tall'
                     data-test-confirm-duplicate-button
                     {{on 'click' (perform this.duplicateWorkspaceTask)}}
                   >
                     Duplicate this workspace
-                  </button>
+                  </Button>
                 {{/if}}
               </div>
             </div>
@@ -1333,21 +1333,6 @@ export default class Workspace extends Component<Signature> {
       .duplicate-modal__cancel:hover {
         border-color: var(--boxel-550);
         background: var(--boxel-light-100);
-      }
-      .duplicate-modal__confirm {
-        background: var(--boxel-dark);
-        border: none;
-        border-radius: var(--boxel-border-radius-xxl);
-        padding: 0 1.5rem;
-        height: var(--boxel-button-tall);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
-        color: var(--boxel-light);
-        cursor: pointer;
-        transition: background 0.15s ease;
-      }
-      .duplicate-modal__confirm:hover {
-        background: var(--boxel-700);
       }
       .duplicate-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
