@@ -102,7 +102,12 @@ To patch a card:\n
     );
   } else if (eventBody.startsWith('debug:eventlist')) {
     try {
-      let aggregatedEventList = await constructHistory(eventList, client);
+      // constructHistory mutates the events it is given; aggregate a clone so
+      // the fallback below still dumps the untouched raw timeline
+      let aggregatedEventList = await constructHistory(
+        structuredClone(eventList),
+        client,
+      );
       await sendEventListAsDebugMessage(
         client,
         roomId,

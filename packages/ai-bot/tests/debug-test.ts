@@ -12,7 +12,7 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
     uploadedContents = [];
-    fakeMatrixClient.uploadContent = async (content: any) => {
+    fakeMatrixClient.uploadContent = async (content: string) => {
       uploadedContents.push(content);
       return { content_uri: 'mxc://example.com/debug-dump' };
     };
@@ -102,6 +102,26 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
     assert.true(
       event.content.isStreamingFinished,
       'isStreamingFinished reflects the final edit',
+    );
+  });
+
+  test('debug:eventlist leaves the input event list unmutated', async (assert) => {
+    let input = [streamedBotMessage()];
+    let pristine = structuredClone(input);
+
+    await handleDebugCommands(
+      {} as any,
+      'debug:eventlist',
+      fakeMatrixClient,
+      'room1',
+      '@aibot:localhost',
+      input,
+    );
+
+    assert.deepEqual(
+      input,
+      pristine,
+      'aggregation operates on a clone, so a fallback raw dump stays raw',
     );
   });
 
