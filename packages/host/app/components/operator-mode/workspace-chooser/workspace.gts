@@ -1782,17 +1782,23 @@ export default class Workspace extends Component<Signature> {
         .filter(Boolean)
         .at(-1) ?? 'workspace';
     let { iconURL, backgroundURL } = this.realmInfo;
-    let name = `${this.name} (Copy)`;
 
     for (
       let attempt = 1;
       attempt <= DUPLICATE_MAX_ENDPOINT_ATTEMPTS;
       attempt++
     ) {
+      // The name numbering follows the endpoint numbering, so the nth copy is
+      // "<source> (Copy n)" at "<endpoint>-copy-n" and existing copies keep
+      // their names distinct from the new one.
       let endpoint =
         attempt === 1
           ? `${sourceEndpoint}-copy`
           : `${sourceEndpoint}-copy-${attempt}`;
+      let name =
+        attempt === 1
+          ? `${this.name} (Copy)`
+          : `${this.name} (Copy ${attempt})`;
       try {
         return await this.realmServer.createRealm({
           endpoint,

@@ -281,8 +281,10 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       'service:realm-server',
     ) as RealmServerService;
     let attemptedEndpoints: string[] = [];
+    let attemptedNames: string[] = [];
     realmServer.createRealm = async (args) => {
       attemptedEndpoints.push(args.endpoint);
+      attemptedNames.push(args.name);
       if (attemptedEndpoints.length === 1) {
         throw new Error(
           `Could not create realm with endpoint '${args.endpoint}': 400 - realm '${copyRealmURL}' already exists on this server`,
@@ -305,6 +307,11 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       attemptedEndpoints,
       ['skills-copy', 'skills-copy-2'],
       'a taken endpoint falls through to the next numbered candidate',
+    );
+    assert.deepEqual(
+      attemptedNames,
+      ['Boxel Skills (Copy)', 'Boxel Skills (Copy 2)'],
+      "the workspace name carries the same number as the endpoint, so a second copy isn't named like the first",
     );
   });
 
