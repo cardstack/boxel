@@ -4,10 +4,10 @@ import '../setup-logger.ts';
 import {
   readSupportContext,
   startFactoryRealmServer,
+  writeMetadataFileAtomically,
   type RealmConfig,
 } from '@cardstack/realm-test-harness';
 import { logger } from '../logger.ts';
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { RealmPermissions } from '@cardstack/runtime-common';
@@ -185,9 +185,9 @@ async function main(): Promise<void> {
   };
 
   if (process.env.TEST_HARNESS_METADATA_FILE) {
-    writeFileSync(
+    writeMetadataFileAtomically(
       process.env.TEST_HARNESS_METADATA_FILE,
-      JSON.stringify(payload, null, 2),
+      payload,
     );
   }
 

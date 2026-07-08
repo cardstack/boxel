@@ -184,10 +184,24 @@ async function waitForMetadataFile<T>(
 ): Promise<T> {
   let startedAt = Date.now();
   let nextHeartbeat = startedAt + METADATA_FILE_HEARTBEAT_MS;
+  let lastParseError: string | undefined;
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
-      return JSON.parse(readFileSync(metadataFile, 'utf8')) as T;
+      let raw = readFileSync(metadataFile, 'utf8');
+      try {
+        return JSON.parse(raw) as T;
+      } catch (error) {
+        // The writer renames an atomically-written temp file into place,
+        // so a partial payload shouldn't be observable here — but
+        // tolerate a truncated read and keep polling rather than aborting
+        // the run on it. Record what we saw so a genuinely malformed
+        // payload surfaces in the timeout error below instead of hiding
+        // behind a bare timeout.
+        lastParseError = `failed to parse ${metadataFile} (${raw.length} chars): ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
     }
 
     if (child.exitCode !== null) {
@@ -211,7 +225,9 @@ async function waitForMetadataFile<T>(
 
   throw new Error(
     `timed out waiting for software-factory metadata file ${metadataFile} ` +
-      `after ${Math.round((Date.now() - startedAt) / 1000)}s\n${getLogs()}`,
+      `after ${Math.round((Date.now() - startedAt) / 1000)}s` +
+      (lastParseError ? `\nlast parse attempt: ${lastParseError}` : '') +
+      `\n${getLogs()}`,
   );
 }
 
