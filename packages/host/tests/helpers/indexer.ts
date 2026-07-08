@@ -121,6 +121,7 @@ export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   indexRows: TestIndexRow[],
+  options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
@@ -137,11 +138,36 @@ export async function setupIndex(
 export async function setupIndex(
   client: DBAdapter,
   maybeVersionRows: RealmGenerationsTable[] | TestIndexRow[] = [],
-  maybeWorkingProductionRows?:
+  maybeRowsOrOptions?:
     | TestIndexRow[]
-    | { working: TestIndexRow[]; production: TestIndexRow[] },
-  options: SetupIndexOptions = {},
+    | { working: TestIndexRow[]; production: TestIndexRow[] }
+    | SetupIndexOptions,
+  maybeOptions: SetupIndexOptions = {},
 ): Promise<void> {
+  // The two-arg form `setupIndex(client, indexRows, options?)` passes options in
+  // the third position; the versionRows forms pass rows there and options
+  // fourth. Options are the only third-arg shape that is neither an array nor a
+  // `{ working, production }` object, so disambiguate on that.
+  let maybeWorkingProductionRows:
+    | TestIndexRow[]
+    | { working: TestIndexRow[]; production: TestIndexRow[] }
+    | undefined;
+  let options: SetupIndexOptions;
+  if (
+    maybeRowsOrOptions != null &&
+    !Array.isArray(maybeRowsOrOptions) &&
+    !('working' in maybeRowsOrOptions)
+  ) {
+    maybeWorkingProductionRows = undefined;
+    options = maybeRowsOrOptions;
+  } else {
+    maybeWorkingProductionRows = maybeRowsOrOptions as
+      | TestIndexRow[]
+      | { working: TestIndexRow[]; production: TestIndexRow[] }
+      | undefined;
+    options = maybeOptions;
+  }
+
   let versionRows: RealmGenerationsTable[];
   let workingRows: TestIndexRow[] = [];
   let productionRows: TestIndexRow[] = [];
@@ -242,14 +268,15 @@ export async function setupIndex(
   }
 }
 
-// Project the HTML/markdown columns (and generation) of the just-seeded
-// `boxel_index(_working)` rows onto `prerendered_html(_working)`, matching the
-// production backfill + dual-write (`IndexWriter.syncPrerenderedHtmlFromWorking`):
-// same column mapping, `indexed_at` seeds `rendered_at`, and `icon_html` stays
-// on `boxel_index`. The upsert keeps the projection idempotent. This lets tests
-// read HTML/markdown through the real `prerendered_html` path — the path that
-// remains once the `boxel_index` HTML columns and the dual-read fallback are
-// dropped.
+// Project the HTML/markdown columns (and generation) of the `boxel_index(_working)`
+// rows onto `prerendered_html(_working)`, matching the production backfill +
+// dual-write (`IndexWriter.syncPrerenderedHtmlFromWorking`): same column mapping,
+// `indexed_at` seeds `rendered_at`, and `icon_html` stays on `boxel_index`. The
+// SELECT covers every row in the source table — in a freshly-seeded test DB
+// those are exactly the rows `setupIndex` just wrote — and the upsert keeps the
+// projection idempotent. This lets tests read HTML/markdown through the real
+// `prerendered_html` path — the path that remains once the `boxel_index` HTML
+// columns and the dual-read fallback are dropped.
 async function projectPrerenderedHtml(
   client: DBAdapter,
   table: 'working' | 'production',
