@@ -55,6 +55,9 @@ export function buildCssVariableName(
 }
 
 // Standardizes rule values by trimming and removing trailing semicolons.
+// Rejects values containing CSS block delimiters: these values are serialized
+// into <style> declaration blocks, where an embedded `}` would close the
+// scoped block and let the remainder inject page-wide rules.
 export const normalizeCssValue = (
   value?: string | null,
 ): string | undefined => {
@@ -62,7 +65,10 @@ export const normalizeCssValue = (
     return;
   }
   const normalized = `${value}`.trim().replace(/[;\s]+$/, '');
-  return normalized ? normalized : undefined;
+  if (!normalized || /[{}]/.test(normalized)) {
+    return;
+  }
+  return normalized;
 };
 
 // Collapses selector aliases (like `root`) into their canonical form.

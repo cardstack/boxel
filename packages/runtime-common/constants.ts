@@ -28,6 +28,12 @@ export function baseRRI(path: string): RealmResourceIdentifier {
   return rri(`${baseRealmRRI}${path}`);
 }
 
+// Hardcoded fallback default skills for new AI rooms when the user's active
+// system card configures none. These are the legacy `Skill/*` cards; flipping
+// the fallback to the `.md` skill files is tracked separately (CS-11783) and
+// waits on those files being served in every skills realm. Note the room-
+// creation path already resolves either kind, and the system card's
+// `defaultSkillCards` / `defaultSkillFiles` already accept both.
 export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';
 

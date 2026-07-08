@@ -779,6 +779,7 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
+export * from './frontmatter-parse.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';

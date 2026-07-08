@@ -335,8 +335,14 @@ export class CorrectnessResultCard extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  // Legacy: skills passed as loaded `Skill` cards. Retained for back-compat.
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
+  // Skills passed by id (kind-agnostic): each id may name a `.md` skill file
+  // (`boxel.kind: skill`) or a legacy `Skill` card. Resolved via
+  // `loadSkillSource` at room creation. Preferred over the card fields above.
+  @field enabledSkillIds = containsMany(StringField);
+  @field disabledSkillIds = containsMany(StringField);
   @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 

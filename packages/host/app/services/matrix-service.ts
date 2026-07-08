@@ -37,7 +37,6 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
@@ -126,7 +125,11 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import {
+  codeModeEntryPointSkillUrl,
+  devSkillId,
+  envSkillId,
+} from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -1910,31 +1913,34 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [envSkillId];
-
-    let codeModeDefaultSkills = [
-      devSkillId,
-      envSkillId,
-      skillCardURL('source-code-editing'),
-    ];
-
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists any default skills — legacy `Skill` cards, `.md` skill
+  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
+  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
+  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = [
+      ...(this.systemCard?.defaultSkillCards ?? []),
+      ...(this.systemCard?.defaultSkillFiles ?? []),
+    ]
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
     }
 
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    let interactModeDefaultSkills = [envSkillId];
+
+    // Code editing is covered by the code-mode entry-point skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
+    let codeModeDefaultSkills = [devSkillId, envSkillId];
+
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -2799,10 +2805,14 @@ export default class MatrixService extends Service {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills (pushed in full) activate
+      // alongside the code-mode entry-point skill, whose linked skills the
+      // bot loads on demand. As the card skills convert to markdown the
+      // pushed set shrinks.
+      skillCardIdsToActivate: [...defaultSkillIds, codeModeEntryPointSkillUrl],
     });
   }
 

@@ -729,7 +729,7 @@ importers:
         version: 7.27.0
       '@babel/traverse':
         specifier: 'catalog:'
-        version: 7.27.0(supports-color@8.1.1)
+        version: 7.27.0
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1
@@ -747,10 +747,10 @@ importers:
         version: 1.61.0
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
@@ -762,7 +762,7 @@ importers:
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
       ember-template-imports:
         specifier: ^4.1.1
-        version: 4.4.0(supports-color@8.1.1)
+        version: 4.4.0
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -807,7 +807,7 @@ importers:
         version: link:../runtime-common
       '@sentry/node':
         specifier: 'catalog:'
-        version: 8.55.2(supports-color@8.1.1)
+        version: 8.55.2
       '@types/lodash-es':
         specifier: 'catalog:'
         version: 4.17.12
@@ -968,7 +968,7 @@ importers:
         version: link:../runtime-common
       '@sentry/node':
         specifier: 'catalog:'
-        version: 8.55.2(supports-color@8.1.1)
+        version: 8.55.2
       stripe:
         specifier: 'catalog:'
         version: 17.7.0
@@ -993,7 +993,7 @@ importers:
         version: link:../runtime-common
       '@sentry/node':
         specifier: 'catalog:'
-        version: 8.55.2(supports-color@8.1.1)
+        version: 8.55.2
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
@@ -1088,10 +1088,10 @@ importers:
         version: 7.7.1
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -1169,7 +1169,7 @@ importers:
         version: 5.0.0(@glint/template@1.7.7)(rollup@4.62.0)
       '@embroider/macros':
         specifier: ^1.16.5
-        version: 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 1.16.13(@glint/template@1.7.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
@@ -1187,10 +1187,10 @@ importers:
         version: 3.0.1
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       babel-plugin-ember-template-compilation:
         specifier: 'catalog:'
         version: 2.4.1
@@ -1202,7 +1202,7 @@ importers:
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
       ember-template-imports:
         specifier: ^4.1.1
-        version: 4.4.0(supports-color@8.1.1)
+        version: 4.4.0
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
@@ -1226,7 +1226,7 @@ importers:
         version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
       http-server:
         specifier: ^14.1.1
-        version: 14.1.1(debug@4.3.4)(supports-color@8.1.1)
+        version: 14.1.1
       lucide-static:
         specifier: ^0.447.0
         version: 0.447.0
@@ -1380,7 +1380,7 @@ importers:
         version: 8.3.0(@glint/template@1.7.7)(rollup@4.62.0)
       '@embroider/macros':
         specifier: ~1.16.5
-        version: 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 1.16.13(@glint/template@1.7.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
@@ -1401,10 +1401,10 @@ importers:
         version: 0.0.30
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       babel-plugin-ember-template-compilation:
         specifier: 'catalog:'
         version: 2.4.1
@@ -1413,7 +1413,7 @@ importers:
         version: 8.2.2
       ember-template-imports:
         specifier: ^4.1.1
-        version: 4.4.0(supports-color@8.1.1)
+        version: 4.4.0
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
@@ -1498,16 +1498,16 @@ importers:
         version: 5.4.3(@babel/core@7.29.7)
       '@embroider/compat':
         specifier: ^3.5.5
-        version: 3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)
       '@embroider/core':
         specifier: ^3.4.15
         version: 3.5.10(@glint/template@1.7.7)
       '@embroider/macros':
         specifier: ^1.16.5
-        version: 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 1.16.13(@glint/template@1.7.7)
       '@embroider/test-setup':
         specifier: ^4.0.0
-        version: 4.0.0(@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1))(@embroider/core@3.5.10(@glint/template@1.7.7))(@embroider/webpack@4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15)))
+        version: 4.0.0(@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7))(@embroider/core@3.5.10(@glint/template@1.7.7))(@embroider/webpack@4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15)))
       '@embroider/webpack':
         specifier: ^4.0.4
         version: 4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15))
@@ -1537,10 +1537,10 @@ importers:
         version: 4.0.9
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       broccoli-asset-rev:
         specifier: 'catalog:'
         version: 3.0.0
@@ -1561,10 +1561,10 @@ importers:
         version: 8.0.1(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@ember/test-waiters@4.1.2)(axe-core@4.12.1)(qunit@2.26.0)
       ember-auto-import:
         specifier: ^2.7.2
-        version: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(postcss@8.5.15))
+        version: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       ember-cli:
         specifier: ^5.4.1
-        version: 5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)(supports-color@8.1.1)
+        version: 5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)
       ember-cli-babel:
         specifier: ^8.2.0
         version: 8.3.1(@babel/core@7.29.7)
@@ -1573,7 +1573,7 @@ importers:
         version: 3.0.0
       ember-cli-dependency-checker:
         specifier: ^3.3.2
-        version: 3.3.3(ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)(supports-color@8.1.1))
+        version: 3.3.3(ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2))
       ember-cli-deploy:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1585,10 +1585,10 @@ importers:
         version: 5.0.0
       ember-cli-deploy-revision-data:
         specifier: ^2.0.0
-        version: 2.0.0(supports-color@8.1.1)
+        version: 2.0.0
       ember-cli-deploy-s3:
         specifier: ^3.1.0
-        version: 3.3.0(supports-color@8.1.1)
+        version: 3.3.0
       ember-cli-deploy-smart-compress:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1606,7 +1606,7 @@ importers:
         version: 2.1.1
       ember-cli-terser:
         specifier: ^4.0.2
-        version: 4.0.2(supports-color@8.1.1)
+        version: 4.0.2
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
@@ -1642,13 +1642,13 @@ importers:
         version: 3.0.0
       ember-template-imports:
         specifier: ^4.1.1
-        version: 4.4.0(supports-color@8.1.1)
+        version: 4.4.0
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
       ember-try:
         specifier: ^2.0.0
-        version: 2.0.0(supports-color@8.1.1)
+        version: 2.0.0
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -1739,10 +1739,10 @@ importers:
         version: 2.19.14
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@universal-ember/test-support':
         specifier: 'catalog:'
         version: 0.5.1(@babel/core@7.29.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)
@@ -1824,16 +1824,16 @@ importers:
         version: 8.57.1
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-doc-generator:
         specifier: 'catalog:'
-        version: 1.7.1(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 1.7.1(eslint@8.57.1)(typescript@5.9.3)
       eslint-plugin-eslint-comments:
         specifier: 'catalog:'
         version: 3.2.0(eslint@8.57.1)
@@ -1848,7 +1848,7 @@ importers:
         version: 2.32.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
       eslint-plugin-markdown:
         specifier: 'catalog:'
-        version: 5.1.0(eslint@8.57.1)(supports-color@8.1.1)
+        version: 5.1.0(eslint@8.57.1)
       eslint-plugin-n:
         specifier: 'catalog:'
         version: 17.24.0(eslint@8.57.1)(typescript@5.9.3)
@@ -1869,7 +1869,7 @@ importers:
         version: 6.4.3(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
-        version: 2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.48.0)
+        version: 2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.48.0)
 
   packages/eslint-plugin-cardstack-host:
     dependencies:
@@ -1882,13 +1882,13 @@ importers:
         version: 8.57.1
       eslint-doc-generator:
         specifier: 'catalog:'
-        version: 1.7.1(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 1.7.1(eslint@8.57.1)(typescript@5.9.3)
       vite:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
-        version: 2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.48.0)
+        version: 2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.48.0)
 
   packages/experiments-realm:
     dependencies:
@@ -2037,7 +2037,7 @@ importers:
         version: 4.1.2
       '@embroider/compat':
         specifier: ^4.0.3
-        version: 4.1.20(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 4.1.20(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)
       '@embroider/config-meta-loader':
         specifier: ^1.0.0
         version: 1.0.0
@@ -2049,10 +2049,10 @@ importers:
         version: 0.1.3
       '@embroider/macros':
         specifier: ^1.16.5
-        version: 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+        version: 1.16.13(@glint/template@1.7.7)
       '@embroider/vite':
         specifier: ^1.1.1
-        version: 1.7.6(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@25.9.3)(terser@5.48.0)(yaml@2.9.0))
+        version: 1.7.6(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(vite@8.0.16(@types/node@25.9.3)(terser@5.48.0)(yaml@2.9.0))
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.7.6
@@ -2076,7 +2076,7 @@ importers:
         version: 1.6.4
       '@percy/cli':
         specifier: 'catalog:'
-        version: 1.31.14(supports-color@8.1.1)(typescript@5.9.3)
+        version: 1.31.14(typescript@5.9.3)
       '@percy/ember':
         specifier: 'catalog:'
         version: 5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2)
@@ -2139,10 +2139,10 @@ importers:
         version: 9.0.8
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@universal-ember/test-support':
         specifier: 'catalog:'
         version: 0.5.1(@babel/core@7.29.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)
@@ -2205,10 +2205,10 @@ importers:
         version: 5.0.0
       ember-cli-deploy-revision-data:
         specifier: ^2.0.0
-        version: 2.0.0(supports-color@8.1.1)
+        version: 2.0.0
       ember-cli-deploy-s3:
         specifier: ^3.1.0
-        version: 3.3.0(supports-color@8.1.1)
+        version: 3.3.0
       ember-cli-deploy-smart-compress:
         specifier: ^2.0.0
         version: 2.0.0
@@ -2235,7 +2235,7 @@ importers:
         version: 2.0.0(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-exam:
         specifier: ^10.1.0
-        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2)
+        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2)
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.2.0(@babel/core@7.29.7)
@@ -2537,7 +2537,7 @@ importers:
         version: link:../runtime-common
       '@sentry/node':
         specifier: 'catalog:'
-        version: 8.55.2(supports-color@8.1.1)
+        version: 8.55.2
       '@types/fs-extra':
         specifier: 'catalog:'
         version: 11.0.4
@@ -2620,13 +2620,13 @@ importers:
         version: 4.0.0
       '@koa/router':
         specifier: 'catalog:'
-        version: 14.0.0(supports-color@8.1.1)
+        version: 14.0.0
       '@octokit/rest':
         specifier: 'catalog:'
         version: 22.0.1
       '@sentry/node':
         specifier: 'catalog:'
-        version: 8.55.2(supports-color@8.1.1)
+        version: 8.55.2
       '@types/archiver':
         specifier: 'catalog:'
         version: 7.0.0
@@ -2746,25 +2746,25 @@ importers:
         version: 11.1.0
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1(debug@4.3.4)(supports-color@8.1.1)
+        version: 14.1.1
       js-yaml:
         specifier: 'catalog:'
         version: 4.2.0
       jsdom:
         specifier: 'catalog:'
-        version: 21.1.2(supports-color@8.1.1)
+        version: 21.1.2
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.3
       koa:
         specifier: 'catalog:'
-        version: 2.16.4(supports-color@8.1.1)
+        version: 2.16.4
       koa-compose:
         specifier: 'catalog:'
         version: 4.1.0
       koa-proxies:
         specifier: 'catalog:'
-        version: 0.12.4(koa@2.16.4(supports-color@8.1.1))
+        version: 0.12.4(koa@2.16.4)
       lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
@@ -2818,7 +2818,7 @@ importers:
         version: 1.0.3
       supertest:
         specifier: 'catalog:'
-        version: 6.3.4(supports-color@8.1.1)
+        version: 6.3.4
       testem:
         specifier: 'catalog:'
         version: 3.20.1(@babel/core@7.29.7)(ejs@3.1.10)(handlebars@4.7.9)(underscore@1.13.8)
@@ -2839,7 +2839,7 @@ importers:
         version: 3.2.0
       wait-on:
         specifier: ^9.0.4
-        version: 9.0.10(debug@4.3.4)
+        version: 9.0.10
       wtfnode:
         specifier: ^0.10.1
         version: 0.10.1
@@ -2923,7 +2923,7 @@ importers:
         version: 7.29.7(@babel/core@7.29.7)
       '@babel/traverse':
         specifier: 'catalog:'
-        version: 7.27.0(supports-color@8.1.1)
+        version: 7.27.0
       '@babel/types':
         specifier: ^7.20.0
         version: 7.29.7
@@ -3098,6 +3098,9 @@ importers:
       uuid:
         specifier: 'catalog:'
         version: 9.0.1
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
       zod:
         specifier: ^3.24.4
         version: 3.25.76
@@ -3320,13 +3323,13 @@ importers:
         version: 1.120.0
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: 'catalog:'
-        version: 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@vscode/vsce':
         specifier: 'catalog:'
-        version: 3.9.2(supports-color@8.1.1)
+        version: 3.9.2
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -16853,7 +16856,7 @@ snapshots:
       '@babel/parser': 7.29.7
       '@babel/types': 7.29.7
 
-  '@babel/traverse@7.27.0(supports-color@8.1.1)':
+  '@babel/traverse@7.27.0':
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/generator': 7.29.7
@@ -17071,7 +17074,7 @@ snapshots:
 
   '@ember/render-modifiers@2.1.0(@babel/core@7.29.7)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))':
     dependencies:
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       ember-cli-babel: 7.26.11
       ember-modifier-manager-polyfill: 1.2.0(@babel/core@7.29.7)
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -17168,7 +17171,7 @@ snapshots:
       - supports-color
       - webpack
 
-  '@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)':
+  '@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)':
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7(supports-color@8.1.1)
@@ -17221,7 +17224,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@embroider/compat@4.1.20(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)':
+  '@embroider/compat@4.1.20(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)':
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7(supports-color@8.1.1)
@@ -17357,9 +17360,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@embroider/macros@1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)':
+  '@embroider/macros@1.16.13(@glint/template@1.7.7)':
     dependencies:
-      '@embroider/shared-internals': 2.9.0(supports-color@8.1.1)
+      '@embroider/shared-internals': 2.9.0
       assert-never: 1.4.0
       babel-import-util: 2.1.1
       ember-cli-babel: 7.26.11
@@ -17393,7 +17396,7 @@ snapshots:
       mem: 8.1.1
       resolve.exports: 2.0.3
 
-  '@embroider/shared-internals@2.9.0(supports-color@8.1.1)':
+  '@embroider/shared-internals@2.9.0':
     dependencies:
       babel-import-util: 2.1.1
       debug: 4.4.3(supports-color@8.1.1)
@@ -17445,18 +17448,18 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@embroider/test-setup@4.0.0(@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1))(@embroider/core@3.5.10(@glint/template@1.7.7))(@embroider/webpack@4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15)))':
+  '@embroider/test-setup@4.0.0(@embroider/compat@3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7))(@embroider/core@3.5.10(@glint/template@1.7.7))(@embroider/webpack@4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15)))':
     dependencies:
       lodash: 4.18.1
       resolve: 1.22.12
     optionalDependencies:
-      '@embroider/compat': 3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/compat': 3.9.4(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.10(@glint/template@1.7.7))(@glint/template@1.7.7)
       '@embroider/core': 3.5.10(@glint/template@1.7.7)
       '@embroider/webpack': 4.1.2(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.10(@glint/template@1.7.7))(webpack@5.107.2(postcss@8.5.15))
 
   '@embroider/util@1.13.1(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))':
     dependencies:
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       broccoli-funnel: 3.0.8
       ember-cli-babel: 7.26.11
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -17465,7 +17468,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@embroider/vite@1.7.6(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@25.9.3)(terser@5.48.0)(yaml@2.9.0))':
+  '@embroider/vite@1.7.6(@embroider/core@4.6.1(@glint/template@1.7.7))(@glint/template@1.7.7)(vite@8.0.16(@types/node@25.9.3)(terser@5.48.0)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@embroider/core': 4.6.1(@glint/template@1.7.7)
@@ -18272,7 +18275,7 @@ snapshots:
     dependencies:
       vary: 1.1.2
 
-  '@koa/router@14.0.0(supports-color@8.1.1)':
+  '@koa/router@14.0.0':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       http-errors: 2.0.1
@@ -18281,7 +18284,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@kwsites/file-exists@1.1.1(supports-color@8.1.1)':
+  '@kwsites/file-exists@1.1.1':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -18360,8 +18363,8 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
-      express-rate-limit: 8.5.2(express@5.2.1(supports-color@8.1.1))
+      express: 5.2.1
+      express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.25
       jose: 6.2.3
       json-schema-typed: 8.0.2
@@ -18565,7 +18568,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18574,7 +18577,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
       '@types/connect': 3.4.36
     transitivePeerDependencies:
@@ -18583,7 +18586,7 @@ snapshots:
   '@opentelemetry/instrumentation-dataloader@0.16.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -18591,7 +18594,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18600,7 +18603,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18609,21 +18612,21 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
   '@opentelemetry/instrumentation-generic-pool@0.43.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
   '@opentelemetry/instrumentation-graphql@0.47.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -18631,7 +18634,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18650,7 +18653,7 @@ snapshots:
   '@opentelemetry/instrumentation-ioredis@0.47.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/redis-common': 0.36.2
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
@@ -18659,7 +18662,7 @@ snapshots:
   '@opentelemetry/instrumentation-kafkajs@0.7.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18667,7 +18670,7 @@ snapshots:
   '@opentelemetry/instrumentation-knex@0.44.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18676,7 +18679,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18684,14 +18687,14 @@ snapshots:
   '@opentelemetry/instrumentation-lru-memoizer@0.44.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
   '@opentelemetry/instrumentation-mongodb@0.51.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18700,7 +18703,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18708,7 +18711,7 @@ snapshots:
   '@opentelemetry/instrumentation-mysql2@0.45.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
       '@opentelemetry/sql-common': 0.40.1(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
@@ -18717,7 +18720,7 @@ snapshots:
   '@opentelemetry/instrumentation-mysql@0.45.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
       '@types/mysql': 2.15.26
     transitivePeerDependencies:
@@ -18726,7 +18729,7 @@ snapshots:
   '@opentelemetry/instrumentation-nestjs-core@0.44.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
       - supports-color
@@ -18735,7 +18738,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.27.0
       '@opentelemetry/sql-common': 0.40.1(@opentelemetry/api@1.9.1)
       '@types/pg': 8.6.1
@@ -18746,7 +18749,7 @@ snapshots:
   '@opentelemetry/instrumentation-redis-4@0.46.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/redis-common': 0.36.2
       '@opentelemetry/semantic-conventions': 1.41.1
     transitivePeerDependencies:
@@ -18755,7 +18758,7 @@ snapshots:
   '@opentelemetry/instrumentation-tedious@0.18.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
       '@types/tedious': 4.0.14
     transitivePeerDependencies:
@@ -18765,7 +18768,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -18775,7 +18778,7 @@ snapshots:
       '@opentelemetry/api-logs': 0.53.0
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.15.0
-      require-in-the-middle: 7.5.2(supports-color@8.1.1)
+      require-in-the-middle: 7.5.2
       semver: 7.8.4
       shimmer: 1.2.1
     transitivePeerDependencies:
@@ -18787,19 +18790,19 @@ snapshots:
       '@opentelemetry/api-logs': 0.57.1
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.15.0
-      require-in-the-middle: 7.5.2(supports-color@8.1.1)
+      require-in-the-middle: 7.5.2
       semver: 7.8.4
       shimmer: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation@0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)':
+  '@opentelemetry/instrumentation@0.57.2(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.57.2
       '@types/shimmer': 1.2.0
       import-in-the-middle: 1.15.0
-      require-in-the-middle: 7.5.2(supports-color@8.1.1)
+      require-in-the-middle: 7.5.2
       semver: 7.8.4
       shimmer: 1.2.1
     transitivePeerDependencies:
@@ -18945,7 +18948,7 @@ snapshots:
   '@percy/cli-doctor@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
-      '@percy/client': 1.31.14(supports-color@8.1.1)(typescript@5.9.3)
+      '@percy/client': 1.31.14(typescript@5.9.3)
       '@percy/config': 1.31.14(typescript@5.9.3)
       '@percy/core': 1.31.14(typescript@5.9.3)
       '@percy/env': 1.31.14
@@ -18992,7 +18995,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/cli@1.31.14(supports-color@8.1.1)(typescript@5.9.3)':
+  '@percy/cli@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-app': 1.31.14(typescript@5.9.3)
       '@percy/cli-build': 1.31.14(typescript@5.9.3)
@@ -19002,7 +19005,7 @@ snapshots:
       '@percy/cli-exec': 1.31.14(typescript@5.9.3)
       '@percy/cli-snapshot': 1.31.14(typescript@5.9.3)
       '@percy/cli-upload': 1.31.14(typescript@5.9.3)
-      '@percy/client': 1.31.14(supports-color@8.1.1)(typescript@5.9.3)
+      '@percy/client': 1.31.14(typescript@5.9.3)
       '@percy/logger': 1.31.14
     transitivePeerDependencies:
       - bufferutil
@@ -19010,12 +19013,12 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@percy/client@1.31.14(supports-color@8.1.1)(typescript@5.9.3)':
+  '@percy/client@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/config': 1.31.14(typescript@5.9.3)
       '@percy/env': 1.31.14
       '@percy/logger': 1.31.14
-      pac-proxy-agent: 7.2.0(supports-color@8.1.1)
+      pac-proxy-agent: 7.2.0
       pako: 2.1.0
     transitivePeerDependencies:
       - supports-color
@@ -19032,7 +19035,7 @@ snapshots:
 
   '@percy/core@1.31.14(typescript@5.9.3)':
     dependencies:
-      '@percy/client': 1.31.14(supports-color@8.1.1)(typescript@5.9.3)
+      '@percy/client': 1.31.14(typescript@5.9.3)
       '@percy/config': 1.31.14(typescript@5.9.3)
       '@percy/dom': 1.31.14
       '@percy/logger': 1.31.14
@@ -19088,7 +19091,7 @@ snapshots:
 
   '@percy/sdk-utils@1.31.14':
     dependencies:
-      pac-proxy-agent: 7.2.0(supports-color@8.1.1)
+      pac-proxy-agent: 7.2.0
     transitivePeerDependencies:
       - supports-color
 
@@ -19378,12 +19381,12 @@ snapshots:
 
   '@sentry/core@8.55.2': {}
 
-  '@sentry/node@8.55.2(supports-color@8.1.1)':
+  '@sentry/node@8.55.2':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/context-async-hooks': 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation-amqplib': 0.46.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation-connect': 0.43.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation-dataloader': 0.16.0(@opentelemetry/api@1.9.1)
@@ -19423,7 +19426,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/context-async-hooks': 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.41.1
       '@sentry/core': 8.55.2
@@ -20102,12 +20105,12 @@ snapshots:
       '@types/node': 24.13.2
     optional: true
 
-  '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/scope-manager': 7.18.0
-      '@typescript-eslint/type-utils': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/type-utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       '@typescript-eslint/visitor-keys': 7.18.0
       eslint: 8.57.1
@@ -20122,17 +20125,17 @@ snapshots:
 
   '@typescript-eslint/experimental-utils@5.62.0(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.9.3)
       eslint: 8.57.1
     transitivePeerDependencies:
       - supports-color
       - typescript
 
-  '@typescript-eslint/parser@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 7.18.0
       '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/typescript-estree': 7.18.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
       '@typescript-eslint/visitor-keys': 7.18.0
       debug: 4.4.3(supports-color@8.1.1)
       eslint: 8.57.1
@@ -20155,9 +20158,9 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  '@typescript-eslint/type-utils@7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/type-utils@7.18.0(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/typescript-estree': 7.18.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
       '@typescript-eslint/utils': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       debug: 4.4.3(supports-color@8.1.1)
       eslint: 8.57.1
@@ -20171,7 +20174,7 @@ snapshots:
 
   '@typescript-eslint/types@7.18.0': {}
 
-  '@typescript-eslint/typescript-estree@5.62.0(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@5.62.0(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/types': 5.62.0
       '@typescript-eslint/visitor-keys': 5.62.0
@@ -20185,7 +20188,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/typescript-estree@7.18.0(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@7.18.0(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/types': 7.18.0
       '@typescript-eslint/visitor-keys': 7.18.0
@@ -20200,14 +20203,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@5.62.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/utils@5.62.0(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1)
       '@types/json-schema': 7.0.15
       '@types/semver': 7.7.1
       '@typescript-eslint/scope-manager': 5.62.0
       '@typescript-eslint/types': 5.62.0
-      '@typescript-eslint/typescript-estree': 5.62.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 5.62.0(typescript@5.9.3)
       eslint: 8.57.1
       eslint-scope: 5.1.1
       semver: 7.8.4
@@ -20220,7 +20223,7 @@ snapshots:
       '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1)
       '@typescript-eslint/scope-manager': 7.18.0
       '@typescript-eslint/types': 7.18.0
-      '@typescript-eslint/typescript-estree': 7.18.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.18.0(typescript@5.9.3)
       eslint: 8.57.1
     transitivePeerDependencies:
       - supports-color
@@ -20397,7 +20400,7 @@ snapshots:
       '@vscode/vsce-sign-win32-arm64': 2.0.6
       '@vscode/vsce-sign-win32-x64': 2.0.6
 
-  '@vscode/vsce@3.9.2(supports-color@8.1.1)':
+  '@vscode/vsce@3.9.2':
     dependencies:
       '@azure/identity': 4.13.1
       '@secretlint/node': 10.2.2
@@ -20420,7 +20423,7 @@ snapshots:
       minimatch: 10.2.5
       parse-semver: 1.1.1
       read: 1.0.7
-      secretlint: 10.2.2(supports-color@8.1.1)
+      secretlint: 10.2.2
       semver: 7.8.4
       tmp: 0.2.7
       typed-rest-client: 1.8.11
@@ -20558,7 +20561,7 @@ snapshots:
 
   aes-js@4.0.0-beta.5: {}
 
-  agent-base@6.0.2(supports-color@8.1.1):
+  agent-base@6.0.2:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -20875,7 +20878,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.18.0(debug@4.3.4):
+  axios@1.18.0:
     dependencies:
       follow-redirects: 1.16.0(debug@4.3.4)
       form-data: 4.0.6
@@ -21149,7 +21152,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  body-parser@2.3.0(supports-color@8.1.1):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.0.0
@@ -21549,7 +21552,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  broccoli-stew@3.0.0(supports-color@8.1.1):
+  broccoli-stew@3.0.0:
     dependencies:
       broccoli-debug: 0.6.5
       broccoli-funnel: 2.0.2
@@ -21568,7 +21571,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  broccoli-terser-sourcemap@4.1.1(supports-color@8.1.1):
+  broccoli-terser-sourcemap@4.1.1:
     dependencies:
       async-promise-queue: 1.0.5
       broccoli-plugin: 4.0.7
@@ -22814,7 +22817,7 @@ snapshots:
   ember-animated@2.2.0(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glint/template@1.7.7):
     dependencies:
       '@embroider/addon-shim': 1.10.3
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       assert-never: 1.4.0
       decorator-transforms: 2.3.2(@babel/core@7.29.7)
       ember-element-helper: 0.8.8
@@ -22839,7 +22842,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-auto-import@2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(postcss@8.5.15)):
+  ember-auto-import@2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15)):
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/plugin-proposal-class-properties': 7.18.6(@babel/core@7.29.7)
@@ -22847,7 +22850,7 @@ snapshots:
       '@babel/plugin-proposal-private-methods': 7.18.6(@babel/core@7.29.7)
       '@babel/plugin-transform-class-static-block': 7.29.7(@babel/core@7.29.7)(supports-color@8.1.1)
       '@babel/preset-env': 7.29.7(@babel/core@7.29.7)(supports-color@8.1.1)
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       '@embroider/reverse-exports': 0.2.0
       '@embroider/shared-internals': 2.9.2(supports-color@8.1.1)
       babel-loader: 8.4.1(@babel/core@7.29.7)(webpack@5.107.2(postcss@8.5.15))
@@ -22891,7 +22894,7 @@ snapshots:
       '@babel/plugin-proposal-private-methods': 7.18.6(@babel/core@7.29.7)
       '@babel/plugin-transform-class-static-block': 7.29.7(@babel/core@7.29.7)(supports-color@8.1.1)
       '@babel/preset-env': 7.29.7(@babel/core@7.29.7)(supports-color@8.1.1)
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       '@embroider/reverse-exports': 0.2.0
       '@embroider/shared-internals': 2.9.2(supports-color@8.1.1)
       babel-loader: 8.4.1(@babel/core@7.29.7)(webpack@5.107.2)
@@ -22932,7 +22935,7 @@ snapshots:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@ember/test-helpers': 5.4.3(@babel/core@7.29.7)
       '@embroider/addon-shim': 1.10.3
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       '@embroider/util': 1.13.1(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       '@glimmer/component': 2.1.1
       '@glimmer/tracking': 1.1.2
@@ -23025,10 +23028,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli-dependency-checker@3.3.3(ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)(supports-color@8.1.1)):
+  ember-cli-dependency-checker@3.3.3(ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)):
     dependencies:
       chalk: 2.4.2
-      ember-cli: 5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)(supports-color@8.1.1)
+      ember-cli: 5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)
       find-yarn-workspace-root: 2.0.0
       is-git-url: 1.0.0
       resolve: 1.22.12
@@ -23057,7 +23060,7 @@ snapshots:
 
   ember-cli-deploy-progress@1.3.0: {}
 
-  ember-cli-deploy-revision-data@2.0.0(supports-color@8.1.1):
+  ember-cli-deploy-revision-data@2.0.0:
     dependencies:
       chalk: 4.1.2
       core-object: 3.1.5
@@ -23065,11 +23068,11 @@ snapshots:
       git-repo-info: 2.1.1
       minimatch: 3.1.5
       rsvp: 4.8.5
-      simple-git: 3.36.0(supports-color@8.1.1)
+      simple-git: 3.36.0
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli-deploy-s3@3.3.0(supports-color@8.1.1):
+  ember-cli-deploy-s3@3.3.0:
     dependencies:
       aws-sdk: 2.1693.0
       chalk: 4.1.2
@@ -23078,7 +23081,7 @@ snapshots:
       lodash: 4.18.1
       mime: 2.6.0
       minimatch: 3.1.5
-      proxy-agent: 5.0.0(supports-color@8.1.1)
+      proxy-agent: 5.0.0
       rsvp: 4.8.5
     transitivePeerDependencies:
       - supports-color
@@ -23170,7 +23173,7 @@ snapshots:
 
   ember-cli-path-utils@1.0.0: {}
 
-  ember-cli-preprocess-registry@5.0.1(supports-color@8.1.1):
+  ember-cli-preprocess-registry@5.0.1:
     dependencies:
       broccoli-funnel: 3.0.8
       debug: 4.4.3(supports-color@8.1.1)
@@ -23185,9 +23188,9 @@ snapshots:
 
   ember-cli-string-utils@1.1.0: {}
 
-  ember-cli-terser@4.0.2(supports-color@8.1.1):
+  ember-cli-terser@4.0.2:
     dependencies:
-      broccoli-terser-sourcemap: 4.1.1(supports-color@8.1.1)
+      broccoli-terser-sourcemap: 4.1.1
     transitivePeerDependencies:
       - supports-color
 
@@ -23225,7 +23228,7 @@ snapshots:
   ember-cli-typescript@5.3.0:
     dependencies:
       ansi-to-html: 0.6.15
-      broccoli-stew: 3.0.0(supports-color@8.1.1)
+      broccoli-stew: 3.0.0
       debug: 4.4.3(supports-color@8.1.1)
       execa: 4.1.0
       fs-extra: 9.1.0
@@ -23269,7 +23272,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)(supports-color@8.1.1):
+  ember-cli@5.12.0(@babel/core@7.29.7)(@types/node@24.13.2):
     dependencies:
       '@pnpm/find-workspace-dir': 6.0.3
       broccoli: 3.5.2
@@ -23284,7 +23287,7 @@ snapshots:
       broccoli-middleware: 2.1.2
       broccoli-slow-trees: 3.1.0
       broccoli-source: 3.0.1
-      broccoli-stew: 3.0.0(supports-color@8.1.1)
+      broccoli-stew: 3.0.0
       calculate-cache-key-for-tree: 2.0.0
       capture-exit: 2.0.0
       chalk: 4.1.2
@@ -23300,7 +23303,7 @@ snapshots:
       ember-cli-is-package-missing: 1.0.0
       ember-cli-lodash-subset: 2.0.1
       ember-cli-normalize-entity-name: 1.0.0
-      ember-cli-preprocess-registry: 5.0.1(supports-color@8.1.1)
+      ember-cli-preprocess-registry: 5.0.1
       ember-cli-string-utils: 1.1.0
       ensure-posix-path: 1.1.1
       execa: 5.1.1
@@ -23319,7 +23322,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 2.0.1
       inquirer: 9.3.8(@types/node@24.13.2)
       is-git-url: 1.0.0
@@ -23334,7 +23337,7 @@ snapshots:
       npm-package-arg: 10.1.0
       os-locale: 5.0.0
       p-defer: 3.0.0
-      portfinder: 1.0.38(supports-color@8.1.1)
+      portfinder: 1.0.38
       promise-map-series: 0.3.0
       promise.hash.helper: 1.0.8
       quick-temp: 0.1.9
@@ -23428,7 +23431,7 @@ snapshots:
       broccoli-middleware: 2.1.2
       broccoli-slow-trees: 3.1.0
       broccoli-source: 3.0.1
-      broccoli-stew: 3.0.0(supports-color@8.1.1)
+      broccoli-stew: 3.0.0
       calculate-cache-key-for-tree: 2.0.0
       capture-exit: 2.0.0
       chalk: 5.6.2
@@ -23443,12 +23446,12 @@ snapshots:
       diff: 8.0.4
       ember-cli-is-package-missing: 1.0.0
       ember-cli-normalize-entity-name: 1.0.0
-      ember-cli-preprocess-registry: 5.0.1(supports-color@8.1.1)
+      ember-cli-preprocess-registry: 5.0.1
       ember-cli-string-utils: 1.1.0
       ensure-posix-path: 1.1.1
       execa: 9.6.1
       exit: 0.1.2
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       filesize: 11.0.17
       find-up: 8.0.0
       find-yarn-workspace-root: 2.0.0
@@ -23461,7 +23464,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 3.0.2
       inquirer: 13.4.3(@types/node@25.9.3)
       is-git-url: 1.0.0
@@ -23475,7 +23478,7 @@ snapshots:
       npm-package-arg: 13.0.2
       os-locale: 6.0.2
       p-defer: 4.0.1
-      portfinder: 1.0.38(supports-color@8.1.1)
+      portfinder: 1.0.38
       promise-map-series: 0.3.0
       promise.hash.helper: 1.0.8
       quick-temp: 0.1.9
@@ -23643,7 +23646,7 @@ snapshots:
       svg-tags: 1.0.0
     optionalDependencies:
       '@babel/eslint-parser': 7.29.7(@babel/core@7.29.7)(eslint@8.57.1)
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
 
@@ -23654,7 +23657,7 @@ snapshots:
       content-tag: 4.2.0
       oxc-parser: 0.130.0
 
-  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2):
+  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2):
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       chalk: 5.6.2
@@ -23716,7 +23719,7 @@ snapshots:
       '@ember/string': 4.0.1
       '@glimmer/component': 2.1.1
       '@glimmer/tracking': 1.1.2
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(postcss@8.5.15))
+      ember-auto-import: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       ember-cli-babel: 8.3.1(@babel/core@7.29.7)
       ember-cli-htmlbars: 6.3.0
       ember-cli-typescript: 5.3.0
@@ -23789,7 +23792,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.7
       '@embroider/addon-shim': 1.10.3
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       ember-resources: 7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7)
     optionalDependencies:
       '@glimmer/component': 2.1.1
@@ -23822,7 +23825,7 @@ snapshots:
   ember-power-calendar-moment@1.0.4(@glint/template@1.7.7)(ember-power-calendar@1.8.1(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-concurrency@5.2.0(@babel/core@7.29.7)(@glint/template@1.7.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)))(moment@2.30.1):
     dependencies:
       '@embroider/addon-shim': 1.10.3
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
       ember-power-calendar: 1.8.1(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-concurrency@5.2.0(@babel/core@7.29.7)(@glint/template@1.7.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
     optionalDependencies:
       moment: 2.30.1
@@ -24015,9 +24018,9 @@ snapshots:
       - '@babel/core'
       - supports-color
 
-  ember-template-imports@4.4.0(supports-color@8.1.1):
+  ember-template-imports@4.4.0:
     dependencies:
-      broccoli-stew: 3.0.0(supports-color@8.1.1)
+      broccoli-stew: 3.0.0
       content-tag: 4.2.0
       ember-cli-version-checker: 5.1.2
     transitivePeerDependencies:
@@ -24083,7 +24086,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  ember-try@2.0.0(supports-color@8.1.1):
+  ember-try@2.0.0:
     dependencies:
       chalk: 4.1.2
       cli-table3: 0.6.5
@@ -24112,7 +24115,7 @@ snapshots:
   ember-window-mock@1.0.2(@glint/template@1.7.7):
     dependencies:
       '@embroider/addon-shim': 1.10.3
-      '@embroider/macros': 1.16.13(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros': 1.16.13(@glint/template@1.7.7)
     transitivePeerDependencies:
       - '@glint/template'
       - supports-color
@@ -24426,9 +24429,9 @@ snapshots:
     dependencies:
       eslint: 8.57.1
 
-  eslint-doc-generator@1.7.1(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3):
+  eslint-doc-generator@1.7.1(eslint@8.57.1)(typescript@5.9.3):
     dependencies:
-      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.9.3)
       ajv: 8.20.0
       boolean: 3.2.0
       commander: 10.0.1
@@ -24457,7 +24460,7 @@ snapshots:
     dependencies:
       debug: 3.2.7
     optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.10
     transitivePeerDependencies:
@@ -24484,7 +24487,7 @@ snapshots:
       snake-case: 3.0.4
       svg-tags: 1.0.0
     optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/eslint-parser'
       - typescript
@@ -24539,16 +24542,16 @@ snapshots:
       string.prototype.trimend: 1.0.10
       tsconfig-paths: 3.15.0
     optionalDependencies:
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
     transitivePeerDependencies:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-markdown@5.1.0(eslint@8.57.1)(supports-color@8.1.1):
+  eslint-plugin-markdown@5.1.0(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
-      mdast-util-from-markdown: 0.8.5(supports-color@8.1.1)
+      mdast-util-from-markdown: 0.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -24598,7 +24601,7 @@ snapshots:
   eslint-plugin-typescript-sort-keys@3.3.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3):
     dependencies:
       '@typescript-eslint/experimental-utils': 5.62.0(eslint@8.57.1)(typescript@5.9.3)
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.9.3)
       eslint: 8.57.1
       json-schema: 0.4.0
       natural-compare-lite: 1.4.0
@@ -24866,9 +24869,9 @@ snapshots:
 
   expect-type@1.3.0: {}
 
-  express-rate-limit@8.5.2(express@5.2.1(supports-color@8.1.1)):
+  express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       ip-address: 10.2.0
 
   express@4.22.2:
@@ -24907,10 +24910,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@8.1.1):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@8.1.1)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -24920,7 +24923,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@8.1.1)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -24931,7 +24934,7 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.2
       range-parser: 1.2.1
-      router: 2.2.0(supports-color@8.1.1)
+      router: 2.2.0
       send: 1.2.1
       serve-static: 2.2.1
       statuses: 2.0.2
@@ -25127,7 +25130,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@2.1.1(supports-color@8.1.1):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -25481,7 +25484,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  get-uri@3.0.2(supports-color@8.1.1):
+  get-uri@3.0.2:
     dependencies:
       '@tootallnate/once': 1.1.2
       data-uri-to-buffer: 3.0.1
@@ -25492,7 +25495,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  get-uri@6.0.5(supports-color@8.1.1):
+  get-uri@6.0.5:
     dependencies:
       basic-ftp: 5.3.1
       data-uri-to-buffer: 6.0.2
@@ -25869,15 +25872,15 @@ snapshots:
   http-proxy-agent@4.0.1:
     dependencies:
       '@tootallnate/once': 1.1.2
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy-agent@5.0.0(supports-color@8.1.1):
+  http-proxy-agent@5.0.0:
     dependencies:
       '@tootallnate/once': 2.0.1
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
@@ -25889,7 +25892,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1(debug@4.3.4):
+  http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
       follow-redirects: 1.16.0(debug@4.3.4)
@@ -25897,18 +25900,18 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  http-server@14.1.1(debug@4.3.4)(supports-color@8.1.1):
+  http-server@14.1.1:
     dependencies:
       basic-auth: 2.0.1
       chalk: 4.1.2
       corser: 2.0.1
       he: 1.2.0
       html-encoding-sniffer: 3.0.0
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       mime: 1.6.0
       minimist: 1.2.8
       opener: 1.5.2
-      portfinder: 1.0.38(supports-color@8.1.1)
+      portfinder: 1.0.38
       secure-compare: 3.0.1
       union: 0.5.0
       url-join: 4.0.1
@@ -25920,7 +25923,7 @@ snapshots:
 
   https-proxy-agent@5.0.1:
     dependencies:
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
@@ -26438,7 +26441,7 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  jsdom@21.1.2(supports-color@8.1.1):
+  jsdom@21.1.2:
     dependencies:
       abab: 2.0.6
       acorn: 8.17.0
@@ -26450,7 +26453,7 @@ snapshots:
       escodegen: 2.1.0
       form-data: 4.0.6
       html-encoding-sniffer: 3.0.0
-      http-proxy-agent: 5.0.0(supports-color@8.1.1)
+      http-proxy-agent: 5.0.0
       https-proxy-agent: 5.0.1
       is-potential-custom-element-name: 1.0.1
       nwsapi: 2.2.24
@@ -26658,16 +26661,16 @@ snapshots:
       co: 4.6.0
       koa-compose: 4.1.0
 
-  koa-proxies@0.12.4(koa@2.16.4(supports-color@8.1.1)):
+  koa-proxies@0.12.4(koa@2.16.4):
     dependencies:
-      http-proxy: 1.18.1(debug@4.3.4)
-      koa: 2.16.4(supports-color@8.1.1)
+      http-proxy: 1.18.1
+      koa: 2.16.4
       path-match: 1.2.4
       uuid: 8.3.2
     transitivePeerDependencies:
       - debug
 
-  koa@2.16.4(supports-color@8.1.1):
+  koa@2.16.4:
     dependencies:
       accepts: 1.3.8
       cache-content-type: 1.0.1
@@ -27069,11 +27072,11 @@ snapshots:
       '@types/events': 3.0.3
       events: 3.3.0
 
-  mdast-util-from-markdown@0.8.5(supports-color@8.1.1):
+  mdast-util-from-markdown@0.8.5:
     dependencies:
       '@types/mdast': 3.0.15
       mdast-util-to-string: 2.0.0
-      micromark: 2.11.4(supports-color@8.1.1)
+      micromark: 2.11.4
       parse-entities: 2.0.0
       unist-util-stringify-position: 2.0.3
     transitivePeerDependencies:
@@ -27172,7 +27175,7 @@ snapshots:
 
   methods@1.1.2: {}
 
-  micromark@2.11.4(supports-color@8.1.1):
+  micromark@2.11.4:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       parse-entities: 2.0.0
@@ -27827,12 +27830,12 @@ snapshots:
 
   p-try@2.2.0: {}
 
-  pac-proxy-agent@5.0.0(supports-color@8.1.1):
+  pac-proxy-agent@5.0.0:
     dependencies:
       '@tootallnate/once': 1.1.2
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
-      get-uri: 3.0.2(supports-color@8.1.1)
+      get-uri: 3.0.2
       http-proxy-agent: 4.0.1
       https-proxy-agent: 5.0.1
       pac-resolver: 5.0.1
@@ -27841,16 +27844,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  pac-proxy-agent@7.2.0(supports-color@8.1.1):
+  pac-proxy-agent@7.2.0:
     dependencies:
       '@tootallnate/quickjs-emscripten': 0.23.0
       agent-base: 7.1.4
       debug: 4.4.3(supports-color@8.1.1)
-      get-uri: 6.0.5(supports-color@8.1.1)
+      get-uri: 6.0.5
       http-proxy-agent: 7.0.2(supports-color@8.1.1)
       https-proxy-agent: 7.0.6(supports-color@8.1.1)
       pac-resolver: 7.0.1
-      socks-proxy-agent: 8.0.5(supports-color@8.1.1)
+      socks-proxy-agent: 8.0.5
     transitivePeerDependencies:
       - supports-color
 
@@ -28099,7 +28102,7 @@ snapshots:
       path-data-parser: 0.1.0
       points-on-curve: 0.2.0
 
-  portfinder@1.0.38(supports-color@8.1.1):
+  portfinder@1.0.38:
     dependencies:
       async: 3.2.6
       debug: 4.4.3(supports-color@8.1.1)
@@ -28238,14 +28241,14 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-agent@5.0.0(supports-color@8.1.1):
+  proxy-agent@5.0.0:
     dependencies:
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
       http-proxy-agent: 4.0.1
       https-proxy-agent: 5.0.1
       lru-cache: 5.1.1
-      pac-proxy-agent: 5.0.0(supports-color@8.1.1)
+      pac-proxy-agent: 5.0.0
       proxy-from-env: 1.1.0
       socks-proxy-agent: 5.0.1
     transitivePeerDependencies:
@@ -28584,7 +28587,7 @@ snapshots:
 
   require-from-string@2.0.2: {}
 
-  require-in-the-middle@7.5.2(supports-color@8.1.1):
+  require-in-the-middle@7.5.2:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       module-details-from-path: 1.0.4
@@ -28784,7 +28787,7 @@ snapshots:
 
   route-recognizer@0.3.4: {}
 
-  router@2.2.0(supports-color@8.1.1):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       depd: 2.0.0
@@ -28922,7 +28925,7 @@ snapshots:
 
   sdp-transform@2.15.0: {}
 
-  secretlint@10.2.2(supports-color@8.1.1):
+  secretlint@10.2.2:
     dependencies:
       '@secretlint/config-creator': 10.2.2
       '@secretlint/formatter': 10.2.2
@@ -29097,9 +29100,9 @@ snapshots:
       simple-concat: 1.0.1
     optional: true
 
-  simple-git@3.36.0(supports-color@8.1.1):
+  simple-git@3.36.0:
     dependencies:
-      '@kwsites/file-exists': 1.1.1(supports-color@8.1.1)
+      '@kwsites/file-exists': 1.1.1
       '@kwsites/promise-deferred': 1.1.1
       '@simple-git/args-pathspec': 1.0.3
       '@simple-git/argv-parser': 1.1.1
@@ -29200,13 +29203,13 @@ snapshots:
 
   socks-proxy-agent@5.0.1:
     dependencies:
-      agent-base: 6.0.2(supports-color@8.1.1)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
       socks: 2.8.9
     transitivePeerDependencies:
       - supports-color
 
-  socks-proxy-agent@8.0.5(supports-color@8.1.1):
+  socks-proxy-agent@8.0.5:
     dependencies:
       agent-base: 7.1.4
       debug: 4.4.3(supports-color@8.1.1)
@@ -29549,7 +29552,7 @@ snapshots:
     dependencies:
       '@types/node': 20.19.43
 
-  superagent@8.1.2(supports-color@8.1.1):
+  superagent@8.1.2:
     dependencies:
       component-emitter: 1.3.1
       cookiejar: 2.1.4
@@ -29564,10 +29567,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  supertest@6.3.4(supports-color@8.1.1):
+  supertest@6.3.4:
     dependencies:
       methods: 1.1.2
-      superagent: 8.1.2(supports-color@8.1.1)
+      superagent: 8.1.2
     transitivePeerDependencies:
       - supports-color
 
@@ -29738,9 +29741,9 @@ snapshots:
       compression: 1.8.1
       consolidate: 1.0.4(@babel/core@7.29.7)(ejs@3.1.10)(handlebars@4.7.9)(lodash@4.18.1)(mustache@4.2.0)(underscore@1.13.8)
       execa: 9.6.1
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       glob: 13.0.6
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       js-yaml: 4.2.0
       lodash: 4.18.1
       minimatch: 10.2.5
@@ -30295,7 +30298,7 @@ snapshots:
       - supports-color
       - terser
 
-  vite-node@2.1.9(@types/node@25.9.3)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.48.0):
+  vite-node@2.1.9(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0):
     dependencies:
       cac: 6.7.14
       debug: 4.4.3(supports-color@8.1.1)
@@ -30414,7 +30417,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.48.0):
+  vitest@2.1.9(@types/node@25.9.3)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.48.0):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0))
@@ -30434,7 +30437,7 @@ snapshots:
       tinypool: 1.1.1
       tinyrainbow: 1.2.0
       vite: 5.4.21(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0)
-      vite-node: 2.1.9(@types/node@25.9.3)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.48.0)
+      vite-node: 2.1.9(@types/node@25.9.3)(lightningcss@1.32.0)(terser@5.48.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 25.9.3
@@ -30536,9 +30539,9 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  wait-on@9.0.10(debug@4.3.4):
+  wait-on@9.0.10:
     dependencies:
-      axios: 1.18.0(debug@4.3.4)
+      axios: 1.18.0
       joi: 18.2.1
       lodash: 4.18.1
       minimist: 1.2.8

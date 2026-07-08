@@ -69,9 +69,24 @@ done
 wait "$WAIT_ON_PID"
 
 echo "All realms ready. Dumping index tables..."
-docker exec boxel-pg pg_dump -U postgres --data-only --strict-names \
-  -t boxel_index -t realm_generations -t realm_meta -t prerendered_html \
+# Tables that make up the cache. This is the single source of truth: the same
+# list drives pg_dump's -t args and the completeness check in the separate
+# "Verify index cache" CI step (via the sidecar written below). Keep the
+# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_working
+# tables are deliberately excluded — they are transient UNLOGGED scratch space.
+CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
+
+DUMP_ARGS=()
+for t in "${CACHE_TABLES[@]}"; do
+  DUMP_ARGS+=(-t "$t")
+done
+
+docker exec boxel-pg pg_dump -U postgres --data-only \
+  "${DUMP_ARGS[@]}" \
   boxel > /tmp/boxel-index-cache.sql
+
+# Record exactly which tables we dumped so the verify step checks the same set.
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache.tables
 
 gzip /tmp/boxel-index-cache.sql
 

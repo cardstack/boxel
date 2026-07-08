@@ -80,6 +80,11 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  decodeWorkerRequestIpc,
+  dispatchWorkerRequest,
+  WORKER_REQUEST_IPC_PREFIX,
+} from './lib/worker-request-forwarder.ts';
 
 /* About the Worker Manager
  *
@@ -978,6 +983,31 @@ async function startWorker(
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith(WORKER_REQUEST_IPC_PREFIX)
+        ) {
+          // A worker child handed us a typed request it can't service itself
+          // (e.g. broadcasting a realm event — it holds no matrix client). We
+          // dispatch on the request type and forward to the realm server over
+          // the authenticated /_worker-request endpoint. Routing every request
+          // through this single manager avoids per-replica fan-out.
+          let request = decodeWorkerRequestIpc(message);
+          if (!request) {
+            log.error(`Failed to parse worker request from worker ${name}`);
+            return;
+          }
+          dispatchWorkerRequest(request, {
+            urlMappings,
+            secret: REALM_SECRET_SEED!,
+            workerName: name,
+          }).catch((e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: failed dispatching worker request '${request.type}' from ${name}`,
+              e,
+            );
+          });
         }
       });
     }),
