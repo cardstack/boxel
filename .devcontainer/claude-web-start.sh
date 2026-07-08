@@ -74,8 +74,20 @@ for _ in $(seq 1 60); do
   curl -sf -o /dev/null --max-time 5 http://localhost:8008/_matrix/client/versions && break
   sleep 2
 done
+
+# Migrate BEFORE registering: `infra:ensure-pg` only creates the database, not
+# its schema. `register-all` (in 'all' mode) INSERTs bot/writer rows into the
+# `users` table, which doesn't exist until the realm-server's migrations run —
+# and those otherwise run later, at dev-all boot. Without this, register-all
+# exits non-zero (the INSERT fails), and since the whole script `process.exit`s
+# from its Promise.all catch, that can even abort the still-in-flight Synapse
+# registrations — leaving the realm-server unable to log in. Run the same
+# migration set the realm-server applies at boot; that later pass then no-ops.
+echo "[start] Running realm-server migrations before registration…"
+mise exec -- pnpm --dir=packages/realm-server migrate
+
 echo "[start] Registering Matrix users (idempotent)…"
-mise exec -- pnpm --dir=packages/matrix register-all || true
+mise exec -- pnpm --dir=packages/matrix register-all
 
 # Restore the realm index from the CI cache if one's available, so the stack
 # comes up without re-rendering every card. On success, tell the realm-server
