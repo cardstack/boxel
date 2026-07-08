@@ -13,7 +13,6 @@ const ON_BEHALF_OF = '@user:localhost';
 const AGENT_ID = 'agent-1';
 const ROOM_ID = '!room:localhost';
 const REQUEST_EVENT_ID = '$request:localhost';
-const REALM = 'https://localhost:4201/user/jane/';
 const FILE_URL =
   'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md';
 
@@ -85,7 +84,7 @@ module('fulfillReadRealmFileCalls', () => {
       })) as unknown as typeof globalThis.fetch;
 
     let outcomes = await fulfillReadRealmFileCalls(
-      [readRealmFileCall('c1', { realm: REALM, url: FILE_URL })],
+      [readRealmFileCall('c1', { url: FILE_URL })],
       baseDeps(client, {
         fetch,
         // Inject the uploader so this case doesn't touch the dedup cache.
@@ -127,7 +126,7 @@ module('fulfillReadRealmFileCalls', () => {
       })) as unknown as typeof globalThis.fetch;
 
     let outcomes = await fulfillReadRealmFileCalls(
-      [readRealmFileCall('c1', { realm: REALM, url: FILE_URL })],
+      [readRealmFileCall('c1', { url: FILE_URL })],
       baseDeps(client, { fetch }),
     );
 
@@ -185,11 +184,11 @@ module('fulfillReadRealmFileCalls', () => {
       })) as unknown as typeof globalThis.fetch;
 
     await fulfillReadRealmFileCalls(
-      [readRealmFileCall('c1', { realm: REALM, url: FILE_URL })],
+      [readRealmFileCall('c1', { url: FILE_URL })],
       baseDeps(client, { fetch }),
     );
     await fulfillReadRealmFileCalls(
-      [readRealmFileCall('c2', { realm: REALM, url: FILE_URL })],
+      [readRealmFileCall('c2', { url: FILE_URL })],
       baseDeps(client, { fetch }),
     );
 

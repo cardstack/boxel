@@ -122,12 +122,8 @@ async function fulfillOne(
   } catch {
     args = undefined;
   }
-  if (!args || !args.realm || !args.url) {
-    return await publishFailure(
-      call.id,
-      'readRealmFile needs a realm and a url.',
-      deps,
-    );
+  if (!args || !args.url) {
+    return await publishFailure(call.id, 'readRealmFile needs a url.', deps);
   }
 
   let result = await executeReadRealmFile(args, {
