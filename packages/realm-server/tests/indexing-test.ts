@@ -4195,38 +4195,26 @@ module(basename(import.meta.filename), function () {
           'FileDef target error doc includes file extract failure details',
         );
 
+        // Relationship consumers stay indexable while a target is broken —
+        // the same first-hop termination card targets have: the error lives
+        // on the target's own rows and the consumer's broken slot renders
+        // the placeholder inline.
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-file-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'first-degree relationship consumer is in error while FileDef target is broken',
+          'instance',
+          'first-degree relationship consumer stays indexable while FileDef target is broken',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-file-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'second-degree relationship consumer is in error while delegated FileDef target is broken',
+          'instance',
+          'second-degree relationship consumer stays indexable while delegated FileDef target is broken',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          let delegatedHasExpectedErrorDetail =
-            hasErrorDetail(
-              grandParentBefore.error,
-              'Received HTTP 404 from server',
-            ) || hasErrorDetail(grandParentBefore.error, 'missing-child');
-          assert.ok(
-            delegatedHasExpectedErrorDetail,
-            'delegated relationship consumer receives nested FileDef error details',
-          );
-        } else {
-          assert.ok(
-            false,
-            'expected delegated relationship consumer error details',
-          );
-        }
 
         await realm.write(
           'filedef-mismatch.gts',
