@@ -126,7 +126,7 @@ import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
 import {
-  codeModeEntryPointSkillUrl,
+  sourceCodeEditingSkillUrl,
   devSkillId,
   envSkillId,
 } from '../lib/utils';
@@ -2808,11 +2808,10 @@ export default class MatrixService extends Service {
     let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills (pushed in full) activate
-      // alongside the code-mode entry-point skill, whose linked skills the
-      // bot loads on demand. As the card skills convert to markdown the
-      // pushed set shrinks.
-      skillCardIdsToActivate: [...defaultSkillIds, codeModeEntryPointSkillUrl],
+      // Dual-path window: the legacy card skills activate alongside the
+      // markdown source-code-editing skill. All are pushed for now; the
+      // on-demand entry point returns as a catalog listing.
+      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
     });
   }
 
