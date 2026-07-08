@@ -6,7 +6,12 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseRealmRRI,
+  rri,
+  searchEntryWireQueryFromQuery,
+} from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -43,6 +48,7 @@ import {
   field,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -81,7 +87,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -102,6 +108,9 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/empty.json');
+    // The card+json GET stamps the index-data generation in per-instance meta;
+    // it's server metadata not asserted by this structural comparison.
+    delete json.data.meta.generation;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -112,12 +121,9 @@ module('Integration | realm', function (hooks) {
           cardThumbnailURL: null,
           cardTitle: 'Untitled Card',
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -135,6 +141,67 @@ module('Integration | realm', function (hooks) {
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
 
+  test('realm serves instance ids in canonical RRI form for a prefix-mapped realm', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'dir/empty.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Without a realm-prefix mapping, instance ids are served in URL form.
+    let urlResponse = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/empty`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    let urlDoc = await urlResponse.json();
+    assert.strictEqual(
+      urlDoc.data.id,
+      `${testRealmURL}dir/empty`,
+      'an unmapped realm serves the instance id in URL form',
+    );
+
+    // Registering a realm-prefix mapping makes the same GET serve the id (and
+    // links.self) in canonical RRI (prefix) form. The unresolve happens at
+    // serve time in getCard, so the mapping need not be present at index time.
+    // The network service's VirtualNetwork is shared across tests, so remove
+    // the mapping afterward to avoid leaking it into later tests.
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test-prefix/', testRealmURL);
+    try {
+      let rriResponse = await handle(
+        realm,
+        new Request(`${testRealmURL}dir/empty`, {
+          headers: { Accept: 'application/vnd.card+json' },
+        }),
+      );
+      let rriDoc = await rriResponse.json();
+      assert.strictEqual(
+        rriDoc.data.id,
+        '@test-prefix/dir/empty',
+        'a prefix-mapped realm serves the instance id in canonical RRI form',
+      );
+      assert.strictEqual(
+        rriDoc.data.links.self,
+        '@test-prefix/dir/empty',
+        'links.self is served in canonical RRI form too',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test-prefix/');
+    }
+  });
+
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -148,9 +215,6 @@ module('Integration | realm', function (hooks) {
               cardInfo,
               cardDescription: null,
               cardThumbnailURL: null,
-            },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -175,7 +239,6 @@ module('Integration | realm', function (hooks) {
                   self: `${testRealmURL}dir/owner`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -200,6 +263,9 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
+    // The card+json GET stamps the index-data generation in per-instance meta;
+    // it's server metadata not asserted by this structural comparison.
+    delete json.data.meta.generation;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -221,7 +287,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -253,9 +318,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -338,11 +400,6 @@ module('Integration | realm', function (hooks) {
       'owner data id points to other realm',
     );
     assert.strictEqual(
-      json.data.relationships['cardInfo.theme'].links.self,
-      null,
-      'mango theme is null',
-    );
-    assert.strictEqual(
       json.data.meta.lastModified,
       adapter.lastModifiedMap.get(`${testRealmURL}dir/mango.json`),
       'mango lastModified',
@@ -360,11 +417,6 @@ module('Integration | realm', function (hooks) {
       `${testModuleRealm}hassan`,
       'included hassan id',
     );
-    assert.strictEqual(
-      hassan.relationships['cardInfo.theme'].links.self,
-      null,
-      'included hassan theme is null',
-    );
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
@@ -375,7 +427,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -408,8 +460,11 @@ module('Integration | realm', function (hooks) {
           method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify(
+            searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+          ),
         }),
       );
       let json = await response.json();
@@ -444,7 +499,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -520,7 +575,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -556,7 +611,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -696,7 +751,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -728,9 +782,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -938,9 +989,6 @@ module('Integration | realm', function (hooks) {
               lastName: 'Abdel-Rahman',
               cardInfo,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}person`,
@@ -978,7 +1026,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.searchCards({
+    let { data: cards } = await searchCardsForTest(queryEngine, {
       filter: {
         on: {
           module: rri(`${testModuleRealm}person`),
@@ -1081,9 +1129,6 @@ module('Integration | realm', function (hooks) {
           cardThumbnailURL: null,
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: `${testModuleRealm}booking`,
@@ -1121,9 +1166,6 @@ module('Integration | realm', function (hooks) {
             sponsors: ['Burton'],
             posts: [],
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1260,7 +1302,6 @@ module('Integration | realm', function (hooks) {
               type: 'card',
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1291,9 +1332,6 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             cardInfo,
           },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
-          },
           meta: {
             adoptsFrom: {
               module: `${testModuleRealm}person`,
@@ -1320,7 +1358,6 @@ module('Integration | realm', function (hooks) {
           },
           relationships: {
             owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1350,7 +1387,6 @@ module('Integration | realm', function (hooks) {
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1492,7 +1528,6 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1541,9 +1576,6 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
-            relationships: {
-              pets: { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
@@ -1607,8 +1639,6 @@ module('Integration | realm', function (hooks) {
           links: { self: `./dir/van-gogh` },
           data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
-        friend: { links: { self: null } },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1718,17 +1748,11 @@ module('Integration | realm', function (hooks) {
         links: { self: `./2` },
         data: { id: `${testRealmURL}2`, type: 'card' },
       },
-      'cardInfo.theme': { links: { self: null } },
     });
     assert.deepEqual(
       JSON.parse((adapter.files.contents['1.json'] as any).content).data
         .relationships,
       {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
         'inners.0.other': {
           links: {
             self: './2',
@@ -1828,10 +1852,12 @@ module('Integration | realm', function (hooks) {
         cardThumbnailURL: null,
         cardInfo,
       },
+      // Emptying `pets` authors it empty — a relationship the card has, spelled
+      // `{ self: null }` on the wire — as distinct from a never-set link, which
+      // is omitted. So the served card+json keeps the emptied `pets` and omits
+      // the never-authored `friend`.
       relationships: {
         pets: { links: { self: null } },
-        friend: { links: { self: null } },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1963,7 +1989,6 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -2064,9 +2089,6 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               relationships: {
-                pets: {
-                  links: { self: null },
-                },
                 friend: {
                   links: { self: `${testRealmURL}dir/different-friend` },
                 },
@@ -2099,9 +2121,6 @@ module('Integration | realm', function (hooks) {
         cardInfo,
       },
       relationships: {
-        pets: {
-          links: { self: null },
-        },
         friend: {
           links: { self: `./dir/different-friend` },
           data: {
@@ -2109,7 +2128,13 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
-        'cardInfo.theme': { links: { self: null } },
+        'pets.0': {
+          links: { self: `./dir/van-gogh` },
+          data: {
+            id: `${testRealmURL}dir/van-gogh`,
+            type: 'card',
+          },
+        },
       },
       meta: {
         adoptsFrom: {
@@ -2240,7 +2265,6 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/mariko`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2272,9 +2296,6 @@ module('Integration | realm', function (hooks) {
             posts: null,
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2313,7 +2334,6 @@ module('Integration | realm', function (hooks) {
                 self: `./mariko`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2430,9 +2450,6 @@ module('Integration | realm', function (hooks) {
           cardTitle: 'Untitled Card',
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
             module: `../driver`,
@@ -2474,9 +2491,6 @@ module('Integration | realm', function (hooks) {
               year: '2024',
             },
             cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2686,7 +2700,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2696,7 +2710,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2707,7 +2721,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.searchCards({});
+    let { data: cards } = await searchCardsForTest(queryEngine, {});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2758,7 +2772,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.searchCards({})).data;
+    cards = (await searchCardsForTest(queryEngine, {})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -2996,7 +3010,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3010,8 +3024,11 @@ module('Integration | realm', function (hooks) {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+        ),
       }),
     );
     let json = await response.json();
@@ -3099,28 +3116,39 @@ module('Integration | realm', function (hooks) {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          sort: [
+        body: JSON.stringify(
+          searchEntryWireQueryFromQuery(
             {
-              by: 'id',
-              on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+              sort: [
+                {
+                  by: 'id',
+                  on: {
+                    module: rri(`${baseRealmRRI}card-api`),
+                    name: 'CardDef',
+                  },
+                },
+              ],
             },
-          ],
-        }),
+            { fields: ['item'] },
+          ),
+        ),
       }),
     );
     let json = await response.json();
-    delete json.included?.[0].meta.lastModified;
-    delete json.included?.[0].meta.resourceCreatedAt;
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    let resources = json.data as any[];
-    assert.strictEqual(resources.length, 3, 'returns 3 cards');
+    // `/_search` returns `entry` resources in `data` (each just an
+    // id + refs); the full card resources — the matched results themselves and
+    // their `loadLinks`-expanded relationship targets — travel in `included`.
+    let entries = json.data as any[];
+    assert.strictEqual(entries.length, 3, 'returns 3 search entries');
     assert.strictEqual(json.meta.page.total, 3, 'meta page total is 3');
 
-    let mango = resources.find((r) => r.id === `${testRealmURL}dir/mango`);
+    let included = (json.included ?? []) as any[];
+    let mango = included.find((r) => r.id === `${testRealmURL}dir/mango`);
     assert.ok(mango, 'mango is in results');
     assert.strictEqual(mango.attributes.firstName, 'Mango', 'mango name');
     assert.strictEqual(
@@ -3134,17 +3162,12 @@ module('Integration | realm', function (hooks) {
       'mango owner id',
     );
     assert.strictEqual(
-      mango.relationships['cardInfo.theme'].links.self,
-      null,
-      'mango theme is null',
-    );
-    assert.strictEqual(
       mango.meta.resourceCreatedAt,
       mangoCreatedAt,
       'mango createdAt',
     );
 
-    let mariko = resources.find((r) => r.id === `${testRealmURL}dir/mariko`);
+    let mariko = included.find((r) => r.id === `${testRealmURL}dir/mariko`);
     assert.ok(mariko, 'mariko is in results');
     assert.strictEqual(
       mariko.attributes.fullName,
@@ -3152,17 +3175,12 @@ module('Integration | realm', function (hooks) {
       'mariko fullName',
     );
     assert.strictEqual(
-      mariko.relationships['cardInfo.theme'].links.self,
-      null,
-      'mariko theme is null',
-    );
-    assert.strictEqual(
       mariko.meta.resourceCreatedAt,
       marikoCreatedAt,
       'mariko createdAt',
     );
 
-    let vanGogh = resources.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
+    let vanGogh = included.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
     assert.ok(vanGogh, 'vanGogh is in results');
     assert.strictEqual(
       vanGogh.relationships.owner.links.self,
@@ -3175,24 +3193,13 @@ module('Integration | realm', function (hooks) {
       'vanGogh owner id',
     );
     assert.strictEqual(
-      vanGogh.relationships['cardInfo.theme'].links.self,
-      null,
-      'vanGogh theme is null',
-    );
-    assert.strictEqual(
       vanGogh.meta.resourceCreatedAt,
       vanGoghCreatedAt,
       'vanGogh createdAt',
     );
 
-    let included = (json.included ?? []) as any[];
     let hassan = included.find((r) => r.id === `${testModuleRealm}hassan`);
-    assert.ok(hassan, 'hassan is included');
-    assert.strictEqual(
-      hassan.relationships['cardInfo.theme'].links.self,
-      null,
-      'included hassan theme is null',
-    );
+    assert.ok(hassan, 'hassan (cross-realm linksTo target) is included');
   });
 
   test('included card uses correct module path when realm is mounted', async function (assert) {
@@ -3303,7 +3310,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3546,7 +3553,7 @@ posts/ignore-me.gts
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'FieldDef',
               },
             },

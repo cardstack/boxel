@@ -7,6 +7,14 @@ import type {
 import { getField } from '../code-ref.ts';
 
 export function cardTypeDisplayName(cardOrField: BaseDef): string {
+  // A not-yet-loaded or broken relationship link can surface an undefined
+  // model to a card's own template (the linksTo component only renders the
+  // broken-link template for specific membership states). Guard like the
+  // sibling helpers below so an unguarded `{{cardTypeDisplayName @model}}`
+  // renders empty instead of throwing and failing the whole card render.
+  if (!cardOrField?.constructor) {
+    return '';
+  }
   return cardOrField.constructor.getDisplayName(cardOrField);
 }
 

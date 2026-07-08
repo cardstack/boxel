@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
@@ -48,7 +49,7 @@ async function seedRow(
   { url, markdown }: { url: string; markdown: string | null },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -77,6 +78,19 @@ async function seedRow(
     param(markdown),
     `)`,
   ]);
+  // The full-text `matches` predicate reads `prerendered_html.markdown` (the
+  // `boxel_index.markdown` fallback disappears once the dual paths are dropped).
+  // Project the just-seeded row's markdown onto `prerendered_html` — mirroring
+  // the production backfill + dual-write — so these tests exercise the real
+  // read path. `indexed_at` seeds `rendered_at`.
+  await query(dbAdapter, [
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, rendered_at)`,
+    `SELECT url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, indexed_at`,
+    `FROM boxel_index WHERE url =`,
+    param(url),
+    `AND realm_url =`,
+    param(testRealmURL),
+  ]);
 }
 
 async function countBoxelIndexRows(dbAdapter: PgAdapter): Promise<number> {
@@ -86,7 +100,7 @@ async function countBoxelIndexRows(dbAdapter: PgAdapter): Promise<number> {
   return rows[0].total;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('MatchesFilter (Postgres integration)', function (hooks) {
     let dbAdapter: PgAdapter;
     let engine: IndexQueryEngine;
@@ -300,8 +314,44 @@ module(basename(__filename), function () {
       );
     });
 
+    test('indexes base64-heavy markdown and keeps its prose searchable', async function (assert) {
+      // Image cards embed base64 in their markdown — a single multi-megabyte
+      // run of base64-alphabet characters. Fed raw to to_tsvector it tokenizes
+      // (on the `+`/`/`) into enough distinct lexemes to blow past Postgres's
+      // 1 MiB tsvector limit, and the INSERT below (which updates the GIN index)
+      // would throw SQLSTATE 54000. markdown_search_text strips runs of >=255
+      // base64-alphabet chars, so the row indexes cleanly and the surrounding
+      // caption stays searchable while the blob itself is not.
+      let base64Blob = Array.from({ length: 200000 }, (_, i) =>
+        i.toString(36),
+      ).join('/');
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}embedded-image.json`,
+        markdown: `Embedded image caption text. data:image/png;base64,${base64Blob}`,
+      });
+
+      let { meta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: { matches: 'embedded image caption' },
+      });
+      assert.strictEqual(
+        meta.page.total,
+        1,
+        'the base64-heavy row indexes and its caption is searchable',
+      );
+
+      let blobFragment = (100000).toString(36); // a token that lives only in the blob
+      let { meta: blobMeta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: { matches: blobFragment },
+      });
+      assert.strictEqual(
+        blobMeta.page.total,
+        0,
+        'the stripped base64 payload is not full-text indexed',
+      );
+    });
+
     test('planner uses boxel_index_markdown_fts_idx for matches queries', async function (assert) {
-      // The filter emits `to_tsvector('english', coalesce(i.markdown, ''))`
+      // The filter emits `to_tsvector('english', markdown_search_text(i.markdown))`
       // which must match the GIN index expression exactly. With only a handful
       // of seeded rows PG will ordinarily prefer a seqscan; disabling seqscan
       // forces the planner to reveal whether the GIN index is a viable
@@ -316,7 +366,7 @@ module(basename(__filename), function () {
         let rows = await run([
           `EXPLAIN (FORMAT JSON)
            SELECT url FROM boxel_index
-           WHERE to_tsvector('english', coalesce(markdown, ''))
+           WHERE to_tsvector('english', markdown_search_text(markdown))
                  @@ websearch_to_tsquery('english', 'mango')`,
         ]);
         await run(['COMMIT']);

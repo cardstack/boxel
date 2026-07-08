@@ -6,7 +6,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import difference from 'lodash/difference';
+import { difference } from 'lodash-es';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -724,29 +724,32 @@ export class RoomResource extends Resource<Args> {
     event: CommandResultEvent;
     index: number;
   }) {
-    let effectiveEventId = this.getEffectiveEventId(event);
+    // Locate the owning bot message by commandRequestId. The commandResult's
+    // m.relates_to.event_id points at the latest m.replace edit, but a reload
+    // strips those edits and loads only the original event, so matching on
+    // event_id finds nothing and the status flip is lost. commandRequestId is
+    // the globally-unique LLM tool-call id, stable across edits and present on
+    // every one, so it resolves the same bot message on both the live and
+    // reload paths.
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
-        (e.event_id === effectiveEventId ||
-          e.content['m.relates_to']?.event_id === effectiveEventId),
-    )! as CardMessageEvent | undefined;
-    // CS-11045: _messageCache is keyed by the bot message's effective/parent
-    // event_id — getEffectiveEventId resolves an m.replace event back to its
-    // parent, so when an m.replace Y of original X arrives loadRoomMessage
-    // keys the cache by X. The commandResult event's own effectiveEventId is
-    // its m.relates_to.event_id verbatim, which under the CS-11045 host fix
-    // is the latest m.replace id Y rather than the parent X. Looking up the
-    // cache by Y would miss and silently fail to flip MessageCommand status
-    // to 'applied'. Instead, derive the cache key from the bot-message event
-    // we just located (messageEventWithCommand): for the m.replace event Y,
-    // getEffectiveEventId returns parent X — which is what the cache holds.
-    let messageCacheKey = messageEventWithCommand
-      ? this.getEffectiveEventId(messageEventWithCommand)
-      : effectiveEventId;
+        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.some(
+          (cr: any) => cr.id === event.content.commandRequestId,
+        ),
+    ) as CardMessageEvent | undefined;
+    if (!messageEventWithCommand) {
+      return;
+    }
+    // _messageCache is keyed by the bot message's effective/parent event_id —
+    // getEffectiveEventId resolves an m.replace event back to its parent, so
+    // when an m.replace Y of original X arrives loadRoomMessage keys the cache
+    // by X. Derive the cache key from the bot-message event we just located
+    // (messageEventWithCommand): for the m.replace event Y, getEffectiveEventId
+    // returns parent X — which is what the cache holds.
+    let messageCacheKey = this.getEffectiveEventId(messageEventWithCommand);
     let message = this._messageCache.get(messageCacheKey);
-    if (!message || !messageEventWithCommand) {
+    if (!message) {
       return;
     }
 

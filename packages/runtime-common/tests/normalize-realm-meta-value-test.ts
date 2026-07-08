@@ -12,7 +12,7 @@ const personSummary: CardTypeSummary = {
 };
 
 const markdownSummary: CardTypeSummary = {
-  code_ref: 'https://cardstack.com/base/markdown-file-def/MarkdownDef',
+  code_ref: '@cardstack/base/markdown-file-def/MarkdownDef',
   display_name: 'Markdown',
   total: 5,
   icon_html: '<svg />',

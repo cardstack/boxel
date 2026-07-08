@@ -55,7 +55,10 @@ import {
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants.ts';
-import { decodeCommandRequest } from '../commands.ts';
+import {
+  buildCommandFunctionNameFromResolvedRef,
+  decodeCommandRequest,
+} from '../commands.ts';
 import type { CommandRequest } from '../commands.ts';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
@@ -66,6 +69,7 @@ import type {
 import type { ToolChoice } from '../helpers/ai.ts';
 import { logger } from '../log.ts';
 
+import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -423,7 +427,7 @@ function isTerminalCommandResultEventFor(
 async function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   client: MatrixClient,
-): Promise<LooseCardResource[]> {
+): Promise<EnabledSkill[]> {
   let skillsConfigEvent = findLast(
     eventlist,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -434,14 +438,165 @@ async function getEnabledSkills(
 
   let enabledSkillCards = skillsConfigEvent.content.enabledSkillCards;
   if (enabledSkillCards?.length) {
-    return await Promise.all(
-      enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
-        let cardContent = await downloadFile(client, cardFileDef);
-        return (JSON.parse(cardContent) as LooseSingleCardDocument)?.data;
-      }),
+    let skills = await Promise.all(
+      enabledSkillCards?.map(
+        async (
+          cardFileDef: SerializedFileDef,
+        ): Promise<EnabledSkill | undefined> => {
+          let content = await downloadFile(client, cardFileDef);
+          // Dual-path window: markdown skills, handled here, are the pull
+          // model — a SKILL.md is a plain file whose body is the
+          // instructions, and it only counts as a skill when its frontmatter
+          // declares boxel.kind: skill (the host gates enabling on the same
+          // rule; this is defense in depth). Other markdown files are
+          // skipped rather than fed to the card path below, which would
+          // choke on non-JSON. The JSON.parse fallthrough is the legacy
+          // pushed-card path; it is removed when the push model is retired.
+          if (isMarkdownSkillFile(cardFileDef)) {
+            let { title, body, kind, commands } = parseMarkdownSkill(
+              content,
+              cardFileDef,
+            );
+            if (kind !== 'skill') {
+              return undefined;
+            }
+            return {
+              id: cardFileDef.sourceUrl,
+              attributes: { title, instructions: body, commands },
+            };
+          }
+          return (JSON.parse(content) as LooseSingleCardDocument)?.data;
+        },
+      ),
     );
+    return skills.filter((skill): skill is EnabledSkill => Boolean(skill));
   }
   return [];
+}
+
+// The subset of a skill the prompt pipeline consumes — sourced either from a
+// legacy Skill card document or from a markdown SKILL.md file.
+export interface EnabledSkill {
+  id?: string;
+  attributes?: {
+    title?: string;
+    instructions?: string;
+    commands?: { functionName: string }[];
+    [key: string]: any;
+  };
+}
+
+// A skill enabled as a markdown file (SKILL.md), rather than a Skill card.
+export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
+  return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
+}
+
+// A command a markdown skill contributes via its `boxel.commands`
+// frontmatter, with the functionName the host derives for the same code ref —
+// so getTools can match it against the room's uploaded command definitions.
+export interface MarkdownSkillCommand {
+  codeRef: { module: string; name: string };
+  functionName: string;
+  requiresApproval: boolean;
+}
+
+// Splits a markdown skill into its instruction body, a title, its declared
+// boxel.kind, and its frontmatter commands. The body is everything after the
+// `--- frontmatter ---` block (the frontmatter is metadata, not
+// instructions); the title is the frontmatter `name`, falling back to the
+// file name. Invalid frontmatter YAML degrades to the raw content as body —
+// prompt assembly must not crash on a malformed skill file.
+export function parseMarkdownSkill(
+  content: string,
+  fileDef: SerializedFileDef,
+): {
+  title: string;
+  body: string;
+  kind?: string;
+  commands: MarkdownSkillCommand[];
+} {
+  let body = content;
+  let title: string | undefined;
+  let kind: string | undefined;
+  let commands: MarkdownSkillCommand[] = [];
+  try {
+    let { data, body: parsedBody } = parseFrontmatter(content);
+    body = parsedBody;
+    if (typeof data.name === 'string' && data.name.trim()) {
+      title = data.name.trim();
+    }
+    let boxel =
+      data.boxel && typeof data.boxel === 'object' && !Array.isArray(data.boxel)
+        ? (data.boxel as Record<string, unknown>)
+        : undefined;
+    if (typeof boxel?.kind === 'string') {
+      kind = boxel.kind;
+    }
+    commands = markdownSkillCommands(data, fileDef.sourceUrl);
+  } catch {
+    // Malformed frontmatter: keep the full content as the body.
+  }
+  if (!title) {
+    let path = fileDef.sourceUrl ?? fileDef.name ?? '';
+    title = path.split('/').filter(Boolean).pop() ?? 'Skill';
+  }
+  return { title, body: body.trim(), kind, commands };
+}
+
+// Extracts `boxel.commands` from parsed frontmatter and computes each
+// command's functionName the way the host does when it uploads the room's
+// command definitions. Package specifiers (e.g. @cardstack/boxel-host/...)
+// resolve verbatim on the host, so hashing the literal module gives the same
+// name; relative modules resolve against the skill's own URL.
+function markdownSkillCommands(
+  frontmatter: Record<string, unknown>,
+  skillUrl: string | undefined,
+): MarkdownSkillCommand[] {
+  let boxel =
+    frontmatter.boxel &&
+    typeof frontmatter.boxel === 'object' &&
+    !Array.isArray(frontmatter.boxel)
+      ? (frontmatter.boxel as Record<string, unknown>)
+      : undefined;
+  if (!Array.isArray(boxel?.commands)) {
+    return [];
+  }
+  let commands: MarkdownSkillCommand[] = [];
+  for (let entry of boxel.commands) {
+    let codeRef = (entry as { codeRef?: { module?: string; name?: string } })
+      ?.codeRef;
+    if (
+      typeof codeRef?.module !== 'string' ||
+      typeof codeRef?.name !== 'string'
+    ) {
+      continue;
+    }
+    let module = codeRef.module;
+    // Match the host's isUrlLike semantics: both `.`- and `/`-prefixed
+    // modules resolve against the skill's own URL. Known limitation: the
+    // host hashes relative refs against the skill's canonical document id,
+    // which in a prefix-form realm differs from the room-state sourceUrl we
+    // resolve against — so relative command modules in prefix-form realms
+    // may not match. Package specifiers and absolute URLs (all current
+    // skills) hash identically on both sides.
+    if ((module.startsWith('.') || module.startsWith('/')) && skillUrl) {
+      try {
+        module = new URL(module, skillUrl).href;
+      } catch {
+        // keep the module as authored; a bad relative ref simply won't match
+      }
+    }
+    let resolvedRef = { module, name: codeRef.name };
+    commands.push({
+      codeRef: resolvedRef,
+      functionName: buildCommandFunctionNameFromResolvedRef(resolvedRef),
+      // Missing means approval required, matching how the host treats an
+      // absent requiresApproval on a skill command.
+      requiresApproval:
+        (entry as { requiresApproval?: unknown }).requiresApproval !== false,
+    });
+  }
+  return commands;
 }
 
 export async function getDisabledSkillIds(
@@ -718,7 +873,7 @@ export function attachedFilesToMessage(
 
 export async function getTools(
   eventList: DiscreteMatrixEvent[],
-  enabledSkills: LooseCardResource[],
+  enabledSkills: EnabledSkill[],
   aiBotUserId: string,
   client: MatrixClient,
 ): Promise<Tool[]> {
@@ -1319,7 +1474,7 @@ export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
-  skillCards: LooseCardResource[] = [],
+  skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
   inputModalities?: string[],
@@ -2198,9 +2353,7 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessages = (
-  cards: Omit<LooseCardResource, 'meta'>[],
-) => {
+export const skillCardsToMessages = (cards: EnabledSkill[]) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
     if (card.attributes?.title) {

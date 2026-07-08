@@ -1,9 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { removeSync, writeJSONSync, writeFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import {
@@ -20,7 +22,7 @@ import type {
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('file watcher realm events', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;

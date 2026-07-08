@@ -2,6 +2,7 @@
   "name": "@cardstack/runtime-common",
   "version": "1.0.0",
   "license": "MIT",
+  "type": "module",
   "imports": {
     "#lint-task": {
       "node": "./tasks/lint.ts",
@@ -11,6 +12,16 @@
       "node": "./fetch-node.ts",
       "browser": "./fetch-browser.ts"
     }
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./package.json": "./package.json",
+    "./ai": "./ai/index.ts",
+    "./amd-transpile": "./amd-transpile/index.ts",
+    "./helpers": "./helpers/index.ts",
+    "./serializers": "./serializers/index.ts",
+    "./tasks": "./tasks/index.ts",
+    "./*": "./*.ts"
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
@@ -35,7 +46,7 @@
     "@types/diff": "catalog:",
     "@types/eslint": "catalog:",
     "@types/flat": "catalog:",
-    "@types/lodash": "catalog:",
+    "@types/lodash-es": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
     "@types/uuid": "catalog:",
@@ -59,7 +70,7 @@
     "ignore": "catalog:",
     "js-string-escape": "catalog:",
     "json-typescript": "catalog:",
-    "lodash": "catalog:",
+    "lodash-es": "catalog:",
     "loglevel": "catalog:",
     "magic-string": "catalog:",
     "marked": "catalog:",
@@ -80,6 +91,7 @@
     "super-fast-md5": "catalog:",
     "transform-modules-amd-plugin": "workspace:*",
     "uuid": "catalog:",
+    "yaml": "catalog:",
     "zod": "^3.24.4"
   },
   "devDependencies": {
@@ -96,8 +108,7 @@
     "monaco-editor": "catalog:",
     "statuses": "catalog:",
     "@glint/ember-tsc": "catalog:",
-    "es-module-lexer": "^1.7.0",
-    "ts-node": "^10.9.1"
+    "es-module-lexer": "^1.7.0"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",
@@ -108,10 +119,10 @@
     "lint:js": "eslint . ",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit",
-    "bench:amd:prep": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/prepare-fixtures.ts",
-    "bench:amd": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/bench.ts",
-    "bench:amd:check": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/check.ts",
-    "bench:amd:check:trip-test": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/trip-test.ts",
-    "bench:amd:trip-drill": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-amd/trip-drill.ts"
+    "bench:amd:prep": "NODE_NO_WARNINGS=1 node scripts/bench-amd/prepare-fixtures.ts",
+    "bench:amd": "NODE_NO_WARNINGS=1 node scripts/bench-amd/bench.ts",
+    "bench:amd:check": "NODE_NO_WARNINGS=1 node scripts/bench-amd/check.ts",
+    "bench:amd:check:trip-test": "NODE_NO_WARNINGS=1 node scripts/bench-amd/trip-test.ts",
+    "bench:amd:trip-drill": "NODE_NO_WARNINGS=1 node scripts/bench-amd/trip-drill.ts"
   }
 }

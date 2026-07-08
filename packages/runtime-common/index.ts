@@ -57,6 +57,52 @@ export interface BrokenLinkSummary {
   kind: 'error' | 'not-found';
 }
 
+// A `searchable` annotation path that didn't resolve against the definition
+// graph when the module's definitions were built. Recorded on the module
+// render's `meta.diagnostics` and persisted to `modules.diagnostics` so a typo
+// / removed field / un-routable segment is visible to authors instead of
+// silently making nothing searchable. Definition build is decoupled in time
+// from the edit, so these are logged, never thrown; the path is simply not
+// followed. Omitted entirely when every annotation in the module resolves.
+export interface SearchablePathDiagnostic {
+  // The card/field def whose field carried the annotation, as the
+  // `internalKeyFor` CodeRef string (a module exports several defs, so the
+  // owning def is named to pinpoint the source).
+  codeRef: string;
+  // The immediate field holding the `searchable` annotation.
+  fieldName: string;
+  // The dotted `searchable` path that failed to resolve.
+  path: string;
+}
+
+// A failure to parse a markdown file's leading YAML frontmatter block,
+// recorded as a finding on the (still successful) index entry. The file
+// indexes fine — `extractAttributes` falls back to treating the whole file
+// as body when the frontmatter won't parse — so without this the failure is
+// invisible and any frontmatter-declared behavior (e.g. a skill's `commands`)
+// silently disappears. Surfaced on `diagnostics.frontmatterParseError` so the
+// `/_indexing-errors` surface can flag it the way it flags `brokenLinks`,
+// letting authors see and fix the YAML rather than wonder where their
+// commands went.
+export interface FrontmatterParseError {
+  // The YAML parser's error message.
+  message: string;
+  // 1-based line within the frontmatter block where the parse failed, when
+  // the parser reports a position. Omitted otherwise.
+  line?: number;
+  // 1-based column within that line, when reported.
+  column?: number;
+}
+
+// Global symbol channel used by file-def `extractAttributes` implementations
+// to route a `FrontmatterParseError` back to the host file extractor without
+// it leaking into the flat `search_doc`. Producer and consumer must agree on
+// the exact string key — exported here so callers share one source of truth
+// and a typo can't silently break the handoff.
+export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-parse-error',
+);
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -83,6 +129,11 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Unresolvable `searchable` annotation paths found while building the
+  // module's definitions, persisted to `modules.diagnostics`. Populated by the
+  // module-prerender route's definition-build validation, not a card render.
+  // Omitted entirely when every annotation in the module resolves.
+  searchablePathIssues?: SearchablePathDiagnostic[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -138,10 +189,11 @@ export interface RenderTimeoutDiagnostics {
   // join all three stacks for this call.
   requestId?: string;
   // Worker-job priority of the request that produced this render.
-  // Plumbed from the producer side via `Job.priority`. `0` is the
-  // system-initiated default; `10` is user-initiated. Read in post-
-  // mortems and in `prerender-queue-snapshot` triage to tell whether a
-  // stalled render was background or user-priority work.
+  // Plumbed from the producer side via `Job.priority`, on the tier
+  // scale defined in `queue.ts` (system tiers `0`/`1` below the user
+  // tiers `9`/`10`). Read in post-mortems and in
+  // `prerender-queue-snapshot` triage to tell whether a stalled render
+  // was background or user-initiated work.
   priority?: number;
   // Whether this render landed on a tab that was already bound to its
   // affinity. `true` = warm tab, fast launch + cached BrowserContext
@@ -336,6 +388,11 @@ export interface FileExtractResponse {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // Set when the file's leading YAML frontmatter block was present but
+  // wouldn't parse. The extract still succeeds (`status: 'ready'`, body-only);
+  // the file indexer merges this onto `diagnostics.frontmatterParseError` so
+  // the failure surfaces via `/_indexing-errors` instead of vanishing.
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 export interface FileRenderResponse {
@@ -432,6 +489,17 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // A row is produced by two prerender visits (index + prerender-html),
+  // each its own HTTP request. `requestId` carries the index visit's id;
+  // this carries the prerender-html visit's so operators can join logs
+  // for both. Absent for in-process callers and fused single-visit rows.
+  prerenderHtmlRequestId?: string;
+  // Frontmatter YAML that wouldn't parse during file extraction. The row
+  // still indexes (body-only); this is the only indexed signal that the
+  // file's frontmatter — and anything it declared — was dropped. Merged in
+  // by the file indexer from the extract response. Absent when the
+  // frontmatter parsed (or there was none).
+  frontmatterParseError?: FrontmatterParseError;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
@@ -482,8 +550,8 @@ export type ModulePrerenderArgs = {
   // Higher priority requests dequeue ahead of lower-priority pending
   // work on the prerender server (per-tab queues + per-affinity file-
   // admission semaphore + global render semaphore). No preemption: an
-  // in-flight low-priority render runs to completion. Defaults to 0
-  // when absent (system-priority).
+  // in-flight low-priority render runs to completion. Defaults to the
+  // lowest tier (0) when absent.
   priority?: number;
 };
 
@@ -499,16 +567,41 @@ export const VISIT_PASS_ORDER = [
 ] as const;
 export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
 
+// The consolidated visit splits along the search-doc/HTML seam into two
+// visit types:
+//
+//   - 'index' — everything the search index needs: the file extract, the
+//     card's meta (search doc / serialized / types / display names / deps)
+//     and the icon render. Never runs the `html` route, never materializes
+//     a format component via `getComponent`.
+//   - 'prerender-html' — the `html` route per format (isolated, head,
+//     atom, fitted, embedded) plus markdown, for both the card and the
+//     file rendering of a URL. Produces no search-doc data.
+//
+// A visit with no `visitType` runs the union of both (the fused visit) —
+// used by callers that want a complete render in one round-trip (e.g. the
+// user-initiated prerender proxy).
+export type PrerenderVisitType = 'index' | 'prerender-html';
+
 export type PrerenderVisitArgs = {
   affinityType: AffinityType;
   affinityValue: string;
   realm: string;
   url: string;
   auth: string;
+  // Selects which half of the bifurcated visit to run — see
+  // PrerenderVisitType. Absent runs the fused union of both halves.
+  visitType?: PrerenderVisitType;
   renderOptions?: RenderRouteOptions;
   // Inputs required only when the fileRender pass is requested
   fileData?: FileRenderArgs['fileData'];
   types?: string[];
+  // Ancestor type chain (internalKeyFor form) driving the card's
+  // fitted/embedded format renders in a 'prerender-html' visit. Supplied
+  // by callers that already hold the chain (the indexing job passes the
+  // index visit's `types` through); when absent the visit resolves the
+  // chain itself via the types route.
+  cardTypes?: string[];
   // Identifies the indexing batch this visit belongs to (CS-10758 step 3).
   // Required to honor `renderOptions.clearCache: true` on the prerender
   // server when another batch currently owns the affinity. Visits without
@@ -637,7 +730,10 @@ export {
   isCardErrorJSONAPI,
   clampSerializedError,
   coerceErrorMessage,
+  stringifyErrorForLog,
   sanitizeForJsonb,
+  mergeErrorDetail,
+  mergeErrorsByGeneration,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';
@@ -677,17 +773,13 @@ export interface RealmCards {
   cards: CardDef[];
 }
 
-export interface RealmPrerenderedCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  prerenderedCards: PrerenderedCard[];
-}
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
+export * from './frontmatter-parse.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';
@@ -696,6 +788,7 @@ export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
@@ -710,6 +803,7 @@ export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
 export * from './expression.ts';
+export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
@@ -732,9 +826,8 @@ export * from './prerender-headers.ts';
 export * from './query.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
-export * from './unified-search.ts';
+export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
-export * from './search-compat.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -785,6 +878,7 @@ export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response.ts';
 
 export * from './db-queries/db-types.ts';
+export * from './db-queries/realm-metadata-queries.ts';
 export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/user-queries.ts';
@@ -822,11 +916,9 @@ export type {
   SingleFileMetaDocument,
   CardCollectionDocument,
   FileMetaCollectionDocument,
-  LinkableCollectionDocument,
-  UnifiedSearchCollectionDocument,
-  UnifiedSearchIncludedResource,
-  SearchEntryCollectionDocument,
-  SearchEntryIncludedResource,
+  EntryCollectionDocument,
+  EntrySingleDocument,
+  EntryIncludedResource,
   SearchEntryResults,
 } from './document-types.ts';
 export type {
@@ -847,8 +939,7 @@ export {
   isSingleCardDocument,
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
-  isLinkableCollectionDocument,
-  isSearchEntryCollectionDocument,
+  isEntryCollectionDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -870,10 +961,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmInfo } from './realm.ts';
-import type {
-  PrerenderedCard,
-  QueryResultsMeta,
-} from './index-query-engine.ts';
+import type { QueryResultsMeta } from './index-query-engine.ts';
 
 export interface MatrixCardError {
   id?: string;
@@ -1196,6 +1284,36 @@ export function internalKeyFor(
   }
 }
 
+// Like `internalKeyFor`, but returns every equivalent spelling of the key —
+// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
+// a single stored `types` value against a key; index rows written before
+// references were canonicalized to RRI may hold the alias or real-URL form,
+// so matching all spellings keeps base-typed cards/files findable until the
+// persisted data is migrated or reindexed.
+export function internalKeysFor(
+  ref: CodeRef,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  if (!('type' in ref)) {
+    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
+    let module: string = trimExecutableExtension(rri(resolved));
+    return virtualNetwork
+      .equivalentURLForms(module)
+      .map((form) => `${form}/${ref.name}`);
+  }
+  switch (ref.type) {
+    case 'ancestorOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/ancestor`,
+      );
+    case 'fieldOf':
+      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
+        (key) => `${key}/fields/${ref.field}`,
+      );
+  }
+}
+
 export function codeRefFromInternalKey(
   internalKey: string | null | undefined,
 ): ResolvedCodeRef | undefined {
@@ -1245,9 +1363,7 @@ export async function apiFor(
   let loader =
     Loader.getLoaderFor(cardOrFieldOrClass) ??
     loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>(
-    'https://cardstack.com/base/card-api',
-  );
+  let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
   if (!api) {
     throw new Error(`could not load card API`);
   }
@@ -1287,15 +1403,19 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string, virtualNetwork: VirtualNetwork) {
-  return !id.startsWith('http') && !virtualNetwork.isRegisteredPrefix(id);
+// A local id is a client-minted token for an instance that has not yet been
+// saved to a realm — it is neither a URL nor a prefix-form RRI. Both remote
+// forms are syntactically distinguishable (URLs start with `http`, prefix-form
+// RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
+// canonical RRI by the time they reach here.
+export function isLocalId(id: string) {
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {
   return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
-export * from './prerendered-card-search.ts';
 export * from './search-results-component.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {

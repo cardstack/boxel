@@ -6,14 +6,13 @@ import { service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  type ResolvedCodeRef,
-  getClass,
-  isCardInstance,
-} from '@cardstack/runtime-common';
+import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { decodeCommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  AI_BOT_EXECUTOR,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -31,6 +30,10 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  getSkillSourceCommands,
+  loadSkillSource,
+} from '@cardstack/host/lib/skill-commands';
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -49,7 +52,6 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';
@@ -322,25 +324,54 @@ export default class MessageBuilder {
       this.builderContext.commandResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
+        // Correlate the result to its command by commandRequestId (the
+        // globally unique LLM tool-call id), not by the result's
+        // m.relates_to.event_id. A reload strips the m.replace edits and loads
+        // only the original event, so the result's link id — pointing at the
+        // final edit — matches no loaded event. commandRequestId is stable
+        // across edits and present on every one, so it resolves the command on
+        // both the live and reload paths.
         return (
           e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          r.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
-          (r.event_id === this.event.event_id ||
-            r.event_id === this.builderContext.effectiveEventId) &&
+          r?.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
           e.content.commandRequestId === commandRequest.id
         );
       }) as CommandResultEvent | undefined);
 
-    // Find command in skills
+    // ai-bot ran this one itself (e.g. readRealmFile), so the host never
+    // resolves a command class or runs it. Skip the skill lookup below — it's
+    // pure async churn here (an `await store.get` per enabled skill) that would
+    // leave the indicator blank for a beat while it runs. Build the command
+    // synchronously: 'applying' (loading) until the result event lands, then
+    // applied (success) or invalid + reason (failure).
+    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
+      return new MessageCommand(
+        message,
+        commandRequest,
+        undefined, // no codeRef — never run on the host
+        this.builderContext.effectiveEventId,
+        false, // requiresApproval — never prompts or runs
+        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
+        (commandResultEvent
+          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
+          : 'applying') as CommandStatus,
+        undefined, // no result card (server-handled results carry no output)
+        getOwner(this)!,
+        commandResultEvent?.content.failureReason,
+      );
+    }
+
+    // Find command in skills. loadSkillSource handles both legacy Skill
+    // cards and markdown skills (commands in boxel.commands frontmatter).
     let skillCommand:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = await this.store.get<Skill>(skill.cardId);
-      if (!skillCard || !isCardInstance(skillCard)) {
+      let source = await loadSkillSource(this.store, skill.cardId);
+      if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of skillCard.commands) {
+      for (let candidateSkillCommand of getSkillSourceCommands(source)) {
         if (commandRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;
@@ -361,6 +392,10 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
+    let commandStatus: CommandStatus = (commandResultEvent?.content[
+      'm.relates_to'
+    ]?.key || 'ready') as CommandStatus;
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
@@ -368,8 +403,7 @@ export default class MessageBuilder {
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      (commandResultEvent?.content['m.relates_to']?.key ||
-        'ready') as CommandStatus,
+      commandStatus,
       commandResultEvent?.content.msgtype ===
         APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.card

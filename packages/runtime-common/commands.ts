@@ -10,12 +10,22 @@ import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
 import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
-import type { EncodedCommandRequest } from '../base/matrix-event';
+import type { EncodedCommandRequest } from '../base/matrix-event.gts';
+
+// `executedBy` value for tool calls ai-bot runs itself in-process (e.g.
+// readRealmFile).
+export const AI_BOT_EXECUTOR = 'ai-bot';
 
 export interface CommandRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
+  // Names the actor that ran (or will run) this tool call — e.g. AI_BOT_EXECUTOR
+  // for tools ai-bot executes itself. It's a value (not a boolean) so it can
+  // identify *which* actor in a multi-bot / multi-user room, and so the field
+  // can later carry e.g. 'host' too. The host therefore matches its own
+  // executor explicitly rather than treating any value as "not mine to run".
+  executedBy?: string;
 }
 
 export const CommandContextStamp = Symbol.for('CommandContext');
@@ -123,7 +133,11 @@ function friendlyModuleName(fullModuleUrl: string) {
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
+  // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
+  // `functionName` is a recomputed `computeVia` field (never persisted), and
+  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // every command name self-consistent.
+  virtualNetwork?: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
@@ -135,13 +149,22 @@ export function buildCommandFunctionName(
     virtualNetwork,
   ) as ResolvedCodeRef;
 
-  const hashed = simpleHash(
-    `${absoluteCodeRef.module}#${absoluteCodeRef.name}`,
-  );
-  let name =
-    absoluteCodeRef.name === 'default'
-      ? friendlyModuleName(absoluteCodeRef.module)
-      : absoluteCodeRef.name;
+  return buildCommandFunctionNameFromResolvedRef(absoluteCodeRef);
+}
+
+// The name-construction half of buildCommandFunctionName, for callers that
+// already hold an absolute code ref (registered package prefixes resolve
+// verbatim, so e.g. ai-bot can produce identical names without a
+// VirtualNetwork).
+export function buildCommandFunctionNameFromResolvedRef(ref: {
+  module: string;
+  name: string;
+}): string {
+  if (!ref?.module || !ref?.name) {
+    return '';
+  }
+  const hashed = simpleHash(`${ref.module}#${ref.name}`);
+  let name = ref.name === 'default' ? friendlyModuleName(ref.module) : ref.name;
   return `${name}_${hashed.slice(0, 4)}`;
 }
 
@@ -170,6 +193,9 @@ export function decodeCommandRequest(
       // ignore malformed nested json; validation will report a clearer error later
     }
   }
+  if (commandRequest.executedBy != null) {
+    decodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
   return decodedCommandRequest;
 }
 
@@ -189,6 +215,9 @@ export function encodeCommandRequest(
   }
   if (commandRequest.arguments) {
     encodedCommandRequest.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  if (commandRequest.executedBy != null) {
+    encodedCommandRequest.executedBy = commandRequest.executedBy;
   }
   return encodedCommandRequest;
 }

@@ -127,8 +127,6 @@ export interface RealmPrivateDependencyReport {
   warningTypes?: PublishabilityWarningType[];
 }
 
-type RealmInfoProperty = 'backgroundURL' | 'iconURL';
-
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
@@ -498,45 +496,6 @@ class RealmResource {
     });
   });
 
-  async setRealmInfoProperty(
-    property: RealmInfoProperty,
-    value: string | null,
-  ): Promise<void> {
-    await this.loginTask.perform();
-    let headers: Record<string, string> = {
-      Accept: SupportedMimeType.JSON,
-      Authorization: `Bearer ${this.token}`,
-    };
-    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: 'realm-config',
-          id: this.url,
-          attributes: { [property]: value },
-        },
-      }),
-    });
-
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
-      );
-    }
-    let json = await waitForPromise(response.json());
-    let isPublic = Boolean(
-      response.headers.get('x-boxel-realm-public-readable'),
-    );
-    let updatedInfo = new TrackedObject({
-      url: json.data.id,
-      ...json.data.attributes,
-      isIndexing: this.info?.isIndexing ?? false,
-      isPublic,
-    }) as EnhancedRealmInfo;
-    this.info = updatedInfo;
-  }
-
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
   }
@@ -668,7 +627,14 @@ class RealmResource {
         this._publishingRealms.push(url);
 
         try {
-          return await this.realmServer.publishRealm(this.url, url);
+          let result = await this.realmServer.publishRealm(this.url, url);
+          // `_publish-realm` returns 202 before the published realm is
+          // indexed. Keep the "Publishing…" state until the realm passes its
+          // readiness check so "Open Site" only enables once the page is
+          // actually viewable. Poll the URL the server actually published to —
+          // a server-side domain override can make that differ from `url`.
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
+          return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
           throw error; // Re-throw so Promise.allSettled can capture it as rejected
@@ -915,7 +881,11 @@ export default class RealmService extends Service {
     }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
-      this.identifyRealm.perform(url);
+      this.identifyRealm
+        .perform(url)
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'identify', error),
+        );
 
       this.identifyRealmTracker;
 
@@ -933,7 +903,11 @@ export default class RealmService extends Service {
     }
 
     if (!resource.info) {
-      resource.fetchInfo();
+      resource
+        .fetchInfo()
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+        );
       return {
         name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
@@ -949,6 +923,40 @@ export default class RealmService extends Service {
       return resource.info;
     }
   };
+
+  // `info()` returns a placeholder synchronously and kicks off a background
+  // load — a realm-identifying HEAD, or an `_info` fetch — to fill in the real
+  // values on a later render. Those loads are best-effort: they can reject when
+  // the realm isn't reachable (a transient network failure, or — in tests — an
+  // in-process realm whose VirtualNetwork handler isn't mounted yet, so the
+  // request escapes to the network and rejects with `TypeError: Failed to
+  // fetch`). Since nothing awaits them, an unhandled rejection would surface as
+  // a global error and fail whatever happens to be running, so it is swallowed
+  // here; the placeholder stays and a later render retries. Cancellations
+  // (component unmount / teardown) are expected and stay silent.
+  private swallowBackgroundInfoError(
+    url: string,
+    op: 'identify' | 'fetchInfo',
+    error: unknown,
+  ) {
+    if (didCancel(error)) {
+      return;
+    }
+    log.warn(`background realm-info ${op} failed for ${url}: ${error}`);
+    // The `fetchInfo` path already surfaces a test-time `[realm-service] realm
+    // info fetch …` warning from fetchInfoFromServer(); only the identify HEAD
+    // has no such diagnostic, so scope the extra test-time warning to it rather
+    // than logging the `fetchInfo` failure twice.
+    if (isTesting() && op === 'identify') {
+      console.warn(
+        `[realm-service] background realm-info load failed ${JSON.stringify({
+          realmURL: url,
+          op,
+          error: String(error),
+        })}`,
+      );
+    }
+  }
 
   async allUsersPermissions(url: string) {
     if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
@@ -1350,8 +1358,22 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
+    // `this.realms` is keyed by the user-facing realm URL (typically a
+    // virtual alias like `https://cardstack.com/base/`). Callers may
+    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
+    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
+    // match the same realm. Normalize both sides via
+    // `virtualNetwork.unresolveURL` (chases through any registered
+    // virtual → real URL mapping and unifies to the realm-prefix RRI
+    // form) so the comparison is form-agnostic.
+    let vn = this.network.virtualNetwork;
+    let normalizedUrl = vn.unresolveURL(url);
     for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
+        return value;
+      }
+      let normalizedKey = vn.unresolveURL(key);
+      if (normalizedUrl.startsWith(normalizedKey)) {
         return value;
       }
     }

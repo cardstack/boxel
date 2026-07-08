@@ -5,6 +5,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from './profile-manager.ts';
+import { SeedAuthenticator, mintRealmServerToken } from './seed-auth.ts';
 
 // A realm-server endpoint is a single underscore-prefixed segment directly
 // under the server root (`_publish-realm`, `_unpublish-realm`, …). A per-realm
@@ -36,9 +37,50 @@ function realmURLForEndpoint(url: string): string {
 // through `authedRealmServerFetch` (realm-server JWT, with its own 401-refresh),
 // while per-realm endpoints carry that realm's token — fetched lazily and
 // cached, and omitted when unavailable since published realms are public-read.
+export interface SeedRealmClientConfig {
+  realmSecretSeed: string;
+  /** Realm-server origin (trailing slash), e.g. `https://host/`. */
+  realmServerURL: string;
+  /**
+   * Matrix user id to put in the realm-server token. Owner-gated admin
+   * endpoints (realm publish) require the realm owner, so callers pass the
+   * source realm's owner.
+   */
+  asUser: string;
+}
+
+function isSeedConfig(
+  arg: ProfileManager | SeedRealmClientConfig,
+): arg is SeedRealmClientConfig {
+  return (arg as SeedRealmClientConfig).realmSecretSeed !== undefined;
+}
+
 export function buildCliRealmClient(
-  profileManager: ProfileManager = getProfileManager(),
+  auth: ProfileManager | SeedRealmClientConfig = getProfileManager(),
 ): RealmClient {
+  // Seed mode: mint an owner-scoped realm-server token locally for realm-server
+  // endpoints, and use a seed-minted realm token for per-realm endpoints — no
+  // Matrix profile required.
+  if (isSeedConfig(auth)) {
+    let realmServerURL = ensureTrailingSlash(auth.realmServerURL);
+    let serverToken = mintRealmServerToken(auth.realmSecretSeed, auth.asUser);
+    let seedAuth = new SeedAuthenticator({ seed: auth.realmSecretSeed });
+    return {
+      realmServerURL,
+      config: { spaceDomain: '', siteDomain: '' },
+      authedFetch: async (url, init) => {
+        if (isRealmServerEndpoint(url, realmServerURL)) {
+          let headers = new Headers(init?.headers);
+          headers.set('Authorization', serverToken);
+          return fetch(url, { ...init, headers });
+        }
+        // Per-realm endpoint (e.g. readiness on the published realm).
+        return seedAuth.authedRealmFetch(url, init);
+      },
+    };
+  }
+
+  let profileManager = auth;
   let active = profileManager.getActiveProfile();
   if (!active) {
     throw new Error(NO_ACTIVE_PROFILE_ERROR);

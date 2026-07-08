@@ -13,6 +13,11 @@ import {
   getProfileManager,
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
+import {
+  deriveOwnerUserId,
+  deriveRealmServerUrl,
+} from '../../lib/seed-auth.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { unpublishRealm } from './unpublish.ts';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
@@ -35,6 +40,13 @@ export interface PublishOptions {
    */
   force?: boolean;
   profileManager?: ProfileManager;
+  /** Seed-mode admin auth — mints an owner-scoped realm-server token. */
+  realmSecretSeed?: string;
+  /**
+   * Owner Matrix id for the seed-minted server token. Defaults to the owner
+   * derived from the source realm URL (`@<owner>:<domain>`).
+   */
+  asUser?: string;
 }
 
 export interface PublishRealmResult {
@@ -61,11 +73,26 @@ export async function publishRealm(
   publishedRealmURL: string,
   options: PublishOptions = {},
 ): Promise<PublishRealmResult> {
-  let pm = options.profileManager ?? getProfileManager();
-  let client = buildCliRealmClient(pm);
-
   let normalizedSource = ensureTrailingSlash(sourceRealmURL);
   let normalizedPublished = ensureTrailingSlash(publishedRealmURL);
+
+  // Seed mode mints an owner-scoped realm-server token; the owner defaults to
+  // the one derived from the source realm URL. `pm` stays defined for the
+  // profile path (and threads into the conflict-retry unpublish below).
+  let realmServerURL = deriveRealmServerUrl(normalizedSource);
+  let asUser =
+    options.asUser ??
+    (options.realmSecretSeed ? deriveOwnerUserId(normalizedSource) : undefined);
+  let pm = options.realmSecretSeed
+    ? undefined
+    : (options.profileManager ?? getProfileManager());
+  let client = options.realmSecretSeed
+    ? buildCliRealmClient({
+        realmSecretSeed: options.realmSecretSeed,
+        realmServerURL,
+        asUser: asUser!,
+      })
+    : buildCliRealmClient(pm!);
 
   // Pre-publish gate: refuse to publish a realm with private-dependency or
   // error-document violations (which would break the published site) unless
@@ -101,6 +128,9 @@ export async function publishRealm(
       let unpublishResult = await unpublishRealm(normalizedPublished, {
         profileManager: pm,
         tolerateMissing: true,
+        realmSecretSeed: options.realmSecretSeed,
+        realmServerURL,
+        asUser,
       });
       if (!unpublishResult.unpublished && !unpublishResult.notFound) {
         throw new Error(
@@ -144,6 +174,8 @@ export interface PublishCliOptions {
   republish?: boolean;
   force?: boolean;
   json?: boolean;
+  realmSecretSeed?: boolean;
+  asUser?: string;
 }
 
 export function publishCliOptsToOptions(
@@ -182,6 +214,14 @@ export function registerPublishCommand(realm: Command): void {
       '--force',
       'Publish even if the realm has publishability violations (skips the gate)',
     )
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
+    .option(
+      '--as-user <matrix-id>',
+      'Owner Matrix id to authorize as in seed mode (defaults to the owner derived from the source realm URL)',
+    )
     .option('--json', 'Output the result as JSON')
     .action(
       async (
@@ -190,11 +230,14 @@ export function registerPublishCommand(realm: Command): void {
         opts: PublishCliOptions,
       ) => {
         try {
-          let result = await publishRealm(
-            sourceRealmURL,
-            publishedRealmURL,
-            publishCliOptsToOptions(opts),
+          let realmSecretSeed = await resolveRealmSecretSeed(
+            opts.realmSecretSeed === true,
           );
+          let result = await publishRealm(sourceRealmURL, publishedRealmURL, {
+            ...publishCliOptsToOptions(opts),
+            realmSecretSeed,
+            asUser: opts.asUser,
+          });
           if (opts.json) {
             cliLog.output(JSON.stringify(result, null, 2));
           } else {

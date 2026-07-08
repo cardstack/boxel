@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import type { CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
-import { startCase } from 'lodash';
+import { startCase } from 'lodash-es';
 import {
   getFieldIcon,
   getField,
@@ -118,7 +118,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         align-self: center;
       }
       .card-info-header :deep(.add-new) {
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
         grid-column: -1 / 1;
       }
       .own-display-fields {

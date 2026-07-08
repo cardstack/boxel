@@ -38,10 +38,10 @@ import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardChooserModal from '../card-chooser/modal';
 import SearchResults from '../card-search/search-results';
-import PrerenderedCardSearch from '../prerendered-card-search';
+import FileChooserModal from '../file-chooser/modal';
+import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
 import { Submodes } from '../submode-switcher';
 
-import ChooseFileModal from './choose-file-modal';
 import CreateListingModal from './create-listing-modal';
 
 import type CardService from '../../services/card-service';
@@ -108,7 +108,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCardCollection: this.getCardCollection,
       store: this.store,
       commandContext: this.commandContext,
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
       searchResultsComponent: SearchResults,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,
@@ -146,9 +145,10 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   <template>
     <div class='operator-mode' ...attributes>
-      <ChooseFileModal />
+      <FileChooserModal />
       <CreateListingModal />
       <CardChooserModal />
+      <MarkdownEmbedChooserModal />
       <FromElseWhere @name='modal-elsewhere' />
 
       {{#if

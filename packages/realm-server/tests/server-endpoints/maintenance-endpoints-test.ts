@@ -1,11 +1,15 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
-import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker.ts';
-import { fetchRealmPermissions } from '@cardstack/runtime-common';
+import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
+import {
+  ensureTrailingSlash,
+  fetchRealmPermissions,
+} from '@cardstack/runtime-common';
 import {
   grafanaSecret,
   insertUser,
@@ -16,11 +20,15 @@ import {
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import {
   adminImpersonateUser,
+  appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
   registerUser,
 } from '../../synapse.ts';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+} from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -54,7 +62,7 @@ async function ensureMatrixAdminUser(): Promise<void> {
   });
 }
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -900,13 +908,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('post-deployment endpoint triggers full reindex when checksums differ', async function (assert: Assert) {
         let compareCurrentBoxelUIChecksumStub = sinon
-          .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+          .stub(boxelUIChecker, 'compareCurrentBoxelUIChecksum')
           .resolves({
             previousChecksum: 'old-checksum-123',
             currentChecksum: 'new-checksum-456',
           });
         let writeCurrentBoxelUIChecksumStub = sinon.stub(
-          boxelUIChangeChecker,
+          boxelUIChecker,
           'writeCurrentBoxelUIChecksum',
         );
         let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
@@ -1030,13 +1038,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('post-deployment endpoint clears modules cache even when checksums match', async function (assert: Assert) {
         let compareCurrentBoxelUIChecksumStub = sinon
-          .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
+          .stub(boxelUIChecker, 'compareCurrentBoxelUIChecksum')
           .resolves({
             previousChecksum: 'same-checksum-789',
             currentChecksum: 'same-checksum-789',
           });
         let writeCurrentBoxelUIChecksumStub = sinon.stub(
-          boxelUIChangeChecker,
+          boxelUIChecker,
           'writeCurrentBoxelUIChecksum',
         );
 
@@ -1711,6 +1719,145 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           body.realms,
           [priorRealm, testRealmURL.href],
           'new realm appended after prior entry',
+        );
+      });
+
+      test('appendRealmServerToUserAccountData round-trips and preserves prior entries', async function (assert) {
+        // CS-11655: parallel write of the trusted-realm-servers list.
+        // Pre-seed an unrelated server origin, then ensure a new server is
+        // appended without dropping or reordering existing entries.
+        let localpart = `grafana-rs-preserve-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+        let priorServer = 'http://other-realm-server.example/';
+        let newServer = ensureTrailingSlash(new URL(testRealmURL.href).origin);
+
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let seed = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALM_SERVERS_EVENT_TYPE}`,
+          {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${userToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ realmServers: [priorServer] }),
+          },
+        );
+        assert.strictEqual(seed.status, 200, 'seed PUT succeeded');
+
+        let result = await appendRealmServerToUserAccountData({
+          matrixURL,
+          userId,
+          userAccessToken: userToken,
+          realmServerURL: newServer,
+        });
+        assert.false(
+          result.alreadyPresent,
+          'realm server was not already present',
+        );
+
+        let after = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALM_SERVERS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        assert.strictEqual(after.status, 200, 'account_data GET returned 200');
+        let body = (await after.json()) as { realmServers?: string[] };
+        assert.deepEqual(
+          body.realmServers,
+          [priorServer, newServer],
+          'new realm server appended after prior entry',
+        );
+
+        // Idempotent: re-appending the same server is a no-op.
+        let second = await appendRealmServerToUserAccountData({
+          matrixURL,
+          userId,
+          userAccessToken: userToken,
+          realmServerURL: newServer,
+        });
+        assert.true(
+          second.alreadyPresent,
+          'second append signals alreadyPresent',
+        );
+      });
+
+      test("grafana upsert syncs realm-server origin to granted user's app.boxel.realm-servers", async function (assert) {
+        // CS-11655: a grafana grant must populate both keys during the
+        // source-of-truth transition. realm-servers is the new key boot
+        // assembly (CS-11658) will read from.
+        let localpart = `grafana-grant-rs-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notOk(
+          response.body.matrixAccountDataWarning,
+          `no matrix warning: ${response.body.matrixAccountDataWarning}`,
+        );
+
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let accountDataResponse = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALM_SERVERS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        assert.strictEqual(
+          accountDataResponse.status,
+          200,
+          'realm-servers account_data row exists',
+        );
+        let body = (await accountDataResponse.json()) as {
+          realmServers?: string[];
+        };
+        assert.deepEqual(
+          body.realmServers,
+          [ensureTrailingSlash(new URL(testRealmURL.href).origin)],
+          'realm-server origin appears in the user account_data',
         );
       });
     },

@@ -62,12 +62,12 @@ export default class CardList extends Component<Signature> {
   @consume(CardContextName)
   declare cardContext: CardContext | undefined;
 
-  // The v2 `search-entry`-rooted query, adapted from the incoming v1 `Query`.
+  // The `entry`-rooted query, adapted from the incoming `Query`.
   // The default fieldset (no `fields` member) resolves to "html, falling back
   // to the `item` serialization where no rendering matched" — exactly what the
   // grid wants (prerendered HTML for cards; an `item`/`icon` fallback for file
   // rows). `@format` binds the prerendered format through the query's
-  // `htmlQuery` (the v2 way to select it); CardsGrid passes `fitted`, which
+  // `htmlQuery` (the way to select it); CardsGrid passes `fitted`, which
   // matches the default, so this is behavior-preserving there while keeping a
   // non-`fitted` caller working. Only read under `{{#if @query}}`.
   private get searchResultsQuery(): SearchEntryWireQuery {

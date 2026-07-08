@@ -1,11 +1,11 @@
 #!/bin/sh
 
 # forcibly stop any isolated realm processes
-isolated_realm_processes=$(ps -ef | grep ts-node | grep '\-\-port=4205' | awk '{print $2}')
+isolated_realm_processes=$(ps -ef | grep node | grep '\-\-port=4205' | awk '{print $2}')
 for pid in $isolated_realm_processes; do
   kill -9 $pid
 done
-isolated_realm_processes=$(ps -ef | grep ts-node | grep '\-\-port=4212' | awk '{print $2}')
+isolated_realm_processes=$(ps -ef | grep node | grep '\-\-port=4212' | awk '{print $2}')
 for pid in $isolated_realm_processes; do
   kill -9 $pid
 done

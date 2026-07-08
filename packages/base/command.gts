@@ -159,6 +159,28 @@ export class WriteTextFileInput extends CardDef {
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
+export class MigrateSkillInput extends CardDef {
+  // The realm to migrate: legacy `Skill` cards are read from it and the
+  // resulting `skills/<name>/SKILL.md` files are written back into it.
+  @field realm = contains(StringField);
+  // Overwrite an existing `SKILL.md` at the target path. When false (default),
+  // a skill whose target already exists is left untouched and reported as
+  // skipped.
+  @field overwrite = contains(BooleanField);
+}
+
+export class MigrateSkillResult extends CardDef {
+  // Absolute URLs of the `SKILL.md` files written by this run.
+  @field migratedFiles = containsMany(StringField);
+  // Ids of legacy `Skill` cards skipped because their target `SKILL.md`
+  // already exists and `overwrite` was not set.
+  @field skippedSkillIds = containsMany(StringField);
+  // Ids of skills skipped because they had no instructions to write — e.g. a
+  // markdown-backed skill whose linked instructions did not resolve. Reported
+  // rather than written out as an empty `SKILL.md`.
+  @field emptySkillIds = containsMany(StringField);
+}
+
 export class WriteBinaryFileInput extends CardDef {
   @field path = contains(StringField);
   @field realm = contains(StringField);
@@ -313,8 +335,14 @@ export class CorrectnessResultCard extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  // Legacy: skills passed as loaded `Skill` cards. Retained for back-compat.
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
+  // Skills passed by id (kind-agnostic): each id may name a `.md` skill file
+  // (`boxel.kind: skill`) or a legacy `Skill` card. Resolved via
+  // `loadSkillSource` at room creation. Preferred over the card fields above.
+  @field enabledSkillIds = containsMany(StringField);
+  @field disabledSkillIds = containsMany(StringField);
   @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 

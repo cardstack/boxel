@@ -31,6 +31,12 @@ const commonConfig = {
   treeShaking: true,
   define: {
     'process.env.NODE_ENV': '"production"',
+    // Source uses `import.meta.dirname` so it runs as native ESM (e.g. `node
+    // scripts/build-plugin.ts` imports the command modules directly). esbuild
+    // does NOT fill `import.meta.dirname` in CJS output — it resolves to
+    // `undefined` at runtime — so map it to `__dirname`, which the CJS bundle
+    // (this single `dist/*.js` file) provides natively as the `dist/` dir.
+    'import.meta.dirname': '__dirname',
   },
   mainFields: ['module', 'main'],
   conditions: ['import', 'require'],
@@ -57,24 +63,6 @@ async function buildCLI() {
     console.log('Making CLI file executable...');
     chmodSync('dist/index.js', 0o755);
 
-    // content-tag (pulled in via runtime-common's transpile pipeline)
-    // loads its wasm with `readFileSync(`${__dirname}/content_tag_bg.wasm`)`
-    // from `pkg/node/`. After esbuild bundles content-tag into
-    // `dist/index.js`, `__dirname` becomes the boxel-cli dist/ dir,
-    // so the wasm has to live next to index.js — otherwise `boxel test`
-    // hits ENOENT on the first transpile.
-    let wasmSrc = join(
-      __dirname,
-      '..',
-      'node_modules',
-      'content-tag',
-      'pkg',
-      'node',
-      'content_tag_bg.wasm',
-    );
-    copyFileSync(wasmSrc, 'dist/content_tag_bg.wasm');
-    console.log('Copied content_tag_bg.wasm into dist/');
-
     console.log('Build complete!');
 
     // Log bundle size
@@ -89,4 +77,57 @@ async function buildCLI() {
   }
 }
 
-buildCLI();
+// The public `@cardstack/boxel-cli/api` surface, bundled to a single CJS file
+// so cross-package consumers (software-factory) load a normal built module
+// rather than raw `.ts` source — the latter resolves under some loaders
+// (vitest, plain node) but not others (Playwright's worker loader), which
+// failed with "does not provide an export named 'BoxelCLIClient'". esbuild's
+// CJS output keeps named exports detectable by Node's cjs-module-lexer, so ESM
+// consumers can still `import { BoxelCLIClient }`.
+async function buildAPI() {
+  mkdirSync('dist', { recursive: true });
+  console.log('Building api...');
+  try {
+    await build({
+      ...commonConfig,
+      entryPoints: ['api.ts'],
+      outfile: 'dist/api.js',
+    });
+    console.log('Built dist/api.js');
+  } catch (error) {
+    console.error('API build failed:', error);
+    process.exit(1);
+  }
+}
+
+// content-tag (pulled in via runtime-common's transpile pipeline) loads its
+// wasm with `readFileSync(`${import.meta.dirname}/content_tag_bg.wasm`)` from
+// `pkg/node/`. After esbuild bundles content-tag into `dist/index.js` or
+// `dist/api.js`, `import.meta.dirname` becomes the boxel-cli `dist/` dir, so
+// the wasm has to live next to whichever entry was built — otherwise the first
+// transpile hits ENOENT. Both `build` and `build:api` consumers need it.
+function copyContentTagWasm() {
+  let wasmSrc = join(
+    import.meta.dirname,
+    '..',
+    'node_modules',
+    'content-tag',
+    'pkg',
+    'node',
+    'content_tag_bg.wasm',
+  );
+  copyFileSync(wasmSrc, 'dist/content_tag_bg.wasm');
+  console.log('Copied content_tag_bg.wasm into dist/');
+}
+
+async function main() {
+  // `build:api` passes --api-only to rebuild just the API surface quickly
+  // (consumers' test pipelines do this); a full `build` produces both.
+  if (!process.argv.includes('--api-only')) {
+    await buildCLI();
+  }
+  await buildAPI();
+  copyContentTagWasm();
+}
+
+main();

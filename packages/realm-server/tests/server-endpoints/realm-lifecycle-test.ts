@@ -1,16 +1,17 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { existsSync, readJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readJSONSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   baseCardRef,
   fetchRealmPermissions,
+  searchEntryWireQueryFromQuery,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
   closeServer,
@@ -26,7 +27,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -117,7 +118,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/realm-config',
+                  module: '@cardstack/base/realm-config',
                   name: 'RealmConfig',
                 },
               },
@@ -166,7 +167,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -227,19 +228,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 permissions: ['read', 'write', 'realm-owner'],
               })}`,
             )
-            .send({
-              filter: {
-                on: baseCardRef,
-                eq: {
-                  cardTitle: 'Test Card',
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: baseCardRef,
+                    eq: {
+                      cardTitle: 'Test Card',
+                    },
+                  },
                 },
-              },
-            } as Query);
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let results = response.body as CardCollectionDocument;
-          (assert.strictEqual(results.data.length, 1),
-            'correct number of search results');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'correct number of search results',
+          );
         }
       });
 
@@ -287,14 +295,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 user: 'rando',
               })}`,
             )
-            .send({
-              filter: {
-                on: baseCardRef,
-                eq: {
-                  cardTitle: 'Test Card',
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: baseCardRef,
+                    eq: {
+                      cardTitle: 'Test Card',
+                    },
+                  },
                 },
-              },
-            } as Query);
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
@@ -308,7 +321,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -373,7 +386,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },

@@ -95,6 +95,7 @@ export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
   resetCatalogRealmURL,
+  setRealmAuthFailure,
   setupAuthEndpoints,
   setCatalogRealmURL,
 } from './realm-server-mock';
@@ -123,6 +124,7 @@ export {
   catalogRealmURL,
   skillsRealmURL,
   skillCardURL,
+  skillFileURL,
   devSkillId,
   envSkillId,
 } from '@cardstack/host/lib/utils';
@@ -1026,16 +1028,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         toolsSupported: true,
         reasoningEffort: 'minimal',
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1055,16 +1050,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-sonnet-4.6',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1084,16 +1072,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-sonnet-4.5',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1113,16 +1094,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-3.7-sonnet',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1161,7 +1135,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'SystemCard',
         },
       },
@@ -1480,13 +1454,7 @@ export async function saveCard(
   realmURL?: RealmIdentifier,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `setCardAsSavedWithId test helper needs the loader to have a VirtualNetwork`,
-    );
-  }
-  let doc = api.serializeCard(instance, { virtualNetwork: vn });
+  let doc = api.serializeCard(instance, {});
   doc.data.id = id;
   if (realmURL) {
     doc.data.meta = {
@@ -2227,7 +2195,7 @@ export function realmConfigCardJSON(
       attributes: attrs,
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/realm-config',
+          module: '@cardstack/base/realm-config',
           name: 'RealmConfig',
         },
       },

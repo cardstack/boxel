@@ -7,7 +7,7 @@ import { Skill } from 'https://cardstack.com/base/skill';
 export class MarkdownSkill extends Skill {
   static displayName = 'Markdown Skill';
 
-  @field instructionsSource = linksTo(MarkdownDef);
+  @field instructionsSource = linksTo(MarkdownDef, { searchable: true });
   @field instructions = contains(MarkdownField, {
     computeVia: function (this: MarkdownSkill) {
       return this.instructionsSource?.content;

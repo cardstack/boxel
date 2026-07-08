@@ -14,7 +14,8 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   ecsMetadata,
@@ -931,6 +932,7 @@ export class RealmServer {
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
   private grafanaSecret: string;
+  private aiBotDelegationSecret: string | undefined;
 
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
@@ -954,6 +956,7 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
@@ -967,6 +970,7 @@ export class RealmServer {
     realmServerSecretSeed,
     realmSecretSeed,
     grafanaSecret,
+    aiBotDelegationSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -979,6 +983,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    reportHostShell,
     searchCache,
   }: {
     serverURL: URL;
@@ -989,6 +994,7 @@ export class RealmServer {
     realmServerSecretSeed: string;
     realmSecretSeed: string;
     grafanaSecret: string;
+    aiBotDelegationSecret?: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -1005,6 +1011,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Reports the current host-shell token to the prerender manager. main.ts
+    // wires this so the post-deployment hook can re-report once the service is
+    // stable (the boot-time report fires as soon as this server starts serving).
+    reportHostShell?: () => Promise<void>;
     // Optional so test harnesses that construct a RealmServer directly get a
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
@@ -1029,6 +1039,7 @@ export class RealmServer {
     this.matrixClient = matrixClient;
 
     this.realmSecretSeed = realmSecretSeed;
+    this.aiBotDelegationSecret = aiBotDelegationSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
@@ -1049,6 +1060,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
@@ -1094,8 +1106,10 @@ export class RealmServer {
           // prerender tab, or any in-DevTools fetch) get a response
           // whose `headers.get('ETag')` is `null` even though the
           // server emitted one — making the entire revalidation
-          // protocol invisible to JS.
-          exposeHeaders: 'ETag',
+          // protocol invisible to JS. Location/Retry-After are likewise
+          // non-safelisted; expose them so a cross-origin client can read
+          // the async-publish status monitor target off the 202 response.
+          exposeHeaders: 'ETag, Location, Retry-After',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
@@ -1137,6 +1151,7 @@ export class RealmServer {
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
+          aiBotDelegationSecret: this.aiBotDelegationSecret,
           virtualNetwork: this.virtualNetwork,
           serveHostApp,
           serveIndex,
@@ -1151,6 +1166,7 @@ export class RealmServer {
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
         }),

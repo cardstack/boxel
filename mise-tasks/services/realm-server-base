@@ -9,7 +9,7 @@
 trap 'exit 0' INT TERM
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
-  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly ./scripts/matrix-registration-secret.ts)
+  MATRIX_REGISTRATION_SHARED_SECRET=$(node ./scripts/matrix-registration-secret.ts)
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
@@ -20,10 +20,10 @@ NODE_ENV=development \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
+  AI_BOT_DELEGATION_SECRET="shhh! it's a secret" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  ts-node \
-  --transpileOnly main \
+  node main.ts \
   --port=4201 \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath='./realms/localhost_4201_base' \

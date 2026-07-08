@@ -1,11 +1,25 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import QUnit, { module, test } from 'qunit';
 
-import { baseRealm, rri, baseRRI, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseRealmRRI,
+  rri,
+  baseRRI,
+  Deferred,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -49,14 +63,14 @@ const files: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
     },
   },
   'error.gts': `
-    import { CardDef } from 'https://cardstack.com/base/card-api';
+    import { CardDef } from '@cardstack/base/card-api';
 
     export default class ErrorCard extends CardDef {
       static displayName = 'error';
@@ -68,8 +82,8 @@ const files: Record<string, any> = {
     }
   `,
   'pet.gts': `
-    import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export default class Pet extends CardDef {
       static displayName = 'Pet';
@@ -83,8 +97,8 @@ const files: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
     import Pet from "./pet";
 
     export class Person extends CardDef {
@@ -108,7 +122,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -125,7 +139,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -142,7 +156,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -169,13 +183,13 @@ const files: Record<string, any> = {
         cardDescription: 'A field that captures big int values',
         specType: 'field',
         ref: {
-          module: `${baseRealm.url}big-integer`,
+          module: `${baseRealmRRI}big-integer`,
           name: 'default',
         },
       },
       meta: {
         adoptsFrom: {
-          module: `${baseRealm.url}spec`,
+          module: `${baseRealmRRI}spec`,
           name: 'Spec',
         },
       },
@@ -189,13 +203,13 @@ const files: Record<string, any> = {
         cardDescription: 'A FieldDef spec',
         specType: 'field',
         ref: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmRRI}card-api`,
           name: 'FieldDef',
         },
       },
       meta: {
         adoptsFrom: {
-          module: `${baseRealm.url}spec`,
+          module: `${baseRealmRRI}spec`,
           name: 'Spec',
         },
       },
@@ -216,15 +230,15 @@ const filesB: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
     },
   },
   'animal.gts': `
-    import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export class Animal extends CardDef {
       static displayName = 'Animal';
@@ -242,7 +256,7 @@ const filesB: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -591,18 +605,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         );
         assert.deepEqual(
           json.data.relationships,
-          {
-            pet: {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
+          undefined,
           'relationships data is correct',
         );
         deferred.fulfill();
@@ -833,8 +836,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
       assert.expect(12);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TrèsTestCard extends CardDef {
   static displayName = "Très test card 😀";
 }`.trim();
@@ -913,7 +916,7 @@ export class TrèsTestCard extends CardDef {
           content,
           `
 import { Person } from './person';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Person {
   static displayName = "Test Card";
 }`.trim(),
@@ -1077,8 +1080,8 @@ export class TestCard extends Person {
         assert.strictEqual(
           content,
           `
-import BigInteger from 'https://cardstack.com/base/big-integer';
-import { Component } from 'https://cardstack.com/base/card-api';
+import BigInteger from '@cardstack/base/big-integer';
+import { Component } from '@cardstack/base/card-api';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
 }`.trim(),
@@ -1146,7 +1149,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Pet {
   static displayName = "Test Card";
 }`.trim(),
@@ -1185,7 +1188,7 @@ export class TestCard extends Pet {
           content,
           `
 import PetParent from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Pet extends PetParent {
   static displayName = "Pet";
 }`.trim(),
@@ -1223,7 +1226,7 @@ export class Pet extends PetParent {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Map0 extends Pet {
   static displayName = "Map";
 }`.trim(),
@@ -1240,8 +1243,8 @@ export class Map0 extends Pet {
     test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1275,8 +1278,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1310,8 +1313,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1370,7 +1373,7 @@ export class TestCard extends CardDef {
           content,
           `
 import { Animal } from '${testRealmURL2}animal';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Animal {
   static displayName = "Test Card";
 }`.trim(),
@@ -1529,4 +1532,183 @@ export class TestCard extends Animal {
       });
     },
   );
+
+  // When the AI assistant (or any external writer) creates a new .gts and
+  // then updates the code-submode codePath to the just-written URL, the
+  // host's FileResource (packages/host/app/resources/file.ts) can lose the
+  // race against the realm's index pipeline. The first authedFetch returns
+  // 404 and `read` transitions into `state: 'not-found'`. The realm later
+  // broadcasts `index/incremental` for the new URL, and the FileResource
+  // must react to that event and recover — otherwise the URL bar stays
+  // stuck on "This resource does not exist" until the user re-navigates.
+  //
+  // This test simulates the external write by navigating to a non-existent
+  // URL, confirming the URL bar shows the not-found error, then performing
+  // the write via the realm directly (mirroring what the realm-server does
+  // when a card+source PUT lands). After the realm broadcasts the matching
+  // `index/incremental` event, the URL bar must recover.
+  module('when an external write creates a new file', function (hooks) {
+    hooks.beforeEach(function () {
+      setRealmPermissions({
+        [baseRealm.url]: ['read'],
+        [testRealmURL]: ['read', 'write'],
+      });
+    });
+
+    test('code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
+      let newFilePath = 'ai-created-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class AiCreatedCard extends CardDef {
+          static displayName = 'Ai Created Card';
+        }
+      `;
+
+      // Simulate the AI assistant updating the codePath to a file that does
+      // not yet exist in the realm. The host has not seen this URL before,
+      // so FileResource.read will hit 404.
+      await visitOperatorMode(newFileUrl);
+
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404',
+        );
+
+      // The realm broadcasts the incremental invalidation event over matrix
+      // once indexing of the newly-written file completes. Subscribe so we
+      // can await its arrival deterministically before asserting recovery.
+      let incrementalEvent = new Deferred<void>();
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental' &&
+            Array.isArray(ev.invalidations) &&
+            (ev.invalidations as string[]).includes(newFileUrl)
+          ) {
+            unsubscribe();
+            incrementalEvent.fulfill();
+          }
+        },
+      );
+
+      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // saveType 'create-file' POSTs the new source to the realm and tags
+      // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
+      // which the realm echoes back in the `index/incremental` event.
+      // This shape — saveType 'create-file' and that clientRequestId
+      // prefix — is what the AI assistant produces and what the
+      // invalidation handler must treat as reload-worthy even though the
+      // id is in `cardService.clientRequestIds`.
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL(newFileUrl),
+        newFileSource,
+        'create-file',
+      );
+      await incrementalEvent.promise;
+      await settled();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .doesNotExist(
+          'URL bar error clears after the realm broadcasts the index/incremental event for the new file',
+        );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          newFileUrl,
+          'code submode stays on the new file URL after recovery',
+        );
+      assert.ok(
+        getMonacoContent().includes('AiCreatedCard'),
+        'monaco loads the recovered file body, not a stale buffer',
+      );
+    });
+
+    // Buck's actual reproduction is navigation: he was viewing a prior
+    // file in code mode, then clicked New Card Definition, and the URL
+    // bar stayed stuck on "This resource does not exist" for the new
+    // file. The existing test above covers cold-start visit to an
+    // un-indexed URL; this one covers the navigate-from-ready path,
+    // because `FileResource.modify` runs with `innerState` already in
+    // `ready` and the realm subscription already established when the
+    // codePath changes.
+    test('navigating from a ready file to a newly-created file recovers via index/incremental', async function (assert) {
+      let newFilePath = 'navigated-to-card.gts';
+      let newFileUrl = `${testRealmURL}${newFilePath}`;
+      let newFileSource = `
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export default class NavigatedToCard extends CardDef {
+          static displayName = 'Navigated To Card';
+        }
+      `;
+
+      // Load an existing file first so FileResource is in state 'ready'
+      // and subscribed to the realm before the navigation that triggers
+      // the bug.
+      await visitOperatorMode(`${testRealmURL}index.json`);
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      // Re-visit the new (not-yet-existent) URL through code mode. This
+      // drives a second `FileResource.modify` from the already-ready
+      // state — the exact transition Buck reported.
+      await visitOperatorMode(newFileUrl);
+      await waitFor('[data-test-card-url-bar-error]');
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .containsText(
+          'This resource does not exist',
+          'URL bar surfaces the not-found error on initial 404 after navigation',
+        );
+
+      let incrementalEvent = new Deferred<void>();
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental' &&
+            Array.isArray(ev.invalidations) &&
+            (ev.invalidations as string[]).includes(newFileUrl)
+          ) {
+            unsubscribe();
+            incrementalEvent.fulfill();
+          }
+        },
+      );
+
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL(newFileUrl),
+        newFileSource,
+        'create-file',
+      );
+      await incrementalEvent.promise;
+      await settled();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+
+      assert
+        .dom('[data-test-card-url-bar-error]')
+        .doesNotExist(
+          'URL bar error clears after the realm broadcasts the index/incremental event for the new file',
+        );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          newFileUrl,
+          'code submode stays on the new file URL after recovery',
+        );
+      assert.ok(
+        getMonacoContent().includes('NavigatedToCard'),
+        'monaco loads the recovered file body after the navigate-then-create sequence',
+      );
+    });
+  });
 });

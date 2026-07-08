@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import packageShimHandlerTests from '@cardstack/runtime-common/tests/package-shim-handler-test';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Strict named-export check (CS-10860 follow-up)', function () {
     test('wrapWithStrictNamespace returns existing exports unchanged', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
@@ -96,6 +97,15 @@ module(basename(__filename), function () {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
     test('shimAsyncModule returns null from handle() when the resolver throws permanently', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('describeShimError surfaces the transient signature from an Error message', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('describeShimError appends a Node socket error code when present', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('describeShimError handles non-Error values without throwing', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
   });

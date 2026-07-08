@@ -511,18 +511,6 @@ module('Integration | operator-mode | links', function (hooks) {
               notes: null,
             },
           },
-          relationships: {
-            'cardInfo.cardThumbnail': {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
           meta: {
             adoptsFrom: {
               module: '../pet',

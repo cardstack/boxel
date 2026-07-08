@@ -26,10 +26,9 @@ import {
 } from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
-// `/_search-prerendered`, `/_federated-search`,
-// `/_federated-search-prerendered`) so the request middleware can track how
+// `/_federated-search`) so the request middleware can track how
 // many searches are in flight for the health sampler.
-const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search(-prerendered)?$/;
+const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search$/;
 
 const REQUEST_BODY_STATE = 'requestBody';
 

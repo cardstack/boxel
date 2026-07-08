@@ -27,7 +27,7 @@ import { setupRenderingTest } from '../helpers/setup';
 
 // End-to-end coverage for the search correlation id: the in-realm browser
 // (the prerendered host SPA) mints `x-boxel-logging-correlation-id` on its
-// `_federated-search-v2` fetch, and the realm-server's search path emits a
+// `_federated-search` fetch, and the realm-server's search path emits a
 // `realm:search-timing` line keyed by that same id. This proves the id
 // threads all the way from the client that originated it through to the
 // server log a triage would join against.
@@ -107,7 +107,7 @@ module('Integration | search correlation id', function (hooks) {
     // Capture the correlation id the client actually puts on the wire.
     let sentRequestIds: string[] = [];
     let spy = async (request: Request) => {
-      if (new URL(request.url).pathname.endsWith('/_federated-search-v2')) {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
         let id = request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER);
         if (id) {
           sentRequestIds.push(id);
@@ -131,7 +131,7 @@ module('Integration | search correlation id', function (hooks) {
     assert.strictEqual(
       sentRequestIds.length,
       1,
-      'the client stamped exactly one correlation id on its _federated-search-v2 fetch',
+      'the client stamped exactly one correlation id on its _federated-search fetch',
     );
     let sentId = sentRequestIds[0];
     assert.ok(
@@ -169,7 +169,7 @@ module('Integration | search correlation id', function (hooks) {
     let sawHeader = false;
     let spy = async (request: Request) => {
       if (
-        new URL(request.url).pathname.endsWith('/_federated-search-v2') &&
+        new URL(request.url).pathname.endsWith('/_federated-search') &&
         request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
       ) {
         sawHeader = true;

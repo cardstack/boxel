@@ -5,9 +5,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
+import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
@@ -26,6 +28,7 @@ import {
   Group,
   IconGlobe,
   IconTrash,
+  IconX,
   Lock,
   Star,
   StarFilled,
@@ -74,6 +77,23 @@ export default class Workspace extends Component<Signature> {
         {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
+        {{#if this.reindexError}}
+          <div class='reindex-error' role='alert' data-test-reindex-error>
+            <span
+              class='reindex-error__message'
+              title={{this.reindexError}}
+            >{{this.reindexError}}</span>
+            <button
+              type='button'
+              class='reindex-error__dismiss'
+              aria-label='Dismiss error'
+              data-test-reindex-error-dismiss
+              {{on 'click' this.clearReindexError}}
+            >
+              <IconX width='11' height='11' />
+            </button>
+          </div>
+        {{/if}}
         <ItemContainer
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
@@ -90,6 +110,7 @@ export default class Workspace extends Component<Signature> {
               <RealmIcon
                 class='workspace-realm-icon'
                 @realmInfo={{this.realmInfo}}
+                @canAnimate={{true}}
               />
             </div>
           </div>
@@ -281,6 +302,84 @@ export default class Workspace extends Component<Signature> {
           </:footer>
         </ModalContainer>
       {{/if}}
+      {{#if this.showArchiveModal}}
+        <ModalContainer
+          @title=''
+          @onClose={{this.closeArchiveModal}}
+          @size='medium'
+          @cardContainerClass='workspace-chooser-archive-modal'
+          class='workspace-chooser-archive-modal-container'
+          aria-label='Archive Workspace'
+          data-test-archive-modal={{@realmIdentifier}}
+        >
+          <:content>
+            <div class='archive-modal__header'>
+              <ArchiveIcon class='archive-modal__icon' />
+              <h2 class='archive-modal__title'>Archive Workspace</h2>
+            </div>
+
+            <div class='archive-modal__workspace-card'>
+              <div class='archive-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='archive-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='archive-modal__workspace-info'>
+                <span class='archive-modal__workspace-name'>{{this.name}}</span>
+              </div>
+            </div>
+
+            <div class='archive-modal__info-box'>
+              <p class='archive-modal__info-text'>
+                Archiving hides this workspace from your realm list and stops
+                its indexer. While archived, it
+                <strong>
+                  will not be available for viewing or editing — to you or any
+                  other user
+                </strong>
+                — until you restore it.
+              </p>
+              <p class='archive-modal__info-text'>
+                You can restore it at any time from the Archived section of the
+                workspace chooser.
+              </p>
+            </div>
+
+            {{#if this.archiveError}}
+              <p class='archive-modal__error'>{{this.archiveError}}</p>
+            {{/if}}
+          </:content>
+          <:footer>
+            <div class='archive-modal__footer'>
+              <div class='archive-modal__actions'>
+                {{#if this.archiveWorkspaceTask.isRunning}}
+                  <LoadingIndicator class='archive-modal__spinner' />
+                {{else}}
+                  <Button
+                    {{on 'click' this.closeArchiveModal}}
+                    class='archive-modal__cancel'
+                    data-test-cancel-archive-button
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type='button'
+                    class='archive-modal__confirm'
+                    data-test-confirm-archive-button
+                    {{on 'click' (perform this.archiveWorkspaceTask)}}
+                  >
+                    Archive this workspace
+                  </button>
+                {{/if}}
+              </div>
+              <span class='archive-modal__disclaimer'>
+                You can restore this workspace later
+              </span>
+            </div>
+          </:footer>
+        </ModalContainer>
+      {{/if}}
     {{/if}}
     <style scoped>
       .workspace-card {
@@ -407,6 +506,51 @@ export default class Workspace extends Component<Signature> {
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
         max-width: var(--boxel-xxs-container);
+      }
+      .reindex-error {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: var(--boxel-xxs-container);
+        box-sizing: border-box;
+        z-index: 21;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-xs);
+      }
+      .reindex-error__message {
+        flex: 1;
+        overflow-wrap: anywhere;
+        /* Cap a long server error at a few lines so the banner never grows to
+        cover the whole tile; the full text stays available via the title. */
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+      }
+      .reindex-error__dismiss {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 2px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        --icon-color: currentColor;
+        cursor: pointer;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .reindex-error__dismiss:hover {
+        background: rgba(255 255 255 / 25%);
       }
       .info > span {
         text-overflow: ellipsis;
@@ -789,6 +933,171 @@ export default class Workspace extends Component<Signature> {
       .delete-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
       }
+      .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.workspace-chooser-archive-modal) {
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__header) {
+        display: none;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content) {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+        overflow: visible;
+        height: auto;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__footer) {
+        height: auto;
+        flex: none;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        border-top: none;
+      }
+      .archive-modal__header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__icon {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .archive-modal__title {
+        font-size: 1.625rem;
+        font-weight: 700;
+        color: var(--boxel-dark);
+        margin: 0;
+      }
+      .archive-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
+      }
+      .archive-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
+        display: flex;
+      }
+      .archive-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .archive-modal__realm-icon {
+        --boxel-realm-icon-size: 2.625rem;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .archive-modal__workspace-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .archive-modal__workspace-name {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__info-box {
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__info-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__error {
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        margin: 0;
+      }
+      .archive-modal__footer {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .archive-modal__actions {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        align-items: center;
+      }
+      .archive-modal__cancel {
+        background: none;
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 var(--boxel-sp-lg);
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .archive-modal__cancel:hover {
+        border-color: var(--boxel-550);
+        background: var(--boxel-light-100);
+      }
+      .archive-modal__confirm {
+        background: var(--boxel-dark);
+        border: none;
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 1.5rem;
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-light);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .archive-modal__confirm:hover {
+        background: var(--boxel-700);
+      }
+      .archive-modal__disclaimer {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        color: var(--boxel-500);
+      }
+      .archive-modal__spinner {
+        --boxel-loading-indicator-size: 2rem;
+      }
     </style>
   </template>
 
@@ -808,11 +1117,19 @@ export default class Workspace extends Component<Signature> {
   @tracked private showDeleteModal = false;
   @tracked private deleteError: string | undefined;
   @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
+  @tracked private showArchiveModal = false;
+  @tracked private archiveError: string | undefined;
   @tracked private isHostDropdownOpen = false;
+  @tracked private reindexError: string | undefined;
 
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask.perform();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.clearReindexError();
   }
 
   private loadRealmTask = task(async () => {
@@ -830,7 +1147,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   get tileMenuItems() {
-    return [
+    let items = [
       new MenuItem({
         label: this.isFavorited ? 'Unfavorite' : 'Favorite',
         icon: this.isFavorited ? StarFilled : Star,
@@ -841,6 +1158,34 @@ export default class Workspace extends Component<Signature> {
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
       }),
+    ];
+    // Re-index and Archive are owner-only and appear only on tiles the user
+    // owns.
+    if (this.canReindexWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Re-index',
+          icon: RefreshIcon,
+          action: this.reindexWorkspaceTask.perform,
+          // Gate on the live indexing flag, not reindexWorkspaceTask.isRunning:
+          // the task resolves the instant the 204 lands (sub-second), while the
+          // reindex itself runs much longer. isIndexing stays true for the whole
+          // pass. Repeat clicks are server-safe regardless (the reindex queue
+          // coalesces them), so this guard is purely a UX nicety.
+          disabled: this.isReindexing,
+        }),
+      );
+    }
+    if (this.canArchiveWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Archive Workspace',
+          icon: ArchiveIcon,
+          action: this.openArchiveModal,
+        }),
+      );
+    }
+    items.push(
       new MenuItem({
         label: 'Delete Workspace',
         icon: IconTrash,
@@ -848,7 +1193,8 @@ export default class Workspace extends Component<Signature> {
         dangerous: true,
         disabled: !this.canDeleteWorkspace,
       }),
-    ];
+    );
+    return items;
   }
 
   @action openRealmConfig() {
@@ -943,6 +1289,18 @@ export default class Workspace extends Component<Signature> {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
+  private get canArchiveWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get canReindexWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get isReindexing() {
+    return this.realmInfo.isIndexing;
+  }
+
   private get deleteSummaryText() {
     if (!this.deleteSummary) {
       return null;
@@ -994,6 +1352,68 @@ export default class Workspace extends Component<Signature> {
     }
     this.showDeleteModal = false;
     this.deleteError = undefined;
+  }
+
+  @action openArchiveModal() {
+    if (!this.canArchiveWorkspace) {
+      return;
+    }
+    this.archiveError = undefined;
+    this.showArchiveModal = true;
+  }
+
+  @action closeArchiveModal() {
+    if (this.archiveWorkspaceTask.isRunning) {
+      return;
+    }
+    this.showArchiveModal = false;
+    this.archiveError = undefined;
+  }
+
+  private archiveWorkspaceTask = dropTask(async () => {
+    this.archiveError = undefined;
+
+    try {
+      let realmPath = new RealmPaths(this.args.realmIdentifier);
+      let isActiveWorkspace =
+        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
+        this.operatorModeStateService
+          .getOpenCardIds()
+          .some((cardId) => realmPath.inRealm(cardId)) ||
+        this.operatorModeStateService.codePathString?.startsWith(
+          this.args.realmIdentifier,
+        );
+
+      await this.realmServer.archiveRealm(this.args.realmIdentifier);
+      // Archiving seals the realm; drop its local session so background
+      // requests don't loop on 403. Restoring re-creates the session.
+      this.realm.removeRealm(this.args.realmIdentifier);
+
+      if (isActiveWorkspace) {
+        this.operatorModeStateService.clearStacks();
+        await this.operatorModeStateService.updateCodePath(null);
+        this.operatorModeStateService.openWorkspaceChooser();
+      }
+
+      this.showArchiveModal = false;
+    } catch (error: any) {
+      this.archiveError = error.message;
+    }
+  });
+
+  private reindexWorkspaceTask = dropTask(async () => {
+    this.clearReindexError();
+    try {
+      await this.realm.fullReindex(this.args.realmIdentifier);
+    } catch (error: any) {
+      // The error stays put until the user dismisses it or retries the
+      // reindex, so a failed pass never disappears before it's noticed.
+      this.reindexError = String(error?.message ?? error);
+    }
+  });
+
+  @action private clearReindexError() {
+    this.reindexError = undefined;
   }
 
   private loadDeleteSummaryTask = dropTask(async () => {

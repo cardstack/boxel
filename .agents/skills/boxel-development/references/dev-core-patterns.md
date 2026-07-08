@@ -1,10 +1,14 @@
-**Card with computed title:**
+**Card with computed cardTitle:**
+
+A card's display name comes from `cardTitle` (a computed pass-through from
+`cardInfo.name`). To derive it from another field, override `cardTitle` — do
+NOT override the base `title` field; the host reads `cardTitle`, not `title`.
 
 ```gts
 export class BlogPost extends CardDef {
   @field headline = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BlogPost) {
       return this.headline ?? 'Untitled Post';
     },
@@ -60,7 +64,7 @@ export class BlogPost extends CardDef {
   @field tags = containsMany(TagField);
   @field relatedPosts = linksToMany(() => BlogPost);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BlogPost) {
       try {
         const baseTitle = this.headline ?? 'Untitled Post';
@@ -68,7 +72,7 @@ export class BlogPost extends CardDef {
         if (baseTitle.length <= maxLength) return baseTitle;
         return baseTitle.substring(0, maxLength - 3) + '...';
       } catch (e) {
-        console.error('BlogPost: Error computing title', e);
+        console.error('BlogPost: Error computing cardTitle', e);
         return 'Untitled Post';
       }
     },
@@ -137,9 +141,9 @@ export class AddressField extends FieldDef {
 
 ```gts
 // ❌ DANGEROUS: Self-reference causes infinite recursion
-@field title = contains(StringField, {
+@field cardTitle = contains(StringField, {
   computeVia: function(this: BlogPost) {
-    return this.title || 'Untitled'; // STACK OVERFLOW!
+    return this.cardTitle || 'Untitled'; // STACK OVERFLOW!
   }
 });
 
@@ -170,9 +174,9 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
   // ³¹ CRITICAL: Do ALL computation in functions, never in templates
   get safeTitle() {
     try {
-      return this.args?.model?.title ?? 'Untitled Post';
+      return this.args?.model?.cardTitle ?? 'Untitled Post';
     } catch (e) {
-      console.error('BlogPost: Error accessing title', e);
+      console.error('BlogPost: Error accessing cardTitle', e);
       return 'Untitled Post';
     }
   }

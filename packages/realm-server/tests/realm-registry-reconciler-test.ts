@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
@@ -51,7 +52,7 @@ async function deleteRow(dbAdapter: PgAdapter, url: string) {
   ]);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('RealmRegistryReconciler', function (hooks) {
     let dbAdapter: PgAdapter;
     let mountCalls: string[];
@@ -87,7 +88,7 @@ module(basename(__filename), function () {
         owner_username: 'luke',
       });
       await seedRow(dbAdapter, {
-        url: 'https://cardstack.com/base/',
+        url: '@cardstack/base/',
         kind: 'bootstrap',
         disk_id: '/abs/base',
         owner_username: 'system',
@@ -102,17 +103,15 @@ module(basename(__filename), function () {
         'source',
       );
       assert.strictEqual(
-        reconciler.knownByUrl.get('https://cardstack.com/base/')?.kind,
+        reconciler.knownByUrl.get('@cardstack/base/')?.kind,
         'bootstrap',
       );
-      assert.true(
-        reconciler.knownByUrl.get('https://cardstack.com/base/')!.pinned,
-      );
+      assert.true(reconciler.knownByUrl.get('@cardstack/base/')!.pinned);
     });
 
     test('reconcile eagerly mounts pinned rows', async function (assert) {
       await seedRow(dbAdapter, {
-        url: 'https://cardstack.com/base/',
+        url: '@cardstack/base/',
         kind: 'bootstrap',
         disk_id: '/abs/base',
         owner_username: 'system',
@@ -121,9 +120,9 @@ module(basename(__filename), function () {
 
       await reconciler.reconcile();
 
-      assert.deepEqual(mountCalls, ['https://cardstack.com/base/']);
+      assert.deepEqual(mountCalls, ['@cardstack/base/']);
       assert.strictEqual(reconciler.mounted.size, 1);
-      assert.ok(reconciler.mounted.get('https://cardstack.com/base/'));
+      assert.ok(reconciler.mounted.get('@cardstack/base/'));
     });
 
     test('reconcile does NOT eagerly mount unpinned rows', async function (assert) {
@@ -155,7 +154,7 @@ module(basename(__filename), function () {
     });
 
     test('registerExistingMounts suppresses re-mount for pinned realms the legacy path already mounted', async function (assert) {
-      const url = 'https://cardstack.com/base/';
+      const url = '@cardstack/base/';
       await seedRow(dbAdapter, {
         url,
         kind: 'bootstrap',
@@ -372,7 +371,7 @@ module(basename(__filename), function () {
     });
 
     test('lookupOrMount returns mounted realm without re-mount', async function (assert) {
-      const url = 'https://cardstack.com/base/';
+      const url = '@cardstack/base/';
       await seedRow(dbAdapter, {
         url,
         kind: 'bootstrap',

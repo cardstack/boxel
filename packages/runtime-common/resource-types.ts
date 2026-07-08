@@ -22,19 +22,16 @@ export interface QueryFieldMeta {
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
-export const RenderedHtmlResourceType = 'rendered-html';
 export const CssResourceType = 'css';
-export const SearchEntryResourceType = 'search-entry';
+export const EntryResourceType = 'entry';
 export const HtmlResourceType = 'html';
 export const IconResourceType = 'icon';
 // resource
 export type Resource =
   | ModuleResource
   | CardResource
-  | PrerenderedCardResource
-  | RenderedHtmlResource
   | CssResource
-  | SearchEntryResource
+  | EntryResource
   | HtmlResource
   | IconResource;
 export type ResourceMeta = ModuleMeta | Meta;
@@ -90,18 +87,6 @@ export type CardResourceMeta = Meta & {
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
-  // Set by the server on an HTML-backed result to mark this `card` as
-  // identity-only: identity + a `rendered-html` relationship, with the live
-  // serialization deliberately withheld (no `attributes`; hydration fetches it
-  // on demand). The authoritative wire signal that a consumer must not treat
-  // this resource as a complete instance — see `isIdentityOnlyCardResource`.
-  identityOnly?: boolean;
-  // The ancestor type this result's HTML was rendered as, echoed on an
-  // identity-only `card` so a consumer renders the hydrated/fallback card as
-  // the same type as its HTML sibling. A full live `card` never carries this
-  // (it ships the standard live wireformat); it rides only on identity-only
-  // results.
-  renderType?: CodeRef;
   // Set on a field-limited serialization: the names of the fields it carries.
   // Presence marks the resource sparse — distinguishing "only these fields
   // were loaded" from "a full card whose other fields happen to be empty" —
@@ -114,15 +99,17 @@ export type CardResourceMeta = Meta & {
   // consumer falls through to the host error component (the terminal rung of
   // the resolution chain) and never deposits the resource into the Store.
   error?: ErrorEntry;
+  // The index-data generation the row was written at (`boxel_index.generation`).
+  // Stamped on a single-card `card+json` GET so a consumer can tell fresh index
+  // data from stale. Additive — absent when the serialization did not come off
+  // the index (e.g. a freshly-built resource that has not been persisted).
+  generation?: number;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
-  // See CardResourceMeta.identityOnly — a file-meta result can likewise be
-  // HTML-backed and identity-only.
-  identityOnly?: boolean;
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
@@ -138,11 +125,6 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    // The card's rendering, when the server resolves this row to prerendered
-    // HTML. A reserved platform key (see RenderedHtmlResourceType) that can
-    // never collide with a userland @field name.
-    'rendered-html'?: Relationship;
   };
   meta: CardResourceMeta;
   links?: {
@@ -156,8 +138,6 @@ export interface FileMetaResource {
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
-  } & {
-    'rendered-html'?: Relationship;
   };
   meta: FileMetaResourceResourceMeta;
   links?: {
@@ -165,33 +145,7 @@ export interface FileMetaResource {
   };
 }
 
-// One prerendered presentation of a card/file (a single format per response).
-// Its `id` is the bare card/file URL — the same id as the `card`/`file-meta`
-// resource it renders; `type` is what distinguishes them. The scoped CSS the
-// rendering needs travels as first-class `css` resources linked through
-// `styles` (deduped in `included` by identity).
-export interface RenderedHtmlResource {
-  id: string;
-  type: typeof RenderedHtmlResourceType;
-  attributes: {
-    html: string;
-    cardType: string;
-    iconHtml?: string;
-    isError?: boolean;
-  };
-  relationships: {
-    styles: {
-      data: { type: typeof CssResourceType; id: string }[];
-    };
-  };
-  // The ancestor type the HTML was rendered as (echoed from the request's
-  // resolved render type).
-  meta?: {
-    renderType?: CodeRef;
-  };
-}
-
-// A scoped stylesheet referenced by a `rendered-html` resource. The scoped-CSS
+// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
 // URL base64-embeds the whole stylesheet, so it travels exactly once here in
 // `attributes.href` (the host loads it via `loader.import`); the `id` is a
 // stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
@@ -209,7 +163,7 @@ export interface CssResource {
 // it rides as its own deduped resource rather than repeated on each rendering.
 // Its `id` is the type's internal key (the `<module>/<name>` form already
 // carried as a row's `types[0]`), so identical types collapse to one
-// `(type, id)` in `included`. Reached from the `search-entry` (not the `html`)
+// `(type, id)` in `included`. Reached from the `entry` (not the `html`)
 // so item-only / no-HTML rows resolve their type descriptor too.
 export interface IconResource {
   id: string;
@@ -224,7 +178,7 @@ export interface IconResource {
   };
 }
 
-// The synthesized rendering-selection query bound on a `search-entry` (the
+// The synthesized rendering-selection query bound on an `entry` (the
 // "htmlQuery"): a boolean sub-query over the rendering dimensions — `eq`
 // leaves composed with `every`/`any`/`not`, with real boolean semantics
 // (`not(not(q))` selects exactly what `q` selects). It selects which of an
@@ -244,7 +198,7 @@ export interface HtmlQueryLeaf {
   renderType?: CodeRef;
 }
 
-// One v2 search result. A platform resource — never a userland card — so its
+// One search result. A platform resource — never a userland card — so its
 // relationships cannot collide with user `@field` names. Its `id` is the bare
 // card/file URL, shared with its `item` (`card`/`file-meta`) serialization;
 // `type` is the discriminator. The branches are composition: the `html`
@@ -253,9 +207,9 @@ export interface HtmlQueryLeaf {
 // `item` points at the live serialization. Which branches appear is governed
 // by the query's sparse fieldset (default: the selected renderings, falling
 // back to `item` — with the `html` relationship omitted — where none match).
-export interface SearchEntryResource {
+export interface EntryResource {
   id: string;
-  type: typeof SearchEntryResourceType;
+  type: typeof EntryResourceType;
   relationships: {
     html?: {
       data: { type: typeof HtmlResourceType; id: string }[];
@@ -273,9 +227,16 @@ export interface SearchEntryResource {
       data: { type: typeof IconResourceType; id: string };
     };
   };
+  // The entry's index-data generation (`boxel_index.generation`) — the
+  // generation the row's search doc / serialization was written at. Lets a
+  // consumer tell fresh index data from stale and pair it against the `html`
+  // resource's own generation (the two channels advance independently).
+  meta?: {
+    generation: number;
+  };
 }
 
-// One prerendered rendering of a card/file: a v2 resource whose `id` is the
+// One prerendered rendering of a card/file: a platform resource whose `id` is the
 // (card URL, format, renderType) composite (see `htmlResourceId`), so each
 // rendering of a card — per format × render type — is an independently
 // cacheable/dedupable resource. The scoped CSS it needs travels as
@@ -299,6 +260,13 @@ export interface HtmlResource {
       data: { type: typeof CssResourceType; id: string }[];
     };
   };
+  // The generation this rendering was produced at
+  // (`prerendered_html.generation`). Independent of the owning entry's
+  // index-data generation: HTML lands on its own channel and can lag the
+  // index, so a consumer compares the two to tell fresh HTML from stale.
+  meta?: {
+    generation: number;
+  };
 }
 
 export type LooseLinkableResource<T extends LinkableResource> = Omit<
@@ -311,27 +279,6 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
 
 export type LooseCardResource = LooseLinkableResource<CardResource>;
 export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
-
-//prerendered cards
-export interface PrerenderedCardResource {
-  id: string;
-  type: 'prerendered-card';
-  attributes: {
-    html: string;
-    cardType?: string;
-    iconHtml?: string;
-    isError?: true;
-  };
-  relationships: {
-    'prerendered-card-css': {
-      data: { id: string }[];
-    };
-  };
-  meta: Partial<Meta>;
-  links?: {
-    self?: string;
-  };
-}
 
 //validation - modules
 export function isModuleResource(resource: any): resource is ModuleResource {
@@ -351,24 +298,21 @@ export {
   isCardFields,
   isMeta,
   isRelationship,
-  isRenderedHtmlResource,
   isCssResource,
   isIconResource,
-  isIdentityOnlyCardResource,
-  isIdentityOnlyFileMetaResource,
-  isSearchEntryResource,
+  isEntryResource,
   isHtmlResource,
   isSparseItemResource,
 } from './card-document-shape.ts';
 
-// The map/set key for a JSON:API `(type, id)` identity pair. NUL-separated so
-// one pair can't alias another by concatenation — no resource type or id
-// contains a NUL byte.
-// `id` may be absent on an unsaved resource; the literal "undefined" segment
-// it produces is still a stable, non-aliasing key.
-export function resourceIdentity(type: string, id: string | undefined): string {
-  return `${type}\u0000${id}`;
-}
+// The map/set key for a JSON:API `(type, id)` identity pair lives in its own
+// dependency-free module so it is importable outside the card-api graph; it is
+// re-exported here so the index and existing call sites keep resolving it from
+// `resource-types`.
+export {
+  RESOURCE_IDENTITY_SEPARATOR,
+  resourceIdentity,
+} from './resource-identity.ts';
 
 // The `css` resource id: a content hash of the (base64-embedding) scoped-CSS
 // URL. Server and host compute it through this one helper so identical
@@ -435,23 +379,51 @@ export function extractRelationshipIds(
   return ids;
 }
 
-//validation - prerendered cards
-export function isPrerenderedCardResource(
-  resource: any,
-): resource is PrerenderedCardResource {
-  if (typeof resource !== 'object' || resource == null) {
+// True when `key` is `fieldName` followed by a plain array index (e.g.
+// `items.1`), the shape `meta.fields` uses for a primitive polymorphic
+// containsMany. Excludes deeper paths like `items.1.nested`.
+export function isDirectIndexedFieldKey(
+  key: string,
+  fieldName: string,
+): boolean {
+  let prefix = `${fieldName}.`;
+  if (!key.startsWith(prefix)) {
     return false;
   }
-  if ('id' in resource && typeof resource.id !== 'string') {
-    return false;
+  let suffix = key.slice(prefix.length);
+  let index = Number(suffix);
+  return Number.isInteger(index) && index >= 0 && String(index) === suffix;
+}
+
+// Remove the field metadata describing an array attribute that a patch fully
+// replaces. A merge that overwrites arrays in `attributes` still deep-merges the
+// `meta.fields` object, so without this the removed elements' per-index metadata
+// survives and can be re-applied to a new entry when the array grows again.
+// Covers both serialization shapes: the array-valued `meta.fields[fieldName]` of
+// a composite containsMany and the per-index `meta.fields['fieldName.0']` keys of
+// a primitive polymorphic containsMany.
+export function clearReplacedArrayFieldMeta(
+  meta: Partial<Meta> | undefined,
+  attributes: Record<string, unknown> | undefined,
+): void {
+  if (!meta?.fields || !attributes) {
+    return;
   }
-  if ('type' in resource && resource.type !== 'prerendered-card') {
-    return false;
+  let fields = meta.fields;
+  for (let [fieldName, value] of Object.entries(attributes)) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    delete fields[fieldName];
+    for (let metaKey of Object.keys(fields)) {
+      if (isDirectIndexedFieldKey(metaKey, fieldName)) {
+        delete fields[metaKey];
+      }
+    }
   }
-  if ('attributes' in resource && typeof resource.attributes !== 'object') {
-    return false;
+  if (Object.keys(fields).length === 0) {
+    delete meta.fields;
   }
-  return true;
 }
 
 export function modulesConsumedInMeta(meta: Partial<Meta>): string[] {

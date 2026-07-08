@@ -8,6 +8,7 @@ import {
 import { format } from 'date-fns';
 import {
   PRERENDER_JOB_ID_HEADER,
+  PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -64,6 +65,11 @@ type Registry = {
   servers: Map<string, ServerInfo>; // key: serverUrl
   affinities: Map<string, string[]>; // affinityKey (<type>:<value>) -> assigned serverUrls (deque semantics)
   lastAccessByAffinity: Map<string, number>;
+  // Latest host-shell token reported by a realm server (POST /host-shell).
+  // Echoed to prerender servers on every heartbeat response so they recycle
+  // when it changes (host redeployed). Undefined until first reported; reset
+  // on manager restart, re-learned from the next realm-server boot report.
+  hostShellHash?: string;
 };
 
 const log = logger('prerender-manager');
@@ -507,12 +513,67 @@ export function buildPrerenderManagerApp(options?: {
         warmedAffinities,
         affinityVacancy,
       });
+      // Echo the current host-shell token so the server can recycle its
+      // browser when the host is redeployed (see PRERENDER_HOST_SHELL_HASH_HEADER).
+      if (registry.hostShellHash) {
+        ctxt.set(PRERENDER_HOST_SHELL_HASH_HEADER, registry.hostShellHash);
+      }
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
       log.error('Error in heartbeat:', e);
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Heartbeat error' }] };
+    }
+  });
+
+  // The realm server reports the host-shell token it is currently serving
+  // (POST at boot, after it has fetched the new shell). A change means the
+  // host was redeployed; prerender servers pick it up on their next heartbeat
+  // and recycle. Storing the latest token (rather than counting) keeps this
+  // robust across the manager's own restart in the deploy train — the next
+  // realm-server boot re-reports the current token.
+  router.post('/host-shell', async (ctxt) => {
+    try {
+      let req = await fetchRequestFromContext(ctxt);
+      let raw = await req.text();
+      let requestBody: any = {};
+      if (raw) {
+        try {
+          requestBody = JSON.parse(raw);
+        } catch (e) {
+          log.debug('Invalid JSON body on /host-shell; treating as empty:', e);
+        }
+      }
+      let hash = requestBody?.data?.attributes?.hash;
+      if (typeof hash !== 'string' || hash.trim().length === 0) {
+        ctxt.status = 400;
+        ctxt.body = { errors: [{ status: 400, message: 'hash is required' }] };
+        return;
+      }
+      // Normalize and bound the token before storing it: it is echoed into a
+      // response header on every heartbeat, so a stray-whitespace variant would
+      // spuriously read as a change, and an oversized value would bloat every
+      // heartbeat response. The real token is a short hex digest, so anything
+      // longer is malformed — reject rather than silently truncate (a truncated
+      // token would never match and would recycle forever).
+      hash = hash.trim();
+      if (hash.length > 64) {
+        ctxt.status = 400;
+        ctxt.body = { errors: [{ status: 400, message: 'hash too long' }] };
+        return;
+      }
+      if (registry.hostShellHash !== hash) {
+        log.info(
+          `host shell token changed (${registry.hostShellHash ?? 'none'} -> ${hash}); prerender servers will recycle on next heartbeat`,
+        );
+        registry.hostShellHash = hash;
+      }
+      ctxt.status = 204;
+    } catch (e) {
+      log.error('Error in /host-shell:', e);
+      ctxt.status = 500;
+      ctxt.body = { errors: [{ status: 500, message: 'host-shell error' }] };
     }
   });
 
@@ -994,8 +1055,8 @@ export function buildPrerenderManagerApp(options?: {
       // Priority comes from the worker job (stamped onto the request
       // attributes by the wire-format threading). Pass through to
       // scoreCandidate so a high-priority request prefers servers
-      // without higher-priority pending work. Defaults to 0 (system
-      // priority) when absent for back-compat with older callers /
+      // without higher-priority pending work. Defaults to the lowest
+      // tier (0) when absent for back-compat with older callers /
       // direct curl. Only accept non-negative safe integers — priority
       // buckets are integer-keyed, and floats / negatives / values
       // beyond 2^53 would produce misleading routing comparisons.

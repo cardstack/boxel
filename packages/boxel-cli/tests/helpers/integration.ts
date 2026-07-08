@@ -19,6 +19,7 @@ export { registerUser } from '#realm-server/synapse';
 export {
   matrixURL,
   matrixRegistrationSecret,
+  realmSecretSeed,
 } from '#realm-server/tests/helpers/index';
 import {
   PgQueuePublisher,
@@ -86,6 +87,14 @@ export interface StartTestRealmServerOptions {
    * realm-server JWT via `setupJwtTestProfile`).
    */
   registerMatrixUser?: boolean;
+  /**
+   * Realm-prefix mappings (prefix → realm URL, e.g.
+   * `'@cli-test/prefixed/': '${TEST_REALM_SERVER_URL}/test/'`) registered on
+   * the server's virtual network before boot. A mapped realm serves its
+   * document ids in prefix (RRI) form, matching production prefix-form
+   * realms like `@cardstack/skills/`.
+   */
+  realmPrefixes?: Record<string, string>;
 }
 
 export async function startTestRealmServer(
@@ -122,6 +131,9 @@ export async function startTestRealmServer(
   });
 
   let virtualNetwork = createVirtualNetwork();
+  for (let [prefix, target] of Object.entries(options.realmPrefixes ?? {})) {
+    virtualNetwork.addRealmMapping(prefix, target);
+  }
   realmsRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-cli-realms-'));
 
   let realms: RealmConfig[] = options.realms ?? [

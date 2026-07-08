@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
@@ -24,10 +25,11 @@ import {
   waitUntil,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -351,7 +353,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -368,7 +370,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/brand-guide'),
+                  module: rri('@cardstack/base/brand-guide'),
                   name: 'default',
                 },
               },
@@ -729,11 +731,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
-        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon).
+        // The head-HTML injection dual-reads from prerendered_html (falling back
+        // to boxel_index), so set the head on both channels for the row.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let faviconHead = `'<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'`;
         await dbAdapter.execute(
           `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+           SET head_html = ${faviconHead}
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+        await dbAdapter.execute(
+          `UPDATE prerendered_html
+           SET head_html = ${faviconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,
@@ -782,10 +794,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        // The head-HTML injection dual-reads from prerendered_html (falling back
+        // to boxel_index), so set the head on both channels for the row.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let touchIconHead = `'<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'`;
         await dbAdapter.execute(
           `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+           SET head_html = ${touchIconHead}
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+        await dbAdapter.execute(
+          `UPDATE prerendered_html
+           SET head_html = ${touchIconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,
@@ -1345,6 +1367,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
       let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
       let dir: DirResult;
@@ -1363,7 +1388,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer } = await runTestRealmServer({
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
             fileSystem: {},
@@ -1442,7 +1467,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: '@cardstack/base/brand-guide',
                       name: 'default',
                     },
                   },
@@ -1474,7 +1499,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: '@cardstack/base/card-api',
                       name: 'CardDef',
                     },
                   },
@@ -1513,6 +1538,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           if (publishResponse.status !== 202) {
             throw new Error(
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+
+          // `_publish-realm` returns 202 before indexing finishes. Drive a
+          // reconcile pass to mount the published realm, then hit its readiness
+          // check, which awaits start() + any in-flight index — so this blocks
+          // until the swapped files are indexed and the assertions below query
+          // indexed content.
+          await testRealmServer.testingOnlyReconcile();
+          let readinessResponse = await request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
+          if (readinessResponse.status !== 200) {
+            throw new Error(
+              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
             );
           }
         },

@@ -1654,7 +1654,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1670,7 +1670,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1686,7 +1686,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1996,7 +1996,7 @@ module('Integration | Store', function (hooks) {
   // correctly-loaded full one. The route is overridden to return such a doc.
   function overrideSearchWith(doc: unknown) {
     registerRealmServerRoute({
-      path: '/_federated-search-v2',
+      path: '/_federated-search',
       handler: async () =>
         new Response(JSON.stringify(doc), {
           status: 200,
@@ -2005,7 +2005,7 @@ module('Integration | Store', function (hooks) {
     });
   }
 
-  // A v2 search-entry that carries only an `html` rendering — no `item`.
+  // An entry that carries only an `html` rendering — no `item`.
   function htmlOnlyEntryDoc(id: string, opts?: { isFileMeta?: boolean }) {
     let htmlId = opts?.isFileMeta
       ? `${id}#fitted`
@@ -2013,7 +2013,7 @@ module('Integration | Store', function (hooks) {
     return {
       data: [
         {
-          type: 'search-entry',
+          type: 'entry',
           id,
           relationships: {
             html: { data: [{ type: 'html', id: htmlId }] },

@@ -1,8 +1,32 @@
 import type { PgPrimitive } from './index.ts';
 import type { Deferred } from './deferred.ts';
 
-export const systemInitiatedPriority = 0;
+// Job priority is a worker-reservation floor, not an ordering: a worker
+// dequeues only jobs whose priority is at or above its configured
+// minimum, oldest-first among those. A higher number therefore reserves
+// a job to more (and to more-dedicated) worker pools.
+//
+// The tiers:
+//
+//   | priority | job                                |
+//   | -------- | ---------------------------------- |
+//   | 10       | any user-initiated job             |
+//   | 9        | user-initiated prerender-html      |
+//   | 1        | any system-initiated job           |
+//   | 0        | system-initiated prerender-html    |
+//
+// The prerender-html tiers sit one notch below their initiator tier so
+// a pool's floor can take in an initiator's plain jobs with or without
+// its (orders-of-magnitude slower) HTML rendering work. Two pools
+// exist: the high-priority pool floors at
+// `userInitiatedPrerenderHtmlPriority`, serving all user-initiated
+// work — prerender-html included — and never system-tier jobs; the
+// all-priority pool floors at `systemInitiatedPrerenderHtmlPriority`
+// and serves everything.
 export const userInitiatedPriority = 10;
+export const userInitiatedPrerenderHtmlPriority = 9;
+export const systemInitiatedPriority = 1;
+export const systemInitiatedPrerenderHtmlPriority = 0;
 
 export interface QueueRunner {
   start: () => Promise<void>;
@@ -97,7 +121,9 @@ export function getQueueJobCoalesceHandler(jobType: string) {
 export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
   return {
     ...args,
-    priority: args.priority ?? 0,
+    // A publish that doesn't state a priority is background work, so it
+    // takes the system-initiated tier.
+    priority: args.priority ?? systemInitiatedPriority,
   };
 }
 
@@ -141,6 +167,17 @@ export class Job<T> {
   constructor(id: number, notifier: Deferred<T>) {
     this.id = id;
     this.notifier = notifier;
+    // The result promise is live from the moment the job is published,
+    // before any caller reads `.done` and attaches a handler. A job that
+    // settles to a rejection in that window — or whose result is never
+    // awaited at all — would otherwise surface as an unhandled rejection,
+    // which under native Node aborts the whole process. Awaiting `.done`
+    // is opt-in: a caller that cares about the outcome reads it and
+    // handles the rejection there, and still receives it even though this
+    // no-op ran first, because a promise delivers to every attached
+    // handler. This guard only suppresses the unhandled-rejection signal
+    // for an outcome nobody is awaiting.
+    this.notifier.promise.catch(() => {});
   }
   get done(): Promise<T> {
     return this.notifier.promise;

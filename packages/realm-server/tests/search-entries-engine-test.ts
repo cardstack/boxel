@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   baseRRI,
@@ -10,14 +11,17 @@ import {
   type HtmlResource,
   type IconResource,
   type Realm,
-  type SearchEntryCollectionDocument,
-  type SearchEntryResource,
+  type EntryCollectionDocument,
+  type EntryResource,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 function htmlIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): HtmlResource | undefined {
   return doc.included?.find(
@@ -33,7 +37,7 @@ function normalizedHtml(resource: HtmlResource): string {
 }
 
 function itemIn(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
 ): CardResource | FileMetaResource | undefined {
   return doc.included?.find(
@@ -43,34 +47,34 @@ function itemIn(
   );
 }
 
-function cssIn(doc: SearchEntryCollectionDocument): CssResource[] {
+function cssIn(doc: EntryCollectionDocument): CssResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is CssResource => resource.type === 'css',
   );
 }
 
-function iconsIn(doc: SearchEntryCollectionDocument): IconResource[] {
+function iconsIn(doc: EntryCollectionDocument): IconResource[] {
   return (doc.included ?? []).filter(
     (resource): resource is IconResource => resource.type === 'icon',
   );
 }
 
-function iconIdOf(entry: SearchEntryResource): string | undefined {
+function iconIdOf(entry: EntryResource): string | undefined {
   return entry.relationships.icon?.data.id;
 }
 
 function entryFor(
-  doc: SearchEntryCollectionDocument,
+  doc: EntryCollectionDocument,
   id: string,
-): SearchEntryResource | undefined {
+): EntryResource | undefined {
   return doc.data.find((entry) => entry.id === id);
 }
 
-function htmlIdsOf(entry: SearchEntryResource): string[] | undefined {
+function htmlIdsOf(entry: EntryResource): string[] | undefined {
   return entry.relationships.html?.data.map((member) => member.id);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('searchEntries projection engine', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
@@ -131,6 +135,32 @@ module(basename(__filename), function () {
             },
           },
         },
+        'webpage.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class WebPage extends CardDef {
+            @field url = contains(StringField);
+          }
+        `,
+        'home.json': {
+          data: {
+            attributes: { url: 'https://example.com' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
+        // Over-match guard: stores the trailing-slash (toURL-normalized) form of
+        // home's url, so a `url` filter for the no-slash value must NOT match it.
+        'home-slash.json': {
+          data: {
+            attributes: { url: 'https://example.com/' },
+            meta: {
+              adoptsFrom: { module: rri('./webpage'), name: 'WebPage' },
+            },
+          },
+        },
         'hello.md': '# Hello from FileDef content',
       },
       onRealmSetup,
@@ -173,6 +203,95 @@ module(basename(__filename), function () {
       });
       assert.true(normalizedHtml(html).includes('Fitted Card Person: John'));
       assert.strictEqual(html.attributes.cardType, 'Person');
+    });
+
+    test('entries and html renderings carry meta.generation from their own channels', async function (assert) {
+      let doc =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      let entry = entryFor(doc, johnId)!;
+      let entryGeneration = entry.meta?.generation;
+      assert.strictEqual(
+        typeof entryGeneration,
+        'number',
+        'entry carries its index-data generation',
+      );
+      assert.ok(entryGeneration! > 0, `entry generation is positive`);
+      let html = htmlIn(doc, `${johnId}#fitted#${personKey}`)!;
+      let htmlGeneration = html.meta?.generation;
+      assert.strictEqual(
+        typeof htmlGeneration,
+        'number',
+        'html rendering carries its own generation',
+      );
+      assert.ok(htmlGeneration! > 0, 'html generation is positive');
+      // The index visit and the prerender-html visit still run fused, so a
+      // freshly-indexed row's two channels sit at the same generation — but
+      // they are threaded from separate columns (boxel_index.generation vs.
+      // prerendered_html.generation), ready to diverge once the split lands.
+      assert.strictEqual(
+        htmlGeneration,
+        entryGeneration,
+        'fused indexing leaves both channels at the same generation',
+      );
+    });
+
+    test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
+      // The realm has no registered prefix by default; register one so a
+      // canonical-RRI value resolves, and remove it afterward so the cached
+      // realm is left as we found it.
+      testRealm.virtualNetwork.addRealmMapping('@test-prefix/', realmHref);
+      try {
+        let prefixJohnId = `@test-prefix/${johnId.slice(realmHref.length)}`;
+
+        let { data: byPrefix } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            // Match rich-markdown's `linkedCards` query shape: a bare id filter
+            // with no type anchor (the primary `id` is not a definition field).
+            filter: { in: { id: [rri(prefixJohnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byPrefix.map((r) => r.id),
+          [rri(johnId)],
+          'prefix-form id value matches the card indexed under its URL-form id',
+        );
+
+        // The URL-form value still matches (it is one of its own equivalent
+        // forms) — existing callers are unaffected.
+        let { data: byUrl } = await searchCardsForTest(
+          testRealm.realmIndexQueryEngine,
+          {
+            filter: { in: { id: [rri(johnId)] } },
+          },
+        );
+        assert.deepEqual(
+          byUrl.map((r) => r.id),
+          [rri(johnId)],
+          'URL-form id value still matches',
+        );
+      } finally {
+        testRealm.virtualNetwork.removeRealmMapping('@test-prefix/');
+      }
+    });
+
+    test('an exact `in` filter on an ordinary `url` field matches exactly and does not over-match', async function (assert) {
+      // `url` here is an ordinary StringField, not a reference, and a URL-form
+      // value is not a registered prefix — so it is matched exactly as given,
+      // neither dropped (no normalized substitution) nor broadened. The `home`
+      // and `home-slash` fixtures differ only by a trailing slash, so a filter
+      // for the no-slash value must match `home` only.
+      let { data } = await searchCardsForTest(testRealm.realmIndexQueryEngine, {
+        filter: {
+          on: { module: rri(`${realmHref}webpage`), name: 'WebPage' },
+          in: { url: ['https://example.com'] },
+        },
+      });
+      assert.deepEqual(
+        data.map((r) => r.id),
+        [rri(`${realmHref}home`)],
+        'matches only the exact raw value; the trailing-slash card is not over-matched',
+      );
     });
 
     test('the type icon rides as a deduped icon resource on the entry', async function (assert) {
@@ -228,6 +347,57 @@ module(basename(__filename), function () {
       );
     });
 
+    test('html.format: head selects the document head rendering', async function (assert) {
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({
+          filterEq: { htmlQuery: { eq: { format: 'head' } } },
+          fields: { entry: ['html'] },
+        }),
+      );
+      assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'head' } });
+      // `head` is a scalar column rendered at the row's own native type, so its
+      // composite id carries the native key like the keyed formats do.
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entryFor(doc, johnId)!), [htmlId]);
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
+      );
+    });
+
+    test('html.format: head scoped to a single card URL returns only that card head markup', async function (assert) {
+      // Mirrors the host-mode published-view head prefetch: an html-only query
+      // at html.format: head, scoped to the single card by cardUrls.
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          cardUrls: [`${johnId}.json`],
+          filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
+          fields: { entry: ['html'] },
+        }),
+      );
+      assert.strictEqual(
+        doc.data.length,
+        1,
+        'only the scoped card is returned',
+      );
+      let entry = entryFor(doc, johnId)!;
+      let htmlId = `${johnId}#head#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entry), [htmlId]);
+      assert.strictEqual(
+        entry.relationships.item,
+        undefined,
+        'the html-only fieldset carries no item branch',
+      );
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'head');
+      assert.true(
+        normalizedHtml(html).includes('data-test-card-head-title'),
+        `head rendering carries the card head <title>: ${html.attributes.html}`,
+      );
+    });
+
     test('a disjunctive htmlQuery selects several renderings per entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
@@ -271,13 +441,13 @@ module(basename(__filename), function () {
       );
     });
 
-    test('fields[search-entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
+    test('fields[entry]=item: full serializations, no html, htmlQuery inert', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({
           // an htmlQuery alongside an item-only fieldset is inert, not an
           // error
           filterEq: { htmlQuery: { eq: { format: 'embedded' } } },
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
         }),
       );
       let entry = entryFor(doc, johnId)!;
@@ -309,18 +479,18 @@ module(basename(__filename), function () {
       );
     });
 
-    test('fields[search-entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
+    test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['item.firstName'] } }),
+        personQuery({ fields: { entry: ['item.firstName'] } }),
       );
       let item = itemIn(doc, johnId)!;
       assert.deepEqual(item.attributes, { firstName: 'John' });
       assert.deepEqual(item.meta.sparseFields, ['firstName']);
     });
 
-    test('fields[search-entry]=html,item: both branches on every entry', async function (assert) {
+    test('fields[entry]=html,item: both branches on every entry', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html', 'item'] } }),
+        personQuery({ fields: { entry: ['html', 'item'] } }),
       );
       let entry = entryFor(doc, johnId)!;
       let htmlId = `${johnId}#fitted#${personKey}`;
@@ -347,8 +517,14 @@ module(basename(__filename), function () {
     });
 
     test('mixed index: a row with no matching rendering falls back per the fieldset', async function (assert) {
+      // Clear the rendering from both channels: the engine dual-reads HTML from
+      // prerendered_html, falling back to boxel_index, so a rendering is absent
+      // only when neither carries it.
       await dbAdapter.execute(
         `UPDATE boxel_index SET fitted_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL WHERE url = '${janeId}.json'`,
       );
       // default mode: the fallback row carries item and omits the html
       // relationship entirely
@@ -384,7 +560,7 @@ module(basename(__filename), function () {
 
       // a pinned html branch keeps membership visible with an empty array
       let pinned = await testRealm.realmIndexQueryEngine.searchEntries(
-        personQuery({ fields: { 'search-entry': ['html'] } }),
+        personQuery({ fields: { entry: ['html'] } }),
       );
       let pinnedJane = entryFor(pinned, janeId)!;
       assert.deepEqual(
@@ -402,6 +578,11 @@ module(basename(__filename), function () {
       // html — at the format the htmlQuery names and the row's own type.
       await dbAdapter.execute(
         `UPDATE boxel_index SET has_error = TRUE, pristine_doc = NULL, fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
+      );
+      // The renderings the engine reads live on prerendered_html; clear them
+      // there too so nothing renderable remains for the error row.
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET fitted_html = NULL, embedded_html = NULL, atom_html = NULL, head_html = NULL WHERE url = '${janeId}.json'`,
       );
       let doc =
         await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
@@ -427,7 +608,7 @@ module(basename(__filename), function () {
           'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
           eq: { 'item.url': fileUrl },
         },
-        fields: { 'search-entry': ['item'] },
+        fields: { entry: ['item'] },
       });
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(query);
       let entry = entryFor(doc, fileUrl)!;

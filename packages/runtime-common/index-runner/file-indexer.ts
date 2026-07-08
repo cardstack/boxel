@@ -32,16 +32,19 @@ export interface FileIndexerOptions {
   lastModified: number;
   resourceCreatedAt: number;
   hasModulePrerender?: boolean;
+  // True when this file is a card-instance .json — the fused visit dual-
+  // indexes those (an `instance` row plus this `file` row).
+  isCardInstance?: boolean;
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Extract / render results from the fused visit. extractResult may be
-  // undefined if the visit short-circuited before the fileExtract pass ran;
-  // renderResult may be undefined if the visit skipped fileRender (e.g. for
-  // module files, which produce HTML via their own module prerender).
+  // Extract result from the index visit and merged render result from the
+  // index + prerender-html visits. extractResult may be undefined if the
+  // visit short-circuited before the fileExtract pass ran; renderResult may
+  // be undefined if no visit produced a file rendering.
   precomputedExtractResult: FileExtractResponse | undefined;
   precomputedRenderResult?: FileRenderResponse;
-  // Timing / diagnostic payload attached to the fused-visit response;
+  // Timing / diagnostic payload attached to the visit responses;
   // persisted onto `boxel_index.diagnostics` for this file's row.
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
@@ -59,6 +62,7 @@ export async function performFileIndexing({
   lastModified,
   resourceCreatedAt,
   hasModulePrerender,
+  isCardInstance,
   realmURL: _realmURL,
   auth: _auth,
   jobInfo,
@@ -164,6 +168,29 @@ export async function performFileIndexing({
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
 
+  // Shared by the success entry and the dependency-error entry below, so the
+  // two rows carry the same search keys. Two of them are synthetic (stamped
+  // after the extractor's searchDoc so they win deterministically):
+  // - `_isCardInstance` marks the `file` row of a dual-indexed card-instance
+  //   .json so mixed cards+files search can exclude it (the card already
+  //   appears via its `instance` row). It rides on the dependency-error entry
+  //   too, so a card .json whose card is in an error state stays out of file
+  //   search. Stamped only when true; plain file docs don't carry the key.
+  // - `_title` is the row's display title (a file's is its name) under a
+  //   neutral key that card docs also carry (stamped alongside `_cardType`
+  //   during card render), so one mixed query can substring-match
+  //   (`contains: {_title}`) and A-Z sort (`search_doc->>'_title'`, NULLS
+  //   LAST) cards and files uniformly.
+  let searchData = {
+    url: fileURL,
+    sourceUrl: fileURL,
+    name,
+    contentType,
+    ...(extractResult.searchDoc ?? {}),
+    ...(isCardInstance ? { _isCardInstance: true } : {}),
+    _title: name,
+  };
+
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
   let dependencyError =
@@ -179,31 +206,37 @@ export async function performFileIndexing({
     await updateEntry(entryURL, {
       type: 'file-error',
       error: normalizedDependencyError,
-      searchData: {
-        url: fileURL,
-        sourceUrl: fileURL,
-        name,
-        contentType,
-        ...(extractResult.searchDoc ?? {}),
-      },
+      searchData,
       types: fileTypes,
       diagnostics,
     });
     return 'error';
   }
 
-  // HTML for the file entry comes from the fused visit's fileRender pass
-  // (when the visit chose to run it — modules skip fileRender since their
-  // module prerender already produces HTML).
+  // HTML for the file entry comes from the visits' fileRender passes (icon
+  // from the index visit, html formats + markdown from the prerender-html
+  // visit).
   let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
   if (renderResult?.error) {
     logWarn(
       `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
     );
   }
-  // hasModulePrerender is retained on the options as a hint for callers but
-  // is no longer acted on here — the fused visit already gates fileRender.
+  // hasModulePrerender remains on the options as a hint for callers; the visit
+  // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
+
+  // A frontmatter parse failure doesn't fail the file (it still indexes
+  // body-only), so it rides on the row's diagnostics — mirroring brokenLinks —
+  // where `/_indexing-errors` surfaces it for the author. Merge it onto
+  // whatever render-side diagnostics the visit already produced.
+  let fileDiagnostics: Diagnostics | undefined =
+    extractResult.frontmatterParseError
+      ? {
+          ...(diagnostics ?? {}),
+          frontmatterParseError: extractResult.frontmatterParseError,
+        }
+      : diagnostics;
 
   await updateEntry(entryURL, {
     type: 'file',
@@ -211,13 +244,7 @@ export async function performFileIndexing({
     resourceCreatedAt,
     deps,
     resource: extractResult.resource ?? null,
-    searchData: {
-      url: fileURL,
-      sourceUrl: fileURL,
-      name,
-      contentType,
-      ...(extractResult.searchDoc ?? {}),
-    },
+    searchData,
     types: fileTypes,
     displayNames: extractResult.displayNames ?? [],
     isolatedHtml: renderResult?.isolatedHTML ?? undefined,
@@ -227,7 +254,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    diagnostics,
+    diagnostics: fileDiagnostics,
   });
 
   return 'indexed';

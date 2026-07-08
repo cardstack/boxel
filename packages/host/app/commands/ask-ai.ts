@@ -37,14 +37,14 @@ export default class AskAiCommand extends HostBaseCommand<
       this.commandContext,
     );
 
-    let [skills, openCards] = await Promise.all([
+    let [skillIds, openCards] = await Promise.all([
       this.matrixService.loadDefaultSkills('code') || Promise.resolve([]),
       this.operatorModeStateService.getOpenCards.perform() ||
         Promise.resolve([]),
     ]);
     let { roomId } = await createRoomCommand.execute({
       name: 'AI App Generator Assistant',
-      enabledSkills: skills,
+      enabledSkillIds: skillIds,
       llmMode: input.llmMode,
     });
     await sendMessageCommand.execute({

@@ -54,6 +54,9 @@ export interface HydratableEntryArgs {
   errorDoc?: ErrorEntry;
   // The hydration gesture for an HTML-backed row.
   mode: HydrationMode;
+  // Whether the row registers with the operator-mode overlay; `false` renders
+  // it plainly (no chip / options menu / selection toggle).
+  overlays: boolean;
 }
 
 class _HydratableEntryComponent {
@@ -67,6 +70,7 @@ class _HydratableEntryComponent {
     readonly isError: boolean,
     readonly errorDoc: ErrorEntry | undefined,
     readonly mode: HydrationMode,
+    readonly overlays: boolean,
   ) {}
 }
 
@@ -82,6 +86,7 @@ setComponentTemplate(
       @isError={{this.isError}}
       @errorDoc={{this.errorDoc}}
       @mode={{this.mode}}
+      @overlays={{this.overlays}}
       ...attributes
     />`,
     {
@@ -127,5 +132,6 @@ export function hydratableEntryComponent(
     args.isError,
     args.errorDoc,
     args.mode,
+    args.overlays,
   ) as unknown as EntryComponent;
 }

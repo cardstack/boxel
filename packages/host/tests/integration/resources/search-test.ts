@@ -24,6 +24,8 @@ import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -1363,4 +1365,643 @@ module(`Integration | search resource`, function (hooks) {
       });
     },
   );
+
+  module(`client-side Store filtering step`, function (innerHooks) {
+    // Counts only `_federated-search` calls, so an assertion that the client
+    // step recomputed "without a server round-trip" isn't perturbed by other
+    // traffic in the test environment.
+    let fetchCalls: number;
+    let restoreFetch: (() => void) | undefined;
+
+    innerHooks.beforeEach(function () {
+      fetchCalls = 0;
+      let realmServer = getService('realm-server') as RealmServerService;
+      let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+      realmServer.maybeAuthedFetchForRealms = (async (url, ...args) => {
+        if (typeof url === 'string' && url.includes('_federated-search')) {
+          fetchCalls++;
+        }
+        return await original(url, ...args);
+      }) as RealmServerService['maybeAuthedFetchForRealms'];
+      restoreFetch = () => {
+        realmServer.maybeAuthedFetchForRealms = original;
+      };
+    });
+
+    innerHooks.afterEach(function () {
+      restoreFetch?.();
+      restoreFetch = undefined;
+    });
+
+    const bookRef = { module: testRRI('book'), name: 'Book' };
+    let abdelRahmanQuery: Query = {
+      filter: { on: bookRef, eq: { 'author.lastName': 'Abdel-Rahman' } },
+    };
+
+    // Hydrate a Book into the Store without persisting it — a candidate the
+    // server doesn't (yet) know about, standing in for a card created/edited
+    // locally before the realm reindexes.
+    async function addBookCandidate(
+      idPath: string,
+      firstName: string,
+      lastName: string,
+    ): Promise<any> {
+      return await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}${idPath}`,
+            attributes: {
+              author: { firstName, lastName },
+              editions: 0,
+              pubDate: '2024-01-01',
+            },
+            meta: { adoptsFrom: bookRef },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
+      );
+    }
+
+    test(`a locally added matching card appears in an eligible live search without a server round-trip`, async function (assert) {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'server returns the two matching books',
+      );
+
+      let fetchesBefore = fetchCalls;
+      await addBookCandidate('books/local-new', 'Apple', 'Abdel-Rahman');
+      await settled();
+
+      let ids = search.instances.map((i) => i.id);
+      assert.strictEqual(
+        search.instances.length,
+        3,
+        'the locally added matching card is merged into the result set',
+      );
+      assert.ok(
+        ids.includes(rri(`${testRealmURL}books/local-new`)),
+        'the new card appears in results',
+      );
+      assert.strictEqual(
+        fetchCalls,
+        fetchesBefore,
+        'no _federated-search fetch fired for the client-side recompute',
+      );
+    });
+
+    test(`a surfaced candidate is not duplicated even though it is keyed by both local and remote id`, async function (assert) {
+      // A hydrated instance lives in the Store identity map under BOTH its
+      // local id and its remote id (see gc-card-store's setCardItem). Without
+      // deduping, the candidate pool yields it twice and the client merge
+      // renders the same card as two rows. This guards that the displayed set
+      // holds each card once regardless of the dual keying.
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      let candidate = await addBookCandidate(
+        'books/dupe-check',
+        'Apple',
+        'Abdel-Rahman',
+      );
+      await settled();
+
+      // The Store keys the same instance under two ids, but the candidate pool
+      // must surface it once.
+      let poolOccurrences = storeService
+        .allCardInstances()
+        .filter((c) => c === candidate).length;
+      assert.strictEqual(
+        poolOccurrences,
+        1,
+        'the candidate appears exactly once in allCardInstances despite dual keying',
+      );
+
+      let ids = search.instances.map((i) => i.id);
+      assert.strictEqual(
+        ids.length,
+        new Set(ids).size,
+        'the displayed result set has no duplicate ids',
+      );
+      assert.strictEqual(
+        ids.filter((id) => id === rri(`${testRealmURL}books/dupe-check`))
+          .length,
+        1,
+        'the surfaced candidate is rendered exactly once',
+      );
+      assert.strictEqual(
+        search.instances.length,
+        3,
+        'two server books plus the single surfaced candidate',
+      );
+    });
+
+    test(`a server-returned card that no longer matches local state is removed`, async function (assert) {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(search.instances.length, 2);
+
+      // Mutate a server-returned card so it no longer satisfies the filter.
+      // The removal is derived from in-memory state; we read synchronously,
+      // before the (async, debounced) autosave + reindex can re-query.
+      let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
+      book1.author.lastName = 'Changed';
+
+      let ids = search.instances.map((i) => i.id);
+      assert.strictEqual(
+        search.instances.length,
+        1,
+        'the now-non-matching server card is removed',
+      );
+      assert.notOk(
+        ids.includes(rri(`${testRealmURL}books/1`)),
+        'books/1 dropped from results',
+      );
+    });
+
+    test(`editing a candidate toggles its membership reactively (recompute on Store mutation)`, async function (assert) {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(search.instances.length, 2);
+
+      let candidate = await addBookCandidate(
+        'books/edit-me',
+        'Switch',
+        'Other',
+      );
+      await settled();
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'a candidate that does not match is not shown',
+      );
+
+      candidate.author.lastName = 'Abdel-Rahman';
+      assert.strictEqual(
+        search.instances.length,
+        3,
+        'after editing to match, the candidate appears',
+      );
+      assert.ok(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}books/edit-me`)),
+      );
+
+      candidate.author.lastName = 'Other again';
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'after editing away from match, the candidate disappears',
+      );
+    });
+
+    test(`a merged candidate is reference-retained while displayed and released when it leaves`, async function (assert) {
+      // Candidates surfaced by the merge are absent from `_instances`, so
+      // `updateInstances`' reference bookkeeping doesn't cover them. Without a
+      // retained reference they sit at count zero and the Store GC can sweep
+      // them mid-render. The resource must hold a reference while the candidate
+      // is displayed and drop it once it leaves the result set.
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      let candidate = await addBookCandidate(
+        'books/retained',
+        'Apple',
+        'Abdel-Rahman',
+      );
+      let candidateId = `${testRealmURL}books/retained`;
+      await settled();
+      assert.strictEqual(
+        storeService.getReferenceCount(candidateId),
+        0,
+        'a freshly hydrated candidate carries no reference before it is displayed',
+      );
+
+      // Reading `instances` drives the merge derivation, which declares the
+      // candidate as in-use; the reference reconciliation is deferred, so flush
+      // with settled() before asserting.
+      assert.ok(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate is displayed',
+      );
+      await settled();
+      assert.ok(
+        storeService.getReferenceCount(candidateId) > 0,
+        'a Store reference is retained while the candidate is displayed',
+      );
+
+      // Edit it out of the result set; the retained reference must be released.
+      candidate.author.lastName = 'Other';
+      assert.notOk(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate leaves the result set',
+      );
+      await settled();
+      assert.strictEqual(
+        storeService.getReferenceCount(candidateId),
+        0,
+        'the reference is released once the candidate is no longer displayed',
+      );
+    });
+
+    test(`the merged set is ordered per the query sort`, async function (assert) {
+      let sortedQuery: Query = {
+        filter: { on: bookRef, eq: { 'author.lastName': 'Abdel-Rahman' } },
+        sort: [{ by: 'author.firstName', on: bookRef, direction: 'asc' }],
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: sortedQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      // Server order by author.firstName asc: Mango (books/1), Van Gogh (books/2).
+      assert.deepEqual(
+        search.instances.map((i) => i.id),
+        [`${testRealmURL}books/1`, `${testRealmURL}books/2`],
+      );
+
+      await addBookCandidate('books/apple', 'Apple', 'Abdel-Rahman');
+      await settled();
+      assert.deepEqual(
+        search.instances.map((i) => i.id),
+        [
+          `${testRealmURL}books/apple`,
+          `${testRealmURL}books/1`,
+          `${testRealmURL}books/2`,
+        ],
+        'the candidate sorts into position by author.firstName',
+      );
+    });
+
+    test(`one-shot store.search never runs the client step (server-only)`, async function (assert) {
+      await addBookCandidate('books/local-only', 'Local', 'Abdel-Rahman');
+
+      let result = (await storeService.search(abdelRahmanQuery, [
+        testRealmURL,
+      ])) as CardDef[];
+      assert.notOk(
+        result
+          .map((c) => c.id)
+          .includes(`${testRealmURL}books/local-only` as CardDef['id']),
+        'one-shot store.search ignores the local-only candidate',
+      );
+    });
+
+    test(`a non-live search is a server-only passthrough`, async function (assert) {
+      await addBookCandidate('books/passthrough', 'Zoe', 'Abdel-Rahman');
+
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'a non-live search ignores the local candidate',
+      );
+      assert.notOk(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}books/passthrough`)),
+      );
+    });
+
+    test(`an incompletely-loaded (paginated) result set skips the client step`, async function (assert) {
+      let pagedQuery: Query = {
+        filter: { type: bookRef },
+        page: { number: 0, size: 2 },
+        sort: [{ by: 'author.firstName', on: bookRef, direction: 'asc' }],
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: pagedQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(search.instances.length, 2, 'first page holds 2');
+      assert.strictEqual(
+        search.meta.page?.total,
+        4,
+        'total is 4 across all pages — the loaded set is incomplete',
+      );
+
+      await addBookCandidate('books/paged-extra', 'Aaa', 'Zzz');
+      await settled();
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'an incomplete result set is not reconciled against the Store',
+      );
+      assert.notOk(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}books/paged-extra`)),
+      );
+    });
+
+    test(`a non-client-evaluable filter (matches) forces server-only`, async function (assert) {
+      // `matches` is a full-text (markdown) predicate the client matcher cannot
+      // evaluate, so an otherwise-live search over it is a server-only
+      // passthrough: its displayed set stays exactly the server result, with no
+      // Store candidate merged in.
+      let matchesQuery: Query = { filter: { matches: 'Abdel-Rahman' } };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: matchesQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      let serverIds = search.instances.map((i) => i.id);
+
+      // A hydrated Store candidate in the target realm — the kind a
+      // client-evaluable filter would surface — must not be merged into a
+      // matches search.
+      await addBookCandidate('books/matches-extra', 'Nope', 'Abdel-Rahman');
+      await settled();
+      assert.ok(
+        storeService.peek(`${testRealmURL}books/matches-extra`),
+        'the candidate is hydrated in the Store',
+      );
+      assert.deepEqual(
+        search.instances.map((i) => i.id),
+        serverIds,
+        'the displayed set stays equal to the server result — no candidate merged',
+      );
+      assert.notOk(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}books/matches-extra`)),
+        'the locally added candidate is not pulled into a matches search',
+      );
+    });
+
+    test(`a candidate evicted from the Store drops out of the displayed set on the next reactive pass`, async function (assert) {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      await addBookCandidate('books/will-evict', 'Plum', 'Abdel-Rahman');
+      await settled();
+      let candidateId = `${testRealmURL}books/will-evict`;
+      assert.ok(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate is displayed before eviction',
+      );
+
+      // Evict from the Store without going through realm DELETE — the reactive
+      // recompute must respond to a Store-level removal on its own, distinct
+      // from the realm-invalidation path which would also re-run the server
+      // search and could mask the recompute under test.
+      let fetchesBefore = fetchCalls;
+      (storeService as any).store.delete(candidateId);
+      await settled();
+
+      assert.notOk(
+        search.instances.map((i) => i.id).includes(rri(candidateId)),
+        'the candidate drops out after a Store eviction',
+      );
+      assert.strictEqual(
+        fetchCalls,
+        fetchesBefore,
+        'no _federated-search fetch fired for the recompute',
+      );
+    });
+
+    test(`a candidate with an unresolvable predicate (unloaded linksTo) is not added`, async function (assert) {
+      // The merge rule is "unresolvable never adds and never removes". This
+      // test pins the "never adds" half: a Post candidate whose `article`
+      // relationship points at a card not in the Store is unresolvable for any
+      // predicate over `article.*`, and so must NOT be merged into the result
+      // set. The symmetric "never removes" guarantee falls out of the same
+      // matcher branch.
+      let postRef = { module: testRRI('post'), name: 'Post' };
+      let query: Query = {
+        filter: { on: postRef, eq: { 'article.cardTitle': 'Any Title' } },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      let serverIds = search.instances.map((i) => i.id);
+
+      await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}posts/unresolved`,
+            attributes: { cardTitle: 'Lonely Post' },
+            relationships: {
+              article: {
+                links: { self: `${testRealmURL}does/not/exist` },
+              },
+            },
+            meta: { adoptsFrom: postRef },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
+      );
+      await settled();
+
+      assert.deepEqual(
+        search.instances.map((i) => i.id),
+        serverIds,
+        'an unresolvable candidate does not enter the displayed set',
+      );
+      assert.notOk(
+        search.instances
+          .map((i) => i.id)
+          .includes(rri(`${testRealmURL}posts/unresolved`)),
+        'the unresolvable candidate is absent',
+      );
+    });
+
+    test(`a Store candidate outside the query's target realm is not added`, async function (assert) {
+      // Candidate-pool reduction is realm-scoped (`isInTargetRealm`), so a
+      // hydrated card whose id falls outside `realms: [testRealmURL]` must
+      // not surface even when it satisfies the filter — that's another
+      // realm's data and the local search has no authority over it.
+      let otherRealmURL = 'https://other-realm.example/';
+      await storeService.add(
+        {
+          data: {
+            type: 'card',
+            id: `${otherRealmURL}books/foreign`,
+            attributes: {
+              author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
+              editions: 0,
+              pubDate: '2024-01-01',
+            },
+            meta: { adoptsFrom: bookRef },
+          },
+        } as LooseSingleCardDocument,
+        { doNotPersist: true },
+      );
+
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+
+      let ids = search.instances.map((i) => i.id).map(String);
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'only the two in-realm matches are displayed',
+      );
+      assert.notOk(
+        ids.some((id) => id.startsWith(otherRealmURL)),
+        'the candidate outside [testRealmURL] is excluded',
+      );
+    });
+
+    test(`override authority: a server-card removal and a candidate add both reach the displayed set`, async function (assert) {
+      // The merge applies corrections in BOTH directions. A server-returned
+      // card mutated out of the filter is dropped, and a local-only candidate
+      // that matches is surfaced — the converged displayed set has the same
+      // count as the server's but different members.
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.strictEqual(search.instances.length, 2);
+
+      // Drop a server card via a local edit AND surface a local-only
+      // candidate via a Store add. The assertions verify convergence, not
+      // single-pass: the `addBookCandidate` await between the two mutations
+      // yields the event loop, so the merge may re-derive twice.
+      let book1 = storeService.peek(`${testRealmURL}books/1`) as any;
+      book1.author.lastName = 'Changed';
+      await addBookCandidate('books/local-add', 'Local', 'Abdel-Rahman');
+      await settled();
+
+      let ids = search.instances.map((i) => i.id);
+      assert.strictEqual(
+        search.instances.length,
+        2,
+        'one server card dropped, one local candidate surfaced — same count, different members',
+      );
+      assert.notOk(
+        ids.includes(rri(`${testRealmURL}books/1`)),
+        'the now-non-matching server card is gone',
+      );
+      assert.ok(
+        ids.includes(rri(`${testRealmURL}books/local-add`)),
+        'the local-only matching candidate is present',
+      );
+    });
+  });
 });

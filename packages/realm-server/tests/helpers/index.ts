@@ -1,11 +1,12 @@
-import {
+import fsExtra from 'fs-extra';
+const {
   writeFileSync,
   writeJSONSync,
   readdirSync,
   statSync,
   ensureDirSync,
   copySync,
-} from 'fs-extra';
+} = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
@@ -17,9 +18,15 @@ import type {
   Plan,
   RealmAdapter,
   DefinitionLookup,
+  Query,
+  CardResource,
+  FileMetaResource,
+  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 import {
   Realm,
+  searchEntryWireQueryFromQuery,
+  parseSearchEntryQueryFromPayload,
   baseRealm,
   VirtualNetwork,
   Worker,
@@ -46,7 +53,8 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.t
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
-import { sign as jwtSign } from 'jsonwebtoken';
+import jsonwebtoken from 'jsonwebtoken';
+const { sign: jwtSign } = jsonwebtoken;
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -103,6 +111,61 @@ function environmentPortOffset(): number {
 }
 
 /** Return a test port, shifted by a per-environment offset when needed. */
+// Test-only: fetch the card/file-meta serializations matching a card-rooted
+// `Query` through the entry engine, returning them in the
+// `{ data, meta }` collection shape index assertions read. Requests the
+// data-only fieldset (one full `item` per entry).
+export async function searchCardsForTest(
+  engine: Realm['realmIndexQueryEngine'],
+  cardQuery: Query,
+  opts?: Parameters<Realm['realmIndexQueryEngine']['searchEntries']>[1],
+): Promise<{
+  data: (CardResource | FileMetaResource)[];
+  included: (CardResource | FileMetaResource)[];
+  meta: QueryResultsMeta;
+}> {
+  let doc = await engine.searchEntries(
+    parseSearchEntryQueryFromPayload(
+      searchEntryWireQueryFromQuery(cardQuery, { fields: ['item'] }),
+    ),
+    opts,
+  );
+  // The top-level result items (one per entry, by the entry's `item` rel) land
+  // in `data`; every other linked card/file-meta resource is sideloaded in
+  // `included` — the legacy collection shape these assertions read.
+  // Key by the full `(type, id)` the entry `item` relationship carries,
+  // not `id` alone — matches the wire contract (and the store's resolver).
+  let itemKeys = new Set<string>();
+  for (let entry of doc.data) {
+    let ref = entry.relationships.item?.data;
+    if (ref) {
+      itemKeys.add(`${ref.type}:${ref.id}`);
+    }
+  }
+  let itemsByKey = new Map<string, CardResource | FileMetaResource>();
+  let included: (CardResource | FileMetaResource)[] = [];
+  for (let resource of doc.included ?? []) {
+    if (resource.type !== 'card' && resource.type !== 'file-meta') {
+      continue;
+    }
+    if (resource.id == null) {
+      continue;
+    }
+    let key = `${resource.type}:${resource.id}`;
+    if (itemKeys.has(key)) {
+      itemsByKey.set(key, resource);
+    } else {
+      included.push(resource);
+    }
+  }
+  let data = doc.data
+    .map((entry) => entry.relationships.item?.data)
+    .filter((ref): ref is NonNullable<typeof ref> => ref != null)
+    .map((ref) => itemsByKey.get(`${ref.type}:${ref.id}`))
+    .filter((item): item is CardResource | FileMetaResource => Boolean(item));
+  return { data, included, meta: doc.meta };
+}
+
 export function testPort(basePort: number): number {
   return basePort + environmentPortOffset();
 }
@@ -217,6 +280,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
+export const aiBotDelegationSecret = `delegation shared secret for tests`;
 
 function getMatrixRegistrationSecret(): string {
   let secret =
@@ -281,6 +345,11 @@ export function cleanWhiteSpace(text: string) {
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  // Mirror the host's network.ts and main.ts symmetry: when the
+  // baseRealm fake URL is registered as a URL alias, also register the
+  // @cardstack/base/ realm-prefix mapping so unresolveURL on either
+  // form canonicalises to the same RRI.
+  virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
   return virtualNetwork;
 }
 
@@ -736,7 +805,7 @@ async function waitForQueueIdle(
 
 // Pure diagnostics — never changes behavior. `_types` (and any reader of the
 // precomputed `realm_meta`) returns instances from the `realm_meta` row whose
-// `realm_version` equals `realm_versions.current_version`. An empty result has
+// `generation` equals `realm_generations.current_generation`. An empty result has
 // three distinguishable causes, and this dump tells them apart in the CI log
 // without needing another iteration:
 //   1. The from-scratch index produced no instance rows at all
@@ -744,7 +813,7 @@ async function waitForQueueIdle(
 //   2. Instances were indexed but their `types` couldn't be resolved (a render
 //      or module fetch failed) — `#fetchTypeSummary` requires `types->>0`, so
 //      those rows silently drop out of `realm_meta` (null_types > 0).
-//   3. No `realm_meta` row matches `current_version` (a version mismatch —
+//   3. No `realm_meta` row matches `current_generation` (a version mismatch —
 //      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
 //      even though instances exist (matched = NONE while instances > 0).
 // Logged unconditionally as a one-liner; degraded/error instance rows are
@@ -757,16 +826,16 @@ export async function logRealmIndexDiagnostics(
 ): Promise<void> {
   try {
     let [versionRow] = await dbAdapter.execute(
-      `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
       { bind: [realmURL] },
     );
-    let currentVersion = versionRow?.current_version ?? null;
+    let currentVersion = versionRow?.current_generation ?? null;
 
     let metaRows = await dbAdapter.execute(
-      `SELECT realm_version,
+      `SELECT generation,
               COALESCE(jsonb_array_length(value->'instances'), -1) AS instances,
               COALESCE(jsonb_array_length(value->'files'), -1) AS files
-       FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+       FROM realm_meta WHERE realm_url = $1 ORDER BY generation`,
       { bind: [realmURL] },
     );
 
@@ -782,16 +851,15 @@ export async function logRealmIndexDiagnostics(
     let metaSummary =
       metaRows
         .map(
-          (r) =>
-            `v${r.realm_version}{instances:${r.instances},files:${r.files}}`,
+          (r) => `v${r.generation}{instances:${r.instances},files:${r.files}}`,
         )
         .join(', ') || '(none)';
-    let matched = metaRows.find((r) => r.realm_version === currentVersion);
+    let matched = metaRows.find((r) => r.generation === currentVersion);
     let nullTypes = Number(counts?.null_types ?? 0);
     let errored = Number(counts?.errored ?? 0);
 
     console.log(
-      `[realm-index-diag ${label}] realm=${realmURL} current_version=${currentVersion} ` +
+      `[realm-index-diag ${label}] realm=${realmURL} current_generation=${currentVersion} ` +
         `realm_meta=[${metaSummary}] ` +
         `matched=${matched ? `instances:${matched.instances}` : 'NONE(version-mismatch)'} ` +
         `boxel_index.instances=${counts?.instances ?? '?'} null_types=${nullTypes} errored=${errored}`,
@@ -1330,6 +1398,7 @@ export async function runTestRealmServer({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1479,6 +1548,7 @@ export async function runTestRealmServerWithRealms({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1935,7 +2005,7 @@ function realmEventIsIndex(
 export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
 
 export function fixtureDir(name: RealmFixtureName): string {
-  return join(__dirname, '..', 'fixtures', name);
+  return join(import.meta.dirname, '..', 'fixtures', name);
 }
 
 type InternalPermissionedRealmSetupOptions = {
@@ -2642,6 +2712,11 @@ async function buildBaseRealmTemplate(
       `http://127.0.0.1:${baseRealmTemplateBuilderPort}/base/`,
     );
     virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+    // Mirror the symmetry from createVirtualNetwork: register the
+    // @cardstack/base/ realm-prefix mapping too. unresolveURL on the
+    // virtual base-realm URL needs the prefix mapping to canonicalise
+    // to RRI form, matching what the host-side prerender writes.
+    virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealmURL.href);
 
     let definitionLookup = new CachingDefinitionLookup(
       dbAdapter,
@@ -2677,6 +2752,7 @@ async function buildBaseRealmTemplate(
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
+      aiBotDelegationSecret,
       matrixRegistrationSecret,
       realmsRootPath: dirSync().name,
       dbAdapter,
@@ -2891,7 +2967,7 @@ export function realmConfigCardJSON(
       attributes: attrs,
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/realm-config',
+          module: '@cardstack/base/realm-config',
           name: 'RealmConfig',
         },
       },

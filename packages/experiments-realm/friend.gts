@@ -14,7 +14,7 @@ export class Friend extends CardDef {
   static displayName = 'Friend';
   static icon = UserPlus;
   @field firstName = contains(StringField);
-  @field friend = linksTo(() => Friend);
+  @field friend = linksTo(() => Friend, { searchable: true });
   @field test = contains(NumberField, {
     computeVia: function () {
       // make sure we don't blow up when '/' appears

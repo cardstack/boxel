@@ -7,9 +7,15 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { dropTask, task, timeout } from 'ember-concurrency';
+import {
+  dropTask,
+  rawTimeout,
+  restartableTask,
+  task,
+  timeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
-import { cloneDeep } from 'lodash';
+import { cloneDeep } from 'lodash-es';
 
 import { Filter } from 'matrix-js-sdk';
 import {
@@ -31,13 +37,13 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
   isCardErrorJSONAPI,
+  stringifyErrorForLog,
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
@@ -55,6 +61,7 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -118,7 +125,11 @@ import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import {
+  codeModeEntryPointSkillUrl,
+  devSkillId,
+  envSkillId,
+} from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -154,6 +165,10 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
+// Backoff for retrying trusted servers that were unreachable at boot. Bounded
+// so a persistently-down server doesn't spin forever.
+const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
+const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -174,6 +189,19 @@ export default class MatrixService extends Service {
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
+  // When true, `app.boxel.realm-servers` is the authoritative source of
+  // the user's realm list and `app.boxel.realms` events are ignored for
+  // `setAvailableRealmIdentifiers`. Set during boot from whether that key
+  // has content, and flipped on by the realm-servers listener if the key
+  // gains content at runtime. Login-related side effects (`loginToRealms`,
+  // `loadMoreAuthRooms`) still run regardless.
+  private trustedRealmServersAuthoritative = false;
+  // Sticky for the lifetime of this instance once a boot assembles from the
+  // legacy `app.boxel.realms` list. Keeps later start() calls on the legacy
+  // path even after the lazy migration writes `app.boxel.realm-servers`, so
+  // the migration only takes effect on the next fresh session. Reset by
+  // resetState() so a logout/login re-evaluates against the persisted key.
+  private bootedFromLegacyRealmsList = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
@@ -393,16 +421,59 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           switch (e.event.type) {
-            case APP_BOXEL_REALMS_EVENT_TYPE:
-              await this.realmServer.setAvailableRealmIdentifiers(
-                (e.event.content.realms as string[]).map(ri),
-              );
+            case APP_BOXEL_REALMS_EVENT_TYPE: {
+              let legacyRealms = e.event.content.realms as string[];
+              // When `app.boxel.realm-servers` is the source of truth,
+              // ignore the realm-list payload here — otherwise the
+              // initial-sync re-emission of this event would overwrite the
+              // trusted-servers boot result. Side effects below still run
+              // so post-login realm authentication isn't dropped.
+              if (!this.trustedRealmServersAuthoritative) {
+                await this.realmServer.setAvailableRealmIdentifiers(
+                  legacyRealms.map(ri),
+                );
+              }
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
                 await this.loginToRealms();
-                await this.loadMoreAuthRooms(e.event.content.realms);
+                await this.loadMoreAuthRooms(legacyRealms);
               }
               break;
+            }
+            case APP_BOXEL_REALM_SERVERS_EVENT_TYPE: {
+              // A session that booted from the legacy `app.boxel.realms` list
+              // stays on the legacy path for the lifetime of this instance
+              // (see `bootedFromLegacyRealmsList` in start()). The boot-time
+              // lazy migration writes `app.boxel.realm-servers`, and that write
+              // echoes back here — both synchronously and again when
+              // startClient()'s initial sync re-emits account data. Ignoring
+              // these keeps the migrated key from re-running trusted-servers
+              // assembly mid-boot and overwriting the legacy-assembled realm
+              // list; the new key only takes effect on the next fresh session.
+              if (this.bootedFromLegacyRealmsList) {
+                break;
+              }
+              let realmServers = e.event.content.realmServers as string[];
+              this.trustedRealmServersAuthoritative = realmServers.length > 0;
+              if (this.trustedRealmServersAuthoritative) {
+                // A server-pushed account-data event must not crash the app:
+                // assembly can reject (e.g. fetchUserRealmsFromTrustedServers
+                // refuses a list that isn't this user's own realm server) and
+                // an async event handler that throws surfaces as an unhandled
+                // rejection. The authoritative, fail-loud assembly runs at
+                // start(); here we log and leave the available-realms list as
+                // it was.
+                try {
+                  await this.applyTrustedRealmServersAccountData(realmServers);
+                } catch (err) {
+                  console.error(
+                    'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
+                    err,
+                  );
+                }
+              }
+              break;
+            }
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
               break;
@@ -425,6 +496,17 @@ export default class MatrixService extends Service {
       clientExists: Boolean(this._client),
       clientLoggedIn: this._client?.isLoggedIn() === true,
       postLoginCompleted: this.postLoginCompleted,
+    };
+  }
+
+  // Test-only diagnostic exposing which boot path the current session is on.
+  // A legacy-booted session must stay non-authoritative even after the lazy
+  // migration writes `app.boxel.realm-servers` and that write echoes back
+  // through the AccountData listener. No production caller.
+  get bootAssemblyDebug() {
+    return {
+      trustedRealmServersAuthoritative: this.trustedRealmServersAuthoritative,
+      bootedFromLegacyRealmsList: this.bootedFromLegacyRealmsList,
     };
   }
 
@@ -711,6 +793,44 @@ export default class MatrixService extends Service {
     await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
   }
 
+  public async getRealmServersFromAccountData(): Promise<string[]> {
+    let { realmServers = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+      )) as { realmServers: string[] }) ?? {};
+    return realmServers;
+  }
+
+  public async setRealmServersInAccountData(
+    realmServers: string[],
+  ): Promise<void> {
+    await this.client.setAccountData(APP_BOXEL_REALM_SERVERS_EVENT_TYPE, {
+      realmServers,
+    });
+  }
+
+  public async appendRealmServerToAccountData(
+    realmServerURLString: string,
+  ): Promise<void> {
+    let realmServers = await this.getRealmServersFromAccountData();
+    if (realmServers.includes(realmServerURLString)) {
+      return;
+    }
+    await this.setRealmServersInAccountData([
+      ...realmServers,
+      realmServerURLString,
+    ]);
+  }
+
+  public async removeRealmServerFromAccountData(
+    realmServerURLString: string,
+  ): Promise<void> {
+    let realmServers = await this.getRealmServersFromAccountData();
+    await this.setRealmServersInAccountData(
+      realmServers.filter((s) => s !== realmServerURLString),
+    );
+  }
+
   public async getWorkspaceFavorites(): Promise<string[]> {
     let { favorites = [] } =
       ((await this.client.getAccountDataFromServer(
@@ -797,16 +917,96 @@ export default class MatrixService extends Service {
           this.startedAtTs = 0;
         }
         if (isTesting())
-          console.warn('[start-phase] getAccountData(realms,favorites)');
-        let [accountDataContent, favoritesData] = await Promise.all([
+          console.warn('[start-phase] getAccountData(realm-servers,favorites)');
+        let [realmServersData, favoritesData] = await Promise.all([
           this.client.getAccountDataFromServer(
-            APP_BOXEL_REALMS_EVENT_TYPE,
-          ) as Promise<{ realms: string[] } | null>,
+            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+          ) as Promise<{ realmServers: string[] } | null>,
           this.client.getAccountDataFromServer(
             APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
           ) as Promise<{ favorites: string[] } | null>,
         ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
+
+        // Boot assembles the realm list from trusted servers via
+        // `_realm-auth`. The transition fallback below reads the legacy
+        // `app.boxel.realms` key when `app.boxel.realm-servers` is absent
+        // or empty, so users whose accounts haven't yet been migrated to
+        // `app.boxel.realm-servers` still boot. Remove the fallback once
+        // the lazy migration that populates `app.boxel.realm-servers` has
+        // run on all active accounts.
+        let trustedServers = realmServersData?.realmServers ?? [];
+        // A session that first assembled from the legacy `app.boxel.realms`
+        // list stays on the legacy path for the lifetime of this
+        // MatrixService instance. The lazy migration below persists
+        // `app.boxel.realm-servers` for the next fresh session; switching
+        // this same instance to the trusted path on a later start() (e.g. a
+        // test that re-boots to pick up a newly-added realm) would re-derive
+        // the realm list from `_realm-auth` for no benefit and drop realms
+        // that the trusted servers don't advertise.
+        let useTrustedServers =
+          trustedServers.length > 0 && !this.bootedFromLegacyRealmsList;
+        // The legacy `app.boxel.realms` AccountData event is re-emitted by
+        // the matrix sync that runs inside `startClient()` below. Setting
+        // this flag here makes that re-emission a no-op for the available-
+        // realms list — the realm-servers path is the authoritative source.
+        this.trustedRealmServersAuthoritative = useTrustedServers;
+        let userRealmURLs: string[];
+        if (useTrustedServers) {
+          if (isTesting())
+            console.warn('[start-phase] fetchUserRealmsFromTrustedServers');
+          userRealmURLs =
+            await this.realmServer.fetchUserRealmsFromTrustedServers(
+              trustedServers,
+            );
+        } else {
+          this.bootedFromLegacyRealmsList = true;
+          if (isTesting())
+            console.warn('[start-phase] getAccountData(realms-legacy)');
+          let legacyRealmsData = (await this.client.getAccountDataFromServer(
+            APP_BOXEL_REALMS_EVENT_TYPE,
+          )) as { realms: string[] } | null;
+          userRealmURLs = legacyRealmsData?.realms ?? [];
+
+          // Lazy migration: this account has no `app.boxel.realm-servers`
+          // entry (the key was absent or empty, so boot fell back to the
+          // legacy realm list above). Seed the new key with the realm-server
+          // backing the user's existing realms so subsequent boots take the
+          // authoritative trusted-servers assembly path. We use
+          // `getRealmServersForRealms`, which derives the server from each
+          // realm's JWT `realmServerURL` claim and falls back to this host's
+          // own realm server — never the bare realm-URL origin. That matters
+          // because a realm URL's origin can differ from its realm server
+          // (e.g. the shared base realm at cardstack.com); persisting such a
+          // foreign origin would make the next boot's `assertOwnRealmServer`
+          // reject the list and log the user out. The legacy
+          // `app.boxel.realms` key is intentionally retained for rollback
+          // safety. Gated on `trustedServers` being genuinely empty so a
+          // re-boot of this same legacy session (where the key we just wrote
+          // is now present) doesn't re-write it. A no-op for an account with
+          // no realms. Best-effort: a failure must not break boot.
+          if (trustedServers.length === 0 && userRealmURLs.length > 0) {
+            try {
+              let derivedRealmServers =
+                this.realmServer.getRealmServersForRealms(userRealmURLs);
+              if (derivedRealmServers.length > 0) {
+                if (isTesting())
+                  console.warn('[start-phase] migrateRealmServersAccountData');
+                // `bootedFromLegacyRealmsList` is already set above, so the
+                // AccountData listener ignores both this self-write and the
+                // echo from startClient()'s initial sync — no extra guard
+                // needed. This session is already assembled from the legacy
+                // list; the new key takes effect on the next boot.
+                await this.setRealmServersInAccountData(derivedRealmServers);
+              }
+            } catch (err) {
+              console.error(
+                'Failed to migrate legacy realms to app.boxel.realm-servers account data',
+                err,
+              );
+            }
+          }
+        }
 
         let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
           ([_url, realmResource]) => !realmResource.isLoggedIn,
@@ -818,9 +1018,7 @@ export default class MatrixService extends Service {
           );
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
-          this.realmServer.setAvailableRealmIdentifiers(
-            (accountDataContent?.realms ?? []).map(ri),
-          ),
+          this.realmServer.setAvailableRealmIdentifiers(userRealmURLs.map(ri)),
         ]);
 
         if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
@@ -829,7 +1027,7 @@ export default class MatrixService extends Service {
         );
 
         if (isTesting()) console.warn('[start-phase] initSlidingSync');
-        await this.initSlidingSync(accountDataContent);
+        await this.initSlidingSync({ realms: userRealmURLs });
         if (isTesting()) console.warn('[start-phase] startClient');
         await this.client.startClient({ slidingSync: this.slidingSync });
         if (isTesting())
@@ -846,7 +1044,24 @@ export default class MatrixService extends Service {
 
           if (isTesting())
             console.warn('[start-phase] authenticateToAllAccessibleRealms');
-          await this.realmServer.authenticateToAllAccessibleRealms();
+          try {
+            await this.realmServer.authenticateToAllAccessibleRealms();
+          } catch (e) {
+            // A trusted server being unreachable must not fail boot: assembly
+            // recorded it in `unreachableRealmServers`, a retry is scheduled
+            // below, and realms from reachable servers still authenticate
+            // individually via `loginToRealms`. But only swallow when there's
+            // actually an unreachable server to blame — otherwise this is an
+            // unrelated auth failure and boot must fail loudly (logout) rather
+            // than proceed to `postLoginCompleted` while unauthenticated.
+            if (this.realmServer.unreachableRealmServers.length === 0) {
+              throw e;
+            }
+            console.error(
+              'Failed to authenticate to all accessible realms because a trusted server is unreachable',
+              e,
+            );
+          }
         }
         // Login here triggers other setup code that needs to happen after
         // otherwise we don't have the realm info.
@@ -856,6 +1071,11 @@ export default class MatrixService extends Service {
 
         this.postLoginCompleted = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
+
+        // If any trusted server was unreachable during boot assembly, keep
+        // the reachable realms and retry the unreachable ones in the
+        // background so they load (and the notice clears) once they recover.
+        this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -981,6 +1201,96 @@ export default class MatrixService extends Service {
       }),
     );
   }
+
+  // Re-assemble the available-realms list from a runtime
+  // `app.boxel.realm-servers` account-data event. Unlike the fail-loud boot
+  // assembly, an event-time refresh must be conservative: because
+  // `fetchUserRealmsFromTrustedServers` now returns a partial list when a
+  // trusted server is unreachable (rather than throwing), replacing the list
+  // with that partial result would erase the realms served by a server that's
+  // only transiently down. So when any server was unreachable this round we
+  // merge (add newly-discovered realms, never remove) and let the retry
+  // reconcile; only a fully reachable assembly is authoritative enough to
+  // remove realms. Called by the AccountData listener and directly by tests.
+  async applyTrustedRealmServersAccountData(realmServers: string[]) {
+    let realmURLs =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(realmServers);
+    if (this.realmServer.unreachableRealmServers.length > 0) {
+      await this.realmServer.setAvailableRealmIdentifiers([
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...realmURLs.map(ri),
+        ]),
+      ]);
+    } else {
+      await this.realmServer.setAvailableRealmIdentifiers(realmURLs.map(ri));
+    }
+    if (this.postLoginCompleted) {
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(realmURLs);
+    }
+    this.scheduleUnreachableRealmServerRetry();
+  }
+
+  // Re-attempt the trusted servers that were unreachable during boot
+  // assembly. On success their realms are merged into the available list and
+  // authenticated so they appear without a reload; the "couldn't reach
+  // <server>" notice clears as `unreachableRealmServers` empties. Returns true
+  // once every previously-unreachable server has recovered. Public so tests
+  // can drive recovery deterministically rather than waiting on the background
+  // timer.
+  async retryUnreachableRealmServers(): Promise<boolean> {
+    let toRetry = [...this.realmServer.unreachableRealmServers];
+    if (toRetry.length === 0) {
+      return true;
+    }
+    let recovered =
+      await this.realmServer.fetchUserRealmsFromTrustedServers(toRetry);
+    if (recovered.length > 0) {
+      let merged = [
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...recovered.map(ri),
+        ]),
+      ];
+      await this.realmServer.setAvailableRealmIdentifiers(merged);
+      await this.loginToRealms();
+      await this.loadMoreAuthRooms(recovered);
+    }
+    return this.realmServer.unreachableRealmServers.length === 0;
+  }
+
+  private scheduleUnreachableRealmServerRetry() {
+    if (isTesting()) {
+      // Tests drive recovery via `retryUnreachableRealmServers()` directly so
+      // the assertions are deterministic; skip the background timer loop, which
+      // would otherwise keep firing while a stubbed server stays down.
+      return;
+    }
+    if (this.realmServer.unreachableRealmServers.length === 0) {
+      return;
+    }
+    this.retryUnreachableRealmServersTask.perform();
+  }
+
+  private retryUnreachableRealmServersTask = restartableTask(async () => {
+    for (
+      let attempt = 0;
+      attempt < MAX_UNREACHABLE_RETRY_ATTEMPTS &&
+      this.realmServer.unreachableRealmServers.length > 0;
+      attempt++
+    ) {
+      await rawTimeout(UNREACHABLE_RETRY_INTERVAL_MS);
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      try {
+        await this.retryUnreachableRealmServers();
+      } catch (err) {
+        console.error('Failed to retry unreachable realm servers', err);
+      }
+    }
+  });
 
   async createRealmSession(realmURL: URL) {
     await this.#clientReadyDeferred.promise;
@@ -1559,6 +1869,21 @@ export default class MatrixService extends Service {
     }
   }
 
+  async loginFlows() {
+    await this.ready;
+    return this.client.loginFlows();
+  }
+
+  async getSsoLoginUrl(callbackUrl: string, idpId: string) {
+    await this.ready;
+    return this.client.getSsoLoginUrl(callbackUrl, 'sso', idpId);
+  }
+
+  async loginWithSsoToken(token: string) {
+    await this.ready;
+    return this.client.loginWithToken(token);
+  }
+
   getRoomData(roomId: string) {
     return this.roomDataMap.get(roomId);
   }
@@ -1588,31 +1913,34 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [envSkillId];
-
-    let codeModeDefaultSkills = [
-      devSkillId,
-      envSkillId,
-      skillCardURL('source-code-editing'),
-    ];
-
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists any default skills — legacy `Skill` cards, `.md` skill
+  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
+  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
+  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = [
+      ...(this.systemCard?.defaultSkillCards ?? []),
+      ...(this.systemCard?.defaultSkillFiles ?? []),
+    ]
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
     }
 
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    let interactModeDefaultSkills = [envSkillId];
+
+    // Code editing is covered by the code-mode entry-point skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
+    let codeModeDefaultSkills = [devSkillId, envSkillId];
+
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -1654,6 +1982,7 @@ export default class MatrixService extends Service {
       );
     }
     this.postLoginCompleted = false;
+    this.bootedFromLegacyRealmsList = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
     this.cardsToSend.clear();
@@ -2476,10 +2805,14 @@ export default class MatrixService extends Service {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills (pushed in full) activate
+      // alongside the code-mode entry-point skill, whose linked skills the
+      // bot loads on demand. As the card skills convert to markdown the
+      // pushed set shrinks.
+      skillCardIdsToActivate: [...defaultSkillIds, codeModeEntryPointSkillUrl],
     });
   }
 
@@ -2557,7 +2890,9 @@ export default class MatrixService extends Service {
     if (userChoiceId) {
       let result = await this.store.get<SystemCard>(userChoiceId);
       if (isCardErrorJSONAPI(result)) {
-        console.error('Error loading user-chosen system card:', result);
+        console.error(
+          `Error loading user-chosen system card: ${stringifyErrorForLog(result)}`,
+        );
         userChoiceFailed = true;
       } else {
         loadedCard = result;
@@ -2571,7 +2906,9 @@ export default class MatrixService extends Service {
       } else {
         let result = await this.store.get<SystemCard>(envDefaultId);
         if (isCardErrorJSONAPI(result)) {
-          console.error('Error loading env default system card:', result);
+          console.error(
+            `Error loading env default system card: ${stringifyErrorForLog(result)}`,
+          );
           envDefaultFailed = true;
         } else {
           loadedCard = result;

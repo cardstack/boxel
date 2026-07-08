@@ -6,7 +6,7 @@ import { cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
@@ -115,7 +115,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     }
   });
 
-  // The file tree only needs each matched file's URL — the `search-entry`
+  // The file tree only needs each matched file's URL — the `entry`
   // ids. The fieldset pins the leanest projection the wire grammar offers (a
   // single-field sparse item) rather than full serializations or renderings.
   private get query(): SearchEntryWireQuery {
@@ -123,7 +123,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     let eq =
       fieldFilter && Object.keys(fieldFilter).length > 0
         ? Object.fromEntries(
-            // Field paths in the search-entry wire grammar are `item.`-prefixed.
+            // Field paths in the entry wire grammar are `item.`-prefixed.
             Object.entries(fieldFilter).map(([field, value]) => [
               `item.${field}`,
               value,
@@ -135,7 +135,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
         'item.on': this.#fileTypeFilter ?? baseFileRef,
         ...(eq ? { eq } : {}),
       },
-      fields: { 'search-entry': ['item.name'] },
+      fields: { entry: ['item.name'] },
     };
   }
 
@@ -154,7 +154,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
 
     for (let fileURL of fileURLs) {
       // Extract relative path from the file URL
-      // The search-entry id is the full URL like "http://localhost:4200/myworkspace/path/to/file.txt"
+      // The entry id is the full URL like "http://localhost:4200/myworkspace/path/to/file.txt"
       // We need just "path/to/file.txt"
       // Decode percent-encoded characters (e.g. emoji filenames appear as %F0%9F%8E%89 in URLs)
       let relativePath = decodeURIComponent(

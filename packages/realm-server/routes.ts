@@ -19,6 +19,9 @@ import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
+import handleArchiveRealm from './handlers/handle-archive-realm.ts';
+import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
+import handleArchivedRealms from './handlers/handle-archived-realms.ts';
 import {
   healthCheck,
   jwtMiddleware,
@@ -38,14 +41,15 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleDelegateSession from './handlers/handle-delegate-session.ts';
+import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
-import handleSearchV2 from './handlers/handle-search-v2.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
-import handleSearchPrerendered from './handlers/handle-search-prerendered.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
@@ -84,6 +88,11 @@ export type CreateRoutesArgs = {
   realmServerSecretSeed: string;
   grafanaSecret: string;
   realmSecretSeed: string;
+  // Shared secret authenticating ai-bot's delegation requests (CS-11552).
+  // Optional: when unset, the /_delegate-session endpoint responds 503 rather
+  // than minting tokens, so the feature stays inert until a secret is
+  // provisioned.
+  aiBotDelegationSecret?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
@@ -110,6 +119,10 @@ export type CreateRoutesArgs = {
   };
   assetsURL: URL;
   prerenderer?: Prerenderer;
+  // Reports the current host-shell token to the prerender manager. The
+  // post-deployment hook calls it so the fleet's recycle signal is refreshed
+  // once the new code is live and the service is stable.
+  reportHostShell?: () => Promise<void>;
   searchCache: JobScopedSearchCache;
 };
 
@@ -197,11 +210,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleSearch({ reconciler: args.reconciler, searchCache }),
   );
   router.all(
-    '/_federated-search-v2',
-    multiRealmAuthorization(args),
-    handleSearchV2({ reconciler: args.reconciler, searchCache }),
-  );
-  router.all(
     '/_federated-info',
     multiRealmAuthorization(args),
     handleRealmInfo({
@@ -216,11 +224,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
     }),
-  );
-  router.all(
-    '/_federated-search-prerendered',
-    multiRealmAuthorization(args),
-    handleSearchPrerendered({ reconciler: args.reconciler, searchCache }),
   );
   router.post(
     '/_prerender-card',
@@ -267,6 +270,21 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleUnpublishRealm(args),
   );
+  router.post(
+    '/_archive-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleArchiveRealm(args),
+  );
+  router.post(
+    '/_unarchive-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnarchiveRealm(args),
+  );
+  router.get(
+    '/_archived-realms',
+    jwtMiddleware(args.realmSecretSeed),
+    handleArchivedRealms(args),
+  );
 
   // Grafana operator-action endpoints. All POST-only with
   // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
@@ -289,6 +307,13 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleRealmAuth(args),
   );
+  // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
+  // inside the handler because the signature covers the request body.
+  router.post('/_delegate-session', handleDelegateSession(args));
+  // Handles a worker-originated request bridged in through the worker manager,
+  // dispatched on its `type`. Shared-secret authenticated (HMAC over body +
+  // timestamp), same as /_delegate-session — auth is inside the handler.
+  router.post('/_worker-request', handleWorkerRequest(args));
   router.get(
     '/_check-boxel-domain-availability',
     jwtMiddleware(args.realmSecretSeed),
@@ -308,6 +333,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_unlisted-realm-path',
+    jwtMiddleware(args.realmSecretSeed),
+    handleUnlistedRealmPathRequest(args),
   );
   // Matrix tests don't need the GitHub PR integration, and skipping this route
   // keeps the realm server from loading Octokit's ESM entrypoint during boot.
@@ -392,7 +422,7 @@ function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     if (!handler) {
       handler = (
-        createRequire(__filename)(
+        createRequire(import.meta.filename)(
           './handlers/handle-github-pr',
         ) as typeof import('./handlers/handle-github-pr.ts')
       ).default(args);

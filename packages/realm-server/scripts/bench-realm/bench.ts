@@ -31,6 +31,10 @@ import { resolve as pathResolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { startFactoryRealmServer } from '@cardstack/realm-test-harness';
+import {
+  searchEntryWireQueryFromQuery,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import { realmSnapshotDir } from './paths.ts';
 
@@ -50,7 +54,7 @@ import { realmSnapshotDir } from './paths.ts';
 // which is correct — a different host produced the cached rows.
 function hostDistFingerprint(): string {
   let indexPath = pathResolve(
-    __dirname,
+    import.meta.dirname,
     '..',
     '..',
     '..',
@@ -82,7 +86,11 @@ export const DEFAULT_WARMUP = 5;
 // the bench's instance JSONs `adoptsFrom`. No runtime fileFilter — the
 // glob is materialized in the snapshot itself, so the bench mounts the
 // realm with the default copy-everything semantics.
-const benchSourceRealmDir = pathResolve(__dirname, 'fixtures', 'source-realm');
+const benchSourceRealmDir = pathResolve(
+  import.meta.dirname,
+  'fixtures',
+  'source-realm',
+);
 
 export interface Scenario {
   name: string;
@@ -162,7 +170,7 @@ function jsonRequest(
 function searchRequest(
   realmURL: URL,
   bearerToken: string,
-  body: unknown,
+  query: unknown,
 ): Request {
   let url = new URL('_search', realmURL);
   return new Request(url, {
@@ -172,7 +180,12 @@ function searchRequest(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearerToken}`,
     },
-    body: JSON.stringify(body),
+    // The search endpoint takes an entry-rooted query; benchmark the
+    // data-only fieldset (one full `item` per result), the closest analogue
+    // to the legacy live-card search response.
+    body: JSON.stringify(
+      searchEntryWireQueryFromQuery(query as Query, { fields: ['item'] }),
+    ),
   });
 }
 
@@ -358,7 +371,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

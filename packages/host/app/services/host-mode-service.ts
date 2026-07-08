@@ -304,18 +304,24 @@ export default class HostModeService extends Service {
     ) {
       realmServerURL = hostModeOrigin;
     }
-    let searchURL = new URL('_federated-search-prerendered', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
+    // The head markup is the `head` rendering of the card's `entry`:
+    // an html-only query at `html.format: head`, scoped to the single card.
+    // The head HTML rides on the resolved `html` resource in `included`,
+    // reached through the entry's `html` relationship.
     let response = await fetch(searchURL.toString(), {
       method: 'QUERY',
       headers: {
         Accept: 'application/vnd.card+json',
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
         realms: [realmRoot],
-        prerenderedHtmlFormat: 'head',
         cardUrls: [cardJsonURL],
+        filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
+        fields: { entry: ['html'] },
       }),
     });
 
@@ -329,7 +335,15 @@ export default class HostModeService extends Service {
     } catch (_error) {
       return undefined;
     }
-    let headHTML: unknown = json?.data?.[0]?.attributes?.html;
+    let htmlRef = json?.data?.[0]?.relationships?.html?.data?.[0];
+    let headHTML: unknown;
+    if (htmlRef?.id) {
+      let htmlResource = (json?.included ?? []).find(
+        (resource: { type?: string; id?: string }) =>
+          resource?.type === 'html' && resource?.id === htmlRef.id,
+      );
+      headHTML = htmlResource?.attributes?.html;
+    }
     return typeof headHTML === 'string' ? headHTML : null;
   }
 

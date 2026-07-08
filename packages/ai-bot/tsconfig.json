@@ -26,7 +26,12 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     },

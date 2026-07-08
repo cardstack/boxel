@@ -29,6 +29,7 @@ import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
 import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as RichMarkdownModule from 'https://cardstack.com/base/rich-markdown';
+import type * as SearchableModule from 'https://cardstack.com/base/searchable';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
@@ -159,6 +160,7 @@ let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let rawSerializeCard: (typeof CardAPIModule)['serializeCard'];
 let rawSerializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
+let searchDocFromFields: (typeof SearchableModule)['searchDocFromFields'];
 
 // Test-side wrappers around the raw card-api serialize functions that
 // auto-supply `virtualNetwork` from the active loader. Tests that need a
@@ -168,28 +170,14 @@ function serializeCard(
   card: Parameters<(typeof CardAPIModule)['serializeCard']>[0],
   opts?: Partial<Parameters<(typeof CardAPIModule)['serializeCard']>[1]>,
 ): ReturnType<(typeof CardAPIModule)['serializeCard']> {
-  let loader = getService('loader-service').loader;
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `base-realm test helper's serializeCard requires the active loader to have a VirtualNetwork`,
-    );
-  }
-  return rawSerializeCard(card, { virtualNetwork: vn, ...opts });
+  return rawSerializeCard(card, { ...opts });
 }
 
 function serializeFileDef(
   fileDef: Parameters<(typeof CardAPIModule)['serializeFileDef']>[0],
   opts?: Partial<Parameters<(typeof CardAPIModule)['serializeFileDef']>[1]>,
 ): ReturnType<(typeof CardAPIModule)['serializeFileDef']> {
-  let loader = getService('loader-service').loader;
-  let vn = loader.getVirtualNetwork();
-  if (!vn) {
-    throw new Error(
-      `base-realm test helper's serializeFileDef requires the active loader to have a VirtualNetwork`,
-    );
-  }
-  return rawSerializeFileDef(fileDef, { virtualNetwork: vn, ...opts });
+  return rawSerializeFileDef(fileDef, { ...opts });
 }
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let getRelationshipMembershipState: (typeof CardAPIModule)['getRelationshipMembershipState'];
@@ -414,6 +402,12 @@ async function initialize() {
     Theme,
   } = cardAPI);
 
+  // The searchable-driven generator lives in its own base module, not on
+  // card-api (so it stays out of every card's dependency closure).
+  searchDocFromFields = (
+    await loader.import<typeof SearchableModule>(`${baseRealm.url}searchable`)
+  ).searchDocFromFields;
+
   enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
     .default;
   const enumModule = await loader.import<typeof EnumModule>(
@@ -484,6 +478,7 @@ export {
   getBrokenLinks,
   getDataBucket,
   getQueryableValue,
+  searchDocFromFields,
   subscribeToChanges,
   unsubscribeFromChanges,
   flushLogs,

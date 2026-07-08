@@ -9,21 +9,28 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
-  bfmBlockFormatAndSize,
+  bfmRefFormatAndSize,
   buildWaiter,
   cardTypeName,
+  fileNameFromUrl,
   extractMermaidBlocks,
   processKatexPlaceholders,
   replaceMermaidSvgs,
+  resolveRRIReference,
+  rri,
   trimJsonExtension,
-  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
 } from '@cardstack/runtime-common/marked-sync';
-import { type BaseDef, type CardDef, getComponent } from '../card-api';
+import {
+  type BaseDef,
+  type CardDef,
+  type FileDef,
+  getComponent,
+} from '../card-api';
 import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
@@ -49,9 +56,16 @@ const markdownRenderingWaiter = buildWaiter('markdown-rendering');
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';
+type RefType = 'card' | 'file';
 
 interface RenderSlot {
   element: HTMLElement;
+  // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
+  // (`:file[URL]`) resolve to FileDef instances. Both kinds share the same
+  // slot pipeline — they're wired to `cardContext.cardComponentModifier` so
+  // operator-mode overlays can target them, both honor BFM size specifiers,
+  // and both render via the instance's `getComponent`.
+  refType: RefType;
   kind: 'inline' | 'block';
   state: SlotState;
   format: CardSlotFormat;
@@ -59,29 +73,23 @@ interface RenderSlot {
   // eventual card's footprint; also carries `overflow: hidden` for resolved
   // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
-  card?: CardDef; // present when state === 'resolved'
+  // Present when state === 'resolved': a CardDef for 'card' refs, a FileDef for
+  // 'file' refs. Both render via `getComponent` and register by `id`.
+  instance?: CardDef | FileDef;
   url?: string; // present when state === 'loading' | 'unresolved'
   typeName?: string; // present when state === 'unresolved'
 }
 
-function resolveUrl(
-  raw: string,
-  baseUrl: string | null | undefined,
-  virtualNetwork: VirtualNetwork | undefined,
-): string {
-  // With a VN, resolve through it so prefix-form bases and registered
-  // prefix-form refs round-trip correctly. Without a VN, plain
-  // `new URL(raw, baseUrl)` still handles the common case — URL-form
-  // refs (with or without a base) and relative refs against a URL-form
-  // base. Prefix-form bases need a VN; `new URL()` throws on those and
-  // we fall back to the raw ref.
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  // Resolve in RRI space (no VirtualNetwork), the same way the reference
+  // extractors resolve the refs behind `linkedCards`/`linkedFiles`. Instance
+  // ids are canonical (the realm serves prefix form for mapped realms, URL for
+  // unmapped), so this produces the same form as a loaded card's `id` — the
+  // slot key (`card.id` / `file.id`) matches without a VirtualNetwork.
   try {
-    if (virtualNetwork) {
-      return trimJsonExtension(
-        virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
-      );
-    }
-    return trimJsonExtension(new URL(raw, baseUrl || undefined).href);
+    return trimJsonExtension(
+      resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -91,8 +99,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   Args: {
     content: string | null | undefined;
     linkedCards?: CardDef[] | null;
+    linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
-    cardReferenceVirtualNetwork?: VirtualNetwork;
   };
 }> {
   @tracked monacoContextInternal: any = undefined;
@@ -150,7 +158,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // text. This must happen at the HTML-string level (not via imperative DOM
     // mutation) so that Glimmer's autotracking sees the final content and does
     // not overwrite it on re-render.
-    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
+    let hasBfmRefs = html.includes('data-boxel-bfm-type=');
     let katex = html.includes('math-placeholder') ? this.katexModule : null;
     let mermaidSvgs = html.includes('<pre class="mermaid">')
       ? this.mermaidSvgs
@@ -158,16 +166,18 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
     if (
       typeof DOMParser !== 'undefined' &&
-      (hasCardRefs || katex || (mermaidSvgs && mermaidSvgs.size))
+      (hasBfmRefs || katex || (mermaidSvgs && mermaidSvgs.size))
     ) {
       let doc = new DOMParser().parseFromString(html, 'text/html');
 
-      // Strip text content from card-type BFM refs so there is no flash of raw
-      // URLs. The URL is preserved in the data attribute; the modifier will
-      // inject fallback text for refs that can't be resolved to a card.
-      if (hasCardRefs) {
+      // Strip text content from BFM refs (card and file) so there is no flash
+      // of raw URLs. The URL is preserved in the data attribute; the modifier
+      // will inject fallback text for refs that can't be resolved.
+      if (hasBfmRefs) {
         doc
-          .querySelectorAll('[data-boxel-bfm-type="card"]')
+          .querySelectorAll(
+            '[data-boxel-bfm-inline-ref], [data-boxel-bfm-block-ref]',
+          )
           .forEach((el) => (el.textContent = ''));
       }
 
@@ -188,17 +198,19 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   captureCardSlots = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
       let linkedCards = this.args.linkedCards;
+      let linkedFiles = this.args.linkedFiles;
       let baseUrl = this.args.cardReferenceBaseUrl;
-      let virtualNetwork = this.args.cardReferenceVirtualNetwork;
       let pendingUpdate = false;
       let pendingToken: unknown = undefined;
-      // On the very first modifier run linkedCards is likely still loading
-      // (empty []) so we skip unresolved Pills to avoid flashing them for
-      // refs that will soon resolve. On subsequent runs (linkedCards changed)
-      // showFallback is true. We also enable it immediately if linkedCards
-      // already has data (in-app navigation with cached results).
-      let showFallback =
-        this._modifierHasRun || (linkedCards != null && linkedCards.length > 0);
+      // On the very first modifier run the linked instances are likely still
+      // loading (empty []) so we skip unresolved Pills to avoid flashing them
+      // for refs that will soon resolve. On subsequent runs showFallback is
+      // true. We also enable it immediately if data is already present (in-app
+      // navigation with cached results).
+      let hasLinkedData =
+        (linkedCards != null && linkedCards.length > 0) ||
+        (linkedFiles != null && linkedFiles.length > 0);
+      let showFallback = this._modifierHasRun || hasLinkedData;
       this._modifierHasRun = true;
 
       let collectSlots = (): RenderSlot[] => {
@@ -210,61 +222,81 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             }
           }
         }
+        let filesByUrl = new Map<string, FileDef>();
+        if (linkedFiles?.length) {
+          for (let file of linkedFiles) {
+            if (file?.id) {
+              filesByUrl.set(trimJsonExtension(file.id), file);
+            }
+          }
+        }
 
         let slots: RenderSlot[] = [];
 
         for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-type="card"], [data-boxel-bfm-type="file"]',
+          ),
         )) {
+          let refType: RefType =
+            el.dataset.boxelBfmType === 'file' ? 'file' : 'card';
           let isInline = !!el.dataset.boxelBfmInlineRef;
           let rawUrl =
             el.dataset.boxelBfmInlineRef ?? el.dataset.boxelBfmBlockRef ?? '';
           if (!rawUrl) continue;
           let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
 
-          let format: CardSlotFormat = 'atom';
-          let sizeStyle: string | undefined;
-          if (!isInline) {
-            let derived = bfmBlockFormatAndSize(
-              el.dataset.boxelBfmFormat,
-              el.dataset.boxelBfmWidth,
-              el.dataset.boxelBfmHeight,
+          // Both inline and block refs derive their format and any fitted
+          // sizing from the BFM size attributes, so `:card[url | embedded]` and
+          // `::card[url | 400x300]` are honored alike. Only the default differs:
+          // an inline ref with no specifier falls back to atom, a block ref to
+          // embedded.
+          let derived = bfmRefFormatAndSize(
+            el.dataset.boxelBfmFormat,
+            el.dataset.boxelBfmWidth,
+            el.dataset.boxelBfmHeight,
+            isInline ? 'atom' : 'embedded',
+          );
+          let format: CardSlotFormat = derived.format;
+          let sizeStyle: string | undefined = derived.sizeStyle;
+
+          // Fitted slots carry an inline width/height plus `overflow: hidden`
+          // so the resolved instance occupies the requested footprint.
+          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined;
+          if (format === 'fitted') {
+            resolvedStyle = htmlSafe(
+              sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
             );
-            format = derived.format;
-            sizeStyle = derived.sizeStyle;
           }
 
-          let card = cardsByUrl.get(
-            resolveUrl(rawUrl, baseUrl, virtualNetwork),
-          );
-          if (card) {
-            let style: ReturnType<typeof htmlSafe> | undefined;
-            if (format === 'fitted') {
-              style = htmlSafe(
-                sizeStyle
-                  ? `${sizeStyle}; overflow: hidden`
-                  : 'overflow: hidden',
-              );
-            }
+          let resolvedUrl = resolveUrl(rawUrl, baseUrl);
+
+          let instance =
+            refType === 'file'
+              ? filesByUrl.get(resolvedUrl)
+              : cardsByUrl.get(resolvedUrl);
+          if (instance) {
             slots.push({
               element: el,
+              refType,
               kind,
               state: 'resolved',
               format,
-              card,
-              style,
+              instance,
+              style: resolvedStyle,
             });
             continue;
           }
 
-          // No matching linkedCard yet: show the sized loading shimmer until
-          // linkedCards has settled (showFallback), then fall back to the
+          // No matching instance yet: show the sized loading shimmer until the
+          // linked instances have settled (showFallback), then fall back to the
           // broken-link box. Skipping the broken state on the first modifier
           // run avoids flashing it for refs that will soon resolve.
           let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
           if (!showFallback) {
             slots.push({
               element: el,
+              refType,
               kind,
               state: 'loading',
               format,
@@ -274,12 +306,16 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           } else {
             slots.push({
               element: el,
+              refType,
               kind,
               state: 'unresolved',
               format,
               style,
               url: rawUrl,
-              typeName: cardTypeName(rawUrl),
+              typeName:
+                refType === 'file'
+                  ? fileNameFromUrl(rawUrl)
+                  : cardTypeName(rawUrl),
             });
           }
         }
@@ -302,10 +338,11 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             nextSlots.some((slot, index) => {
               let current = this.renderSlots[index];
               if (!current || current.element !== slot.element) return true;
+              if (current.refType !== slot.refType) return true;
               if (current.kind !== slot.kind) return true;
               if (current.state !== slot.state) return true;
               if (current.format !== slot.format) return true;
-              if (current.card !== slot.card) return true;
+              if (current.instance !== slot.instance) return true;
               if (current.url !== slot.url) return true;
               return String(current.style ?? '') !== String(slot.style ?? '');
             });
@@ -443,27 +480,44 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots this.renderedHtml @linkedCards}}
+      {{this.captureCardSlots this.renderedHtml @linkedCards @linkedFiles}}
     >
       {{this.renderedHtml}}
     </div>
     {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
         {{#if (eq slot.state 'resolved')}}
+          {{! Card and file refs render identically: both resolve to a
+              `getComponent`-rendered instance registered by `id`. Only the
+              test hook differs (card vs file). }}
           <CardContextConsumer as |context|>
-            {{#let (this.getCardComponent slot.card) as |CardComponent|}}
+            {{#let (this.getCardComponent slot.instance) as |RefComponent|}}
               {{#if (eq slot.kind 'inline')}}
                 <span
-                  class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
-                  data-test-markdown-bfm-inline-card
+                  class='markdown-bfm-card-slot
+                    {{if
+                      (eq slot.format "atom")
+                      "markdown-bfm-card-slot--inline"
+                      "markdown-bfm-card-slot--inline-embed"
+                    }}
+                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                  style={{slot.style}}
+                  data-test-markdown-bfm-inline-file={{if
+                    (eq slot.refType 'file')
+                    ''
+                  }}
+                  data-test-markdown-bfm-inline-card={{if
+                    (eq slot.refType 'card')
+                    ''
+                  }}
                   {{context.cardComponentModifier
-                    card=slot.card
+                    cardId=slot.instance.id
                     format='data'
                     fieldType=undefined
                     fieldName=undefined
                   }}
                 >
-                  <CardComponent
+                  <RefComponent
                     @format={{slot.format}}
                     @displayContainer={{false}}
                   />
@@ -473,15 +527,22 @@ export default class MarkDownTemplate extends GlimmerComponent<{
                   class='markdown-bfm-card-slot markdown-bfm-card-slot--block
                     {{if slot.style "markdown-bfm-card-slot--fitted"}}'
                   style={{slot.style}}
-                  data-test-markdown-bfm-block-card
+                  data-test-markdown-bfm-block-file={{if
+                    (eq slot.refType 'file')
+                    ''
+                  }}
+                  data-test-markdown-bfm-block-card={{if
+                    (eq slot.refType 'card')
+                    ''
+                  }}
                   {{context.cardComponentModifier
-                    card=slot.card
+                    cardId=slot.instance.id
                     format='data'
                     fieldType=undefined
                     fieldName=undefined
                   }}
                 >
-                  <CardComponent
+                  <RefComponent
                     @format={{slot.format}}
                     @displayContainer={{false}}
                   />
@@ -491,11 +552,20 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           </CardContextConsumer>
         {{else if (eq slot.state 'loading')}}
           {{#if (eq slot.kind 'inline')}}
-            <span
-              class='markdown-bfm-loading markdown-bfm-loading--inline'
-              aria-hidden='true'
-              data-test-markdown-bfm-loading-inline
-            />
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline'
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{else}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline-embed markdown-bfm-loading--{{slot.format}}'
+                style={{slot.style}}
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{/if}}
           {{else}}
             <div
               class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
@@ -506,16 +576,30 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           {{/if}}
         {{else}}
           {{#if (eq slot.kind 'inline')}}
-            <span
-              class='markdown-bfm-broken markdown-bfm-broken--inline'
-              title={{slot.url}}
-              data-test-markdown-bfm-unresolved-inline
-            >
-              <span class='markdown-bfm-broken-label'>
-                <LinkOffIcon width='12' height='12' />
-                {{slot.typeName}}
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline'
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='12' height='12' />
+                  {{slot.typeName}}
+                </span>
               </span>
-            </span>
+            {{else}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline-embed markdown-bfm-broken--{{slot.format}}'
+                style={{slot.style}}
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='14' height='14' />
+                  {{slot.typeName}}
+                </span>
+              </span>
+            {{/if}}
           {{else}}
             <div
               class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
@@ -858,6 +942,14 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           vertical-align: middle;
         }
 
+        /* Inline embeds with an explicit non-atom format flow inline-block so a
+           sized card sits in the text run without the flex shrink behavior the
+           atom pill relies on. */
+        .markdown-bfm-card-slot--inline-embed {
+          display: inline-block;
+          vertical-align: middle;
+        }
+
         .markdown-bfm-card-slot--block {
           display: block;
         }
@@ -900,6 +992,13 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           height: 1.2em;
           vertical-align: middle;
           border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-loading--inline-embed {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
         }
         .markdown-bfm-loading--block {
           display: block;
@@ -959,6 +1058,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           padding: 0 var(--boxel-sp-5xs);
           vertical-align: middle;
           border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-broken--inline-embed {
+          display: inline-flex;
+          vertical-align: middle;
         }
         .markdown-bfm-broken--block {
           display: flex;

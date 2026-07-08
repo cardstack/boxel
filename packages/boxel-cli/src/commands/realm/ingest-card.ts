@@ -17,7 +17,7 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
-import { search } from '../search.ts';
+import { searchEntryRequestBody, itemsFromSearchEntryDoc } from '../search.ts';
 
 const CARD_JSON = 'application/vnd.card+json';
 const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
@@ -48,6 +48,34 @@ export function extractImportSpecifiers(source: string): string[] {
   while ((m = fromRe.exec(source))) specs.add(m[1]);
   while ((m = sideEffectRe.exec(source))) specs.add(m[1]);
   return [...specs];
+}
+
+/**
+ * Non-null `relationships.*.links.self` values from a card instance's JSON —
+ * the `linksTo` / `linksToMany` targets to follow when crawling an instance's
+ * link graph. `linksToMany` serializes as `field.0`, `field.1`, … each with its
+ * own `links.self`; unset links are `null` and skipped.
+ */
+export function extractRelationshipLinks(source: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    return [];
+  }
+  let rels = (parsed as { data?: { relationships?: Record<string, unknown> } })
+    ?.data?.relationships;
+  if (!rels || typeof rels !== 'object') {
+    return [];
+  }
+  let out: string[] = [];
+  for (let value of Object.values(rels)) {
+    let self = (value as { links?: { self?: unknown } })?.links?.self;
+    if (typeof self === 'string' && self) {
+      out.push(self);
+    }
+  }
+  return out;
 }
 
 /** Exported card/field class names declared in a module (for instance lookup). */
@@ -104,17 +132,14 @@ export function resolveSameRealmFile(
 class RealmCardIngester extends RealmSyncBase {
   hasError = false;
   copiedFiles: string[] = [];
-  private profileManager: ProfileManager;
   private cardUrl: string;
   private sourceCache = new Map<string, string | null>();
 
   constructor(
     options: SyncOptions & { cardUrl: string },
     authenticator: RealmAuthenticator,
-    profileManager: ProfileManager,
   ) {
     super(options, authenticator);
-    this.profileManager = profileManager;
     this.cardUrl = options.cardUrl;
   }
 
@@ -196,14 +221,20 @@ class RealmCardIngester extends RealmSyncBase {
       if (test !== f && fileSet.has(test)) toCopy.add(test);
     }
 
-    // 3. The entry card's own instances.
-    let entryModuleAbs = entry.moduleRels.map((r) => this.relToAbs(r));
-    let instanceRels = await this.findEntryInstances(
-      moduleFiles,
-      entryModuleAbs,
-      fileSet,
-    );
-    for (let r of entry.instanceRels) instanceRels.add(r);
+    // 3. Instances. A module entry means "the card type" → copy every
+    //    instance of it. An instance entry means "this record" → copy just it
+    //    and the records it links to (transitively), not unrelated siblings.
+    let instanceRels: Set<string>;
+    if (entry.instanceRels.length > 0) {
+      instanceRels = await this.crawlInstanceLinks(entry.instanceRels, fileSet);
+    } else {
+      let entryModuleAbs = entry.moduleRels.map((r) => this.relToAbs(r));
+      instanceRels = await this.findEntryInstances(
+        moduleFiles,
+        entryModuleAbs,
+        fileSet,
+      );
+    }
     for (let r of instanceRels) toCopy.add(r);
 
     // 4. The card's own Catalog Spec(s) — card/app specType only.
@@ -313,6 +344,66 @@ class RealmCardIngester extends RealmSyncBase {
     return out;
   }
 
+  /**
+   * BFS the same-realm link graph from the seed instances: each instance plus
+   * every instance it references via `linksTo` / `linksToMany`, transitively.
+   * The instance analogue of `crawlModules` — for an instance entry we copy
+   * that record and the records it links to (e.g. a cellar and its bottles),
+   * but not unrelated siblings of the same type.
+   */
+  private async crawlInstanceLinks(
+    seeds: string[],
+    fileSet: Set<string>,
+  ): Promise<Set<string>> {
+    let seen = new Set<string>();
+    let queue = [...seeds];
+    while (queue.length) {
+      let rel = queue.shift()!;
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      let source = await this.fetchText(rel);
+      if (source == null) continue;
+      for (let self of extractRelationshipLinks(source)) {
+        let linked = this.resolveLinkedInstanceRel(self, rel, fileSet);
+        if (linked && !seen.has(linked)) queue.push(linked);
+      }
+    }
+    return seen;
+  }
+
+  /**
+   * Resolve a relationship `links.self` (relative `../Foo/x`, published alias
+   * `@cardstack/<realm>/…`, or absolute https — and without a `.json` extension)
+   * to a same-realm instance file that exists in `fileSet`, or null for
+   * cross-realm / missing links.
+   */
+  private resolveLinkedInstanceRel(
+    self: string,
+    fromRel: string,
+    fileSet: Set<string>,
+  ): string | null {
+    let rel: string;
+    if (self.startsWith('@')) {
+      // Published-alias form — map onto this realm by its path tail. A tail
+      // that isn't ours (another realm's alias) won't resolve to a local file.
+      rel = this.relativize(self);
+    } else {
+      // Relative or absolute https: resolve to an absolute URL and require it
+      // to live under THIS realm's served root. A link into another realm —
+      // even one whose URL happens to share our path tail — is left as a
+      // runtime reference, not copied (mirrors resolveSameRealmFile).
+      let absUrl = /^https?:\/\//.test(self)
+        ? self
+        : new URL(self, this.relToAbs(fromRel)).href;
+      if (!absUrl.startsWith(this.realmRoot)) {
+        return null;
+      }
+      rel = absUrl.slice(this.realmRoot.length).replace(/^\/+/, '');
+    }
+    let candidate = rel.endsWith('.json') ? rel : `${rel}.json`;
+    return fileSet.has(candidate) ? candidate : null;
+  }
+
   /** Card/app Spec cards whose `ref` resolves to a seeded module. */
   private async findCardSpecs(
     moduleFiles: Set<string>,
@@ -342,15 +433,42 @@ class RealmCardIngester extends RealmSyncBase {
   private async searchCards(
     query: Record<string, unknown>,
   ): Promise<CardResource[]> {
-    let result = await search([this.realmRoot], query, {
-      profileManager: this.profileManager,
-    });
-    if (!result.ok) {
+    // Query the SOURCE realm's own `_search` directly rather than the
+    // profile-scoped federated search. A shared/published source realm (e.g.
+    // the catalog) isn't in the active profile's federated set, so federated
+    // search returns nothing for it — which is why instances and Specs went
+    // uncopied (the module crawl survives because it uses direct file fetches).
+    // The realm's own endpoint sees its full index. The request is data-only
+    // (`fields[entry]=item`); the response is an entry document
+    // whose matched `item` serializations resolve out of `included` uniformly
+    // for normal and published realms (the v1 `data`-vs-`included` split
+    // disappears — every match is an entry that references its item).
+    let res = await this.authenticator.authedRealmFetch(
+      `${this.realmRoot}_search`,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: CARD_JSON,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(searchEntryRequestBody(query)),
+      },
+    );
+    if (!res.ok) {
       this.hasError = true;
-      console.warn(`  search failed: ${result.error ?? 'unknown'}`);
+      // Include statusText + a body snippet so auth errors, malformed queries,
+      // etc. are diagnosable from the CLI output, not just a bare status code.
+      let body = await res.text().catch(() => '');
+      console.warn(
+        `  search failed: HTTP ${res.status} ${res.statusText}`.trimEnd() +
+          (body ? ` — ${body.slice(0, 300)}` : ''),
+      );
       return [];
     }
-    return (result.data ?? []) as CardResource[];
+    let json = (await res.json()) as Parameters<
+      typeof itemsFromSearchEntryDoc
+    >[0];
+    return itemsFromSearchEntryDoc(json) as unknown as CardResource[];
   }
 
   private cardIdToInstanceRel(id: string | undefined): string | null {
@@ -490,7 +608,6 @@ export async function ingestCard(
         cardUrl,
       },
       authenticator,
-      pm,
     );
     console.log(
       `Ingesting ${cardUrl}\n  from realm ${realmRoot}\n  into ${localDir}`,

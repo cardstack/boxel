@@ -28,16 +28,13 @@
     <script>
       globalThis.process = {
         env: {},
+        browser: true,
         version: '',
-        cwd() {
-          return '/';
+        versions: {},
+        platform: 'browser',
+        nextTick(fn, ...args) {
+          Promise.resolve().then(() => fn(...args));
         },
-      };
-    </script>
-
-    <script>
-      globalThis.process = {
-        env: {},
         cwd() {
           return '';
         },

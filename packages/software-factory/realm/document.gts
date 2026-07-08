@@ -473,7 +473,7 @@ export class Document extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     // ¹⁷ Isolated format matching SkillPlus layout
 
-    handleTocClick = (event: MouseEvent) => {
+    handleTocClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
       if (!anchor) return;
@@ -539,7 +539,7 @@ export class Document extends CardDef {
               </button>
             </div>
 
-            {{! template-lint-disable no-invalid-interactive*/}}
+            {{! template-lint-disable no-invalid-interactive}}
             <nav class='toc-navigation' {{on 'click' this.handleTocClick}}>
               {{#if @model.content}}
                 <div class='toc-section'>

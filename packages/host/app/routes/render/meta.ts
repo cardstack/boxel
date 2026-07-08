@@ -3,7 +3,7 @@ import type Transition from '@ember/routing/transition';
 
 import { service } from '@ember/service';
 
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
@@ -23,6 +23,7 @@ import {
 
 import type CardService from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
+import type RenderStoreService from '@cardstack/host/services/render-store';
 
 import type {
   BaseDef,
@@ -38,9 +39,24 @@ export type Model = PrerenderMeta | RenderError | undefined;
 
 const computePerfLog = logger('host:computed-perf');
 
+// Bounds for the searchable-driven load-settle loop below. Match the
+// template-render settle in the /render route (READY_SETTLE_MAX_PASSES /
+// READY_SETTLE_REQUIRED_STABLE_PASSES): keep pulling + waiting until the
+// store's load generation holds steady for a couple of passes, capped so a
+// pathological graph can't loop forever.
+const SEARCHABLE_SETTLE_MAX_PASSES = 20;
+const SEARCHABLE_SETTLE_REQUIRED_STABLE_PASSES = 2;
+
+// The base module whose generator produces every search doc. Recorded as a
+// dependency of the meta output directly (see the deps union below) rather
+// than relying on its per-loader-cached module-load hook to fire during a
+// given render. `unresolveURLs` maps it to `@cardstack/base/searchable`.
+const SEARCHABLE_MODULE_URL = 'https://cardstack.com/base/searchable';
+
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
   @service declare private network: NetworkService;
+  @service('render-store') declare private store: RenderStoreService;
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -59,36 +75,77 @@ export default class RenderMetaRoute extends Route<Model> {
       return;
     }
 
-    let deps =
-      renderModel?.capturedDeps ??
-      snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps;
+    // The search doc comes from the searchable-driven generator in its own base
+    // module. It derives link depth from the explicit `searchable` annotations
+    // rather than from what the render happened to load.
+    let searchable = await this.cardService.getSearchable();
 
-    // Open a synchronous compute-memo pass that spans both
-    // serializeCard and searchDoc. Computed fields invoked through the
-    // descriptor or through peekAtField hit the per-instance memo
-    // instead of re-running `computeVia` — one compute per distinct
-    // (instance, fieldName) for the whole traversal. The pass MUST
-    // close before any await so it doesn't leak across reactive cycles.
+    // Drive the instance's linked-field loading to quiescence before
+    // serializing. The searchable annotations name which links to pull, and
+    // the card's own contained/computed fields read links too — both fire
+    // lazy loads through the field getter (tracked on the store). Nothing
+    // awaits those loads inline (a computed reading a not-yet-loaded link
+    // sees `undefined`; a broken link's terminal sentinel isn't planted
+    // until its load settles), so pull-then-wait here, repeating until the
+    // store's load generation holds steady: each pass loads whatever the
+    // current state newly permits — a deeper searchable hop once its parent
+    // resolved, a computed's link once the computed re-reads — and
+    // `store.loaded()` drains it. Cycles clip via the generator's own stack
+    // guard, so a ring loads its nodes once and then quiesces.
+    //
+    // This reproduces, for the search doc, the settle the /render route
+    // provides for template renders (its readyPromise waits on the same
+    // `store.loaded()` after the template pulls the links). The two are
+    // complementary: when a template render already loaded the graph (a fused
+    // visit, or an HTML render sharing this tab), the first pass finds every
+    // target resident and `store.loaded()` resolves immediately — there is
+    // nothing left to wait for.
+    await this.#settleSearchableLoads(instance, searchable);
+
+    // Union the render route's captured deps with a fresh snapshot: the
+    // settle loop above loaded links through the tracked getter (each a
+    // recorded dependency), and those loads land in the still-open tracking
+    // session but after `capturedDeps` was snapshotted. A render that never
+    // pulled a link (an index visit with no HTML render) would otherwise
+    // drop the edges searchable just followed.
+    //
+    // The searchable module itself is loaded through a per-loader cache, so its
+    // module-load hook only fires (and only records a dependency) on the first
+    // pull in a given render tab — a warm tab would omit it. Building the search
+    // doc always consumes it, so record it unconditionally, independent of that
+    // load-hook timing.
+    let deps = [
+      ...new Set([
+        SEARCHABLE_MODULE_URL,
+        ...(renderModel?.capturedDeps ?? []),
+        ...snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+      ]),
+    ];
+
+    // Open a synchronous compute-memo pass over serializeCard. Computed fields
+    // invoked through the descriptor or through peekAtField hit the per-instance
+    // memo instead of re-running `computeVia` — one compute per distinct
+    // (instance, fieldName). The pass MUST close before any await so it doesn't
+    // leak across reactive cycles; searchable-driven generation does targeted
+    // link loading (async), so it runs after the pass closes — see below.
     //
     // Guarded by typeof checks: during a cold dev boot the host can briefly
     // load a base/card-api build that predates these exports (vite is still
     // bundling, or a stale realm-transpile is in flight). In that window we
     // skip the pass — `getter` falls through its `passComputeMemo === null`
-    // fast path and the render still produces a correct serialized + search
-    // doc, just without the per-row diagnostics fields.
+    // fast path and the render still produces a correct serialized doc, just
+    // without the per-row diagnostics fields.
     //
-    // Pass close is in a `finally` so a throw inside serializeCard /
-    // searchDoc still closes the pass — otherwise the module-global
-    // memo in field-support.ts stays set and later off-pass `getter`
-    // calls would read stale memoized values across reactive cycles.
+    // Pass close is in a `finally` so a throw inside serializeCard still closes
+    // the pass — otherwise the module-global memo in field-support.ts stays set
+    // and later off-pass `getter` calls would read stale memoized values across
+    // reactive cycles.
     let passOpen = typeof api.beginComputePass === 'function';
     if (passOpen) {
       api.beginComputePass();
     }
     let serialized: SingleCardDocument;
     let serializeMs: number;
-    let searchDoc: Record<string, any>;
-    let searchDocMs: number;
     let passSnapshot: ComputePassSnapshot | undefined;
     try {
       let serializeStart = performance.now();
@@ -102,7 +159,6 @@ export default class RenderMetaRoute extends Route<Model> {
         // relationships, so omit query fields here (the relationship data is
         // stripped below regardless).
         omitQueryFields: true,
-        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
             vn.toURL(reference),
@@ -111,20 +167,40 @@ export default class RenderMetaRoute extends Route<Model> {
           ),
       }) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
+      // Emulate the on-disk file serialization: a card file holds only the
+      // card's own resource — relationship slots keep their `links` but drop
+      // the resolved `data`, and no linked neighbors ride along in `included`.
+      // The searchable settle above may have loaded link targets into the
+      // store, and `serializeCard` walks whatever is resident into `included`;
+      // strip both so the serialized instance is a pure function of the card's
+      // own data, independent of which targets happen to be loaded.
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
-        // we want to emulate the file serialization here
         delete relationship.data;
       }
-
-      let searchDocStart = performance.now();
-      searchDoc = api.searchDoc(instance);
-      searchDocMs = performance.now() - searchDocStart;
+      delete serialized.included;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
         passSnapshot = api.endComputePass();
       }
+    }
+
+    // Run searchable-driven generation after the compute-memo pass closes: it
+    // awaits targeted link loads, and the pass cannot span an await. The
+    // generator collects the URLs of the link targets it pulls into the doc;
+    // those are dependencies of this card (unioned into `deps` below), so
+    // editing a searchable target reindexes the owner even when the render did
+    // not itself load that target.
+    let searchDocStart = performance.now();
+    let searchableDeps = new Set<string>();
+    let searchDoc: Record<string, any> = await searchable.searchDocFromFields(
+      instance,
+      searchableDeps,
+    );
+    let searchDocMs = performance.now() - searchDocStart;
+    if (searchableDeps.size > 0) {
+      deps = [...new Set([...deps, ...searchableDeps])];
     }
 
     let Klass = getClass(instance);
@@ -135,6 +211,11 @@ export default class RenderMetaRoute extends Route<Model> {
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
     searchDoc._cardType = friendlyCardType(Klass);
+    // `_title` is the neutral, cross-type display-title key that file docs also
+    // carry (see file-indexer), so a mixed cards+files query can substring-match
+    // and A-Z sort both row types on a single key. For a card it mirrors the
+    // `cardTitle` computed already present in the search doc.
+    searchDoc._title = searchDoc.cardTitle;
 
     let diagnostics: PrerenderMetaDiagnostics = {
       ...(passSnapshot
@@ -179,9 +260,53 @@ export default class RenderMetaRoute extends Route<Model> {
         internalKeyFor(t, undefined, this.network.virtualNetwork),
       ),
       searchDoc,
-      deps,
+      deps: this.network.virtualNetwork.unresolveURLs(deps),
       diagnostics,
     };
+  }
+
+  // Pull the instance's searchable-path links (and the links its
+  // contained/computed fields read) and wait for the store to settle,
+  // repeating until the load generation is stable. Running the searchable
+  // generator IS the pull — it reads every field the search doc and pristine
+  // doc will read, firing each link's lazy load through the tracked getter —
+  // and `store.loaded()` is the wait. The intermediate search docs are
+  // discarded (a throwaway dependency set); the authoritative generation runs
+  // afterward against the settled store. See the call site for why this is
+  // needed and how it composes with the /render template settle.
+  async #settleSearchableLoads(
+    instance: CardDef,
+    searchable: Awaited<ReturnType<CardService['getSearchable']>>,
+  ): Promise<void> {
+    let observedGeneration = this.store.loadGeneration;
+    let stablePasses = 0;
+    for (let pass = 0; pass < SEARCHABLE_SETTLE_MAX_PASSES; pass++) {
+      // A computed that reads a not-yet-loaded link (e.g.
+      // `this.author.firstName`) throws on the first pass — the getter fires
+      // the lazy load, then the read of the still-`undefined` target throws.
+      // The load it fired is what we wait on next, so swallow the throw and
+      // let it settle: a later pass re-runs the computed against the loaded
+      // target. A genuine (non-load-race) failure resurfaces in the
+      // authoritative generation the caller runs after this settles.
+      try {
+        await searchable.searchDocFromFields(instance);
+      } catch {
+        // intentionally ignored during settle — see above
+      }
+      await this.store.loaded();
+      let nextGeneration = this.store.loadGeneration;
+      if (nextGeneration === observedGeneration) {
+        if (++stablePasses >= SEARCHABLE_SETTLE_REQUIRED_STABLE_PASSES) {
+          return;
+        }
+      } else {
+        observedGeneration = nextGeneration;
+        stablePasses = 0;
+      }
+    }
+    computePerfLog.warn(
+      `render.meta searchable settle for ${instance.id} did not reach a stable load generation within ${SEARCHABLE_SETTLE_MAX_PASSES} passes; proceeding with the current store state`,
+    );
   }
 }
 

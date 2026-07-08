@@ -44,6 +44,11 @@ import {
   keymap,
 } from '@codemirror/view';
 
+import {
+  type BfmRefRange,
+  extractBfmRefRanges,
+} from '@cardstack/runtime-common/bfm-card-references';
+
 // ── Card widget target interface ────────────────────────────────────────────
 
 export interface CardWidgetTarget {
@@ -51,6 +56,9 @@ export interface CardWidgetTarget {
   cardId: string;
   format: 'atom' | 'embedded';
   kind: 'inline' | 'block';
+  // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
+  // (`:file[URL]`) resolve to FileDef instances.
+  refType: 'card' | 'file';
 }
 
 // ── State effect for opening card search ────────────────────────────────────
@@ -90,6 +98,19 @@ interface DecoRange {
 const BLOCK_CARD_RE = /^::card\[([^\]\n]+)\][ \t]*$/gm;
 // Inline: :card[URL], not preceded by another colon (avoids matching ::card)
 const INLINE_CARD_RE = /(?<!:):card\[([^\]\n]+)\]/g;
+// File references mirror card references with the `file` keyword.
+const BLOCK_FILE_RE = /^::file\[([^\]\n]+)\][ \t]*$/gm;
+const INLINE_FILE_RE = /(?<!:):file\[([^\]\n]+)\]/g;
+
+// The keyword-generic set of BFM reference patterns scanned in the editor.
+const BFM_REF_CONFIGS: {
+  refType: 'card' | 'file';
+  blockRe: RegExp;
+  inlineRe: RegExp;
+}[] = [
+  { refType: 'card', blockRe: BLOCK_CARD_RE, inlineRe: INLINE_CARD_RE },
+  { refType: 'file', blockRe: BLOCK_FILE_RE, inlineRe: INLINE_FILE_RE },
+];
 
 // ── Cursor-aware helpers ───────────────────────────────────────────────────
 
@@ -118,12 +139,17 @@ class CardWidget extends WidgetType {
   constructor(
     readonly cardId: string,
     readonly kind: 'inline' | 'block',
+    readonly refType: 'card' | 'file' = 'card',
   ) {
     super();
   }
 
   eq(other: CardWidget) {
-    return this.cardId === other.cardId && this.kind === other.kind;
+    return (
+      this.cardId === other.cardId &&
+      this.kind === other.kind &&
+      this.refType === other.refType
+    );
   }
 
   toDOM(): HTMLElement {
@@ -131,6 +157,7 @@ class CardWidget extends WidgetType {
     let el = document.createElement(tag);
     el.setAttribute('data-card-id', this.cardId);
     el.setAttribute('data-card-kind', this.kind);
+    el.setAttribute('data-bfm-ref-type', this.refType);
     el.className = `cm-card-widget cm-card-widget--${this.kind}`;
     el.contentEditable = 'false';
     return el;
@@ -620,103 +647,105 @@ function buildCardDecorations(
   let decos: DecoRange[] = [];
   let doc = state.doc;
   let text = doc.toString();
-
-  // Block cards: ::card[URL]
-  BLOCK_CARD_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = BLOCK_CARD_RE.exec(text)) !== null) {
-    let from = match.index;
-    let to = from + match[0].length;
-    if (isInsideCode(state, from, to)) continue;
 
-    let cardId = match[1].trim();
-    let pipeIdx = cardId.indexOf('|');
-    if (pipeIdx >= 0) {
-      cardId = cardId.substring(0, pipeIdx).trim();
+  for (let { refType, blockRe, inlineRe } of BFM_REF_CONFIGS) {
+    // Block refs: ::card[URL] / ::file[URL]
+    blockRe.lastIndex = 0;
+    while ((match = blockRe.exec(text)) !== null) {
+      let from = match.index;
+      let to = from + match[0].length;
+      if (isInsideCode(state, from, to)) continue;
+
+      let cardId = match[1].trim();
+      let pipeIdx = cardId.indexOf('|');
+      if (pipeIdx >= 0) {
+        cardId = cardId.substring(0, pipeIdx).trim();
+      }
+
+      let line = doc.lineAt(from);
+      let onCursor = livePreview && line.number === cursorLine;
+
+      if (!livePreview) {
+        // Source mode: show raw syntax with highlighting only
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class:
+              'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+          }),
+        });
+      } else if (onCursor) {
+        // Cursor on line: show raw syntax AND preview below
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class:
+              'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+          }),
+        });
+        let previewWidget = new CardWidget(cardId, 'block', refType);
+        decos.push({
+          from: to,
+          to: to,
+          value: Decoration.widget({ widget: previewWidget, side: 1 }),
+        });
+      } else {
+        // Replace source text with widget
+        let widget = new CardWidget(cardId, 'block', refType);
+        decos.push({
+          from,
+          to,
+          value: Decoration.replace({ widget }),
+        });
+      }
     }
 
-    let line = doc.lineAt(from);
-    let onCursor = livePreview && line.number === cursorLine;
+    // Inline refs: :card[URL] / :file[URL]
+    inlineRe.lastIndex = 0;
+    while ((match = inlineRe.exec(text)) !== null) {
+      let from = match.index;
+      let to = from + match[0].length;
+      if (isInsideCode(state, from, to)) continue;
 
-    if (!livePreview) {
-      // Source mode: show raw syntax with highlighting only
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class:
-            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
-        }),
-      });
-    } else if (onCursor) {
-      // Cursor on line: show raw syntax AND card preview below
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class:
-            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
-        }),
-      });
-      let previewWidget = new CardWidget(cardId, 'block');
-      decos.push({
-        from: to,
-        to: to,
-        value: Decoration.widget({ widget: previewWidget, side: 1 }),
-      });
-    } else {
-      // Replace source text with card widget
-      let widget = new CardWidget(cardId, 'block');
-      decos.push({
-        from,
-        to,
-        value: Decoration.replace({ widget }),
-      });
-    }
-  }
+      let cardId = match[1].trim();
+      let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
 
-  // Inline cards: :card[URL]
-  INLINE_CARD_RE.lastIndex = 0;
-  while ((match = INLINE_CARD_RE.exec(text)) !== null) {
-    let from = match.index;
-    let to = from + match[0].length;
-    if (isInsideCode(state, from, to)) continue;
-
-    let cardId = match[1].trim();
-    let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
-
-    if (!livePreview) {
-      // Source mode: show raw syntax with highlighting only
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
-        }),
-      });
-    } else if (onCursor) {
-      // Cursor on line: show raw syntax AND card preview after
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
-        }),
-      });
-      let previewWidget = new CardWidget(cardId, 'inline');
-      decos.push({
-        from: to,
-        to: to,
-        value: Decoration.widget({ widget: previewWidget, side: 1 }),
-      });
-    } else {
-      // Replace source text with inline card widget
-      let widget = new CardWidget(cardId, 'inline');
-      decos.push({
-        from,
-        to,
-        value: Decoration.replace({ widget }),
-      });
+      if (!livePreview) {
+        // Source mode: show raw syntax with highlighting only
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+      } else if (onCursor) {
+        // Cursor on line: show raw syntax AND preview after
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+        let previewWidget = new CardWidget(cardId, 'inline', refType);
+        decos.push({
+          from: to,
+          to: to,
+          value: Decoration.widget({ widget: previewWidget, side: 1 }),
+        });
+      } else {
+        // Replace source text with inline widget
+        let widget = new CardWidget(cardId, 'inline', refType);
+        decos.push({
+          from,
+          to,
+          value: Decoration.replace({ widget }),
+        });
+      }
     }
   }
 
@@ -820,12 +849,16 @@ function createCardTargetNotifier(
           for (let el of widgetElements) {
             let cardId = el.getAttribute('data-card-id');
             let kind = el.getAttribute('data-card-kind') as 'inline' | 'block';
+            let refType =
+              (el.getAttribute('data-bfm-ref-type') as 'card' | 'file') ??
+              'card';
             if (cardId) {
               targets.push({
                 element: el as HTMLElement,
                 cardId,
                 format: kind === 'inline' ? 'atom' : 'embedded',
                 kind,
+                refType,
               });
             }
           }
@@ -1015,6 +1048,10 @@ export interface SelectionInfo {
     strikethrough: boolean;
     link: boolean;
   };
+  // BFM `:card[…]` / `::file[…]` directive the cursor head is currently
+  // inside. Undefined when the cursor is outside every directive. Drives
+  // the toolbar's Add-vs-Edit-embed swap.
+  currentRef?: BfmRefRange;
 }
 
 function detectFormats(
@@ -1089,33 +1126,54 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       override: [slashSource],
       defaultKeymap: true,
     }),
-    EditorView.updateListener.of((update: ViewUpdate) => {
-      if (update.docChanged) {
-        onDocChange(update.state.doc.toString());
-      }
-      if (
-        onSelectionChange &&
-        (update.selectionSet || update.docChanged || update.focusChanged)
-      ) {
-        let { from, to } = update.state.selection.main;
-        let hasSelection = from !== to;
-        onSelectionChange({
-          hasSelection,
-          hasFocus: update.view.hasFocus,
-          from,
-          to,
-          formats: hasSelection
-            ? detectFormats(update.state, from, to)
-            : {
-                bold: false,
-                italic: false,
-                code: false,
-                strikethrough: false,
-                link: false,
-              },
-        });
-      }
-    }),
+    (() => {
+      // BFM ref ranges cached across selection-only updates — `extractBfmRefRanges`
+      // is a doc-wide string scan, so recompute only when the doc changes.
+      let cachedRanges: BfmRefRange[] = extractBfmRefRanges(content);
+
+      return EditorView.updateListener.of((update: ViewUpdate) => {
+        if (update.docChanged) {
+          let nextDoc = update.state.doc.toString();
+          onDocChange(nextDoc);
+          cachedRanges = extractBfmRefRanges(nextDoc);
+        }
+        if (
+          onSelectionChange &&
+          (update.selectionSet || update.docChanged || update.focusChanged)
+        ) {
+          let { from, to } = update.state.selection.main;
+          let hasSelection = from !== to;
+          let head = update.state.selection.main.head;
+          // Which directive, if any, owns the caret. A block directive is the
+          // only content on its line, so its whole span — end boundary included
+          // (`head == to`, e.g. caret at end-of-line or on the block widget) —
+          // reads as "inside". An inline directive is surrounded by prose, so
+          // its end boundary is exclusive: caret on the closing `]` (== to) is
+          // the seam where post-directive typing continues, not edit-this-embed.
+          let currentRef = cachedRanges.find((r) =>
+            r.kind === 'block'
+              ? head >= r.from && head <= r.to
+              : head >= r.from && head < r.to,
+          );
+          onSelectionChange({
+            hasSelection,
+            hasFocus: update.view.hasFocus,
+            from,
+            to,
+            formats: hasSelection
+              ? detectFormats(update.state, from, to)
+              : {
+                  bold: false,
+                  italic: false,
+                  code: false,
+                  strikethrough: false,
+                  link: false,
+                },
+            currentRef,
+          });
+        }
+      });
+    })(),
     EditorView.lineWrapping,
   ];
 

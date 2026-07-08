@@ -1,6 +1,6 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import {
@@ -72,7 +72,6 @@ import {
   type getCards,
   type getCardCollection,
   type Store,
-  type PrerenderedCardComponentSignature,
   type SearchResultsComponentSignature,
   type ErrorEntry,
   type Query,
@@ -81,7 +80,6 @@ import {
   type SerializedError,
   FileMetaResourceType,
   CardResourceType,
-  RenderedHtmlResourceType,
   loadFileMetaDocument,
   CardResource,
   LooseLinkableResource,
@@ -95,8 +93,10 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   rri,
+  resolveRRIReference,
   type RealmResourceIdentifier,
   type VirtualNetwork,
+  isDirectIndexedFieldKey,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -182,6 +182,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
   propagateRealmContext,
@@ -316,15 +317,24 @@ export type SerializedFile<Extra extends object = {}> = {
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
+// Declares which links a field makes searchable — i.e. which linked cards are
+// pulled into the search doc rather than left as a bare `{ id }` reference.
+// `searchable` only ever governs links: a contained value is always included
+// once its owner is in the doc, so `searchable` never decides whether a
+// contained field appears. `true` makes the immediate ("self") link
+// searchable; a dotted path makes a deeper (n+1) link searchable, routed from
+// this field's target through its links — naming intermediate contained
+// fields as segments to reach a link beneath them; an array combines routes.
+// Omitted leaves the link as `{ id }` only. On a `contains`/`containsMany`
+// field (whose value is always present) a path is therefore only meaningful to
+// make a link reached *through* that contained value searchable.
+export type Searchable = true | string | string[];
+
 interface Options {
   computeVia?: () => unknown;
   description?: string;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
+  // Names which links this field makes searchable. See `Searchable`.
+  searchable?: Searchable;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
   configuration?: ConfigurationInput<any>;
 }
@@ -346,15 +356,8 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  /**
-   * @deprecated Use {@link CardContext.searchResultsComponent} — the v2
-   * `<SearchResults>` surface. Retained (and still provided) during the
-   * migration window; first-party card source moves to the v2 surface via the
-   * `@context` search codemod, after which this is removed.
-   */
-  prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
-  // The v2 search rendering surface: renders the heterogeneous `search-entry`
-  // stream for a `search-entry`-rooted query — prerendered HTML inert (hydrated
+  // The search rendering surface: renders the heterogeneous `entry`
+  // stream for an `entry`-rooted query — prerendered HTML inert (hydrated
   // lazily) or a live card — so a card author renders results without ever
   // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.
   searchResultsComponent: typeof GlimmerComponent<SearchResultsComponentSignature>;
@@ -371,8 +374,8 @@ export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
   declaredCardThunk?: () => T;
-  isUsed?: true;
   isPolymorphic?: true;
+  searchable?: Searchable;
   name: string;
   queryDefinition?: QueryWithInterpolations;
 }
@@ -567,13 +570,12 @@ export interface Field<
     value: any,
     resource: LooseCardResource,
   ): void;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
   isPolymorphic?: true;
+  // The links this field makes searchable. This descriptor is the source of
+  // truth; `getFieldDefinitions` mirrors it (raw) into the cached
+  // `FieldDefinition` for the loaderless query compiler and definition-build
+  // validation. See `Searchable`.
+  searchable?: Searchable;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -645,21 +647,21 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
   }
 
   get card(): FieldT {
@@ -972,21 +974,21 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
   }
 
   get card(): CardT {
@@ -1200,8 +1202,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   constructor({
@@ -1209,16 +1211,16 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
     queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
     this.queryDefinition = queryDefinition;
   }
 
@@ -1441,7 +1443,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveRef(store.virtualNetwork, reference, relativeTo);
+    let href = resolveRef(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1636,8 +1638,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   constructor({
@@ -1645,16 +1647,16 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
     queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
     this.queryDefinition = queryDefinition;
   }
 
@@ -1979,14 +1981,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (!Array.isArray(values.data)) {
-        return [];
+        // A `{ links: { self: null } }` relationship (no `data` array) is an
+        // authored empty — no members. Fall through with an empty relationship
+        // list so the shared WatchedArray path below wraps (and tags) it the
+        // same as an empty `{ data: [] }`: a mutable, reactive backing array,
+        // not a bare `[]` (which would hand a later push/splice a plain array
+        // and skip the WatchedArray subscriber).
+        relationships = [];
+      } else {
+        relationships = values.data.map((entry) => ({
+          links: {
+            self: entry && 'id' in entry ? (entry.id ?? null) : null,
+          },
+          data: entry,
+        }));
       }
-      relationships = values.data.map((entry) => ({
-        links: {
-          self: entry && 'id' in entry ? (entry.id ?? null) : null,
-        },
-        data: entry,
-      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
@@ -2014,11 +2023,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveRef(
-          store.virtualNetwork,
-          reference,
-          relativeTo,
-        );
+        let normalizedReference = resolveRef(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2066,7 +2071,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return deserialized;
       });
 
-    return new WatchedArray(
+    let resolved = await Promise.all(resources);
+    let watched = new WatchedArray(
       (oldValue, value) =>
         instancePromise.then((instance) => {
           applySubscribersToInstanceValue(
@@ -2078,9 +2084,18 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifySubscribers(instance, this.name, value);
           notifyCardTracking(instance);
         }),
-      await Promise.all(resources),
+      resolved,
       { hideSlot: isNonPresentLink },
     );
+    // An authored-empty plural relationship (`{ data: [] }` or
+    // `{ links: { self: null } }` in the source) deserializes to an empty
+    // array — tag it authored so serialization keeps it as `{ self: null }`
+    // rather than dropping it like a never-set link. A computed field's
+    // emptiness is derived, never authored, so it is never tagged.
+    if (resolved.length === 0 && !this.computeVia) {
+      markAuthoredEmptyLink(watched);
+    }
+    return watched;
   }
 
   emptyValue(instance: BaseDef) {
@@ -2285,14 +2300,6 @@ export const field = function (
       `the @field decorator can only be used inside classes that extend BaseDef`,
     );
   }
-  if (key === RenderedHtmlResourceType) {
-    // Reserved platform relationship key (the link from a card/file-meta to
-    // its rendered-html resource). Reserved exactly like `id` so it can never
-    // collide with a userland field name.
-    throw new Error(
-      `'${key}' is a reserved relationship key and cannot be used as a @field name`,
-    );
-  }
   let init = initializer() as InternalFieldInitializer;
   let descriptor = init.setupField(key, target as BaseDef);
   if (init.description) {
@@ -2308,12 +2315,12 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed } = options ?? {};
+      let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2328,12 +2335,12 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed } = options ?? {};
+      let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2348,7 +2355,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
+      let { computeVia, searchable, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2358,7 +2365,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
@@ -2374,7 +2381,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
+      let { computeVia, searchable, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -2384,7 +2391,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
@@ -2479,11 +2486,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
-        return resolveRef(
-          getStore(value).virtualNetwork,
-          maybeRelativeReference,
-          value[relativeTo],
-        );
+        return resolveRef(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2500,37 +2503,33 @@ export class BaseDef {
           // membership from `relationships.{field}.data` separately.
           .filter(([, field]) => !field?.queryDefinition)
           .map(([fieldName, field]) => {
-          let rawValue = peekAtField(value, fieldName);
-          if (field?.fieldType === 'linksToMany') {
+            let rawValue = peekAtField(value, fieldName);
+            if (field?.fieldType === 'linksToMany') {
+              return [
+                fieldName,
+                field
+                  .queryableValue(rawValue, [value, ...stack])
+                  ?.map((v: any) => {
+                    return { ...v, id: makeAbsoluteURL(v.id) };
+                  }) ?? null,
+              ];
+            }
+            if (isNonPresentLink(rawValue)) {
+              let normalizedId = rawValue.reference;
+              if (value[relativeTo]) {
+                normalizedId = resolveRef(normalizedId, value[relativeTo]);
+              }
+              return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
+            }
+            // Reuse the value we already peeked above instead of re-reading
+            // through the descriptor — for computed fields the descriptor
+            // get path re-invokes `computeVia`, doubling the work for every
+            // contains/contains-many/links-to field in the search doc.
             return [
               fieldName,
-              field
-                .queryableValue(rawValue, [value, ...stack])
-                ?.map((v: any) => {
-                  return { ...v, id: makeAbsoluteURL(v.id) };
-                }) ?? null,
+              getQueryableValue(field!, rawValue, [value, ...stack]),
             ];
-          }
-          if (isNonPresentLink(rawValue)) {
-            let normalizedId = rawValue.reference;
-            if (value[relativeTo]) {
-              normalizedId = resolveRef(
-                getStore(value).virtualNetwork,
-                normalizedId,
-                value[relativeTo],
-              );
-            }
-            return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
-          }
-          // Reuse the value we already peeked above instead of re-reading
-          // through the descriptor — for computed fields the descriptor
-          // get path re-invokes `computeVia`, doubling the work for every
-          // contains/contains-many/links-to field in the search doc.
-          return [
-            fieldName,
-            getQueryableValue(field!, rawValue, [value, ...stack]),
-          ];
-        }),
+          }),
       );
     }
   }
@@ -3488,11 +3487,7 @@ function lazilyLoadLink(
     inflightLinkLoads.set(instance, inflightLoads);
   }
   let store = getStore(instance);
-  let reference = resolveRef(
-    store.virtualNetwork,
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let reference = resolveRef(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   if (promise) {
@@ -3608,7 +3603,6 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3696,7 +3690,6 @@ function lazilyLoadLink(
             continue;
           }
           let notLoadedRef = resolveRef(
-            store.virtualNetwork,
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -4207,11 +4200,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let deferred = new Deferred<BaseDef>();
   let nonNestedRelationships = Object.fromEntries(
     Object.entries(resource.relationships ?? {}).filter(
-      // Skip the reserved `rendered-html` relationship key: it links the
-      // resource to its prerendered-HTML rendering, not to a field, so it must
-      // never be deserialized as one.
-      ([fieldName]) =>
-        !fieldName.includes('.') && fieldName !== RenderedHtmlResourceType,
+      ([fieldName]) => !fieldName.includes('.'),
     ),
   );
   let linksToManyRelationships: Record<string, Relationship[]> = Object.entries(
@@ -4251,6 +4240,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   ): Partial<Meta>[] | undefined {
     let entry = fieldsMeta?.[key];
     return Array.isArray(entry) ? entry : undefined;
+  }
+  function clearIndexedFieldOverrides(fieldName: string): void {
+    for (let key of existingOverrides.keys()) {
+      if (isDirectIndexedFieldKey(key, fieldName)) {
+        existingOverrides.delete(key);
+      }
+    }
   }
   function isAssignableToField(
     overrideCard: typeof BaseDef,
@@ -4363,6 +4359,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
+        clearIndexedFieldOverrides(fieldName);
         if (primitive in field.card) {
           if (Array.isArray(value)) {
             for (let [index] of value.entries()) {
@@ -4510,15 +4507,6 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
     deserialized.set('id', id);
   }
   instance[isSavedInstance] = true;
-}
-
-export function searchDoc<CardT extends BaseDefConstructor>(
-  instance: InstanceType<CardT>,
-): Record<string, any> {
-  return getQueryableValue(instance.constructor, instance) as Record<
-    string,
-    any
-  >;
 }
 
 function makeDescriptor<
@@ -4817,52 +4805,49 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
-// The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the instance is
-// detached (no store, no loader-attached VN) — callers handle that by
-// degrading to URL math or throwing.
-export function virtualNetworkFor(
-  instance: BaseDef,
-): VirtualNetwork | undefined {
+// Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
+// relative to the instance's own location. Card definitions that must hand a
+// real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
+// AI source-file reader's `new URL(...)`) use this rather than reaching for the
+// VirtualNetwork object directly — they get back a URL, not the network itself.
+// Resolves through the instance's own store's VirtualNetwork, which may carry
+// realm mappings the module loader's does not (e.g. a card deserialized with an
+// explicit store). Returns undefined when none is available, or when the
+// reference can't be resolved, so callers can degrade to URL math.
+export function resolveInstanceURL(
+  instance: CardDef,
+  reference: string,
+): URL | undefined {
+  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    return getStore(instance).virtualNetwork;
+    virtualNetwork = getStore(instance).virtualNetwork;
+  } catch {
+    return undefined;
+  }
+  if (!virtualNetwork) {
+    return undefined;
+  }
+  try {
+    return virtualNetwork.resolveURL(
+      reference,
+      instance.id ?? instance[relativeTo],
+    );
   } catch {
     return undefined;
   }
 }
 
-// Resolve a (possibly prefix-form or relative) reference to an absolute URL
-// string through the supplied VirtualNetwork. When the caller can't supply
-// one (test stubs, detached instances), fall back to plain URL math: it
-// covers URL-form refs and relative refs against URL-form bases. Prefix-form
-// refs and refs against prefix-form bases can't be resolved without a VN —
-// `new URL()` throws on those, so we return the raw reference unchanged
-// instead of bubbling the error to callers (e.g. relationship deserialize
-// uses the returned string as a "did this resolve?" signal).
-function resolveRef(
-  virtualNetwork: VirtualNetwork | undefined,
+// Resolve a (possibly relative) reference to its absolute canonical RRI,
+// relative to `relativeTo`. Identifiers are canonical RRI by the time they
+// reach here, so this is pure form-preserving path math (see
+// `resolveRRIReference`) — no VirtualNetwork, no realm-mapping lookup. The
+// returned string is used as an opaque store key / "did this resolve?" signal.
+// Exported for `searchable.ts`'s search-doc absolutization.
+export function resolveRef(
   reference: string,
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
-  if (virtualNetwork) {
-    return virtualNetwork.resolveURL(reference, relativeTo).href;
-  }
-  let base: URL | string | undefined;
-  if (relativeTo instanceof URL) {
-    base = relativeTo;
-  } else if (typeof relativeTo === 'string') {
-    if (
-      relativeTo.startsWith('http://') ||
-      relativeTo.startsWith('https://')
-    ) {
-      base = relativeTo;
-    }
-  }
-  try {
-    return new URL(reference, base).href;
-  } catch {
-    return reference;
-  }
+  return resolveRRIReference(reference, relativeTo);
 }
 
 function myLoader(): Loader {

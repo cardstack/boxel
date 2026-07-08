@@ -1,4 +1,4 @@
-import { logger } from '@cardstack/runtime-common';
+import { logger, systemInitiatedPriority } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { CronJob } from 'cron';
 import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant.ts';
@@ -47,7 +47,7 @@ function startDailyCreditGrantCron(): CronJob | undefined {
       try {
         await enqueueDailyCreditGrant({
           lowCreditThreshold,
-          priority: 4,
+          priority: systemInitiatedPriority,
         });
       } catch (error) {
         Sentry.captureException(error);

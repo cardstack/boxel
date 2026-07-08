@@ -18,7 +18,7 @@ import FileIcon from '@cardstack/boxel-icons/file';
 import {
   chooseCard,
   specRef,
-  baseRealm,
+  baseRealmRRI,
   baseFileRef,
   isCardInstance,
   SupportedMimeType,
@@ -43,7 +43,6 @@ import {
   CardDef,
   realmInfo,
   realmURL,
-  virtualNetworkFor,
   type BaseDef,
   type BoxComponent,
 } from './card-api';
@@ -307,13 +306,9 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      let vn = virtualNetworkFor(spec);
-      if (!vn) {
-        throw new Error(
-          `cards-grid createCard requires a VirtualNetwork on the spec's store`,
-        );
-      }
-      await this.args.createCard?.(spec.ref, vn.toURL(spec.id!), {
+      // Resolve `spec.ref` relative to the spec's (canonical) id in RRI space —
+      // no VirtualNetwork. `createCard` resolves the ref against this base.
+      await this.args.createCard?.(spec.ref, spec.id, {
         realmURL: this.args.model[realmURL],
       });
     } else if (activeFilterRef) {
@@ -361,12 +356,12 @@ class Isolated extends Component<typeof CardsGrid> {
       };
     }[];
     let excludedCardTypeIds = [
-      `${baseRealm.url}card-api/CardDef`,
-      `${baseRealm.url}cards-grid/CardsGrid`,
+      `${baseRealmRRI}card-api/CardDef`,
+      `${baseRealmRRI}cards-grid/CardsGrid`,
     ];
     // The "All Files" group already represents the bare FileDef root — listing
     // it again as a leaf would just be a duplicate row.
-    let excludedFileTypeIds = [`${baseRealm.url}card-api/FileDef`];
+    let excludedFileTypeIds = [`${baseRealmRRI}card-api/FileDef`];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);

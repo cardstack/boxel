@@ -15,7 +15,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, identifyCard } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
+  identifyCard,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { buildFileResource } from '@cardstack/host/utils/file-def-attributes-extractor';
@@ -208,6 +212,58 @@ module('Integration | markdown skill frontmatter', function (hooks) {
       instance.frontmatter.commands[0].codeRef.name,
       'SyncCommand',
       'command codeRef survives round-trip',
+    );
+  });
+
+  test('invalid frontmatter YAML routes a parse-error marker and still indexes the body', async function (assert) {
+    let { MarkdownDef } = await loadBase();
+    let url = `${testRealmURL}skills/bad/SKILL.md`;
+    // Unterminated flow mapping — valid `---` fences, invalid YAML inside.
+    let badMarkdown = `---
+name: Bad Skill
+boxel: { kind: skill, commands: [
+---
+# Bad Skill
+
+Body paragraph.
+`;
+    let attrs = await MarkdownDef.extractAttributes(
+      url,
+      streamOf(badMarkdown),
+      {},
+    );
+
+    let routed = (attrs as Record<PropertyKey, any>)[
+      FRONTMATTER_PARSE_ERROR_SYMBOL
+    ];
+    assert.strictEqual(
+      typeof routed?.message,
+      'string',
+      'routes a frontmatter parse error carrying a message string',
+    );
+    assert.true(
+      (routed?.message?.length ?? 0) > 0,
+      'the routed parse-error message is non-empty',
+    );
+
+    assert.strictEqual(
+      attrs.kind,
+      undefined,
+      'no searchable kind — the frontmatter was dropped',
+    );
+    assert.strictEqual(
+      attrs.frontmatter,
+      undefined,
+      'no typed frontmatter value when the YAML failed to parse',
+    );
+    assert.strictEqual(
+      (attrs as Record<PropertyKey, any>)[FILE_FIELD_META],
+      undefined,
+      'no routed field meta when the frontmatter was dropped',
+    );
+    assert.true(
+      attrs.content.includes('Body paragraph.'),
+      'body is still indexed despite the parse failure',
     );
   });
 

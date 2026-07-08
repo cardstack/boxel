@@ -10,7 +10,7 @@ import {
   type QueuePublisher,
   type CopyArgs,
   type CopyResult,
-} from '.';
+} from './index.ts';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
@@ -24,7 +24,7 @@ import type {
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
 import { RealmPaths } from './paths.ts';
-import ignore, { type Ignore } from 'ignore';
+import { ignore, type Ignore } from './ignore.ts';
 
 export class RealmIndexUpdater {
   #realm: Realm;

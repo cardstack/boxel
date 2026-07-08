@@ -623,6 +623,16 @@ jobs:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
 
+      # The shard's pass/fail must reflect the test suite actually running,
+      # not the exit code of whatever wraps it. testem's xunit reporter
+      # writes junit/host-N.xml only once the suite runs to completion, so
+      # a missing or empty report means the suite never ran (e.g. its
+      # wrapper wedged before launch) — fail loudly here rather than
+      # report a green shard that executed zero tests.
+      - name: Assert junit report was produced
+        if: ${{ !cancelled() }}
+        run: test -s junit/host-${{ matrix.shardIndex }}.xml
+
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}

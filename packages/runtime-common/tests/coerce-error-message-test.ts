@@ -1,4 +1,8 @@
-import { CardError, coerceErrorMessage } from '../error.ts';
+import {
+  CardError,
+  coerceErrorMessage,
+  stringifyErrorForLog,
+} from '../error.ts';
 import type { SharedTests } from '../helpers/index.ts';
 
 const PLACEHOLDER = 'placeholder fallback message';
@@ -119,6 +123,48 @@ const tests = Object.freeze({
     assert.strictEqual(coerceErrorMessage({}, PLACEHOLDER), PLACEHOLDER);
     let tagged = { [Symbol.toStringTag]: 'TaggedError' };
     assert.strictEqual(coerceErrorMessage(tagged, PLACEHOLDER), PLACEHOLDER);
+  },
+
+  'stringifyErrorForLog returns the stack for an Error': async (assert) => {
+    let err = new Error('boom');
+    let out = stringifyErrorForLog(err);
+    assert.true(out.includes('boom'), 'includes the message');
+    assert.true(out.includes('Error'), 'includes the error name');
+  },
+
+  'stringifyErrorForLog falls back to name+message when an Error has no stack':
+    async (assert) => {
+      let err = new Error('no stack here');
+      // Force `stack` to undefined via an own data property so the test
+      // doesn't depend on whether the engine exposes `stack` as an own
+      // property (deletable) or a prototype accessor.
+      Object.defineProperty(err, 'stack', {
+        value: undefined,
+        configurable: true,
+      });
+      assert.strictEqual(stringifyErrorForLog(err), 'Error: no stack here');
+    },
+
+  'stringifyErrorForLog JSON-dumps a plain / JSON:API error object': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      stringifyErrorForLog({ status: 500, title: 'Internal Server Error' }),
+      '{"status":500,"title":"Internal Server Error"}',
+    );
+  },
+
+  'stringifyErrorForLog returns a string error unchanged': async (assert) => {
+    assert.strictEqual(stringifyErrorForLog('plain message'), 'plain message');
+  },
+
+  'stringifyErrorForLog falls back to a placeholder for null': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      stringifyErrorForLog(null),
+      '(no error detail available)',
+    );
   },
 } as SharedTests<{}>);
 

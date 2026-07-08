@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
@@ -93,7 +94,7 @@ function buildModuleResponse(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('DefinitionLookup', function (hooks) {
     let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';
@@ -158,7 +159,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: rri('https://cardstack.com/base/string'),
+                        module: rri('@cardstack/base/string'),
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -1739,19 +1740,34 @@ module(basename(__filename), function () {
         2,
         'invalidate dropped the in-flight entry so caller B triggered its own prerender',
       );
-      // CS-10948: A's pre-invalidation result is dropped at persist time
-      // rather than served back. lookupDefinition therefore rejects (the
-      // post-skip readFromDatabaseCache misses because invalidate also
-      // deleted the row). Only B — which started after the bump and ran a
-      // fresh prerender — returns a Definition.
-      assert.strictEqual(
-        resultA.status,
-        'rejected',
-        'A is rejected — its pre-invalidation prerender result is discarded',
-      );
+      // A's pre-invalidation prerender result (v1) is discarded at persist
+      // time rather than served back. After discarding it, A falls back to
+      // readFromDatabaseCache, and the row that read finds depends on a race
+      // with caller B's fresh persist: releaseGate() unparks both callers at
+      // once, so A's
+      // fallback SELECT and B's INSERT of v2 settle in nondeterministic
+      // order —
+      //   - B's v2 not yet persisted when A reads -> A misses -> A rejects.
+      //   - B's v2 already persisted              -> A returns v2.
+      // Either way the invariant holds: A never serves its own stale v1.
+      // (Asserting strictly 'rejected' picks one race winner and flakes when
+      // B's INSERT lands before A's SELECT.)
       assert.strictEqual(resultB.status, 'fulfilled');
       if (resultB.status === 'fulfilled') {
         assert.strictEqual(resultB.value?.displayName, 'CoalesceInvalidate v2');
+      }
+      if (resultA.status === 'fulfilled') {
+        assert.strictEqual(
+          resultA.value?.displayName,
+          'CoalesceInvalidate v2',
+          "A discarded its stale v1 and fell back to B's freshly-persisted v2 (benign race: B persisted before A read)",
+        );
+      } else {
+        assert.strictEqual(
+          resultA.status,
+          'rejected',
+          'A discarded its stale v1 and its DB fallback missed (benign race: A read before B persisted)',
+        );
       }
     });
 
@@ -2246,6 +2262,12 @@ module(basename(__filename), function () {
     let nextPrerenderMeta:
       | import('@cardstack/runtime-common').PrerenderResponseMeta
       | undefined;
+    // Override the field map/defs the mock returns for the Person definition,
+    // so a test can drive a `searchable`-bearing FieldDefinition through the
+    // persistence path and read it back out of `modules.definitions`.
+    let nextPersonDefinitionParts:
+      | { fields: Record<string, string>; fieldDefs: Record<string, any> }
+      | undefined;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -2271,8 +2293,8 @@ module(basename(__filename), function () {
                   type: 'card-def',
                   codeRef: { module: rri(moduleURL.href), name: 'Person' },
                   displayName: 'Person',
-                  fields: {},
-                  fieldDefs: {},
+                  fields: nextPersonDefinitionParts?.fields ?? {},
+                  fieldDefs: nextPersonDefinitionParts?.fieldDefs ?? {},
                 },
                 types: [],
               },
@@ -2315,6 +2337,7 @@ module(basename(__filename), function () {
     hooks.afterEach(async function () {
       await adapter.close();
       nextPrerenderMeta = undefined;
+      nextPersonDefinitionParts = undefined;
     });
 
     test('persists diagnostics from prerender meta on module rows', async function (assert) {
@@ -2366,6 +2389,84 @@ module(basename(__filename), function () {
         rows[0].diagnostics,
         null,
         'diagnostics is null when meta is absent',
+      );
+    });
+
+    test('persists searchablePathIssues from prerender meta on module rows', async function (assert) {
+      // The module-prerender route's definition-build validation records
+      // unresolvable `searchable` paths on meta.diagnostics; this is the
+      // channel that lands them in `modules.diagnostics` for authors to see.
+      let searchablePathIssues = [
+        {
+          codeRef: `${realmURL}person/Person`,
+          fieldName: 'reviewer',
+          path: 'addresss',
+        },
+      ];
+      nextPrerenderMeta = { diagnostics: { searchablePathIssues } };
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      let rows = (await adapter.execute(
+        `SELECT diagnostics FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { diagnostics: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].diagnostics;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      assert.deepEqual(
+        persisted?.searchablePathIssues,
+        searchablePathIssues,
+        'searchablePathIssues persisted to modules.diagnostics',
+      );
+    });
+
+    test("persists a field's searchable annotation into modules.definitions", async function (assert) {
+      // getFieldDefinitions mirrors `searchable` onto the cached
+      // FieldDefinition; confirm the raw value survives the persistence path
+      // into the `modules.definitions` JSON the loaderless query compiler reads.
+      nextPersonDefinitionParts = {
+        fields: { reviewer: 'f0' },
+        fieldDefs: {
+          f0: {
+            type: 'linksTo',
+            isPrimitive: false,
+            isComputed: false,
+            fieldOrCard: {
+              module: rri(`${realmURL}author.gts`),
+              name: 'Author',
+            },
+            searchable: 'address',
+          },
+        },
+      };
+      await definitionLookup.lookupDefinition({
+        module: rri(`${realmURL}person.gts`),
+        name: 'Person',
+      });
+
+      let rows = (await adapter.execute(
+        `SELECT definitions FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { definitions: unknown }[];
+      assert.strictEqual(rows.length, 1, 'one modules row was written');
+      let raw = rows[0].definitions;
+      let persisted =
+        typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, any>)
+          : (raw as Record<string, any>);
+      let personEntry = persisted[Object.keys(persisted)[0]];
+      let definition = personEntry.definition;
+      let reviewerDefId = definition.fields.reviewer;
+      assert.strictEqual(
+        definition.fieldDefs[reviewerDefId].searchable,
+        'address',
+        'searchable survives into the persisted modules.definitions JSON',
       );
     });
   });

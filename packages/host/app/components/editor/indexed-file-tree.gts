@@ -101,10 +101,8 @@ export default class IndexedFileTree extends Component<Signature> {
         position: relative;
         min-height: 100%;
       }
-      nav:focus-visible {
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: -2px;
-        border-radius: var(--boxel-border-radius-xs);
+      nav:focus {
+        outline: none;
       }
     </style>
   </template>

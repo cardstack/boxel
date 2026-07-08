@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -138,7 +138,7 @@ module('Acceptance | ogg audio def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const oggDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}ogg-audio-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}ogg-audio-def` as RealmResourceIdentifier,
     name: 'OggDef',
   });
 

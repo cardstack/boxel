@@ -103,3 +103,33 @@ templates:
 experimental_features:
   msc3575_enabled: true
   msc3874_enabled: true
+
+# BEGIN_TEST_OIDC
+# Google OIDC wired to navikt/mock-oauth2-server for the Playwright SSO suite.
+# packages/matrix/support/synapse/index.ts strips this block unless
+# MOCK_OAUTH2_ISSUER is set (the matrix global setup sets it once the mock
+# container is up), so suites that don't exercise SSO boot Synapse without a
+# provider whose discovery would never resolve.
+sso:
+  # Synapse refuses to redirect back to the host after SSO unless the target
+  # is allowlisted; without this it renders its built-in success page instead.
+  client_whitelist:
+    - "https://localhost:4205/"
+oidc_providers:
+  # idp_id `google` is surfaced to clients as `oidc-google`, which the host's
+  # login component looks for.
+  - idp_id: google
+    idp_name: "Google"
+    idp_brand: "google"
+    issuer: "{{MOCK_OAUTH2_ISSUER}}"
+    client_id: "synapse"
+    client_secret: "synapse-secret"
+    scopes: ["openid", "email", "profile"]
+    allow_existing_users: true
+    # The mock issuer is plain http; authlib's metadata validation otherwise
+    # rejects a non-https issuer and Synapse refuses to boot. Test-only.
+    skip_verification: true
+    user_mapping_provider:
+      module: boxel_oidc_mapping_provider.BoxelOidcMappingProvider
+      config: {}
+# END_TEST_OIDC

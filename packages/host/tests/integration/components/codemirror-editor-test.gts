@@ -230,6 +230,143 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('inline :file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Some intro text\n\nSee :file[https://example.com/docs/report.pdf] for details.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let inlineTarget = targets.find((t) => t.kind === 'inline');
+      assert.ok(inlineTarget, 'has an inline target');
+      assert.strictEqual(
+        inlineTarget?.cardId,
+        'https://example.com/docs/report.pdf',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        inlineTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        inlineTarget?.format,
+        'atom',
+        'inline files use atom format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('block ::file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          '# Title\n\n::file[https://example.com/data/sample.csv]\n\nMore text.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let blockTarget = targets.find((t) => t.kind === 'block');
+      assert.ok(blockTarget, 'has a block target');
+      assert.strictEqual(
+        blockTarget?.cardId,
+        'https://example.com/data/sample.csv',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        blockTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        blockTarget?.format,
+        'embedded',
+        'block files use embedded format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('card and file refs coexist with distinct refTypes', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Card: :card[https://example.com/Author/alice]\n\nFile: :file[https://example.com/docs/report.pdf]',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let cardTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/Author/alice',
+      );
+      let fileTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/docs/report.pdf',
+      );
+      assert.strictEqual(
+        cardTarget?.refType,
+        'card',
+        'card ref → refType card',
+      );
+      assert.strictEqual(
+        fileTarget?.refType,
+        'file',
+        'file ref → refType file',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   test('card refs inside fenced code blocks are NOT decorated', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
@@ -1681,6 +1818,84 @@ module('Integration | codemirror-context', function (hooks) {
       );
     } finally {
       delete (globalThis as any).__loadCodeMirror;
+    }
+  });
+
+  // ── currentRef tracking (BFM directive under cursor) ──
+
+  test('onSelectionChange.currentRef reports the BFM directive under the cursor', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let content = 'Inline :card[./mango] then more text';
+      let state = cmContext.createEditorState({
+        content,
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      let directiveStart = content.indexOf(':card');
+      let directiveEnd = content.indexOf(']') + 1;
+
+      // Inside the directive — currentRef populated.
+      view.dispatch({
+        selection: { anchor: directiveStart + 2, head: directiveStart + 2 },
+      });
+      assert.ok(lastInfo?.currentRef, 'currentRef is set inside the directive');
+      assert.strictEqual(lastInfo.currentRef.refType, 'card');
+      assert.strictEqual(lastInfo.currentRef.url, './mango');
+      assert.strictEqual(lastInfo.currentRef.from, directiveStart);
+      assert.strictEqual(lastInfo.currentRef.to, directiveEnd);
+
+      // Outside the directive — currentRef cleared.
+      view.dispatch({ selection: { anchor: 0, head: 0 } });
+      assert.notOk(
+        lastInfo?.currentRef,
+        'currentRef is undefined outside any directive',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('currentRef refreshes after a doc edit shifts the range', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let state = cmContext.createEditorState({
+        content: ':card[./mango]',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // Prepend text — the directive shifts right by 5 chars.
+      view.dispatch({ changes: { from: 0, to: 0, insert: 'pre: ' } });
+      view.dispatch({ selection: { anchor: 7, head: 7 } });
+
+      assert.ok(lastInfo?.currentRef, 'currentRef detected after the edit');
+      assert.strictEqual(
+        lastInfo.currentRef.from,
+        5,
+        'range start tracks the edit',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
     }
   });
 });

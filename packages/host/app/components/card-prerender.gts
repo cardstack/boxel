@@ -32,6 +32,7 @@ import {
   VISIT_PASS_ORDER,
   serializeRenderRouteOptions,
   cleanCapturedHTML,
+  snapshotRuntimeDependencies,
 } from '@cardstack/runtime-common';
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
@@ -202,13 +203,19 @@ export default class CardPrerender extends Component {
 
   // Composite visit task — runs the caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a shared nonce and with a single
-  // clearCache consumption. Mirrors the server-side prerenderVisitAttempt.
+  // clearCache consumption. Mirrors the server-side prerenderVisitAttempt,
+  // including its visitType bifurcation: an 'index' visit runs the extract,
+  // the card's meta + icon and the file's icon — never an html-format
+  // render; a 'prerender-html' visit runs only the html formats + markdown.
+  // No visitType runs the fused union.
   private prerenderVisitTask = enqueueTask(
     async ({
       url,
+      visitType,
       renderOptions,
       fileData,
       types,
+      cardTypes,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
       this.#nonce++;
       // Clear any residual render error from a previous visit so the earliest
@@ -219,8 +226,12 @@ export default class CardPrerender extends Component {
         Boolean(renderOptions?.clearCache),
       );
       let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
+      let runIndexSteps = visitType !== 'prerender-html';
+      let runHtmlSteps = visitType !== 'index';
       let requested = {
-        fileExtract: Boolean(baseOptions.fileExtract),
+        // The extract belongs to the index half; a prerender-html visit
+        // never runs it even when the flag rides along on shared options.
+        fileExtract: Boolean(baseOptions.fileExtract) && runIndexSteps,
         cardRender: Boolean(baseOptions.cardRender),
         fileRender: Boolean(baseOptions.fileRender),
       };
@@ -333,6 +344,7 @@ export default class CardPrerender extends Component {
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
         let markdown: string | null = null;
+        let capturedDeps: string[] | null = null;
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
@@ -344,48 +356,82 @@ export default class CardPrerender extends Component {
           await this.#primeCardType(url, context);
           let subsequentRenderOptions =
             omitOneTimeOptions(initialRenderOptions);
-          isolatedHTML = await this.renderHTML.perform(
-            url,
-            'isolated',
-            0,
-            initialRenderOptions,
-          );
-          meta = await this.renderMeta.perform(url, subsequentRenderOptions);
-          headHTML = await this.renderHTML.perform(
-            url,
-            'head',
-            0,
-            subsequentRenderOptions,
-          );
-          atomHTML = await this.renderHTML.perform(
-            url,
-            'atom',
-            0,
-            subsequentRenderOptions,
-          );
-          iconHTML = await this.renderIcon.perform(
-            url,
-            subsequentRenderOptions,
-          );
-          markdown = await this.renderHTML.perform(
-            url,
-            'markdown',
-            0,
-            subsequentRenderOptions,
-          );
-          if (meta?.types) {
-            embeddedHTML = await this.renderAncestors.perform(
+          if (runHtmlSteps) {
+            isolatedHTML = await this.renderHTML.perform(
               url,
-              'embedded',
-              meta.types,
+              'isolated',
+              0,
+              initialRenderOptions,
+            );
+            if (visitType === 'prerender-html') {
+              // The card's runtime deps normally ride on render.meta, which
+              // a prerender-html visit never runs. Snapshot the tracking
+              // session directly after the isolated render settles so the
+              // HTML rendering still reports what it pulled in — the
+              // indexing job unions this with the index visit's meta deps.
+              capturedDeps = this.network.virtualNetwork.unresolveURLs(
+                snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+              );
+            }
+          }
+          if (runIndexSteps) {
+            meta = await this.renderMeta.perform(
+              url,
+              runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
+            );
+          }
+          if (runHtmlSteps) {
+            headHTML = await this.renderHTML.perform(
+              url,
+              'head',
+              0,
               subsequentRenderOptions,
             );
-            fittedHTML = await this.renderAncestors.perform(
+            atomHTML = await this.renderHTML.perform(
               url,
-              'fitted',
-              meta.types,
+              'atom',
+              0,
               subsequentRenderOptions,
             );
+          }
+          if (runIndexSteps) {
+            iconHTML = await this.renderIcon.perform(
+              url,
+              subsequentRenderOptions,
+            );
+          }
+          if (runHtmlSteps) {
+            markdown = await this.renderHTML.perform(
+              url,
+              'markdown',
+              0,
+              subsequentRenderOptions,
+            );
+            // The ancestor type chain drives the fitted/embedded renders. A
+            // prerender-html visit takes the chain the caller passed (the
+            // indexing job forwards the index visit's types) and resolves it
+            // itself via render.meta only as a fallback; the fused visit
+            // already holds it from the meta step above.
+            let typesForAncestors = runIndexSteps
+              ? meta?.types
+              : cardTypes?.length
+                ? cardTypes
+                : (await this.renderMeta.perform(url, subsequentRenderOptions))
+                    ?.types;
+            if (typesForAncestors) {
+              embeddedHTML = await this.renderAncestors.perform(
+                url,
+                'embedded',
+                typesForAncestors,
+                subsequentRenderOptions,
+              );
+              fittedHTML = await this.renderAncestors.perform(
+                url,
+                'fitted',
+                typesForAncestors,
+                subsequentRenderOptions,
+              );
+            }
           }
         } catch (e: any) {
           try {
@@ -425,6 +471,7 @@ export default class CardPrerender extends Component {
         }
         response.card = {
           ...meta,
+          ...(capturedDeps ? { deps: capturedDeps } : {}),
           isolatedHTML,
           headHTML,
           atomHTML,
@@ -490,47 +537,55 @@ export default class CardPrerender extends Component {
           try {
             let subsequentRenderOptions =
               omitOneTimeOptions(initialRenderOptions);
-            isolatedHTML = await this.renderHTML.perform(
-              url,
-              'isolated',
-              0,
-              initialRenderOptions,
-            );
-            headHTML = await this.renderHTML.perform(
-              url,
-              'head',
-              0,
-              subsequentRenderOptions,
-            );
-            atomHTML = await this.renderHTML.perform(
-              url,
-              'atom',
-              0,
-              subsequentRenderOptions,
-            );
-            iconHTML = await this.renderIcon.perform(
-              url,
-              subsequentRenderOptions,
-            );
-            markdown = await this.renderHTML.perform(
-              url,
-              'markdown',
-              0,
-              subsequentRenderOptions,
-            );
-            if (effectiveTypes?.length) {
-              embeddedHTML = await this.renderAncestors.perform(
+            if (runHtmlSteps) {
+              isolatedHTML = await this.renderHTML.perform(
                 url,
-                'embedded',
-                effectiveTypes,
+                'isolated',
+                0,
+                initialRenderOptions,
+              );
+              headHTML = await this.renderHTML.perform(
+                url,
+                'head',
+                0,
                 subsequentRenderOptions,
               );
-              fittedHTML = await this.renderAncestors.perform(
+              atomHTML = await this.renderHTML.perform(
                 url,
-                'fitted',
-                effectiveTypes,
+                'atom',
+                0,
                 subsequentRenderOptions,
               );
+            }
+            if (runIndexSteps) {
+              // The file's icon belongs to the index half; in an index visit
+              // it is the pass's only render.
+              iconHTML = await this.renderIcon.perform(
+                url,
+                runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
+              );
+            }
+            if (runHtmlSteps) {
+              markdown = await this.renderHTML.perform(
+                url,
+                'markdown',
+                0,
+                subsequentRenderOptions,
+              );
+              if (effectiveTypes?.length) {
+                embeddedHTML = await this.renderAncestors.perform(
+                  url,
+                  'embedded',
+                  effectiveTypes,
+                  subsequentRenderOptions,
+                );
+                fittedHTML = await this.renderAncestors.perform(
+                  url,
+                  'fitted',
+                  effectiveTypes,
+                  subsequentRenderOptions,
+                );
+              }
             }
           } catch (e: any) {
             try {

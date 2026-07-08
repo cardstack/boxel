@@ -4,12 +4,20 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
+import { dropTask } from 'ember-concurrency';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
-import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
+import {
+  IconGlobe,
+  Lock,
+  StarFilled,
+  TriangleRight,
+  Warning as WarningIcon,
+} from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { ri } from '@cardstack/runtime-common';
@@ -20,6 +28,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import ArchivedWorkspace from './archived-workspace';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -40,6 +49,64 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+
+  // Archived realms are tucked away below the fold and collapsed by default —
+  // they're rarely needed, so the section stays out of the way and the list
+  // isn't fetched until the owner opens the disclosure.
+  @tracked private isArchivedExpanded = false;
+
+  private get archivedRealms() {
+    return this.realmServer.archivedRealms;
+  }
+
+  // Trusted realm servers that couldn't be reached during boot. When present,
+  // an unobtrusive notice names them so the user understands some workspaces
+  // may be missing; the notice clears once the background retry recovers them.
+  private get unreachableRealmServers() {
+    return this.realmServer.unreachableRealmServers;
+  }
+
+  private get unreachableRealmServersMessage() {
+    let hosts = this.unreachableRealmServers.map((serverURL) => {
+      try {
+        return new URL(serverURL).host;
+      } catch {
+        return serverURL;
+      }
+    });
+    // Name every unreachable server, per the notice's contract. Trusted
+    // servers are few in practice, so a comma-joined list stays readable.
+    let servers = hosts.join(', ');
+    return `Couldn’t reach ${servers}. Some workspaces may be missing — retrying…`;
+  }
+
+  // Show the archived count once we've loaded the list (or already have entries
+  // from an archive action this session). Before the first load we don't know
+  // the count, so the row shows just "Archived".
+  private get showArchivedCount() {
+    return (
+      Boolean(this.loadArchivedRealmsTask.lastSuccessful) ||
+      this.archivedRealms.length > 0
+    );
+  }
+
+  private loadArchivedRealmsTask = dropTask(async () => {
+    await this.realmServer.fetchArchivedRealms();
+  });
+
+  @action private toggleArchived() {
+    this.isArchivedExpanded = !this.isArchivedExpanded;
+    // Lazy-load on first expand. Retry if a prior attempt failed (no
+    // lastSuccessful); the service caches a successful fetch so re-expanding
+    // after success is a no-op.
+    if (
+      this.isArchivedExpanded &&
+      !this.loadArchivedRealmsTask.lastSuccessful &&
+      !this.loadArchivedRealmsTask.isRunning
+    ) {
+      this.loadArchivedRealmsTask.perform();
+    }
+  }
 
   private sortOptions: SortOption[] = [
     { label: 'View All', icon: Shapes, value: 'default' },
@@ -331,6 +398,20 @@ export default class WorkspaceChooser extends Component<Signature> {
         {{/in-element}}
       {{/if}}
       <div class='workspace-chooser__content boxel-dark-scrollbar'>
+        {{#if this.unreachableRealmServers.length}}
+          <div
+            class='unreachable-notice'
+            role='status'
+            data-test-unreachable-realm-servers-notice
+          >
+            <WarningIcon
+              width='16'
+              height='16'
+              class='unreachable-notice-icon'
+            />
+            <span>{{this.unreachableRealmServersMessage}}</span>
+          </div>
+        {{/if}}
         <div class='sections-wrapper'>
           <div class='workspace-section' data-test-favorites-section>
             <div class='section-header'>
@@ -418,6 +499,44 @@ export default class WorkspaceChooser extends Component<Signature> {
               {{/if}}
             </div>
           {{/if}}
+          <div class='workspace-section' data-test-archived-section>
+            <button
+              type='button'
+              class='section-header section-header--toggle
+                {{if this.isArchivedExpanded "is-expanded"}}'
+              aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
+              data-test-archived-toggle
+              {{on 'click' this.toggleArchived}}
+            >
+              <TriangleRight
+                width='12'
+                height='12'
+                class='section-disclosure-icon'
+              />
+              <ArchiveIcon width='20' height='20' class='section-header-icon' />
+              <span class='workspace-chooser__title'>Archived</span>
+              {{#if this.showArchivedCount}}
+                <span
+                  class='section-count'
+                >{{this.archivedRealms.length}}</span>
+              {{/if}}
+            </button>
+            {{#if this.isArchivedExpanded}}
+              {{#if this.loadArchivedRealmsTask.isRunning}}
+                <WorkspaceLoadingIndicator />
+              {{else if this.archivedRealms.length}}
+                <div class='workspace-list' data-test-archived-list>
+                  {{#each this.archivedRealms as |archivedRealm|}}
+                    <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
+                  {{/each}}
+                </div>
+              {{else}}
+                <span class='section-empty' data-test-archived-empty>
+                  No archived workspaces
+                </span>
+              {{/if}}
+            {{/if}}
+          </div>
         </div>
       </div>
     </div>
@@ -481,6 +600,28 @@ export default class WorkspaceChooser extends Component<Signature> {
         color: var(--boxel-teal);
         flex-shrink: 0;
       }
+      .section-header--toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        width: fit-content;
+        text-align: left;
+      }
+      .section-disclosure-icon {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
+        flex-shrink: 0;
+        transition: transform 0.15s ease;
+      }
+      .section-header--toggle.is-expanded .section-disclosure-icon {
+        transform: rotate(90deg);
+      }
+      .section-count {
+        color: var(--boxel-400);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+      }
       .workspace-chooser__title {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-lg);
@@ -495,6 +636,22 @@ export default class WorkspaceChooser extends Component<Signature> {
       .section-empty {
         color: var(--boxel-400);
         font: 400 var(--boxel-font-sm);
+      }
+      .unreachable-notice {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        max-width: 40rem;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: rgba(255 255 255 / 10%);
+        color: var(--boxel-light);
+        font: 400 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .unreachable-notice-icon {
+        --icon-color: var(--boxel-warning-100);
+        flex-shrink: 0;
       }
     </style>
   </template>

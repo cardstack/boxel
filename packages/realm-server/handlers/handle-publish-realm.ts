@@ -1,6 +1,5 @@
 import type Koa from 'koa';
 import {
-  createResponse,
   fetchUserPermissions,
   isResolvedCodeRef,
   query,
@@ -14,18 +13,17 @@ import {
   fetchRealmPermissions,
   uuidv4,
   userInitiatedPriority,
+  deriveRealmName,
 } from '@cardstack/runtime-common';
+import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import { join } from 'path';
-import {
-  copySync,
-  readJsonSync,
-  writeJsonSync,
-  removeSync,
-  existsSync,
-  moveSync,
-} from 'fs-extra';
+import fsExtra from 'fs-extra';
+// Async fs ops only: the publish handler runs these inside the request, and a
+// synchronous copy/move of a whole realm directory would freeze the Node event
+// loop, stalling every other concurrent request until it finished.
+const { copy, readJson, writeJson, remove, pathExists, move } = fsExtra;
 
 import {
   fetchRequestFromContext,
@@ -39,7 +37,10 @@ import { createJWT } from '../jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { registerUser } from '../synapse.ts';
-import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
+import {
+  getMatrixUsername,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 
@@ -148,15 +149,20 @@ async function maybeApplyPublishedRealmOverride(
 // the index.json's adoptsFrom — a published realm that has customised
 // its index to a different CardDef is left alone (its isolated render
 // is presumably the bespoke landing page the publisher wanted).
-function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
+async function ensureRealmIndexBoilerplateOptIn(
+  publishedRealmPath: string,
+): Promise<void> {
   let indexJsonPath = join(publishedRealmPath, 'index.json');
   let realmJsonPath = join(publishedRealmPath, 'realm.json');
-  if (!existsSync(indexJsonPath) || !existsSync(realmJsonPath)) {
+  if (
+    !(await pathExists(indexJsonPath)) ||
+    !(await pathExists(realmJsonPath))
+  ) {
     return;
   }
   let indexDoc: unknown;
   try {
-    indexDoc = readJsonSync(indexJsonPath);
+    indexDoc = await readJson(indexJsonPath);
   } catch (e) {
     log.warn(
       `could not parse published index.json at ${indexJsonPath}: ${
@@ -180,7 +186,7 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
   }
   let realmConfigDoc: Record<string, unknown>;
   try {
-    realmConfigDoc = readJsonSync(realmJsonPath) as Record<string, unknown>;
+    realmConfigDoc = (await readJson(realmJsonPath)) as Record<string, unknown>;
   } catch (e) {
     log.warn(
       `could not parse published realm.json at ${realmJsonPath}: ${
@@ -198,7 +204,7 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
   data.attributes = attributes;
   realmConfigDoc.data = data;
   try {
-    writeJsonSync(realmJsonPath, realmConfigDoc, { spaces: 2 });
+    await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
   } catch (e) {
     log.warn(
       `could not write includePrerenderedDefaultRealmIndex into ${realmJsonPath}: ${
@@ -315,6 +321,35 @@ export default function handlePublishRealm({
         );
         return;
       }
+
+      // Within the owner's own published space (`<username>.<spaceDomain>`), a
+      // subdirectory publish may target only the realm-name path (the "Your
+      // Boxel Space" target) or the server-issued unlisted-link slug — never an
+      // arbitrary, client-chosen path — so the unlisted link's unguessable
+      // path can't be hand-picked through a direct API call. Publishes to any
+      // other host (claimed custom domains, etc.) are left permissive.
+      let spaceDomain = domainsForPublishedRealms?.boxelSpace;
+      let matrixUsername = getMatrixUsername(ownerUserId);
+      let publishedURLForPath = new URL(publishedRealmURL);
+      let isOwnerSpaceHost =
+        !!spaceDomain &&
+        (publishedURLForPath.host === `${matrixUsername}.${spaceDomain}` ||
+          publishedURLForPath.hostname === `${matrixUsername}.${spaceDomain}`);
+      if (isOwnerSpaceHost) {
+        let publishedPath = publishedURLForPath.pathname
+          .split('/')
+          .filter(Boolean)
+          .join('/');
+        let realmName = deriveRealmName(sourceRealmURL);
+        let unlistedSlug = await getUnlistedSlug(dbAdapter, sourceRealmURL);
+        if (publishedPath !== realmName && publishedPath !== unlistedSlug) {
+          await sendResponseForBadRequest(
+            ctxt,
+            'publishedRealmURL path must be the realm name or the server-issued unlisted link',
+          );
+          return;
+        }
+      }
     }
 
     try {
@@ -385,9 +420,8 @@ export default function handlePublishRealm({
       // mounts the (re-)published realm on its first request. The
       // response is 202 Accepted with status:'pending'; the client polls
       // /<publishedRealmURL>/_readiness-check to learn when it's ready.
-      let { lastPublishedAt, publishedRealmId } = await dbAdapter.withWriteLock(
-        publishedRealmURL,
-        async () => {
+      let { lastPublishedAt, publishedRealmId, isNewRealm } =
+        await dbAdapter.withWriteLock(publishedRealmURL, async () => {
           let existingRows = (await query(dbAdapter, [
             `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
@@ -447,21 +481,24 @@ export default function handlePublishRealm({
           // enqueueReindexRealmJob below to refresh the index.
           let tempCopyPath = `${publishedRealmPath}.tmp`;
           let backupPath = `${publishedRealmPath}.backup`;
-          removeSync(tempCopyPath);
-          removeSync(backupPath);
-          copySync(sourceRealmPath, tempCopyPath);
+          await remove(tempCopyPath);
+          await remove(backupPath);
+          await copy(sourceRealmPath, tempCopyPath);
           try {
-            if (existsSync(publishedRealmPath)) {
-              moveSync(publishedRealmPath, backupPath);
+            if (await pathExists(publishedRealmPath)) {
+              await move(publishedRealmPath, backupPath);
             }
-            moveSync(tempCopyPath, publishedRealmPath);
-            removeSync(backupPath);
+            await move(tempCopyPath, publishedRealmPath);
+            await remove(backupPath);
           } catch (swapError) {
             // Restore the old published realm if the swap failed
-            if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
-              moveSync(backupPath, publishedRealmPath);
+            if (
+              !(await pathExists(publishedRealmPath)) &&
+              (await pathExists(backupPath))
+            ) {
+              await move(backupPath, publishedRealmPath);
             }
-            removeSync(tempCopyPath);
+            await remove(tempCopyPath);
             throw swapError;
           }
 
@@ -489,7 +526,7 @@ export default function handlePublishRealm({
           // The flag is written to the published realm's RealmConfig
           // card (/realm.json) on disk before the reindex below picks
           // it up.
-          ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
+          await ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
 
           // Clear stale modules cache for the published realm (including
           // error entries from a previous publish) before the reindex's
@@ -519,7 +556,7 @@ export default function handlePublishRealm({
             // Phase 3 PR 2 rollback simplification: no in-memory
             // realms[]/virtualNetwork state to unwind. Just remove the
             // FS swap that we just put in place.
-            removeSync(publishedRealmPath);
+            await remove(publishedRealmPath);
             throw dbError;
           }
 
@@ -538,12 +575,13 @@ export default function handlePublishRealm({
           // an async race against the immediately-enqueued reindex.
           // Force the invalidation synchronously here.
           //
-          // For a new publish, lookupOrMount mounts the realm fresh
-          // (registry row was just upserted above); the cache is
-          // empty so clearLocalSourceCaches is a no-op. Either way the
-          // reindex below sees correct source.
+          // Use the non-mounting `mounted` map rather than lookupOrMount:
+          // for a new publish the realm isn't mounted here yet and there's
+          // nothing cached to clear — and mounting it would await a
+          // from-scratch index inside the request, which this handler must
+          // not block on. It lazy-mounts fresh on its first request instead.
           let mountedRealmForCacheClear =
-            await reconciler.lookupOrMount(publishedRealmURL);
+            reconciler.mounted.get(publishedRealmURL);
           if (mountedRealmForCacheClear) {
             // Sync local clear + cross-replica NOTIFY in one call. The
             // local clear is what this replica's reindex fan-out needs;
@@ -552,15 +590,16 @@ export default function handlePublishRealm({
             await mountedRealmForCacheClear.clearLocalSourceCachesAndBroadcast();
           }
 
-          // Refresh the index. For a new publish this is redundant
-          // (lazy-mount's first start() does its own fullIndex on a
-          // fresh DB), but the from-scratch-index coalesce handler
-          // (CS-10893) collapses both into a single canonical job. For
-          // a republish where the realm is already mounted with a
-          // resolved #startedUp, this is the only mechanism that
-          // re-indexes against the swapped files. clearLastModified
-          // forces every row to re-render even if mtimes appear
-          // unchanged (file copies preserve mtimes).
+          // Durability enqueue: guarantees the swapped files get indexed
+          // even if no client ever polls this published realm. The index is
+          // not awaited here — the handler returns 202 (pending) and the
+          // client polls _readiness-check. For a realm not mounted on this
+          // instance, its first request (typically the readiness poll)
+          // lazy-mounts it and start()'s from-scratch pass coalesces with
+          // this job. For a republish already mounted here, the post-lock
+          // fullIndex below tracks completion for readiness. clearLastModified
+          // forces every row to re-render even though file copies preserve
+          // mtimes.
           await enqueueReindexRealmJob(
             publishedRealmURL,
             realmUsername,
@@ -570,48 +609,61 @@ export default function handlePublishRealm({
             { clearLastModified: true },
           );
 
-          return { lastPublishedAt, publishedRealmId };
-        },
-      );
+          return { lastPublishedAt, publishedRealmId, isNewRealm };
+        });
 
-      // Mount + start the published realm on this instance now. The
-      // reconciler's prepareRealmFromRow constructs a Realm and adds
-      // it to realms[] / virtualNetwork; ensureMounted then awaits
-      // realm.start() which awaits the from-scratch-index job we
-      // enqueued above (the chooseFromScratch coalesce JOINs the
-      // start()-enqueued job with ours). By the time we return 202,
-      // indexing is complete on this instance — sibling instances
-      // pick the published realm up via NOTIFY and lazy-mount on
-      // first request. This preserves the test-suite's synchronous-
-      // publish semantics while keeping the handler purely registry-
-      // driven.
-      let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
-      if (!publishedRealm) {
-        throw new Error(
-          `expected published realm ${publishedRealmURL} to be mounted after publish — registry row missing or mount failed`,
-        );
+      // Mount the published realm on this instance so it is served as soon as
+      // the 202 returns, but do NOT await its index/prerender — that runs in
+      // the background and clients poll <publishedRealmURL>_readiness-check.
+      // ensureMounted publishes the realm into virtualNetwork synchronously, so
+      // a request arriving right after this 202 (the readiness poll, or a
+      // visitor) resolves to the realm rather than 404ing; awaiting the full
+      // index + prerender (pool-bound) instead would hold the HTTP request open
+      // for the entire indexing duration. Sibling instances pick the realm up
+      // via the realm_registry NOTIFY and lazy-mount on their first request.
+      if (isNewRealm) {
+        // Brand-new publish: no prior index. lookupOrMount's start() runs a
+        // from-scratch index (isNewIndex), and #startedUp resolves only after
+        // it completes — readinessCheck awaits #startedUp, so a single pass
+        // gates readiness. Don't await it here (that would block the response
+        // on the full index); the durability enqueue above coalesces with it.
+        void reconciler
+          .lookupOrMount(publishedRealmURL)
+          .catch((err: unknown) => {
+            log.error(
+              `background mount failed for ${publishedRealmURL}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          });
+      } else {
+        // Republish: the realm already has index rows, so start() does NOT
+        // re-index them and #startedUp resolves without reflecting the swapped
+        // files — readinessCheck must instead wait on indexing(). Register a
+        // tracked clearLastModified reindex SYNCHRONOUSLY (before the 202) so
+        // indexing() reflects it and readiness can't report ready before the
+        // reindex lands. Get the mounted realm, or mount it first when this
+        // instance is cold (e.g. after a restart, or the publish landed on an
+        // instance that never mounted this realm) — that mount is fast because
+        // start() skips indexing for an existing index. fullIndex invalidates
+        // the cached RealmInfo before the pass, so og:title re-bakes from the
+        // swapped realm.json (parseRealmInfo's disk overlay) in a single pass.
+        // The reindex job coalesces with the durability enqueue above.
+        let publishedRealm =
+          reconciler.mounted.get(publishedRealmURL) ??
+          (await reconciler.lookupOrMount(publishedRealmURL));
+        if (publishedRealm) {
+          void publishedRealm
+            .fullIndex(userInitiatedPriority, { clearLastModified: true })
+            .catch((err: unknown) => {
+              log.error(
+                `background publish reindex failed for ${publishedRealmURL}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            });
+        }
       }
-      // Re-run a full index after start()'s pass so the RealmConfig card
-      // at /realm.json is queryable by parseRealmInfo before /index is
-      // re-rendered. start()'s from-scratch pass walks files in order and
-      // typically renders /index before /realm.json — at which point
-      // attachRealmInfo → getRealmInfo → parseRealmInfo finds /realm.json
-      // not yet indexed, falls back to "Unnamed Workspace", and caches
-      // that. The prerendered head HTML for /index is baked with the
-      // stale value, surfacing as og:title="Unnamed Workspace" on the
-      // published page.
-      //
-      // clearLastModified: true forces every row to re-render on this
-      // pass even though copySync preserves mtimes — without it, the
-      // indexer's mtime-cache check would skip the already-rendered
-      // /index and the stale prerendered HTML would persist.
-      // Realm.fullIndex clears #cachedRealmInfo before this pass so the
-      // first attachRealmInfo call re-reads parseRealmInfo against the
-      // now-populated index and bakes the correct realm name into the
-      // re-rendered prerendered HTML.
-      await publishedRealm.fullIndex(userInitiatedPriority, {
-        clearLastModified: true,
-      });
 
       // The source realm's `RealmInfo.lastPublishedAt` map is built
       // from `realm_registry` rows joined on `source_url = sourceRealmURL`,
@@ -628,8 +680,19 @@ export default function handlePublishRealm({
         new URL(publishedRealmURL),
       );
 
-      let response = createResponse({
-        body: JSON.stringify(
+      // Build the 202 directly rather than via createResponse: the published
+      // realm may not be mounted on this instance (a new publish lazy-mounts
+      // on first request), so there is no Realm object to read a url from.
+      //
+      // Point clients at the status monitor for this accepted-but-not-yet-
+      // -complete request (RFC 9110 §15.3.3): `Location` is the published
+      // realm's readiness check, which resolves once it is indexed and
+      // viewable, and `Retry-After` hints the poll interval. This lets a
+      // consumer discover where to wait for completion from the response
+      // itself rather than hard-coding the readiness URL.
+      let readinessCheckURL = `${publishedRealmURL}_readiness-check`;
+      let response = new Response(
+        JSON.stringify(
           {
             data: {
               type: 'published_realm',
@@ -645,17 +708,19 @@ export default function handlePublishRealm({
           null,
           2,
         ),
-        init: {
+        {
           status: 202,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
+            Location: readinessCheckURL,
+            'Retry-After': '1',
+            'X-Boxel-Realm-Url': publishedRealmURL,
+            ...(publishedPermissions['*']?.includes('read') && {
+              'X-Boxel-Realm-Public-Readable': 'true',
+            }),
           },
         },
-        requestContext: {
-          realm: publishedRealm,
-          permissions: publishedPermissions,
-        },
-      });
+      );
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {

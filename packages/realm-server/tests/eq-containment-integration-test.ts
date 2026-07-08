@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
@@ -32,9 +33,9 @@ function ref(module: string, name: string): ResolvedCodeRef {
 
 const testRealmURL = 'http://eq-containment-test/';
 
-const stringRef = ref('https://cardstack.com/base/string', 'default');
-const numberRef = ref('https://cardstack.com/base/number', 'default');
-const booleanRef = ref('https://cardstack.com/base/boolean', 'default');
+const stringRef = ref('@cardstack/base/string', 'default');
+const numberRef = ref('@cardstack/base/number', 'default');
+const booleanRef = ref('@cardstack/base/boolean', 'default');
 const policyRef = ref(`${testRealmURL}policy`, 'Policy');
 const customerRef = ref(`${testRealmURL}customer`, 'Customer');
 const metadataRef = ref(`${testRealmURL}policy`, 'Metadata');
@@ -267,7 +268,7 @@ async function seedPolicy(
 ) {
   let typeKey = internalKeyFor(policyRef, undefined, vn);
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at) VALUES (`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at) VALUES (`,
     param(url),
     `,`,
     param(url),
@@ -294,7 +295,7 @@ async function seedPolicy(
   ]);
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('eq containment (Postgres integration)', function (hooks) {
     let dbAdapter: PgAdapter;
     let engine: IndexQueryEngine;

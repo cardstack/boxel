@@ -2,7 +2,6 @@ import type Koa from 'koa';
 import {
   asExpressions,
   dbAdapterQuerier,
-  ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
   notifyAllFileChanges,
@@ -34,6 +33,7 @@ import {
   deletePublishedRowsBySourceUrl,
   deleteRegistryRowByUrl,
 } from '../lib/realm-registry-writes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -208,6 +208,15 @@ export default function handleDeleteRealm({
           ` AND removed_at IS NULL`,
         ]);
 
+        // Server-issued unlisted-link slug for this realm. Hard-delete it so a
+        // realm later recreated at the same endpoint can't reuse the old
+        // unguessable slug — which would expose the new realm to anyone holding
+        // the previous unlisted URL.
+        await q([
+          `DELETE FROM unlisted_realm_paths WHERE source_realm_url = `,
+          param(realmURL),
+        ]);
+
         await removeRealmPermissions(dbAdapter, parsedRealmURL, txQuerier);
         await removeRealmDatabaseArtifacts({
           dbAdapter,
@@ -282,18 +291,6 @@ function assertIsDeleteRealmJSON(
   }
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
-  }
-}
-
-function normalizeRealmURL(realmURL: string): URL | null {
-  try {
-    let parsedRealmURL = new URL(realmURL);
-    parsedRealmURL.pathname = ensureTrailingSlash(parsedRealmURL.pathname);
-    parsedRealmURL.search = '';
-    parsedRealmURL.hash = '';
-    return parsedRealmURL;
-  } catch {
-    return null;
   }
 }
 

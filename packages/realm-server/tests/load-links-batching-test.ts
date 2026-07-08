@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type {
@@ -6,7 +7,10 @@ import type {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  searchCardsForTest,
+} from './helpers/index.ts';
 
 const testRealm = new URL('http://127.0.0.1:4451/test/');
 const NUM_SOURCES = 50;
@@ -82,7 +86,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
 // cards each linking to 5 targets, the original implementation would have
 // fired 250 sequential `WHERE i.url = $1` lookups. The new BFS path issues
 // one batched `WHERE i.url IN (...)` per recursion depth.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('loadLinks batching', function (hooks) {
     let realm: Realm;
 
@@ -127,7 +131,8 @@ module(basename(__filename), function () {
           return originalExecute(sql, opts);
         };
 
-        let result = await realm.realmIndexQueryEngine.searchCards(
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
           {
             filter: {
               type: { module: rri(`${testRealm}source`), name: 'Source' },

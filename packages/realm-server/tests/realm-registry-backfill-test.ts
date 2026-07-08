@@ -1,7 +1,9 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { dirSync, type DirResult } from 'tmp';
-import { ensureDirSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync } = fsExtra;
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
@@ -94,7 +96,7 @@ function seedRealmJson(realmDir: string, payload: Record<string, unknown>) {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/realm-config',
+          module: '@cardstack/base/realm-config',
           name: 'RealmConfig',
         },
       },
@@ -103,7 +105,7 @@ function seedRealmJson(realmDir: string, payload: Record<string, unknown>) {
   writeFileSync(join(realmDir, 'realm.json'), JSON.stringify(card, null, 2));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('runRegistryBackfill', function (hooks) {
     let dbAdapter: PgAdapter;
     let dir: DirResult;
@@ -130,16 +132,14 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: bootstrapPath, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: bootstrapPath, url: '@cardstack/base/' }],
       });
 
       const rows = (await allRegistryRows(dbAdapter)).filter(
         (r) => r.kind === 'bootstrap',
       );
       assert.strictEqual(rows.length, 1, 'one bootstrap row written');
-      assert.strictEqual(rows[0].url, 'https://cardstack.com/base/');
+      assert.strictEqual(rows[0].url, '@cardstack/base/');
       assert.true(rows[0].pinned, 'pinned=true');
       assert.strictEqual(
         rows[0].owner_username,
@@ -228,9 +228,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: bootstrapPath, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: bootstrapPath, url: '@cardstack/base/' }],
       };
       await runRegistryBackfill(opts);
       const firstRun = await allRegistryRows(dbAdapter);
@@ -256,9 +254,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: pathA, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: pathA, url: '@cardstack/base/' }],
       });
       const firstDiskId = (await allRegistryRows(dbAdapter)).find(
         (r) => r.kind === 'bootstrap',
@@ -269,9 +265,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: pathB, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: pathB, url: '@cardstack/base/' }],
       });
       const secondDiskId = (await allRegistryRows(dbAdapter)).find(
         (r) => r.kind === 'bootstrap',

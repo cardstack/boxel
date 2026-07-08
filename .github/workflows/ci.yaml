@@ -402,6 +402,12 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
+      - name: Run OIDC mapping provider unit tests
+        # Fast (~no boot) and stack-independent — it only needs the warmed
+        # Synapse image — so run it once on shard 1 rather than every shard.
+        if: matrix.shardIndex == 1
+        run: pnpm test:oidc-mapping-provider
+        working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
@@ -595,7 +601,7 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.cjs ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
       # Warm the test images from the GHCR mirror so the services
       # below start from a local image instead of an unauthenticated Docker Hub
@@ -1021,7 +1027,11 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Index all realms and dump tables
-        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        # pipefail so a nonzero exit from the index/dump task fails the step
+        # instead of being masked by tee's exit code.
+        run: |
+          set -o pipefail
+          mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1030,6 +1040,11 @@ jobs:
           name: cache-index-log
           path: /tmp/cache-index.log
           retention-days: 7
+      # Separate step so an incomplete cache (a table dropped out of the dump)
+      # surfaces as its own short, clearly-labeled failure with an error
+      # annotation, rather than an exit code buried in the dump log above.
+      - name: Verify index cache is complete
+        run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

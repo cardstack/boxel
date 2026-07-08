@@ -2,10 +2,33 @@ import { describe, it, expect } from 'vitest';
 import {
   extractImportSpecifiers,
   extractExportedClassNames,
+  extractRelationshipLinks,
   resolveSameRealmFile,
 } from '../../src/commands/realm/ingest-card.js';
 
 describe('ingest-card helpers', () => {
+  describe('extractRelationshipLinks', () => {
+    it('collects linksToMany (field.N) + linksTo self URLs, skipping nulls', () => {
+      let src = JSON.stringify({
+        data: {
+          relationships: {
+            'bottles.0': { links: { self: '../WineBottle/a' } },
+            'bottles.1': { links: { self: '../WineBottle/b' } },
+            label: { links: { self: '../Image/x' } },
+          },
+        },
+      });
+      expect(new Set(extractRelationshipLinks(src))).toEqual(
+        new Set(['../WineBottle/a', '../WineBottle/b', '../Image/x']),
+      );
+    });
+
+    it('returns [] for no relationships or invalid JSON', () => {
+      expect(extractRelationshipLinks('{"data":{}}')).toEqual([]);
+      expect(extractRelationshipLinks('not json')).toEqual([]);
+    });
+  });
+
   describe('extractImportSpecifiers', () => {
     it('captures value, type, namespace, re-export, and side-effect imports', () => {
       let src = `

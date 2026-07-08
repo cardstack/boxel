@@ -1,8 +1,8 @@
 import {
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
   fieldSerializer,
   relativeTo,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { TrackedObject } from 'tracked-built-ins';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -11,13 +11,13 @@ import {
   CardDef,
   Component,
   FieldDef,
+  FileDef,
   MarkdownField,
   StringField,
   contains,
   containsMany,
   field,
   linksToMany,
-  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
@@ -50,32 +50,59 @@ export class RichMarkdownField extends FieldDef {
   /** The raw markdown text. Uses MarkdownField for textarea edit UI. */
   @field content = contains(MarkdownField);
 
-  /** Resolved absolute URLs of `:card[URL]` and `::card[URL]` references. */
+  /**
+   * Absolute base URL that relative `:card`/`:file` refs resolve against,
+   * derived from this field's `relativeTo` location. Empty string when the
+   * field has no location yet.
+   */
+  private get refBaseUrl(): string {
+    let rel = this[relativeTo];
+    if (!rel) {
+      return '';
+    }
+    // `relativeTo` is already a canonical RRI; references resolve against it in
+    // RRI space (no VirtualNetwork).
+    return typeof rel === 'string' ? rel : rel.href;
+  }
+
+  /** Resolved canonical-RRI references of `:card[URL]` and `::card[URL]`. */
   @field cardReferenceUrls = containsMany(StringField, {
     computeVia: function (this: RichMarkdownField) {
       if (!this.content) {
         return [];
       }
-      let rel = this[relativeTo];
-      let baseUrl = rel
-        ? typeof rel === 'string'
-          ? (virtualNetworkFor(this)?.toURL(rel).href ?? rel)
-          : rel.href
-        : '';
-      return extractCardReferenceUrls(
-        this.content,
-        baseUrl,
-        virtualNetworkFor(this) ?? new VirtualNetwork(),
-      );
+      return extractCardReferenceUrls(this.content, this.refBaseUrl);
     },
   });
 
   /** Cards referenced in the markdown, loaded via query. */
   @field linkedCards = linksToMany(CardDef, {
-    isUsed: true,
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
+      },
+    },
+  });
+
+  /** Resolved absolute URLs of `:file[URL]` and `::file[URL]` references. */
+  @field fileReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: RichMarkdownField) {
+      if (!this.content) {
+        return [];
+      }
+      return extractFileReferenceUrls(this.content, this.refBaseUrl);
+    },
+  });
+
+  /**
+   * Files referenced in the markdown, loaded via query. Resolved by `url`
+   * rather than `id`: a FileDef's search doc carries no queryable `id`
+   * (unlike CardDef instances), so `in: { id }` never matches.
+   */
+  @field linkedFiles = linksToMany(FileDef, {
+    query: {
+      filter: {
+        in: { url: '$this.fileReferenceUrls' },
       },
     },
   });
@@ -84,25 +111,22 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     <template>
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
-        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -111,25 +135,22 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     <template>
       <MarkdownTemplate
         @content={{this.content}}
         @linkedCards={{@model.linkedCards}}
+        @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
-        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -156,22 +177,27 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     get linkedCards(): CardDef[] | null {
       try {
         return this.args.model?.linkedCards ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
+    get linkedFiles(): FileDef[] | null {
+      try {
+        return this.args.model?.linkedFiles ?? null;
       } catch {
         // linksToMany query may fail in environments without a full card store
         return null;
@@ -186,14 +212,17 @@ export class RichMarkdownField extends FieldDef {
           {{! Preview has no CodeMirrorEditor, so the sticky mode selector
               lives in its own docked bar above the rendered markdown. }}
           <div class='rich-markdown-toolbar' data-test-markdown-toolbar>
-            <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
+            <MarkdownEditorModeSelect
+              @mode={{this._mode}}
+              @onChange={{this.setMode}}
+            />
           </div>
           <div class='rich-markdown-preview' data-test-markdown-preview>
             <MarkdownTemplate
               @content={{@model.content}}
               @linkedCards={{@model.linkedCards}}
+              @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
-              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
           </div>
         {{else}}
@@ -202,13 +231,16 @@ export class RichMarkdownField extends FieldDef {
               @content={{@model.content}}
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
+              @linkedFiles={{this.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
-              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             >
               <:leadingControls>
-                <MarkdownEditorModeSelect @mode={{this._mode}} @onChange={{this.setMode}} />
+                <MarkdownEditorModeSelect
+                  @mode={{this._mode}}
+                  @onChange={{this.setMode}}
+                />
               </:leadingControls>
             </CodeMirrorEditor>
           </CardContextConsumer>

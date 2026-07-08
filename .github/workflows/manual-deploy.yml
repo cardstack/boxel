@@ -107,7 +107,7 @@ jobs:
       dockerfile: "packages/ai-bot/Dockerfile"
 
   deploy-ai-bot:
-    needs: [build-ai-bot, post-migrate-db]
+    needs: [build-ai-bot, migrate-db]
     name: Deploy ai-bot to AWS ECS
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
@@ -128,7 +128,7 @@ jobs:
       dockerfile: "packages/bot-runner/Dockerfile"
 
   deploy-bot-runner:
-    needs: [build-bot-runner, post-migrate-db]
+    needs: [build-bot-runner, migrate-db]
     name: Deploy bot-runner to AWS ECS
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
@@ -211,31 +211,128 @@ jobs:
       environment: ${{ inputs.environment }}
       dockerfile: "packages/postgres/Dockerfile"
 
+  # Run the DB migrations as a one-shot ECS task and gate the rest of the deploy
+  # on its exit code, so the app never rolls out ahead of its schema. The
+  # pg-migration image applies migrations and exits with node-pg-migrate's
+  # status (packages/postgres/scripts/run-migrations.sh); run one-shot with the
+  # service's trailing `sleep infinity` overridden away, a failing or
+  # crash-looping migration exits non-zero and fails this job — blocking every
+  # downstream deploy. deploy-host / build-realm-server are deps so migrations
+  # run at the last possible moment, minimizing how long old code sees the new
+  # schema.
   migrate-db:
-    # use "deploy-host" and "build-realm-server" as deps so we can run
-    # migrations at last possible moment in order to reduce the amount of time
-    # that old code is pointing to new schema
     needs: [build-pg-migration, build-realm-server, deploy-host]
-    name: Deploy and run DB migrations
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-pg-migration"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-pg-migration-${{ inputs.environment }}"
-      image: ${{ needs.build-pg-migration.outputs.image }}
-      wait-for-service-stability: false
-
-  # the wait-for-service-stability flag doesn't seem to work in
-  # aws-actions/amazon-ecs-deploy-task-definition@v2. we keep getting timeouts
-  # waiting for service stability. So we are manually waiting here.
-  post-migrate-db:
-    name: Wait for db-migration
-    needs: [migrate-db]
+    name: Run DB migrations
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLUSTER: ${{ inputs.environment }}
+      SERVICE: boxel-pg-migration-${{ inputs.environment }}
+      CONTAINER: boxel-pg-migration
+      IMAGE: ${{ needs.build-pg-migration.outputs.image }}
+      LOG_GROUP: ecs-boxel-pg-migration-${{ inputs.environment }}
+      # Bounds a migration that hangs (e.g. blocked on a lock); a long backfill
+      # migration must finish under it. Genuine failures exit immediately.
+      TIMEOUT_SECONDS: "1800"
     steps:
-      - run: sleep 180
+      - name: Set up env
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
+          else
+            echo "unrecognized environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Run migrations and gate on exit code
+        run: |
+          set -euo pipefail
+          region=us-east-1
+          console_logs="https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${LOG_GROUP}"
+
+          # Register a new revision of the pg-migration task definition pinned to
+          # the image just built. Strip the read-only fields describe returns
+          # that register-task-definition rejects.
+          aws ecs describe-task-definition --task-definition "$SERVICE" \
+            --query 'taskDefinition' --output json > td.json
+          jq --arg IMAGE "$IMAGE" --arg CONTAINER "$CONTAINER" '
+            .containerDefinitions |= map(if .name == $CONTAINER then .image = $IMAGE else . end)
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
+          ' td.json > td-new.json
+          task_def=$(aws ecs register-task-definition --cli-input-json file://td-new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered migration task definition: $task_def"
+
+          # Place the one-shot task in the pg-migration service's own network
+          # config — its security group is the one allowed to reach the DB.
+          net=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration' --output json)
+          subnets=$(echo "$net" | jq -r '.subnets | join(",")')
+          groups=$(echo "$net" | jq -r '.securityGroups | join(",")')
+          public=$(echo "$net" | jq -r '.assignPublicIp // "DISABLED"')
+
+          # Override the command to run the migrations WITHOUT the service's
+          # trailing `sleep infinity`, so the task exits with the migration's
+          # status instead of staying up.
+          overrides=$(jq -cn --arg CONTAINER "$CONTAINER" \
+            '{containerOverrides: [{name: $CONTAINER, command: ["./scripts/run-migrations.sh"]}]}')
+          run_out=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$task_def" \
+            --launch-type FARGATE \
+            --count 1 \
+            --started-by "deploy-${GITHUB_SHA:0:7}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$groups],assignPublicIp=$public}" \
+            --overrides "$overrides" \
+            --output json)
+          task_arn=$(echo "$run_out" | jq -r '.tasks[0].taskArn // empty')
+          if [ -z "$task_arn" ]; then
+            echo "::error::Failed to start the migration task."
+            echo "$run_out" | jq '.failures'
+            exit 1
+          fi
+          echo "Started migration task: $task_arn"
+
+          # Wait for the task to stop, then gate on the container's exit code.
+          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          while :; do
+            status=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+              --query 'tasks[0].lastStatus' --output text)
+            echo "migration task status: $status"
+            [ "$status" = "STOPPED" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out after ${TIMEOUT_SECONDS}s waiting for the migration task to finish."
+              echo "Migration logs: ${console_logs}"
+              aws ecs stop-task --cluster "$CLUSTER" --task "$task_arn" \
+                --reason "migration gate timeout" >/dev/null 2>&1 || true
+              exit 1
+            fi
+            sleep 10
+          done
+
+          exit_code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+            --query "tasks[0].containers[?name=='${CONTAINER}']|[0].exitCode" --output text)
+          echo "migration container exit code: ${exit_code}"
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::DB migration failed (exit ${exit_code}) — deploy blocked so the app never runs ahead of its schema."
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+              --query "tasks[0].{stopCode:stopCode,taskReason:stoppedReason,containerReason:containers[?name=='${CONTAINER}']|[0].reason}" \
+              --output table || true
+            echo "Migration logs: ${console_logs}"
+            exit 1
+          fi
+          echo "DB migration succeeded."
 
   deploy-prerender:
     name: Deploy prerender
@@ -268,7 +365,7 @@ jobs:
   deploy-worker:
     name: Deploy worker
     needs:
-      [build-worker, deploy-host, post-migrate-db, deploy-prerender-manager]
+      [build-worker, deploy-host, migrate-db, deploy-prerender-manager]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -292,7 +389,7 @@ jobs:
   deploy-realm-server:
     name: Deploy realm server
     needs:
-      [post-deploy-worker, build-realm-server, deploy-host, post-migrate-db]
+      [post-deploy-worker, build-realm-server, deploy-host, migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -335,6 +432,35 @@ jobs:
             exit 1
           fi
 
+  recycle-prerender:
+    name: Recycle prerender after host is live
+    # The prerender fleet deploys before the realm server (the manager,
+    # worker, and realm server all depend on it being up for boot indexing),
+    # so its tabs warm against the OLD host shell the realm server was still
+    # serving at that point. Once the realm server is up serving the new
+    # shell, re-deploy the prerender service so its tabs re-warm against it.
+    # The reusable deploy passes force-new-deployment, so this recycles fresh
+    # tasks even though the image is unchanged.
+    #
+    # Gate on `deploy-realm-server` (wait-for-service-stability: true → the
+    # new realm server is up and serving the new shell), NOT on
+    # `post-deploy-realm-server`: that job is a separate post-deploy hook
+    # (it POSTs the realm server's `/_post-deployment` endpoint) and can fail
+    # independently of the recycle's only real precondition — the new shell
+    # being served. Coupling to it would skip this recycle on an unrelated
+    # hook failure.
+    needs: [build-prerender, deploy-realm-server]
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-prerender-server"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-prerender-server-${{ inputs.environment }}"
+      image: ${{ needs.build-prerender.outputs.image }}
+      timeout-minutes: 10
+      wait-for-service-stability: true
+
   apply-observability:
     # Push the observability/ package's dashboards/folders/data sources/alerts
     # into the production self-host Grafana as part of the deploy. The
@@ -368,13 +494,13 @@ jobs:
         build-worker,
         build-pg-migration,
         migrate-db,
-        post-migrate-db,
         deploy-prerender,
         deploy-prerender-manager,
         deploy-worker,
         post-deploy-worker,
         deploy-realm-server,
         post-deploy-realm-server,
+        recycle-prerender,
         apply-observability,
       ]
     if: github.event_name == 'workflow_dispatch' && always()

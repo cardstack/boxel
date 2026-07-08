@@ -20,6 +20,7 @@ import {
   withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 const SKILL_MD = `---
@@ -79,7 +80,7 @@ module('Integration | markdown skill search', function (hooks) {
   });
 
   test('finds MarkdownDef files where boxel.kind is "skill"', async function (assert) {
-    let result = (await queryEngine.searchCards({
+    let result = (await searchCardsForTest(queryEngine, {
       filter: {
         on: markdownRef,
         eq: { kind: 'skill' },
@@ -99,7 +100,7 @@ module('Integration | markdown skill search', function (hooks) {
   });
 
   test('all three markdown files index as MarkdownDef (kind only discriminates the filter)', async function (assert) {
-    let result = (await queryEngine.searchCards({
+    let result = (await searchCardsForTest(queryEngine, {
       filter: { type: markdownRef },
     })) as unknown as { data: { id?: string }[] };
 

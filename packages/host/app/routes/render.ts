@@ -17,11 +17,9 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   formattedError,
-  baseRealm,
   snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
-  isBaseDefInstance,
   rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -38,7 +36,6 @@ import {
 } from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   windowErrorHandler,
@@ -152,7 +149,7 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
-    // Drop any pending `_federated-search-v2` in-flight entries the
+    // Drop any pending `_federated-search` in-flight entries the
     // render-context coalescer accumulated during this visit. Entries
     // self-clear on settle, but a deactivate while one is still
     // in-flight could otherwise let a same-key caller arriving in the
@@ -170,6 +167,7 @@ export default class RenderRoute extends Route<Model> {
     // invalidation is handled by `fetchSearchDoc`'s entry-time
     // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
     // CS-10872: also tear down the stage setter + timestamp. Without
@@ -352,6 +350,9 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
   ): Promise<Model> {
+    // Reset before any await so a reader can never see a previous card's
+    // settle-time snapshot; #settleModelAfterRender repopulates it.
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
@@ -532,12 +533,6 @@ export default class RenderRoute extends Route<Model> {
             realm: realmURL,
             doNotPersist: true,
           });
-          if (hydratedInstance) {
-            (globalThis as any).__boxelSetRenderStage?.(
-              'buildModel:touching-used-fields',
-            );
-            await this.#touchIsUsedFields(hydratedInstance);
-          }
           (globalThis as any).__boxelSetRenderStage?.(
             'buildModel:store-settle',
           );
@@ -569,137 +564,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
-  }
-
-  async #touchIsUsedFields(instance: CardDef): Promise<void> {
-    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
-    this.#touchIsUsedRelationships(
-      cardApi,
-      instance,
-      new WeakSet<object>(),
-      new WeakMap<object, boolean>(),
-    );
-  }
-
-  #touchFieldSafely(container: any, fieldName: string): unknown {
-    try {
-      // accessing the field triggers lazy loading for links
-      return container?.[fieldName];
-    } catch (error) {
-      console.warn(
-        `Failed to touch field '${fieldName}' on ${container?.constructor?.name ?? 'Unknown'} for isUsed=true:`,
-        error,
-      );
-      return undefined;
-    }
-  }
-
-  #touchIsUsedRelationships(
-    cardApi: typeof CardAPI,
-    value: unknown,
-    visited: WeakSet<object>,
-    typeHasUsedRelationshipCache: WeakMap<object, boolean>,
-  ): void {
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        this.#touchIsUsedRelationships(
-          cardApi,
-          item,
-          visited,
-          typeHasUsedRelationshipCache,
-        );
-      }
-      return;
-    }
-    if (!isBaseDefInstance(value)) {
-      return;
-    }
-    if (visited.has(value)) {
-      return;
-    }
-    visited.add(value);
-
-    let fields = cardApi.getFields(value, { includeComputeds: true });
-    for (let [fieldName, field] of Object.entries(fields)) {
-      if (!field) {
-        continue;
-      }
-      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
-        if (field.isUsed) {
-          this.#touchFieldSafely(value, fieldName);
-        }
-        continue;
-      }
-      if (
-        field.fieldType === 'contains' ||
-        field.fieldType === 'containsMany'
-      ) {
-        if (
-          !this.#typeHasIsUsedRelationship(
-            cardApi,
-            field.card as CardAPI.BaseDefConstructor,
-            new WeakSet<object>(),
-            typeHasUsedRelationshipCache,
-          )
-        ) {
-          continue;
-        }
-        let nested = this.#touchFieldSafely(value, fieldName);
-        this.#touchIsUsedRelationships(
-          cardApi,
-          nested,
-          visited,
-          typeHasUsedRelationshipCache,
-        );
-      }
-    }
-  }
-
-  #typeHasIsUsedRelationship(
-    cardApi: typeof CardAPI,
-    type: CardAPI.BaseDefConstructor,
-    visitedTypes: WeakSet<object>,
-    cache: WeakMap<object, boolean>,
-  ): boolean {
-    if (cache.has(type)) {
-      return cache.get(type)!;
-    }
-    if (visitedTypes.has(type)) {
-      return false;
-    }
-    visitedTypes.add(type);
-
-    let fields = cardApi.getFields(type, { includeComputeds: true });
-    for (let field of Object.values(fields)) {
-      if (!field) {
-        continue;
-      }
-      if (
-        (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
-        field.isUsed
-      ) {
-        cache.set(type, true);
-        return true;
-      }
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        this.#typeHasIsUsedRelationship(
-          cardApi,
-          field.card as CardAPI.BaseDefConstructor,
-          visitedTypes,
-          cache,
-        )
-      ) {
-        cache.set(type, true);
-        return true;
-      }
-    }
-
-    cache.set(type, false);
-    return false;
   }
 
   setupController(controller: Controller, model: Model) {
@@ -786,6 +650,14 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
+    // Publish the settle-time dependency snapshot (unresolved/prefix form,
+    // matching what render.meta reports as `deps`) for visits that never run
+    // the meta route: a prerender-html visit reads this global after its
+    // isolated render so the HTML rendering still reports the dependencies
+    // it pulled in. Cleared at the top of #buildModel so a later card in the
+    // same tab can never read a predecessor's snapshot.
+    (globalThis as any).__boxelRenderCapturedDeps =
+      this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
@@ -950,6 +822,7 @@ export default class RenderRoute extends Route<Model> {
       // (and the entire ApplicationInstance) on globalThis.
       (globalThis as any).__boxelRenderContext = undefined;
       (globalThis as any).__renderModel = undefined;
+      (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
     });

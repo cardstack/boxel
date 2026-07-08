@@ -12,7 +12,7 @@ import { writeSync } from 'node:fs';
 // and throws *again*. Node delivers the throw inside an uncaughtException
 // handler as the next pending exception, so V8 hot-loops re-reporting it
 // (uv__run_check → CheckImmediate → InspectorConsoleCall → Error.stack
-// formatting via ts-node) at ~100% CPU until the process is SIGKILLed —
+// formatting) at ~100% CPU until the process is SIGKILLed —
 // CS-11084. Swallowing EPIPE at the stream level breaks the loop and
 // lets normal SIGTERM-driven shutdown finish.
 const swallowEpipe = (err: NodeJS.ErrnoException) => {
@@ -41,8 +41,8 @@ writeSync(
 
 import {
   logger,
-  userInitiatedPriority,
-  systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
+  systemInitiatedPrerenderHtmlPriority,
   query as _query,
   param,
   separatedByCommas,
@@ -55,7 +55,7 @@ import {
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
-import flattenDeep from 'lodash/flattenDeep';
+import { flattenDeep } from 'lodash-es';
 import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
@@ -80,6 +80,11 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  decodeWorkerRequestIpc,
+  dispatchWorkerRequest,
+  WORKER_REQUEST_IPC_PREFIX,
+} from './lib/worker-request-forwarder.ts';
 
 /* About the Worker Manager
  *
@@ -138,7 +143,7 @@ let {
     },
     highPriorityCount: {
       description:
-        'The number of workers that service high priority jobs (user initiated) to start (default 0)',
+        'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -656,11 +661,16 @@ let adapter: PgAdapter;
   // is set.
   eventSink.setAdapter(adapter);
 
+  // Each pool's minimum priority is a dequeue floor: its workers only
+  // claim jobs at or above it. The high-priority pool floors at the
+  // user-initiated prerender-html tier so it serves all user-initiated
+  // work — prerender-html included — and never system-tier jobs; the
+  // all-priority pool floors at the lowest tier and serves everything.
   for (let i = 0; i < highPriorityCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings);
+    await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
   }
   for (let i = 0; i < allPriorityCount; i++) {
-    await startWorker(systemInitiatedPriority, urlMappings);
+    await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
   }
   isReady = true;
   log.info('All workers have been started');
@@ -822,10 +832,9 @@ async function startWorker(
   urlMappings: [URL | string, URL][],
 ) {
   let worker = spawn(
-    'ts-node',
+    'node',
     [
-      '--transpileOnly',
-      'worker',
+      'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
@@ -974,6 +983,31 @@ async function startWorker(
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith(WORKER_REQUEST_IPC_PREFIX)
+        ) {
+          // A worker child handed us a typed request it can't service itself
+          // (e.g. broadcasting a realm event — it holds no matrix client). We
+          // dispatch on the request type and forward to the realm server over
+          // the authenticated /_worker-request endpoint. Routing every request
+          // through this single manager avoids per-replica fan-out.
+          let request = decodeWorkerRequestIpc(message);
+          if (!request) {
+            log.error(`Failed to parse worker request from worker ${name}`);
+            return;
+          }
+          dispatchWorkerRequest(request, {
+            urlMappings,
+            secret: REALM_SECRET_SEED!,
+            workerName: name,
+          }).catch((e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: failed dispatching worker request '${request.type}' from ${name}`,
+              e,
+            );
+          });
         }
       });
     }),

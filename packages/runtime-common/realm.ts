@@ -3,13 +3,12 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
+  fieldsetFromParam,
+  htmlQueryFromParams,
   parseSearchEntryQueryFromPayload,
+  type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
-import {
-  prerenderedSearchEntryQuery,
-  searchEntryDocToPrerenderedDoc,
-} from './search-compat.ts';
 import {
   rri,
   type RealmResourceIdentifier,
@@ -24,11 +23,19 @@ import {
   makeCardTypeSummaryDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type LinkableCollectionDocument,
-  type SearchEntryCollectionDocument,
-  type PrerenderedCardCollectionDocument,
+  type EntryCollectionDocument,
+  type EntrySingleDocument,
 } from './document-types.ts';
-import type { CardResource, Relationship } from './resource-types.ts';
+import type {
+  CardResource,
+  HtmlQuery,
+  HtmlResource,
+  Relationship,
+} from './resource-types.ts';
+import {
+  clearReplacedArrayFieldMeta,
+  HtmlResourceType,
+} from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
@@ -65,6 +72,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  isRealmArchived,
   baseRealm,
   maybeURL,
   insertPermissions,
@@ -76,7 +84,6 @@ import {
   param,
   dbExpression,
   dbAdapterQuerier,
-  isValidPrerenderedHtmlFormat,
   type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -88,13 +95,10 @@ import {
   type FileMeta,
   type DirectoryMeta,
   type ResolvedCodeRef,
-  isResolvedCodeRef,
   type RealmPermissions,
   type RealmAction,
   type LintArgs,
   type LintResult,
-  type Query,
-  type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
   codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
@@ -102,17 +106,17 @@ import {
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
+  unresolveResourceInstanceURLs,
   type IndexedFile,
-  PRERENDERED_HTML_FORMATS,
+  type LooseCardResource,
+  type FileMetaResource,
 } from './index.ts';
 import type { FromScratchResult } from './tasks/indexer.ts';
 import { isCodeRef, visitModuleDeps } from './code-ref.ts';
-import merge from 'lodash/merge';
-import mergeWith from 'lodash/mergeWith';
-import cloneDeep from 'lodash/cloneDeep';
-import isEqual from 'lodash/isEqual';
-import isPlainObject from 'lodash/isPlainObject';
-import { z } from 'zod';
+import { merge } from 'lodash-es';
+import { mergeWith } from 'lodash-es';
+import { cloneDeep } from 'lodash-es';
+import { isEqual } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -124,6 +128,7 @@ import {
 import { transpileJS } from './transpile.ts';
 import type { Method, RouteTable } from './router.ts';
 import {
+  ArchivedRealmError,
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
@@ -131,7 +136,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router.ts';
-import { InvalidQueryError, assertQuery, parseQuery } from './query.ts';
+import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import { mergeRelationships } from './merge-relationships.ts';
@@ -224,8 +229,6 @@ export type RealmInfo = {
   includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
-const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
-
 // Marker header the host SPA attaches to outbound _federated-search /
 // _search calls when it's running inside a prerender tab. The prerender
 // server uses puppeteer's `evaluateOnNewDocument` to inject a window
@@ -246,21 +249,6 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. A PATCH
-// /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
-// PROPERTIES is rejected — unrecognized keys have no storage target.
-const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
-  'name',
-  'backgroundURL',
-  'iconURL',
-  'hostRoutingRules',
-  'includePrerenderedDefaultRealmIndex',
-]);
-
-// Fields owned by the realm_metadata DB table. Routes through
-// upsertRealmMetadata.
-const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
-
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -280,6 +268,13 @@ const CACHE_MISS_VALUE = 'miss';
 // a second transpile before the winner finishes.
 const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
 const COALESCE_NOTIFY_WAIT_MS = 180_000;
+// `localPath`s (no leading slash) exempt from the archived-realm seal: the
+// realm's public operational endpoints, which must keep working while a realm
+// is archived. `_readiness-check` is the health probe; `_session` is the
+// authentication endpoint. Matched on path rather than `Accept`/`Content-Type`
+// so the exemption holds for header-less probes too. Keep in sync with
+// `#publicEndpoints`.
+const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -295,7 +290,14 @@ const SOURCE_ETAG_VARIANT = 'source';
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
-const CARD_JSON_ETAG_VARIANT = 'card';
+//
+// Bump this variant whenever the served card-JSON representation changes so
+// caches revalidate instead of 304'ing a client to a stale body: neither
+// `indexed_at` nor the realm-info hash moves on a serialization change, so the
+// variant is the only signal that invalidates already-cached bodies. Bumped to
+// `card-rri` when the server began serving instance ids (`id`/`links.self`/
+// relationship ids) in canonical prefix (RRI) form for mapped realms.
+const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
@@ -488,6 +490,46 @@ function buildCardJsonEtag(
   return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
 }
 
+// The card+html / file-meta+html GET's composite validator. It encodes both
+// channels the response draws from: the entry's index-data generation and the
+// rendering's generation — or `none` when no rendering is present — so the
+// validator changes when EITHER advances. An ETag of the rendering generation
+// alone breaks the refresh flow: a client that cached the no-rendering response
+// at index generation 42 would send a validator that still matches after HTML
+// lands at 42 and would 304 forever. The rendering generation is read off the
+// entry's own `html` linkage; all of one card's renderings share a generation
+// (it's a per-row value), so the first referenced `html` resource stands for
+// the channel.
+//
+// When the response carries an `item`, its serialization also rides
+// `meta.realmInfo` — which can change without reindexing the card (realm
+// rename / icon / publish) and so advances neither generation. So fold the
+// realm-info hash in for item-bearing responses, exactly as the card+json GET
+// does, or a validator would pin the stale realmInfo across such a change. A
+// pure-html response carries no realmInfo, so its validator stays the clean
+// index:html composite.
+function buildEntryHtmlEtag(
+  doc: EntrySingleDocument,
+  realmInfoHash: string | undefined,
+): string {
+  let indexGeneration = doc.data.meta?.generation ?? 0;
+  let htmlIds = doc.data.relationships.html?.data ?? [];
+  let htmlGeneration: number | undefined;
+  if (htmlIds.length > 0) {
+    let firstId = htmlIds[0].id;
+    let htmlResource = doc.included?.find(
+      (resource): resource is HtmlResource =>
+        resource.type === HtmlResourceType && resource.id === firstId,
+    );
+    htmlGeneration = htmlResource?.meta?.generation;
+  }
+  let base = `${indexGeneration}:${htmlGeneration ?? 'none'}`;
+  if (doc.data.relationships.item && realmInfoHash) {
+    base = `${base}:${realmInfoHash}`;
+  }
+  return `"${base}"`;
+}
+
 // RFC 9110 §13.1.2: `If-None-Match` may be `*`, a comma-separated
 // list of validators, and individual entries may be weak (`W/`-
 // prefixed). For GET we don't distinguish weak vs. strong (spec
@@ -579,6 +621,12 @@ export interface TokenClaims {
   sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
   permissions: RealmPermissions['user'];
   realmServerURL: string;
+  // Set on tokens minted by the realm-server's /_delegate-session endpoint
+  // (CS-11552): a read-only session ai-bot uses to read a realm on behalf of
+  // a user. Unlike a normal session token, a delegated token carries only
+  // ['read'] even when the bound user has broader permissions, so request
+  // authorization treats it specially (read-only, no exact-permissions match).
+  delegated?: boolean;
 }
 
 export interface AdapterWriteResult {
@@ -810,11 +858,21 @@ export class Realm {
   #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
-  // card+json ETag so a /_config PATCH (or any other path that nulls
-  // `#cachedRealmInfo`) invalidates cached card responses, even
-  // though the index row's `indexed_at` doesn't bump on a config
-  // change. Recomputed lazily alongside the cached realm info.
+  // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
+  // invalidateCachedRealmInfo on publish/unpublish) invalidates cached
+  // card responses, even though the index row's `indexed_at` doesn't
+  // bump on a config change. Recomputed lazily alongside the cached
+  // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // Cached host routing map, derived from the indexed RealmConfig card.
+  // `getHostRoutingMap()` is called on every host-mode index request
+  // (serve-index), so re-querying the index each time is wasteful — the map
+  // only changes when the realm is (re)indexed. Dropped by
+  // `clearRealmIndexCaches()` alongside `#cachedRealmInfo`, which fires on
+  // every index swap (full/incremental/publish) both locally and on peer
+  // replicas via the realm_index_updated broadcast. `null` means "not yet
+  // computed"; an empty array is a valid cached result (no routing rules).
+  #cachedHostRoutingMap: { path: string; id: string }[] | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -951,42 +1009,17 @@ export class Realm {
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .patch(
-        '/_config',
-        SupportedMimeType.JSON,
-        this.patchRealmConfig.bind(this),
-      )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get(
         '/_search',
         SupportedMimeType.CardJson,
-        this.searchResponse.bind(this),
+        this.searchEntriesResponse.bind(this),
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
-        this.searchResponse.bind(this),
-      )
-      .get(
-        '/_search-v2',
-        SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-      )
-      .query(
-        '/_search-v2',
-        SupportedMimeType.CardJson,
-        this.searchEntriesResponse.bind(this),
-      )
-      .get(
-        '/_search-prerendered',
-        SupportedMimeType.CardJson,
-        this.searchPrerenderedResponse.bind(this),
-      )
-      .query(
-        '/_search-prerendered',
-        SupportedMimeType.CardJson,
-        this.searchPrerenderedResponse.bind(this),
       )
       .get(
         '/_types',
@@ -1056,6 +1089,12 @@ export class Realm {
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
+      .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.FileMetaHtml,
+        this.getFileMetaHtml.bind(this),
+      )
       .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
       .patch(
         '/.+(?<!.json)',
@@ -1135,6 +1174,16 @@ export class Realm {
     requestContext: RequestContext,
   ) {
     await this.#startedUp.promise;
+    // #startedUp is a one-time gate that resolves after the first start()'s
+    // from-scratch index. On a republish the realm is already mounted with a
+    // resolved #startedUp, so awaiting it alone would report ready before the
+    // reindex of the swapped files completes. Also await any in-flight full or
+    // incremental index so a publish poll only succeeds once the just-published
+    // content is indexed and viewable.
+    let inflight = this.indexing();
+    if (inflight) {
+      await inflight;
+    }
 
     return createResponse({
       body: null,
@@ -1587,22 +1636,17 @@ export class Realm {
   }
   #testOnlySourceCacheDelay?: () => Promise<void>;
 
-  // CS-11119: Drop every read-side cache whose content derives from
-  // server-side state — currently `#inFlightSearch` (the searchCards
-  // coalesce map, index-derived) and `#cachedRealmInfo` (cached
-  // `RealmInfo` + ETag-hash; mostly index-derived but its `visibility`
-  // field is permissions-derived per CS-11178). Called by the
-  // realm_index_updated LISTEN handler on peer instances after a swap
-  // commits — or after a `realm_permissions` PATCH lands — somewhere
-  // else in the fleet. Public so the realm-server process can wire the
-  // listener without reaching into private state. Callers awaiting a
-  // pre-clear in-flight searchCards promise still receive its
-  // pre-update result (the SQL was already in motion); only NEW callers
-  // after the clear miss the map and fire a fresh search against the
-  // now-current index.
+  // Drop every read-side cache whose content derives from server-side
+  // state — currently `#cachedRealmInfo` (cached `RealmInfo` + ETag-hash;
+  // mostly index-derived, but its `visibility` field is permissions-derived)
+  // and the cached host routing map. Called by the realm_index_updated LISTEN
+  // handler on peer instances after a swap commits — or after a
+  // `realm_permissions` PATCH lands — somewhere else in the fleet. Public so
+  // the realm-server process can wire the listener without reaching into
+  // private state.
   clearRealmIndexCaches(): void {
-    this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
+    this.#cachedHostRoutingMap = null;
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -2124,6 +2168,16 @@ export class Realm {
     return statuses.length > 0 ? Math.min(...statuses) : 400;
   }
 
+  // Atomic operation hrefs may arrive in canonical RRI (prefix) form, since
+  // that is the form this realm now serves instance ids in. Resolve those to a
+  // real URL before doing path math; plain URL / relative hrefs pass through
+  // unchanged (they are not registered prefixes).
+  #resolveAtomicHref(href: string): string {
+    return this.#virtualNetwork.isRegisteredPrefix(href)
+      ? this.#virtualNetwork.toURL(href).href
+      : href;
+  }
+
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<AtomicPayloadValidationError[]> {
@@ -2139,7 +2193,9 @@ export class Realm {
 
         let localPath: LocalPath;
         try {
-          localPath = this.paths.local(new URL(operation.href, this.paths.url));
+          localPath = this.paths.local(
+            new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+          );
         } catch (error: any) {
           errors.push({
             title: 'Invalid atomic:operations format',
@@ -2284,7 +2340,9 @@ export class Realm {
       for (let operation of operations) {
         let resource = operation.data;
         let href = operation.href;
-        let localPath = this.paths.local(new URL(href, this.paths.url));
+        let localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(href), this.paths.url),
+        );
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           return createResponse({
@@ -2403,7 +2461,11 @@ export class Realm {
       let results: AtomicOperationResult[] = writeResults.map(
         ({ path, created }) => ({
           data: {
-            id: this.paths.fileURL(path).href,
+            // Serve the created instance id in canonical RRI (prefix) form, to
+            // match getCard / create / patch (no-op for unmapped realms).
+            id: this.#virtualNetwork.unresolveURL(
+              this.paths.fileURL(path).href,
+            ),
           },
           meta: {
             created,
@@ -2791,8 +2853,6 @@ export class Realm {
     let requiredPermission: RealmAction = 'read';
     if (localPath === '_permissions') {
       requiredPermission = 'realm-owner';
-    } else if (localPath === '_config' && request.method === 'PATCH') {
-      requiredPermission = 'realm-owner';
     } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
       requiredPermission = 'write';
     }
@@ -2802,6 +2862,32 @@ export class Realm {
     try {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
+        // An archived realm is sealed for everyone, owner included: once a
+        // caller is authorized, every external content request is
+        // short-circuited with 403 (archived). The seal runs AFTER
+        // checkPermission so an unauthenticated or unauthorized caller to a
+        // private realm gets the normal 401/403 and never learns the realm
+        // exists or is archived — only callers who could otherwise reach the
+        // content see the sealed response. A public realm's readers are
+        // authorized by checkPermission, so they do see the seal (the realm's
+        // existence is already public). The seal is method-agnostic, so reads
+        // and writes are blocked by this one check. The realm's public
+        // operational endpoints stay reachable while archived: the
+        // `_readiness-check` health probe (so health checks don't read an
+        // archived realm as down) and `_session` (so authentication still
+        // works). They're matched on `localPath`, independent of request
+        // headers, so a bare health probe that sends no `Accept` header is
+        // still exempt. The archive-management endpoints live on the realm
+        // SERVER router and never reach this boundary, so they stay reachable.
+        // Read fresh (no memoization) for the same reason createRequestContext
+        // does: a peer replica's archive/unarchive must take effect here
+        // without a restart.
+        if (
+          !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
+          (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+        ) {
+          throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -2821,6 +2907,34 @@ export class Realm {
           init: {
             status: 401,
             headers: {
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
+          },
+          requestContext,
+        });
+      }
+
+      if (e instanceof ArchivedRealmError) {
+        // 403 (not 404) carrying an "archived" marker — both a dedicated
+        // header and a JSON:API error with a stable `code` — so the client can
+        // distinguish a sealed realm from a generic forbidden response and
+        // render the right message.
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '403',
+                code: 'archived',
+                title: 'Realm Archived',
+                detail: e.message,
+              },
+            ],
+          }),
+          init: {
+            status: 403,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+              'X-Boxel-Realm-Archived': 'true',
               'X-Boxel-Realm-Url': requestContext.realm.url,
             },
           },
@@ -3008,7 +3122,11 @@ export class Realm {
     if (!maybeFileRef) {
       return {
         kind: 'not-found',
-        response: notFound(request, requestContext, `${request.url} not found`),
+        response: notFound(
+          request,
+          requestContext,
+          `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+        ),
       };
     }
 
@@ -3697,6 +3815,48 @@ export class Realm {
       );
 
       let user = token.user;
+
+      // Delegated read-only session (minted by the realm-server's
+      // /_delegate-session endpoint for ai-bot — CS-11552). It is bound to a
+      // single user and deliberately scoped to ['read'] even when that user
+      // has broader permissions, so neither the exact-permissions-match
+      // invariant used for normal sessions below nor the assume-user
+      // indirection applies. Enforce instead the two guarantees the delegation
+      // design promises: the session is read-only, and it grants no more than
+      // the bound user can already read.
+      if (token.delegated) {
+        // Single-realm scope. Delegated tokens are signed with the realm-server
+        // seed shared across every realm on this server and this branch skips
+        // the normal exact-permissions match, so without this check a token
+        // minted for realm A could be replayed against realm B whenever the
+        // bound user also has read on B. Bind the token to the realm it names.
+        if (
+          ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
+        ) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
+        if (requiredPermission !== 'read') {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+          );
+          throw new AuthorizationError('Delegated sessions are read-only');
+        }
+        if (!(await realmPermissionChecker.can(user, 'read'))) {
+          this.#log.warn(
+            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.PermissionMismatch,
+          );
+        }
+        return;
+      }
+
       let assumedUser = request.headers.get('X-Boxel-Assume-User');
       let didAssumeUser = false;
       if (
@@ -4194,6 +4354,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4289,6 +4450,7 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4465,6 +4627,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -4582,6 +4745,16 @@ export class Realm {
         realmURL: new URL(this.url),
       });
 
+      // When a patch fully replaces an array attribute, its per-index field
+      // metadata (e.g. the polymorphic type recorded at `meta.fields['items.1']`,
+      // or the array-valued `meta.fields['items']` for a composite containsMany)
+      // is stale. `mergeWith` overwrites arrays in attributes but deep-merges the
+      // `meta.fields` object, so without clearing these first the removed
+      // element's metadata survives and can be re-applied to a new entry when the
+      // array grows again. Drop the matching entries from the original before the
+      // merge so the patch's own metadata (if any) wins cleanly.
+      clearReplacedArrayFieldMeta(originalClone.meta, patch.attributes);
+
       let primaryResource = mergeWith(
         originalClone,
         patch,
@@ -4632,6 +4805,7 @@ export class Realm {
           let etag = foreignDeps
             ? undefined
             : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+          this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
             init: {
@@ -4772,6 +4946,7 @@ export class Realm {
         entry && entry.type !== 'error' && !foreignDeps
           ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
           : undefined;
+      this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -4857,6 +5032,22 @@ export class Realm {
       ? 'public'
       : 'private';
     return `${cacheVisibility}, max-age=0, must-revalidate`;
+  }
+
+  // Serve instance ids in canonical RRI (prefix) form. Unresolves the primary
+  // resource's `id` / `links.self` / relationship ids and every loaded link
+  // from URL to registered-prefix form. Unmapped realms have no prefix
+  // mapping, so this is a no-op there (ids stay URL). The write handlers derive
+  // the on-disk path from the request path / `lid` (not `data.id`), so accepting
+  // a prefix-form id needs no change — only the responses are canonicalized.
+  #serveInstanceIdsAsRRI(doc: {
+    data: LooseCardResource | FileMetaResource;
+    included?: (LooseCardResource | FileMetaResource)[];
+  }): void {
+    unresolveResourceInstanceURLs(doc.data, this.#virtualNetwork);
+    for (let resource of doc.included ?? []) {
+      unresolveResourceInstanceURLs(resource, this.#virtualNetwork);
+    }
   }
 
   private async getCard(
@@ -5032,6 +5223,12 @@ export class Realm {
       }
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
+      this.#serveInstanceIdsAsRRI(card);
+      // Surface the instance's index-data generation
+      // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
+      // card+json GET can tell fresh index data from stale. A fresh `meta`
+      // object — never a mutation of the cached pristine doc's `meta`.
+      card.data.meta = { ...card.data.meta, generation: maybeError.generation };
 
       // The 302 redirect for the `.json` form is now done up-front
       // (see top of method). Here we only need to redirect for the
@@ -5086,6 +5283,121 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start);
     }
+  }
+
+  // The single-instance card+html GET: one `entry` sourced by URL, carrying
+  // the card's selected rendering (`html`) plus its `item` serialization — the
+  // single-instance counterpart to `_search` and the primitive the host's
+  // selective refresh uses to update one member's HTML without re-running a
+  // whole query.
+  private async getCardHtml(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    return this.#entryHtmlResponse(request, requestContext, 'instance');
+  }
+
+  // The file counterpart of `getCardHtml`: one file's `entry` (a native
+  // rendering + its `file-meta` serialization).
+  private async getFileMetaHtml(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    return this.#entryHtmlResponse(request, requestContext, 'file');
+  }
+
+  async #entryHtmlResponse(
+    request: Request,
+    requestContext: RequestContext,
+    kind: 'instance' | 'file',
+  ): Promise<Response> {
+    let mimeType =
+      kind === 'file'
+        ? SupportedMimeType.FileMetaHtml
+        : SupportedMimeType.CardHtml;
+
+    // Read endpoints serve the realm's canonical indexed view — drain any
+    // in-flight incremental indexing first, exactly as `getCard` does.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
+
+    let htmlQuery: HtmlQuery;
+    let fieldset: SearchEntryFieldset;
+    try {
+      let { searchParams } = new URL(request.url);
+      // `?format=` (default fitted) + optional `?renderType=<module>/<name>`
+      // select the rendering; `?fields=` (html | item | html,item) is the
+      // sparse fieldset. Both mirror the html. branch, sourced from the query
+      // string rather than a request body.
+      htmlQuery = htmlQueryFromParams({
+        format: searchParams.get('format'),
+        renderType: searchParams.get('renderType'),
+      });
+      fieldset = fieldsetFromParam(searchParams.get('fields'));
+    } catch (e) {
+      if (e instanceof SearchRequestError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': mimeType },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
+
+    let localPath = this.paths.local(new URL(request.url));
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    // Instance rows key on their `.json` file URL; file rows on the bare path.
+    let dbUrl =
+      kind === 'file'
+        ? this.paths.fileURL(localPath)
+        : this.paths.fileURL(
+            `${localPath.replace(/\.json$/, '') || 'index'}.json`,
+          );
+
+    let doc = await this.#realmIndexQueryEngine.searchEntry(
+      dbUrl,
+      { htmlQuery, fieldset, kind },
+      {
+        loadLinks: true,
+        ...(isDuringPrerenderRequest(request)
+          ? { cacheOnlyDefinitions: true }
+          : {}),
+      },
+    );
+    if (!doc) {
+      return notFound(request, requestContext);
+    }
+
+    // `searchEntry` ran `attachRealmInfo`, which (re)populated the realm-info
+    // cache, so the hash we fold into an item-bearing response's ETag reflects
+    // the realm info the item was just serialized with.
+    let etag = buildEntryHtmlEtag(doc, this.getCachedRealmInfoHash());
+    let ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 304,
+          headers: { etag, 'content-type': mimeType },
+        },
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': mimeType, etag },
+      },
+      requestContext,
+    });
   }
 
   private async getCardMarkdown(
@@ -5298,121 +5610,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(
-    query: Query,
-    opts?: SearchOpts,
-  ): Promise<LinkableCollectionDocument> {
-    assertQuery(query);
-    let engineOpts = {
-      loadLinks: true as const,
-      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
-      ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
-      // `!== undefined` so an explicit priority 0 (system-initiated) survives.
-      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-      ...(opts?.timings ? { timings: opts.timings } : {}),
-      // The SQL-side `i.url IN (...)` subset filter reads `cardUrls` from the
-      // engine opts, so forward it (non-empty only — an empty array is a no-op).
-      ...(opts?.cardUrls?.length ? { cardUrls: opts.cardUrls } : {}),
-    };
-    return await this.#realmIndexQueryEngine.searchCards(query, engineOpts);
-  }
-
-  private async searchResponse(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    if (request.method !== 'QUERY') {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: 'method must be QUERY',
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    let cardsQuery: unknown;
-    try {
-      cardsQuery = await request.json();
-    } catch (e: any) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Request body is not valid JSON: ${e?.message ?? e}`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    try {
-      assertQuery(cardsQuery);
-      let duringPrerender = isDuringPrerenderRequest(request);
-      let doc = await this.search(cardsQuery, {
-        cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender the search skips the `loadLinks`
-        // relationship-assembly pass entirely: the host re-resolves
-        // every result card from its raw card+source file and consumes
-        // only `data[].id`, so the query-field umbrellas and the
-        // transitive `included[]` are throwaway work in this path.
-        omitIncluded: duringPrerender,
-      });
-      return createResponse({
-        body: JSON.stringify(doc, null, 2),
-        init: {
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    } catch (e) {
-      if (e instanceof InvalidQueryError) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Invalid Query',
-                message: `Invalid query: ${e.message}`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      // Re-throw other errors
-      throw e;
-    }
-  }
-
-  // The v2 search: the parsed search-entry query (the item. membership
+  // The search: the parsed entry query (the item. membership
   // query + the applied htmlQuery + the sparse fieldset) against the
-  // search-entry projection engine. Same opts threading as `search` —
+  // entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.
   public async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: SearchOpts,
-  ): Promise<SearchEntryCollectionDocument> {
+  ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
@@ -5531,177 +5736,6 @@ export class Realm {
       body: JSON.stringify(result),
       init: {
         headers: { 'content-type': SupportedMimeType.JSON },
-      },
-      requestContext,
-    });
-  }
-
-  public async searchPrerendered(
-    query: Query,
-    opts: {
-      htmlFormat: PrerenderedHtmlFormat;
-      cardUrls?: string[];
-      renderType?: ResolvedCodeRef;
-    },
-  ): Promise<PrerenderedCardCollectionDocument> {
-    assertQuery(query);
-    // The legacy prerendered search expressed over the search-entry engine:
-    // both branches pinned (the `item` lets the coalescer recover a row's
-    // actual type where no rendering matched), no link expansion. The
-    // coalescer picks the requested ancestor's rendering and falls back to
-    // the native one, then flattens the first-class `css` resources into
-    // `meta.scopedCssUrls`.
-    let isFileMeta = await this.#realmIndexQueryEngine.queryTargetsFileMeta(
-      query.filter,
-    );
-    let doc = await this.#realmIndexQueryEngine.searchEntries(
-      prerenderedSearchEntryQuery(query, opts),
-    );
-    return searchEntryDocToPrerenderedDoc(doc, {
-      renderType: opts.renderType,
-      isFileMeta,
-    });
-  }
-
-  private async searchPrerenderedResponse(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let payload: Record<string, any> | undefined;
-    let htmlFormat: string | undefined;
-    let cardUrls: string[] | string | undefined;
-    let renderType: CodeRef | undefined;
-    let query: unknown;
-
-    if (request.method !== 'QUERY') {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: 'method must be QUERY',
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    try {
-      payload = (await request.json()) as Record<string, any>;
-    } catch (e: any) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Request body is not valid JSON: ${e?.message ?? e}`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-    htmlFormat = payload.prerenderedHtmlFormat;
-    cardUrls = payload.cardUrls;
-    renderType = payload.renderType;
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
-    delete payload.prerenderedHtmlFormat;
-    delete payload.cardUrls;
-    delete payload.renderType;
-    query = payload;
-
-    if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message: `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`,
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    let normalizedCardUrls: string[] | undefined;
-    if (Array.isArray(cardUrls)) {
-      if (!cardUrls.every((url) => typeof url === 'string')) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Bad Request',
-                message: 'cardUrls must be a string or array of strings',
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      normalizedCardUrls = cardUrls;
-    } else if (typeof cardUrls === 'string') {
-      normalizedCardUrls = [cardUrls];
-    }
-    let normalizedRenderType = isResolvedCodeRef(renderType)
-      ? renderType
-      : undefined;
-
-    try {
-      assertQuery(query);
-    } catch (e) {
-      if (e instanceof InvalidQueryError) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Invalid Query',
-                message: `Invalid query: ${e.message}`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      throw e;
-    }
-
-    let doc = await this.searchPrerendered(query as Query, {
-      htmlFormat,
-      cardUrls: normalizedCardUrls,
-      renderType: normalizedRenderType,
-    });
-
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.CardJson },
       },
       requestContext,
     });
@@ -6231,7 +6265,7 @@ export class Realm {
     let sourceRealmURL = ensureTrailingSlash(this.url);
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, type, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
+      `SELECT url, type, has_error, error_doc, diagnostics FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
       `AND (`,
@@ -6240,49 +6274,95 @@ export class Realm {
       `    jsonb_typeof(diagnostics->'brokenLinks') = 'array'`,
       `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
       `  )`,
+      `  OR jsonb_typeof(diagnostics->'frontmatterParseError') = 'object'`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
       url: string;
       type: string;
+      has_error: boolean | null;
       error_doc: SerializedError | null;
       diagnostics: Record<string, unknown> | null;
     }[];
 
     let doc = {
-      data: rows.map((row) => {
+      data: rows.flatMap((row) => {
         let brokenLinks =
           row.diagnostics && Array.isArray(row.diagnostics.brokenLinks)
             ? (row.diagnostics.brokenLinks as unknown[])
             : null;
-        let hasError = row.error_doc != null;
+        let frontmatterParseError =
+          row.diagnostics &&
+          typeof row.diagnostics.frontmatterParseError === 'object' &&
+          row.diagnostics.frontmatterParseError !== null
+            ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
+            : null;
+        // Source of truth is the row's `has_error` column — the SQL above
+        // filters on it, so we mirror that filter when branching. Using
+        // `row.error_doc != null` here would silently drop any row where
+        // `has_error = TRUE` but `error_doc` is NULL.
+        let hasError = row.has_error === true;
+        // A single boxel_index row can carry more than one independent
+        // finding — e.g. a markdown skill with both unparseable frontmatter
+        // and a broken card reference in its body. We emit one resource per
+        // finding so a consumer filtering by `type` (the JSON CLI, or anyone
+        // selecting only 'broken-link') never loses a signal just because it
+        // co-occurs with another.
+        //
         // 'indexing-error' = row.has_error = TRUE (rendered/indexed badly).
+        //   Any brokenLinks ride along as an attribute since the row's
+        //   headline is the render failure, not the dead targets.
         // 'broken-link' = the index row is healthy but the rendered card has
-        // dead linksTo/linksToMany targets surfaced by render.meta. Both
-        // classes share the (entryType, url) key; the discriminator lets
+        //   dead linksTo/linksToMany targets surfaced by render.meta.
+        // 'frontmatter-error' = the index row is healthy but the file's YAML
+        //   frontmatter wouldn't parse, so anything it declared was dropped.
+        // All classes share the (entryType, url) key; the discriminator lets
         // consumers branch on which attributes to read.
-        let resourceType: 'indexing-error' | 'broken-link' = hasError
-          ? 'indexing-error'
-          : 'broken-link';
-        let attributes: Record<string, unknown> = {
+        let baseAttributes = {
           url: row.url,
           entryType: row.type,
           diagnostics: row.diagnostics,
         };
+        let findings: {
+          type: 'indexing-error' | 'broken-link' | 'frontmatter-error';
+          attributes: Record<string, unknown>;
+        }[] = [];
         if (hasError) {
-          attributes.errorDoc = row.error_doc;
+          let attributes: Record<string, unknown> = {
+            ...baseAttributes,
+            errorDoc: row.error_doc,
+          };
+          if (brokenLinks && brokenLinks.length > 0) {
+            attributes.brokenLinks = brokenLinks;
+          }
+          findings.push({ type: 'indexing-error', attributes });
+        } else {
+          if (frontmatterParseError) {
+            findings.push({
+              type: 'frontmatter-error',
+              attributes: { ...baseAttributes, frontmatterParseError },
+            });
+          }
+          if (brokenLinks && brokenLinks.length > 0) {
+            findings.push({
+              type: 'broken-link',
+              attributes: { ...baseAttributes, brokenLinks },
+            });
+          }
         }
-        if (brokenLinks && brokenLinks.length > 0) {
-          attributes.brokenLinks = brokenLinks;
-        }
-        return {
-          type: resourceType,
+        return findings.map((finding) => ({
+          type: finding.type,
           // `(type, url)` is the boxel_index PK partition; encoding both
           // keeps the JSON:API resource id unique when the same URL fails
-          // as both 'instance' and 'file'.
-          id: `${row.type}::${row.url}`,
-          attributes,
-        };
+          // as both 'instance' and 'file'. When a single row yields more
+          // than one finding we append the finding class too, so the two
+          // resources don't collide on a shared id.
+          id:
+            findings.length > 1
+              ? `${row.type}::${row.url}::${finding.type}`
+              : `${row.type}::${row.url}`,
+          attributes: finding.attributes,
+        }));
       }),
     };
 
@@ -6541,6 +6621,9 @@ export class Realm {
   // linked-card attrs }`. We only need the absolute `id` here.
   // Returns absolute URLs.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    if (this.#cachedHostRoutingMap) {
+      return this.#cachedHostRoutingMap;
+    }
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
@@ -6548,13 +6631,13 @@ export class Realm {
       let indexEntry =
         await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type !== 'instance') {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
       let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
       if (!Array.isArray(rules)) {
-        return [];
+        return (this.#cachedHostRoutingMap = []);
       }
-      return rules.flatMap((rule) => {
+      let map = rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
@@ -6586,49 +6669,15 @@ export class Realm {
         }
         return [{ path, id }];
       });
+      return (this.#cachedHostRoutingMap = map);
     } catch (e) {
       this.#log.warn(
         `failed to read host routing map from RealmConfig card: ${e}`,
       );
+      // Don't cache a transient read failure — leave `null` so the next
+      // call retries the index query.
       return [];
     }
-  }
-
-  // Upserts the patch into realm_metadata for this realm. Only the
-  // provided keys are written; absent keys retain their existing column
-  // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit
-  // null to clear a column.
-  private async upsertRealmMetadata(patch: {
-    publishable?: boolean | null;
-    showAsCatalog?: boolean | null;
-  }): Promise<void> {
-    if (patch.publishable === undefined && patch.showAsCatalog === undefined) {
-      return;
-    }
-    let publishable =
-      patch.publishable === undefined ? null : patch.publishable;
-    let showAsCatalog =
-      patch.showAsCatalog === undefined ? null : patch.showAsCatalog;
-    let publishableProvided = patch.publishable !== undefined;
-    let showAsCatalogProvided = patch.showAsCatalog !== undefined;
-    await query(this.#dbAdapter, [
-      `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
-      param(this.url),
-      `,`,
-      param(publishable),
-      `,`,
-      param(showAsCatalog),
-      `) ON CONFLICT (url) DO UPDATE SET `,
-      // Update only the columns that were provided; preserve the
-      // existing values of the others.
-      ...(publishableProvided
-        ? [`publishable = `, param(publishable), `, `]
-        : []),
-      ...(showAsCatalogProvided
-        ? [`show_as_catalog = `, param(showAsCatalog), `, `]
-        : []),
-      `updated_at = now()`,
-    ]);
   }
 
   async getRealmInfo(): Promise<RealmInfo> {
@@ -6683,7 +6732,7 @@ export class Realm {
     };
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
-    // file is the source of truth — patchRealmConfig writes it, publish
+    // file is the source of truth — card writes update it, publish
     // copySync's it from the source realm — and exists before the indexer
     // ever processes it. Reading from disk closes the gap during indexing,
     // when /_info can fire mid-pass via the prerender host's cardRender:
@@ -6775,222 +6824,6 @@ export class Realm {
     }
 
     return realmInfo;
-  }
-
-  private async patchRealmConfig(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let json: unknown;
-    try {
-      json = await request.json();
-    } catch (e: any) {
-      return badRequest({
-        message: `The request body was not json: ${e.message}`,
-        requestContext,
-      });
-    }
-
-    const realmConfigPatchSchema = z.object({
-      data: z.object({
-        type: z.literal('realm-config'),
-        attributes: z.record(z.unknown()),
-      }),
-    });
-
-    let parsed = realmConfigPatchSchema.safeParse(json);
-    if (!parsed.success) {
-      let message =
-        parsed.error.issues.map((issue: any) => issue.message).join(', ') ||
-        'The request body was invalid';
-      return badRequest({ message, requestContext });
-    }
-
-    let { attributes } = parsed.data.data;
-
-    if (Object.keys(attributes).length === 0) {
-      return badRequest({
-        message: 'At least one property must be provided',
-        requestContext,
-      });
-    }
-
-    let emptyProperty = Object.keys(attributes).find(
-      (property) => property.trim().length === 0,
-    );
-    if (emptyProperty !== undefined) {
-      return badRequest({
-        message: 'Property names cannot be empty',
-        requestContext,
-      });
-    }
-
-    let protectedProperty = Object.keys(attributes).find((property) =>
-      PROTECTED_REALM_CONFIG_PROPERTIES.includes(property),
-    );
-
-    if (protectedProperty) {
-      return badRequest({
-        message: `${protectedProperty} cannot be updated`,
-        requestContext,
-      });
-    }
-
-    // Validate types of fields bound for realm_metadata BEFORE any
-    // writes. The patch schema accepts arbitrary attribute values
-    // (z.record(z.unknown())); without this check a non-boolean
-    // would reach the SQL boolean column and surface as an opaque
-    // 500. Card and sidecar fields rely on their own downstream
-    // validation; the DB-bound fields don't have one.
-    if ('publishable' in attributes) {
-      let publishableValue = attributes.publishable;
-      if (publishableValue !== null && typeof publishableValue !== 'boolean') {
-        return badRequest({
-          message: `'publishable' must be a boolean or null`,
-          requestContext,
-        });
-      }
-    }
-
-    let cardAttrs: Record<string, unknown> = {};
-    let metadataAttrs: Record<string, unknown> = {};
-    let unknownKeys: string[] = [];
-    for (let [key, value] of Object.entries(attributes)) {
-      if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
-        cardAttrs[key] = value;
-      } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
-        metadataAttrs[key] = value;
-      } else {
-        unknownKeys.push(key);
-      }
-    }
-    if (unknownKeys.length > 0) {
-      return badRequest({
-        message: `Unknown realm config attribute(s): ${unknownKeys.join(', ')}`,
-        requestContext,
-      });
-    }
-
-    // Read and validate the card before writing anything. A mixed PATCH
-    // like { name, publishable } touches the card and the realm_metadata
-    // table; we don't want a malformed card to surface 500 *after* the
-    // metadata has already been mutated.
-    let cardPath: LocalPath | undefined;
-    let cardDoc:
-      | {
-          data: {
-            type: string;
-            attributes?: Record<string, unknown>;
-            meta: { adoptsFrom: { module: string; name: string } };
-          };
-        }
-      | undefined;
-    if (Object.keys(cardAttrs).length > 0) {
-      cardPath = this.paths.local(this.paths.fileURL('realm.json'));
-      cardDoc = {
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      };
-      let existingCard = await this.readFileAsText(cardPath, undefined);
-      if (existingCard?.content) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(existingCard.content);
-        } catch (e: any) {
-          return systemError({
-            requestContext,
-            message: `Unable to parse existing realm config card: ${e.message}`,
-          });
-        }
-        if (!isPlainObject(parsed)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card is not a JSON object`,
-          });
-        }
-        cardDoc = parsed as typeof cardDoc;
-        cardDoc!.data = cardDoc!.data ?? ({} as any);
-        if (!isPlainObject(cardDoc!.data)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card data is not a JSON object`,
-          });
-        }
-        let adoptsFrom = (cardDoc!.data as any).meta?.adoptsFrom;
-        if (
-          !isPlainObject(adoptsFrom) ||
-          adoptsFrom.module !== 'https://cardstack.com/base/realm-config' ||
-          adoptsFrom.name !== 'RealmConfig'
-        ) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card does not adopt from RealmConfig`,
-          });
-        }
-        let existingAttrs = cardDoc!.data.attributes;
-        if (existingAttrs != null && !isPlainObject(existingAttrs)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config card attributes is not a JSON object`,
-          });
-        }
-        cardDoc!.data.attributes = existingAttrs ?? {};
-      }
-      // `name` is exposed on the public RealmInfo shape but stored on the
-      // RealmConfig card under cardInfo.name (the standard CardDef slot
-      // that drives cardTitle). Translate so PATCH /_config callers can
-      // keep sending { name: ... } unchanged.
-      for (let [key, value] of Object.entries(cardAttrs)) {
-        if (key === 'name') {
-          let existingCardInfo = (cardDoc!.data.attributes!.cardInfo ??
-            {}) as Record<string, unknown>;
-          cardDoc!.data.attributes!.cardInfo = {
-            ...existingCardInfo,
-            name: value,
-          };
-        } else {
-          cardDoc!.data.attributes![key] = value;
-        }
-      }
-    }
-
-    if (cardPath !== undefined && cardDoc !== undefined) {
-      await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
-    }
-    if (Object.keys(metadataAttrs).length > 0) {
-      await this.upsertRealmMetadata({
-        publishable:
-          'publishable' in metadataAttrs
-            ? (metadataAttrs.publishable as boolean | null)
-            : undefined,
-      });
-    }
-
-    this.invalidateCachedRealmInfo();
-
-    let realmInfo = await this.parseRealmInfo();
-    let doc = {
-      data: {
-        id: this.url,
-        type: 'realm-config',
-        attributes: realmInfo,
-      },
-    };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.JSON },
-      },
-      requestContext,
-    });
   }
 
   private async realmInfo(
@@ -7108,6 +6941,25 @@ export class Realm {
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
     this.#adapter.broadcastRealmEvent(
+      event,
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
+  }
+
+  // Public entry point for broadcasting a realm event that does not originate
+  // from a request this Realm handled — a worker-originated event bridged in
+  // through the worker manager. Unlike the private broadcastRealmEvent
+  // (fire-and-forget), this awaits the adapter so the internal /_worker-request
+  // endpoint doesn't leave a dangling promise and can
+  // surface a resolution/dispatch throw. Delivery itself is best-effort — the
+  // adapter swallows per-room send failures the same way web-tier broadcasts do
+  // — so a 200 means "resolved and dispatched," not "received by every host."
+  // The adapter stamps this realm's canonical url on the event, so it reaches
+  // subscribed hosts exactly as a web-tier-originated event does.
+  async broadcastEvent(event: RealmEventContent): Promise<void> {
+    await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,

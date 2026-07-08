@@ -27,6 +27,23 @@ export default {
         // https://github.com/ember-template-lint/ember-template-lint/blob/e1d3fd25fc1b8b250edd9bce11500f78721759c0/lib/rules/no-forbidden-elements.js#L9
         'no-forbidden-elements': ['meta', 'html', 'script'],
       },
+      overrides: [
+        {
+          // Tests legitimately select on `data-test-*` (e.g. `find-all
+          // '[data-test-foo]'`) — that's what the attribute is for — so the
+          // guard against using it as a functional selector only applies to
+          // non-test templates. Covers both `tests/` dirs and co-located
+          // `*-test.*` / `*.test.*` files.
+          files: [
+            '**/tests/**',
+            '**/*-test.{gjs,gts,hbs,js,ts}',
+            '**/*.test.{gjs,gts,hbs,js,ts}',
+          ],
+          rules: {
+            'no-data-test-selector': false,
+          },
+        },
+      ],
     },
   },
 };

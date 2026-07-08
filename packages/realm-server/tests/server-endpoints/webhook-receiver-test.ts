@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { createHmac } from 'crypto';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
@@ -10,7 +11,7 @@ import {
   extractBranchNameFromPayload,
 } from '../../handlers/webhook-filter-handlers.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
 
@@ -837,7 +838,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let prCardId = uuidv4();
       let prCardUrl = `https://app.boxel.ai/submissions/PrCard/${prCardId}`;
       await query(context.dbAdapter, [
-        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
+        `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
         `VALUES (`,
         param(prCardUrl),
         `,`,
@@ -951,7 +952,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let prCardId = uuidv4();
       let prCardUrl = `https://realms-staging.stack.cards/submissions/PrCard/${prCardId}`;
       await query(context.dbAdapter, [
-        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
+        `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
         `VALUES (`,
         param(prCardUrl),
         `,`,

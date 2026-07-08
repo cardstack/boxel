@@ -23,7 +23,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { Skill } from 'https://cardstack.com/base/skill';
-import { includes, uniqBy } from 'lodash';
+import { includes, uniqBy } from 'lodash-es';
 
 import SettingsIcon from '@cardstack/boxel-icons/settings';
 import ZapIcon from '@cardstack/boxel-icons/zap';
@@ -3538,9 +3538,15 @@ export class Environment extends CardDef {
   static icon = SettingsIcon;
 
   @field name = contains(StringField);
-  @field parent = linksTo(() => Environment);
-  @field modelSettings = containsMany(ModelSettingsField);
-  @field shortcutSettings = containsMany(ShortcutSettingsField);
+  @field parent = linksTo(
+    () => Environment,
+    { searchable: ['disabledModels.model', 'modelSettings.model', 'modelsList.model', 'parent.modelSettings.model', 'parent.modelsList.model', 'parent.shortcutSettings.preferredModel', 'parent.shortcutSettings.requiredSkills', 'parent.shortcutSettings.requiredSkills.backMatterToc', 'parent.shortcutSettings.requiredSkills.contentToc', 'parent.shortcutSettings.requiredSkills.frontMatterToc', 'parent.shortcutSettings.requiredSkills.instructionsSource', 'parent.shortcutSettings.requiredSkills.relatedSkills.skill', 'parent.shortcutSettings.requiredSkills.relatedSkills.skill.instructionsSource', 'parent.shortcutSettings.requiredSkills.relatedSkills.skill.toc', 'parent.shortcutSettings.requiredSkills.toc', 'parent.shortcutsList.preferredModel', 'parent.shortcutsList.requiredSkills', 'parent.shortcutsList.requiredSkills.backMatterToc', 'parent.shortcutsList.requiredSkills.contentToc', 'parent.shortcutsList.requiredSkills.frontMatterToc', 'parent.shortcutsList.requiredSkills.instructionsSource', 'parent.shortcutsList.requiredSkills.relatedSkills.skill', 'parent.shortcutsList.requiredSkills.relatedSkills.skill.instructionsSource', 'parent.shortcutsList.requiredSkills.relatedSkills.skill.toc', 'parent.shortcutsList.requiredSkills.toc', 'shortcutSettings.preferredModel', 'shortcutSettings.requiredSkills', 'shortcutSettings.requiredSkills.backMatterToc', 'shortcutSettings.requiredSkills.contentToc', 'shortcutSettings.requiredSkills.frontMatterToc', 'shortcutSettings.requiredSkills.instructionsSource', 'shortcutSettings.requiredSkills.relatedSkills.skill', 'shortcutSettings.requiredSkills.relatedSkills.skill.instructionsSource', 'shortcutSettings.requiredSkills.relatedSkills.skill.toc', 'shortcutSettings.requiredSkills.toc', 'shortcutsList.preferredModel', 'shortcutsList.requiredSkills', 'shortcutsList.requiredSkills.backMatterToc', 'shortcutsList.requiredSkills.contentToc', 'shortcutsList.requiredSkills.frontMatterToc', 'shortcutsList.requiredSkills.instructionsSource', 'shortcutsList.requiredSkills.relatedSkills.skill', 'shortcutsList.requiredSkills.relatedSkills.skill.instructionsSource', 'shortcutsList.requiredSkills.relatedSkills.skill.toc', 'shortcutsList.requiredSkills.toc'] },
+  );
+  @field modelSettings = containsMany(ModelSettingsField, { searchable: 'model' });
+  @field shortcutSettings = containsMany(
+    ShortcutSettingsField,
+    { searchable: ['preferredModel', 'requiredSkills', 'requiredSkills.backMatterToc', 'requiredSkills.contentToc', 'requiredSkills.frontMatterToc', 'requiredSkills.instructionsSource', 'requiredSkills.relatedSkills.skill', 'requiredSkills.relatedSkills.skill.instructionsSource', 'requiredSkills.toc'] },
+  );
 
   get localModelCount(): number {
     return this.#getArray(this.modelSettings).length;
@@ -3659,6 +3665,8 @@ export class Environment extends CardDef {
       collect(this);
       return Array.from(shortcuts.values());
     },
+
+    searchable: ['preferredModel', 'requiredSkills', 'requiredSkills.backMatterToc', 'requiredSkills.contentToc', 'requiredSkills.frontMatterToc', 'requiredSkills.instructionsSource', 'requiredSkills.relatedSkills.skill', 'requiredSkills.relatedSkills.skill.instructionsSource', 'requiredSkills.relatedSkills.skill.toc', 'requiredSkills.toc'],
   });
 
   @field modelsList = containsMany(ModelSettingsField, {
@@ -3683,12 +3691,16 @@ export class Environment extends CardDef {
       collect(this);
       return Array.from(settings.values());
     },
+
+    searchable: 'model',
   });
 
   @field disabledModels = containsMany(ModelSettingsField, {
     computeVia: function (this: Environment) {
       return this.modelsList.filter((setting) => setting.isDisabled);
     },
+
+    searchable: 'model',
   });
 
   static isolated = Isolated;

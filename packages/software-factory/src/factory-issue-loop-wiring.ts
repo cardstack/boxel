@@ -52,7 +52,7 @@ import { withStdoutRedirected } from './redirect-stdout.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,6 +103,13 @@ export interface IssueLoopWiringConfig {
    * awareness of boxel-ui components. See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * Invoked once, right after the bootstrap issue completes. The entrypoint
+   * uses this to link the realm index's `board` relationship as soon as the
+   * IssueTracker exists, instead of waiting for the entire loop to return.
+   * Passed straight through to {@link runIssueLoop}.
+   */
+  onBootstrapComplete?: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +190,20 @@ export async function runFactoryIssueLoop(
   let syncGate = new WorkspaceSyncGate(workspaceDir, () =>
     syncWorkspaceToRealm(client, targetRealm, workspaceDir),
   );
-  let syncWorkspace = () => syncGate.sync();
+  // Time every sync through one stopwatch. Both the loop's own syncs and the
+  // realm-touching `run_*` tool syncs (which fire inside `agent.run`) go
+  // through this `syncWorkspace`, so the loop can read `getSyncElapsedMs()` to
+  // attribute tool-triggered sync time to sync rather than agent time.
+  let syncElapsedMs = 0;
+  let syncWorkspace = async () => {
+    let start = Date.now();
+    try {
+      return await syncGate.sync();
+    } finally {
+      syncElapsedMs += Date.now() - start;
+    }
+  };
+  let getSyncElapsedMs = () => syncElapsedMs;
   let validationCache = new ValidationRunCache(workspaceDir, { syncGate });
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealm,
@@ -261,6 +281,9 @@ export async function runFactoryIssueLoop(
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
+    debug: config.debug,
+    getSyncElapsedMs,
+    onBootstrapComplete: config.onBootstrapComplete,
   };
 
   try {

@@ -12,7 +12,7 @@ import {
   htmlResourceId,
   CssResourceType,
   HtmlResourceType,
-  SearchEntryResourceType,
+  EntryResourceType,
   type Loader,
   type Realm,
   type SearchEntryResults,
@@ -186,14 +186,14 @@ module('Integration | search-entries resource', function (hooks) {
     let doc: SearchEntryResults = {
       data: [
         {
-          type: SearchEntryResourceType,
+          type: EntryResourceType,
           id: itemFileUrl,
           relationships: {
             item: { data: { type: 'file-meta', id: itemFileUrl } },
           },
         },
         {
-          type: SearchEntryResourceType,
+          type: EntryResourceType,
           id: htmlFileUrl,
           relationships: {
             html: { data: [{ type: HtmlResourceType, id: renderingId }] },
@@ -251,7 +251,7 @@ module('Integration | search-entries resource', function (hooks) {
       named: {
         query: {
           filter: { 'item.on': bookRef },
-          fields: { 'search-entry': ['item'] },
+          fields: { entry: ['item'] },
           realms: [testRealmURL],
         },
       },
@@ -314,7 +314,7 @@ module('Integration | search-entries resource', function (hooks) {
       assert.strictEqual(
         trackedLoads[0],
         load,
-        'the registered load is the in-flight v2 search',
+        'the registered load is the in-flight search',
       );
       assert.true(
         renderStore.loadGeneration > generationBefore,
@@ -370,7 +370,7 @@ module('Integration | search-entries resource', function (hooks) {
     let unrenderedDoc: SearchEntryResults = {
       data: [
         {
-          type: SearchEntryResourceType,
+          type: EntryResourceType,
           id: entryURL,
           relationships: { html: { data: [] } },
         },
@@ -380,7 +380,7 @@ module('Integration | search-entries resource', function (hooks) {
     let renderedDoc: SearchEntryResults = {
       data: [
         {
-          type: SearchEntryResourceType,
+          type: EntryResourceType,
           id: entryURL,
           relationships: {
             html: { data: [{ type: HtmlResourceType, id: renderingId }] },

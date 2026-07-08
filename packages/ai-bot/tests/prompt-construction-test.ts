@@ -1,4 +1,5 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {
@@ -16,6 +17,7 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -25,7 +27,8 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { readFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { readFileSync } = fsExtra;
 import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import {
@@ -39,6 +42,8 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
+  isMarkdownSkillFile,
+  parseMarkdownSkill,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -233,7 +238,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   },
                   {
                     codeRef: {
-                      module: rri('https://cardstack.com/base/card-api'),
+                      module: rri('@cardstack/base/card-api'),
                       name: 'CardDef',
                     },
                     fields: [],
@@ -292,7 +297,7 @@ File open in code editor: http://localhost:4201/experiments/author.gts
   Inheritance chain:
     1. Address from http://localhost:4201/experiments/author
        Fields: street, city, state
-      2. CardDef from https://cardstack.com/base/card-api
+      2. CardDef from @cardstack/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
@@ -1932,7 +1937,7 @@ Attached Files (files with newer versions don't show their content):
 
   test('should include instructions in system prompt for skill cards', async () => {
     const rawEvents = readFileSync(
-      path.join(__dirname, 'resources/chats/added-skill.json'),
+      path.join(import.meta.dirname, 'resources/chats/added-skill.json'),
       'utf-8',
     );
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
@@ -1945,7 +1950,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1991,7 +1996,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
-        'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
+        'Skill (id: @cardstack/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
@@ -2011,7 +2016,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-skill-and-attached-card.json',
         ),
         'utf-8',
@@ -2024,7 +2029,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2129,7 +2134,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-one-skill.json',
         ),
         'utf-8',
@@ -2205,7 +2210,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-two-skills.json',
         ),
         'utf-8',
@@ -2232,7 +2237,7 @@ Attached Files (files with newer versions don't show their content):
     // handle that.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/skill-card-no-id.json'),
+        path.join(import.meta.dirname, 'resources/chats/skill-card-no-id.json'),
         'utf-8',
       ),
     );
@@ -2243,7 +2248,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2293,7 +2298,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-messages-with-same-skill-card.json',
         ),
         'utf-8',
@@ -2341,7 +2346,10 @@ Attached Files (files with newer versions don't show their content):
   test('if tool calls are required, ensure they are set', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/forced-function-call.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/forced-function-call.json',
+        ),
         'utf-8',
       ),
     );
@@ -2668,7 +2676,7 @@ Attached Files (files with newer versions don't show their content):
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/search-results',
+                      module: '@cardstack/base/search-results',
                       name: 'SearchResults',
                     },
                   },
@@ -2708,7 +2716,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.equal(result[5].role, 'tool');
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal((result[5].content as string).trim(), expected.trim());
   });
@@ -2717,7 +2725,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2743,7 +2751,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2762,7 +2770,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -2786,7 +2794,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/connect-tool-calls-to-results.json',
         ),
         'utf-8',
@@ -2836,7 +2844,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/invoke-submode-swith-command.json',
         ),
         'utf-8',
@@ -2849,7 +2857,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -2868,7 +2876,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -2960,7 +2968,10 @@ Attached Files (files with newer versions don't show their content):
   test('Does not respond to first tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3002,7 +3013,10 @@ Attached Files (files with newer versions don't show their content):
   test('Responds to second tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-two-results.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-two-results.json',
+        ),
         'utf-8',
       ),
     );
@@ -3080,7 +3094,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/enabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3093,7 +3107,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -3224,7 +3238,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/disabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3256,7 +3270,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/updated-skill-command-definitions.json',
         ),
         'utf-8',
@@ -3269,7 +3283,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -3288,7 +3302,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -3394,7 +3408,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3428,7 +3442,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // m.replace messages, relying on server side aggregation
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/server-side-aggregations.json',
+        ),
         'utf-8',
       ),
     );
@@ -3439,7 +3456,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -3533,7 +3550,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Responds to successful completion of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-success.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-success.json',
+        ),
         'utf-8',
       ),
     );
@@ -3558,7 +3578,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Does not respond to first code patch result when two patches were proposed', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-code-blocks-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-code-blocks-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3578,7 +3601,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3605,7 +3628,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-one-result.json',
         ),
         'utf-8',
@@ -3627,7 +3650,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-a.json',
         ),
         'utf-8',
@@ -3694,7 +3717,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-b.json',
         ),
         'utf-8',
@@ -3760,7 +3783,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Responds to failure of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-failure.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
         'utf-8',
       ),
     );
@@ -3785,7 +3811,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed before last user message when just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-single.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-single.json',
+        ),
         'utf-8',
       ),
     );
@@ -3803,7 +3832,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed before last user message when multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3823,7 +3855,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed after the last tool call if the last message is a tool call', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/tool-call-last.json'),
+        path.join(import.meta.dirname, 'resources/chats/tool-call-last.json'),
         'utf-8',
       ),
     );
@@ -3847,7 +3879,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message is placed after the last user message if the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/assistant-message-last.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/assistant-message-last.json',
+        ),
         'utf-8',
       ),
     );
@@ -3866,7 +3901,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('context message contains the current date and time', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3889,7 +3927,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('tool call messages include attached files when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-gts-file.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-gts-file.json'),
         'utf-8',
       ),
     );
@@ -3928,7 +3966,7 @@ Attached Files (files with newer versions don't show their content):
   test('tool call messages include attached cards when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-card.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-card.json'),
         'utf-8',
       ),
     );
@@ -3973,7 +4011,7 @@ Attached Cards (cards with newer versions don't show their content):
   test('getPromptParts collects patched files from code patch result attachments', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/patched-gts.json'),
+        path.join(import.meta.dirname, 'resources/chats/patched-gts.json'),
         'utf-8',
       ),
     );
@@ -6540,7 +6578,7 @@ module('set model in prompt', (hooks) => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -6558,7 +6596,7 @@ module('set model in prompt', (hooks) => {
   test('use latest active llm', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/set-active-llm.json'),
+        path.join(import.meta.dirname, 'resources/chats/set-active-llm.json'),
         'utf-8',
       ),
     );
@@ -7164,5 +7202,240 @@ module('fill missing capability fields from fallback constant', (hooks) => {
       true,
       'no-event branch fills toolsSupported from the default row',
     );
+  });
+});
+
+module('markdown skills', () => {
+  test('isMarkdownSkillFile detects .md/.markdown by sourceUrl', (assert) => {
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/skills/x/SKILL.md' } as any),
+    );
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/notes.markdown' } as any),
+    );
+    assert.false(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/Skill/boxel-dev' } as any),
+    );
+  });
+
+  test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
+    let content =
+      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
+    let { title, body, kind } = parseMarkdownSkill(content, {
+      sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'Source Code Editing');
+    assert.strictEqual(
+      body,
+      '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
+    );
+    assert.strictEqual(kind, 'skill');
+    assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');
+  });
+
+  test('parseMarkdownSkill reports no kind for plain markdown', (assert) => {
+    let { kind } = parseMarkdownSkill(
+      '---\nname: "Notes"\n---\nJust some notes.',
+      { sourceUrl: 'https://r/notes.md' } as any,
+    );
+    assert.strictEqual(kind, undefined);
+  });
+
+  test('parseMarkdownSkill falls back to the file name when no frontmatter', (assert) => {
+    let { title, body } = parseMarkdownSkill('Just instructions.', {
+      sourceUrl: 'https://r/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'SKILL.md');
+    assert.strictEqual(body, 'Just instructions.');
+  });
+});
+
+module('markdown skill commands', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
+  let originalFetch: any;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 500,
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
+  });
+
+  hooks.afterEach(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  const SKILL_MD = [
+    '---',
+    'name: "Boxel Environment"',
+    'description: "env"',
+    'boxel:',
+    '  kind: skill',
+    '  commands:',
+    '    - codeRef:',
+    '        module: "@cardstack/boxel-host/commands/switch-submode"',
+    '        name: "default"',
+    '      requiresApproval: false',
+    '---',
+    '',
+    'Use switch-submode to change modes.',
+  ].join('\n');
+
+  test('parseMarkdownSkill computes the same functionName the host derives', (assert) => {
+    let { commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    assert.strictEqual(commands.length, 1);
+    // switch-submode_dd88 is the name the host's buildCommandFunctionName
+    // produces for this code ref (registered prefixes resolve verbatim).
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+    assert.false(commands[0].requiresApproval);
+  });
+
+  test('a command without requiresApproval defaults to approval required', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "@cardstack/boxel-host/commands/switch-submode"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.true(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill resolves relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "../../commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  test('parseMarkdownSkill resolves root-relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "/commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  test('getTools offers a command definition matched by a markdown skill', async () => {
+    mockResponses.set('mxc://mock-server/switch-submode-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/switch-submode',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'Switch between interact and code submodes',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+
+    const eventList = [
+      {
+        type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        event_id: 'skills-1',
+        origin_server_ts: 1000,
+        state_key: '',
+        content: {
+          enabledSkillCards: [
+            {
+              sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+              url: 'mxc://mock-server/env-skill',
+              name: 'SKILL.md',
+              contentType: 'text/plain',
+            },
+          ],
+          disabledSkillCards: [],
+          commandDefinitions: [
+            {
+              sourceUrl: 'https://realm/commands/switch-submode',
+              url: 'mxc://mock-server/switch-submode-def',
+              name: 'switch-submode_dd88',
+              contentType: 'text/plain',
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000 },
+        status: EventStatus.SENT,
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    // The card-shaped skill getEnabledSkills produces for this SKILL.md.
+    let { title, body, commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    const enabledSkills = [
+      {
+        id: 'https://realm/skills/boxel-environment/SKILL.md',
+        type: 'card',
+        attributes: { title, instructions: body, commands },
+      } as unknown as LooseCardResource,
+    ];
+
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
   });
 });

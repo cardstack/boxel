@@ -61,7 +61,7 @@ module('Integration | card-info | thumbnail picker edit', function (hooks) {
     };
   }
 
-  test('toggle button reads "Change Thumbnail" and discloses the picker', async function (this: RenderingTestContext, assert) {
+  test('toggle button discloses the picker', async function (this: RenderingTestContext, assert) {
     class Thing extends CardDef {
       static displayName = 'Thing';
     }
@@ -70,13 +70,32 @@ module('Integration | card-info | thumbnail picker edit', function (hooks) {
 
     assert
       .dom('[data-test-toggle-thumbnail-editor]')
-      .hasText('Change Thumbnail');
+      .hasText('Change Theme & Thumbnail');
     assert
       .dom('[data-test-field="cardInfo-thumbnailURL"]')
       .doesNotExist('picker is hidden by default');
 
     await click('[data-test-toggle-thumbnail-editor]');
     assert.dom('[data-test-field="cardInfo-thumbnailURL"]').exists();
+  });
+
+  test('toggle button omits "Theme &" and hides the theme field when the theme chooser is hidden', async function (this: RenderingTestContext, assert) {
+    class Thing extends CardDef {
+      static displayName = 'Thing';
+      @field cssVariables = contains(StringField);
+    }
+    let instance = new Thing({ cardInfo: new CardInfoField({ name: 'x' }) });
+    await renderCard(loader, instance, 'edit');
+
+    assert
+      .dom('[data-test-toggle-thumbnail-editor]')
+      .hasText('Change Thumbnail');
+
+    await click('[data-test-toggle-thumbnail-editor]');
+    assert.dom('[data-test-field="cardInfo-thumbnailURL"]').exists();
+    assert
+      .dom('[data-test-field="cardInfo-theme"]')
+      .doesNotExist('theme field is hidden when the theme chooser is hidden');
   });
 
   test('renders url input and Select Image button when no value is set', async function (this: RenderingTestContext, assert) {

@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -178,7 +178,7 @@ module('Acceptance | png image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const pngDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}png-image-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}png-image-def` as RealmResourceIdentifier,
     name: 'PngDef',
   });
 

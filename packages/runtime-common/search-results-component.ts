@@ -1,7 +1,7 @@
 import type { ComponentLike } from '@glint/template';
 
 import type { ResolvedCodeRef } from './code-ref.ts';
-import type { SearchEntryCollectionDocument } from './document-types.ts';
+import type { EntryCollectionDocument } from './document-types.ts';
 import type { ErrorEntry } from './error.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
@@ -12,10 +12,10 @@ import type {
 import type { SearchEntryWireQuery } from './search-entry.ts';
 
 // How an HTML-backed search result becomes a live, running card. `none` stays
-// inert; `hover` / `click` / `touch` fetch the card on the matching gesture and
-// swap the inert HTML for a live render. A host-side UX choice — it never
-// travels on the wire.
-export type HydrationMode = 'none' | 'hover' | 'click' | 'touch';
+// inert; `hover` fetches the card on pointer-hover / keyboard-focus and swaps
+// the inert HTML for a live render. A host-side UX choice — it never travels on
+// the wire.
+export type HydrationMode = 'none' | 'hover';
 
 // One rendering of a search result: the wire's `html` resource flattened, with
 // its `styles` references resolved to the stylesheets' hrefs. `id` is the
@@ -34,7 +34,7 @@ export interface SearchEntryRendering {
   cssUrls: string[];
 }
 
-// One v2 search result as a renderable view-model. `component` renders the
+// One search result as a renderable view-model. `component` renders the
 // result transparently — prerendered HTML inert (hydrated lazily) or a live
 // card — so a consumer renders `<entry.component />` without ever branching on
 // prerendered-vs-live. `html` / `item` are the raw branches, exposed for custom
@@ -42,6 +42,8 @@ export interface SearchEntryRendering {
 export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
+  // The URL of the realm hosting this result — used to group results by realm.
+  realmUrl: string;
   // The result's realm-local path (e.g. `Person/error`) — a readable label a
   // consumer shows on an error tile to identify which result failed. Falls back
   // to the bare id when the id isn't under the entry's realm.
@@ -69,13 +71,13 @@ export interface RenderableSearchEntryLike {
 export interface SearchResultsYield {
   entries: RenderableSearchEntryLike[];
   isLoading: boolean;
-  meta: SearchEntryCollectionDocument['meta'];
+  meta: EntryCollectionDocument['meta'];
   errors: ErrorEntry[] | undefined;
 }
 
-// The card-facing contract for the v2 search component the host provides on
+// The card-facing contract for the search component the host provides on
 // `@context` (`@context.searchResultsComponent`). It consumes the heterogeneous
-// `search-entry` stream for a `search-entry`-rooted query and renders it
+// `entry` stream for an `entry`-rooted query and renders it
 // transparently — prerendered HTML inert (hydrated lazily) or the live
 // serialization. Used with a block it yields a `results` object
 // (`entries` / `isLoading` / `meta` / `errors`); used without one it renders
@@ -83,13 +85,18 @@ export interface SearchResultsYield {
 export interface SearchResultsComponentSignature {
   Element: HTMLElement;
   Args: {
-    // The `search-entry`-rooted v2 query. Re-issued live on invalidation;
+    // The `entry`-rooted query. Re-issued live on invalidation;
     // changing it re-runs the search. Undefined → idle (no results).
     query: SearchEntryWireQuery | undefined;
     // The hydration gesture for HTML-backed rows — a host-UX choice, never on
     // the wire. A full live row ignores it. Defaults to `hover`; pass `none` to
-    // keep rows inert, `click` / `touch` to gate on those gestures.
+    // keep rows inert.
     mode?: HydrationMode;
+    // Whether rendered results register with the operator-mode overlay (the
+    // card-type chip / options menu / selection toggle). Defaults to `true`;
+    // pass `false` for a card that lays results out in its own UI and wants
+    // them rendered plainly, with no overlay even inside operator mode.
+    overlays?: boolean;
   };
   Blocks: {
     default: [SearchResultsYield];

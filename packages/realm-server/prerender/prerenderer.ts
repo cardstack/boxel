@@ -209,6 +209,17 @@ export class Prerenderer {
     await this.#pagePool.warmStandbys();
   }
 
+  // Recycle the whole browser to pick up a redeployed host. Reuses the
+  // failure-recovery restart path (closeAll → restart Chrome → re-warm
+  // standbys); the full browser restart also clears Chrome's HTTP cache, so
+  // re-warmed pages reload the current host shell rather than a cached stale
+  // bundle. Coalesced via the same in-flight guard as #restartBrowser, so
+  // overlapping recycle signals collapse to one restart.
+  async recycle(): Promise<void> {
+    log.info('Recycling prerender browser to pick up a redeployed host');
+    await this.#restartBrowser();
+  }
+
   // Emit the `render cancelled` log line (format from CS-10872)
   // and, on a `rendering`-state cancel, tear down the affinity so
   // the next request gets a fresh tab rather than one whose
@@ -643,9 +654,11 @@ export class Prerenderer {
       realm,
       url,
       auth,
+      visitType,
       renderOptions,
       fileData,
       types,
+      cardTypes,
       opts,
       priority,
       jobId,
@@ -701,10 +714,12 @@ export class Prerenderer {
             realm,
             url,
             auth,
+            visitType,
             opts,
             renderOptions: attemptOptions,
             fileData,
             types,
+            cardTypes,
             priority,
             jobId,
             signal,
@@ -734,10 +749,12 @@ export class Prerenderer {
               realm,
               url,
               auth,
+              visitType,
               opts,
               renderOptions: attemptOptions,
               fileData,
               types,
+              cardTypes,
               priority,
               jobId,
               signal,

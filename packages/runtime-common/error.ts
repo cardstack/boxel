@@ -235,6 +235,85 @@ function omittedSentinel(count: number): {
   };
 }
 
+// Identity used to dedupe error documents when folding one into another —
+// two documents describing the same failure (same target, message, status)
+// are the same error even if one rode in via a different path.
+function errorDocIdentity(error: {
+  id?: string | null;
+  message?: string;
+  status?: number;
+}): string {
+  return JSON.stringify({
+    id: error.id ?? null,
+    message: error.message ?? null,
+    status: error.status ?? null,
+  });
+}
+
+// Fold `secondary`'s error detail into `primary` without changing which
+// document is authoritative: `primary` keeps its message / status / stack
+// (the reader-facing text), and `secondary`'s detail is added to
+// `primary.additionalErrors` so a dependency error only one document captured
+// survives. `secondary`'s own top-level error is added as a flat entry (its
+// nested `additionalErrors` are spread in alongside rather than nested), and
+// `deps` are unioned. Entries are deduped by (id, message, status).
+export function mergeErrorDetail(
+  primary: SerializedError,
+  secondary: SerializedError,
+): SerializedError {
+  let merged = Array.isArray(primary.additionalErrors)
+    ? [...primary.additionalErrors]
+    : [];
+  let seen = new Set<string>([
+    errorDocIdentity(primary),
+    ...merged.map(errorDocIdentity),
+  ]);
+  let candidates = [
+    { ...secondary, additionalErrors: null },
+    ...(Array.isArray(secondary.additionalErrors)
+      ? secondary.additionalErrors
+      : []),
+  ];
+  for (let candidate of candidates) {
+    let key = errorDocIdentity(candidate);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(candidate);
+    }
+  }
+  let deps =
+    primary.deps || secondary.deps
+      ? [...new Set([...(primary.deps ?? []), ...(secondary.deps ?? [])])]
+      : undefined;
+  return {
+    ...primary,
+    additionalErrors: merged.length > 0 ? merged : null,
+    ...(deps ? { deps } : {}),
+  };
+}
+
+// Combine two error documents for the same indexed entry, using their index
+// generation as the authority. A higher generation is more recent, so it wins
+// outright: the lower-generation document may be stale — the dependency graph
+// it recorded may have changed since. At the same generation neither
+// supersedes the other (e.g. the two prerender visits of a single indexing
+// job): keep `a` as the authoritative envelope and fold `b`'s detail into it
+// via `mergeErrorDetail`.
+export function mergeErrorsByGeneration(
+  a: SerializedError,
+  aGeneration: number,
+  b: SerializedError,
+  bGeneration: number,
+): SerializedError {
+  if (aGeneration > bGeneration) {
+    return a;
+  }
+  if (bGeneration > aGeneration) {
+    return b;
+  }
+  return mergeErrorDetail(a, b);
+}
+
 export interface CardErrorJSONAPI {
   id?: string; // 404 errors won't necessarily have an id
   status: number;
@@ -637,6 +716,30 @@ export function coerceErrorMessage(err: unknown, placeholder: string): string {
     }
   }
   return placeholder;
+}
+
+// Render an unknown error as a single log-safe string. Passing an Error (or any
+// object) as a console argument serializes to "[object Object]" in
+// text-captured console output (e.g. CI test logs), and `JSON.stringify` of an
+// Error yields "{}" because its `message`/`stack` are non-enumerable — both
+// drop the stack, which is the detail that localizes a transient failure.
+// Prefer the stack for Errors, a JSON dump for plain / JSON:API error objects,
+// and fall back to `coerceErrorMessage` for everything else.
+export function stringifyErrorForLog(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? `${err.name}: ${err.message}`;
+  }
+  if (err != null && typeof err === 'object') {
+    try {
+      let json = JSON.stringify(err);
+      if (json && json !== '{}') {
+        return json;
+      }
+    } catch {
+      // not serializable (e.g. circular references) — fall through
+    }
+  }
+  return coerceErrorMessage(err, '(no error detail available)');
 }
 
 export function responseWithError(

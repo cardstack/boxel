@@ -262,7 +262,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
+                  module: '@cardstack/base/cards-grid',
                   name: 'CardsGrid',
                 },
               },
@@ -303,7 +303,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                 },
               },
               attributes: {
@@ -609,13 +609,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             notes: null,
           },
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`../pet`),
@@ -647,6 +640,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       delete json.data.meta.realmURL;
       delete json.data.meta.lastModified;
       delete json.data.meta.resourceCreatedAt;
+      // `generation` is index metadata the realm stamps on the card+json GET;
+      // it rides along in the loaded card the same way lastModified/realmInfo
+      // do (and, like them, is stripped from the persisted source), so drop it
+      // before comparing against the card's source serialization.
+      delete json.data.meta.generation;
       assert.strictEqual(
         stringify(json),
         stringify(expected),

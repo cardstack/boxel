@@ -1,0 +1,34 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PlaygroundWidget",
+        "module": "../client-filter-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "label": "Gamma",
+      "status": "active",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "priority": 7
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -241,7 +241,7 @@ export async function validateEmail(
     await opts.onAppTrigger(appPage);
   } else {
     await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-      'Please check your email to complete registration.',
+      'Please check your email to complete registration',
     );
   }
 
