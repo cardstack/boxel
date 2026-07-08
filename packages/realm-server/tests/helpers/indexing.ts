@@ -150,6 +150,18 @@ export async function expectIncrementalIndexEvent(
 
   let actualContent = { ...incrementalEventContent };
   delete actualContent.clientRequestId;
+  // The committed realm generation varies with the fixture's indexing
+  // history; assert its shape and compare the rest exactly.
+  if (actualContent.generation !== undefined) {
+    let hasPositiveGeneration =
+      typeof actualContent.generation === 'number' &&
+      actualContent.generation > 0;
+    assert.true(
+      hasPositiveGeneration,
+      `incremental event carries a positive generation: ${actualContent.generation}`,
+    );
+    delete actualContent.generation;
+  }
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
