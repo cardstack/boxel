@@ -60,6 +60,12 @@ It will be able to see any cards shared in the chat and can respond using GPT4 i
 
 ### Debugging
 
+Send `debug:help` in a room the bot has joined to list the available debug commands.
+
+`debug:eventlist` attaches a JSON dump of the room's events. Streamed messages show their final content: `m.replace` edits are applied and continuation-split messages are joined, so each message body matches what the model sees when the prompt is constructed. Use `debug:eventlist:raw` for the unaggregated timeline, where streamed messages appear as their original placeholder events with edits nested under `unsigned["m.relations"]["m.replace"]`.
+
+`debug:prompt` attaches the prompt that would be sent to the AI for the last user message. Append a number, e.g. `debug:prompt:3`, to drop that many trailing events first.
+
 You can deliberately trigger a specific patch by sending a message that starts `debug:patch:` and has the JSON patch you want returned. For example:
 
 ```

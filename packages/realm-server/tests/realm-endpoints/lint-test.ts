@@ -821,6 +821,59 @@ export default class Sample extends Component {
       );
     });
 
+    test('no-unused-block-params allows underscore-prefixed params but still flags plain unused ones', async function (assert) {
+      // Underscore-prefixed block params are intentionally unused (matching the
+      // `^_` convention we already allow in ESLint), so they must NOT be
+      // flagged; a plain unused trailing param still must be.
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'block-params.gts').send(`<template>
+  {{#each this.rows as |_row|}}
+    <div class="dot"></div>
+  {{/each}}
+  {{#each this.rows as |row idx|}}
+    {{row}}
+  {{/each}}
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        message: string;
+      }[];
+      let unusedFindings = messages.filter((m) =>
+        /is defined but never used/.test(m.message),
+      );
+      assert.notOk(
+        unusedFindings.some((m) => m.message.includes(`'_row'`)),
+        `underscore-prefixed '_row' should be allowed: ${JSON.stringify(
+          unusedFindings,
+        )}`,
+      );
+      assert.ok(
+        unusedFindings.some(
+          (m) =>
+            m.ruleId === 'no-unused-block-params-except-underscore' &&
+            m.message.includes(`'idx'`),
+        ),
+        `plain unused 'idx' should still be flagged: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'no-unused-block-params'),
+        'the core no-unused-block-params rule is disabled (replaced by the underscore-aware variant)',
+      );
+    });
+
     test('lints .gjs files with the gts parser (host config has no .gjs override)', async function (assert) {
       let response = await request
         .post('/_lint')

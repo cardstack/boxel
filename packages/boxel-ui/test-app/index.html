@@ -13,13 +13,13 @@
       integrity=""
       rel="stylesheet"
       crossorigin="anonymous"
-      href="{{rootURL}}assets/vendor.css"
+      href="/@embroider/virtual/vendor.css"
     />
     <link
       integrity=""
       rel="stylesheet"
       crossorigin="anonymous"
-      href="{{rootURL}}assets/test-app.css"
+      href="/@embroider/virtual/app.css"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -33,8 +33,13 @@
     <div id="ember-basic-dropdown-wormhole"></div>
     {{content-for "body"}}
 
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/test-app.js"></script>
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script type="module">
+      import Application from './app/app';
+      import environment from './app/config/environment';
+
+      Application.create(environment.APP);
+    </script>
 
     {{content-for "body-footer"}}
   </body>
