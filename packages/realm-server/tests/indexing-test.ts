@@ -4704,10 +4704,23 @@ module(basename(import.meta.filename), function () {
             actual.error.errorDetail.isCardError,
             'error is marked as a card error',
           );
-          assert.strictEqual(
+          // The render surfaces the module 404 both as the primary error and
+          // as a captured browser console entry; only the latter may ride in
+          // additionalErrors — never a dependency error document.
+          let additionalErrors = Array.isArray(
             actual.error.errorDetail.additionalErrors,
-            null,
-            'no additional dependency errors are present',
+          )
+            ? (actual.error.errorDetail.additionalErrors as {
+                title?: string;
+              }[])
+            : [];
+          assert.true(
+            additionalErrors.every(
+              (additionalError) => additionalError.title === 'Console error',
+            ),
+            `no additional dependency errors are present: ${JSON.stringify(
+              additionalErrors,
+            )}`,
           );
           assert.strictEqual(
             actual.error.errorDetail.message,
