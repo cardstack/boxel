@@ -7303,6 +7303,25 @@ module('markdown skill commands', (hooks) => {
     assert.false(commands[0].requiresApproval);
   });
 
+  test('a command without requiresApproval defaults to approval required', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  commands:',
+      '    - codeRef:',
+      '        module: "@cardstack/boxel-host/commands/switch-submode"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.true(commands[0].requiresApproval);
+  });
+
   test('parseMarkdownSkill resolves relative command modules against the skill URL', (assert) => {
     let md = [
       '---',

@@ -497,7 +497,7 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
 export interface MarkdownSkillCommand {
   codeRef: { module: string; name: string };
   functionName: string;
-  requiresApproval?: boolean;
+  requiresApproval: boolean;
 }
 
 // Splits a markdown skill into its instruction body, a title, its declared
@@ -573,7 +573,12 @@ function markdownSkillCommands(
     }
     let module = codeRef.module;
     // Match the host's isUrlLike semantics: both `.`- and `/`-prefixed
-    // modules resolve against the skill's own URL.
+    // modules resolve against the skill's own URL. Known limitation: the
+    // host hashes relative refs against the skill's canonical document id,
+    // which in a prefix-form realm differs from the room-state sourceUrl we
+    // resolve against — so relative command modules in prefix-form realms
+    // may not match. Package specifiers and absolute URLs (all current
+    // skills) hash identically on both sides.
     if ((module.startsWith('.') || module.startsWith('/')) && skillUrl) {
       try {
         module = new URL(module, skillUrl).href;
@@ -585,9 +590,10 @@ function markdownSkillCommands(
     commands.push({
       codeRef: resolvedRef,
       functionName: buildCommandFunctionNameFromResolvedRef(resolvedRef),
-      requiresApproval: Boolean(
-        (entry as { requiresApproval?: unknown }).requiresApproval,
-      ),
+      // Missing means approval required, matching how the host treats an
+      // absent requiresApproval on a skill command.
+      requiresApproval:
+        (entry as { requiresApproval?: unknown }).requiresApproval !== false,
     });
   }
   return commands;
