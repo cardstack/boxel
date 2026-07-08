@@ -128,6 +128,19 @@ export async function executeReadRealmFile(
   }
   let realm = ensureTrailingSlash(realmHeader);
 
+  // The header is only trustworthy as a claim about the responding host
+  // itself: the token minted below is sent with the retry to `url`, and the
+  // mint handshake goes to the realm's origin. Requiring the file to live
+  // inside the realm that claimed it keeps both on the origin that issued the
+  // challenge — otherwise a hostile host could name someone else's realm in
+  // the header and receive that realm's delegated token on the retry.
+  if (!url.startsWith(realm)) {
+    return {
+      ok: false,
+      error: `could not load ${url}: it does not belong to the realm that claimed it (${realm})`,
+    };
+  }
+
   let authorized = async (): Promise<{
     response?: Response;
     error?: string;

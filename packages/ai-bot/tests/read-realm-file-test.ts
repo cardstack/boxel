@@ -164,6 +164,32 @@ module('executeReadRealmFile', () => {
     assert.strictEqual(sessions.calls.length, 0, 'no token minted');
   });
 
+  test('refuses to mint when the claimed realm does not contain the file', async () => {
+    let sessions = stubSessions({ token: 'tok' });
+    // A host answering for FILE_URL claims a realm on a different origin; the
+    // delegated token for that realm must not be minted or sent back to it.
+    let { fetch, calls } = recordingFetch(
+      () =>
+        new Response('unauthorized', {
+          status: 401,
+          headers: { 'x-boxel-realm-url': 'https://other.example/user/mary/' },
+        }),
+    );
+    let result = await executeReadRealmFile(
+      { url: FILE_URL },
+      { onBehalfOf: ON_BEHALF_OF, delegatedUserRealmSessions: sessions, fetch },
+    );
+    assert.false(result.ok, 'result not ok');
+    assert.true(
+      (result as { ok: false; error: string }).error.includes(
+        'does not belong to the realm',
+      ),
+      'error explains the mismatch',
+    );
+    assert.strictEqual(sessions.calls.length, 0, 'no token minted');
+    assert.strictEqual(calls.length, 1, 'no authenticated retry');
+  });
+
   test('returns an error result when the file is missing (404)', async () => {
     let sessions = stubSessions({ token: 'tok' });
     let { fetch } = recordingFetch(

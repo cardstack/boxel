@@ -2355,12 +2355,12 @@ export const attachedCardsToMessage = (
 
 // Skill bodies (a SKILL.md, the skills index) are authored with links relative
 // to the file's own location, so the same source resolves on the coding
-// harness's filesystem. The ai-bot has no filesystem: it reads a referenced
-// file over HTTP via `readRealmFile`, and can't resolve a relative path itself
-// — it has repeatedly flattened `skills/skills/…` to `skills/…` (404) or
-// guessed the wrong realm. Resolving every relative markdown link against the
-// skill's own URL up front hands the model a copy-ready absolute URL, so one
-// relative-authored document works for both agents.
+// harness's filesystem. The ai-bot has no filesystem: it reads referenced
+// files over HTTP via `readRealmFile`, which needs a full URL — a relative
+// path gives the model nothing reliable to resolve it against. Resolving
+// every relative markdown link against the skill's own URL up front hands the
+// model a copy-ready absolute URL, so one relative-authored document works
+// for both agents.
 export function absolutizeSkillLinks(
   markdown: string,
   baseUrl: string | undefined,
