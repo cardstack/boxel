@@ -685,16 +685,17 @@ module('Integration | searchable search doc', function (hooks) {
     return await searchDocFromFields(instance);
   }
 
-  // The search doc the indexer persisted, minus `_cardType` (which the prerender
-  // meta route appends, not the generator). The prerender meta route generates
-  // it via `searchDocFromFields`; the parity check below confirms it matches a
-  // direct `searchDocFromFields` call.
+  // The search doc the indexer persisted, minus the synthetic keys `_cardType`
+  // and `_title` (which the prerender meta route appends, not the generator).
+  // The prerender meta route generates the rest via `searchDocFromFields`; the
+  // parity check below confirms it matches a direct `searchDocFromFields` call.
   async function indexedSearchDoc(id: string) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       return undefined;
     }
-    let { _cardType, ...rest } = (entry as IndexedInstance).searchDoc ?? {};
+    let { _cardType, _title, ...rest } =
+      (entry as IndexedInstance).searchDoc ?? {};
     return rest;
   }
 

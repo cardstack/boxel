@@ -5,7 +5,8 @@ import { diffDoc, isShallowLink, shallowIds } from '@cardstack/runtime-common';
 
 // Unit coverage for the parity comparison logic shared by the realm-scale
 // validator (`scripts/searchable-parity-diff.ts`) and the generation tests.
-// The differ ignores `_cardType`, normalizes object key order, and (under
+// The differ ignores synthetic keys (`_cardType`, `_title`, `_isCardInstance`),
+// normalizes object key order, and (under
 // --ignore-shallow-links) treats the store-driven omit-vs-keep-`{id}` difference
 // as equivalent — at any nesting depth — while still catching a CHANGED
 // reference or any real contained-data delta.
@@ -49,6 +50,27 @@ module('Unit | searchable-parity-diff', function () {
         ),
         [],
         'same data, differing _cardType → equal',
+      );
+    });
+
+    test('synthetic _title / _isCardInstance keys are ignored', function (assert) {
+      assert.deepEqual(
+        diffDoc(
+          { title: 'A' },
+          { title: 'A', _title: 'A', _isCardInstance: true },
+          false,
+        ),
+        [],
+        'synthetic keys present on only one side → equal',
+      );
+      assert.deepEqual(
+        diffDoc(
+          { title: 'A', _title: 'X' },
+          { title: 'A', _title: 'Y' },
+          false,
+        ),
+        [],
+        'differing _title → equal',
       );
     });
 

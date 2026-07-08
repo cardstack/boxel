@@ -8,6 +8,7 @@ import {
 const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
 const BLOCK_PATTERN = /(.*?)\{([\s\S]*?)\}/g;
 const PROPERTY_PATTERN = /^[a-z\d-]+$/i;
+const CUSTOM_PROPERTY_PATTERN = /^--[a-z\d_-]+$/i;
 
 // Turns a CSS declaration block into a property-value map.
 const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
@@ -36,7 +37,9 @@ const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
     const value = declaration.slice(colonIndex + 1).trim();
     if (
       !property ||
-      (!property.startsWith('--') && !PROPERTY_PATTERN.test(property))
+      (property.startsWith('--')
+        ? !CUSTOM_PROPERTY_PATTERN.test(property)
+        : !PROPERTY_PATTERN.test(property))
     ) {
       console.warn(
         'parseCssDeclarations: skipping invalid property "%s"',

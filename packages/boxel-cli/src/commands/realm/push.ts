@@ -205,11 +205,16 @@ class RealmPusher extends RealmSyncBase {
       // binary POST fails — dropping the manifest update in that
       // case would force a re-add on the next push (409 cascade).
       if (result.succeeded.length > 0) {
+        // Guard the map lookup: `succeeded` should only carry paths from
+        // `filesToUpload`, but a server response in an unexpected shape must
+        // degrade to a manifest gap (re-upload next push), not a crash.
         const uploaded = await Promise.all(
-          result.succeeded.map(async (rel) => ({
-            rel,
-            hash: await computeFileHash(filesToUpload.get(rel)!),
-          })),
+          result.succeeded
+            .filter((rel) => filesToUpload.has(rel))
+            .map(async (rel) => ({
+              rel,
+              hash: await computeFileHash(filesToUpload.get(rel)!),
+            })),
         );
         for (const { rel, hash } of uploaded) {
           newManifest.files[rel] = hash;

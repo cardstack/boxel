@@ -11,9 +11,7 @@ import {
   buildCssGroups,
   generateCssVariables,
   parseCssGroups,
-  extractCssVariables,
   markdownEscape,
-  sanitizeHtmlSafe,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
 
@@ -148,7 +146,7 @@ class Isolated extends Component<typeof StructuredTheme> {
   <template>
     <ThemeDashboard
       class='structured-theme-card'
-      style={{if this.isDarkMode @model.darkModeStyles}}
+      @themeCss={{@model.cssVariables}}
       @title={{@model.cardTitle}}
       @description={{@model.cardDescription}}
       @isDarkMode={{this.isDarkMode}}
@@ -286,10 +284,6 @@ export default class StructuredTheme extends Theme {
   });
 
   guideSections: SectionSignature[] = GUIDE_SECTIONS;
-
-  get darkModeStyles() {
-    return sanitizeHtmlSafe(extractCssVariables(this.cssVariables, '.dark'));
-  }
 
   setCss = (content: string) => {
     if (!content || !parseCssGroups) {

@@ -1014,6 +1014,7 @@ export class IndexRunner {
     lastModified,
     resourceCreatedAt,
     hasModulePrerender,
+    isCardInstance,
     extractResult,
     renderResult,
     diagnostics,
@@ -1022,6 +1023,7 @@ export class IndexRunner {
     lastModified: number;
     resourceCreatedAt: number;
     hasModulePrerender?: boolean;
+    isCardInstance?: boolean;
     // Extract result from the index visit and merged render result from the
     // index + prerender-html visits. Either may be undefined if the visits
     // short-circuited before producing it.
@@ -1040,6 +1042,7 @@ export class IndexRunner {
       lastModified,
       resourceCreatedAt,
       hasModulePrerender,
+      isCardInstance,
       realmURL: this.#realmURL,
       auth: this.#auth,
       jobInfo: this.#jobInfo,

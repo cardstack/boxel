@@ -10,6 +10,8 @@ import {
 import BooleanField from './boolean';
 import StringField from './string';
 import enumField from './enum';
+import { MarkdownDef } from './markdown-file-def';
+import { Skill } from './skill';
 import { getMenuItems, rri } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -78,6 +80,26 @@ export class SystemCard extends CardDef {
 
   @field modelConfigurations = linksToMany(ModelConfiguration, {
     description: 'List of available model configurations for this system',
+    searchable: true,
+  });
+
+  // Skills enabled by default in new AI assistant rooms. A skill is either a
+  // legacy `Skill` card or a `.md` skill file (`MarkdownDef` whose
+  // `boxel.kind: skill` frontmatter makes it a skill source). The two kinds
+  // live in separate `linksToMany` fields because a single relationship field
+  // serializes every item under one resource type (card links vs. file-meta
+  // links); `loadDefaultSkills` unions their ids and resolves each
+  // kind-agnostically. When either is set on the user's active system card,
+  // they replace the host's hardcoded default-skill list for new rooms.
+  @field defaultSkillCards = linksToMany(Skill, {
+    description:
+      'Skill cards enabled by default in new AI assistant rooms',
+    searchable: true,
+  });
+
+  @field defaultSkillFiles = linksToMany(MarkdownDef, {
+    description:
+      'Markdown skill files enabled by default in new AI assistant rooms',
     searchable: true,
   });
 
@@ -359,6 +381,16 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       <div class='system-card-content'>
         <@fields.defaultModelConfiguration />
         <@fields.modelConfigurations />
+
+        <section class='default-skills'>
+          <h3 class='section-heading'>Default Skills</h3>
+          <p class='section-hint'>
+            Skills enabled automatically in new AI assistant sessions when this
+            is your active system card. Add skill cards, skill files, or both.
+          </p>
+          <@fields.defaultSkillCards @format='fitted' />
+          <@fields.defaultSkillFiles @format='fitted' />
+        </section>
       </div>
     </div>
 
@@ -483,6 +515,22 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
       .system-card-content {
         padding-top: var(--boxel-sp-sm);
+      }
+
+      .default-skills {
+        margin-top: var(--boxel-sp-lg);
+      }
+
+      .section-heading {
+        margin: 0 0 var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+      }
+
+      .section-hint {
+        margin: 0 0 var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-500, #6b7280);
       }
     </style>
   </template>

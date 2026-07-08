@@ -3,6 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
 import { sanitizeHtml } from '../../helpers/sanitize-html.ts';
+import { themeScopedCss } from '../../helpers/theme-scoped-css.ts';
 
 interface Signature {
   Args: {
@@ -10,6 +11,14 @@ interface Signature {
     displayBoundaries?: boolean;
     isThemed?: boolean;
     tag?: keyof HTMLElementTagNameMap;
+    // Raw theme CSS variable definitions (`:root` + optional `.dark`). Scoped to
+    // this container via `themeScope` so light/dark switches with the ambient
+    // `--boxel-color-scheme` signal — no inline styles, no JS. The scope
+    // attribute is only stamped when theme CSS is present: it also triggers the
+    // theme.css boundary reset that stops ambient/outer-theme token values from
+    // inheriting in, which unthemed cards rely on to follow the chrome scheme.
+    themeCss?: string | null;
+    themeScope?: string;
   };
   Blocks: {
     default: [];
@@ -26,6 +35,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         boxel-card-container--themed=@isThemed
       }}
       data-boxel-card-container
+      data-boxel-theme-scope={{if @themeCss @themeScope}}
       data-test-boxel-card-container
       ...attributes
     >
@@ -36,6 +46,13 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
           {{#each @cssImports as |url|}}
             @import url('{{sanitizeHtml url}}');
           {{/each}}
+        </style>
+        {{! template-lint-enable require-scoped-style  }}
+      {{/if}}
+      {{#if @themeCss}}
+        {{! template-lint-disable require-scoped-style  }}
+        <style>
+          {{themeScopedCss @themeScope @themeCss}}
         </style>
         {{! template-lint-enable require-scoped-style  }}
       {{/if}}
@@ -217,42 +234,40 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       line-height: var(--boxel-body-line-height);
     }
 
+    /* Element reset + typography roles, contained to card content: bare
+       :global(h1) etc. would restyle the entire document once a single card
+       renders. Still :global (with an ancestor guard) for the cached-HTML
+       safety described above. */
     @layer reset {
-      :global(h1),
-      :global(h2),
-      :global(h3),
-      :global(h4),
-      :global(h5),
-      :global(h6),
-      :global(p) {
+      :global(.boxel-card-container :is(h1, h2, h3, h4, h5, h6, p)) {
         margin-inline-start: 0;
         margin-inline-end: 0;
         margin-block-start: 0;
         margin-block-end: 0;
       }
 
-      :global(h1) {
+      :global(.boxel-card-container h1) {
         font-family: var(--boxel-heading-font-family);
         font-size: var(--boxel-heading-font-size);
         font-weight: var(--boxel-heading-font-weight);
         line-height: var(--boxel-heading-line-height);
       }
-      :global(h2) {
+      :global(.boxel-card-container h2) {
         font-family: var(--boxel-section-heading-font-family);
         font-size: var(--boxel-section-heading-font-size);
         font-weight: var(--boxel-section-heading-font-weight);
         line-height: var(--boxel-section-heading-line-height);
       }
-      :global(h3) {
+      :global(.boxel-card-container h3) {
         font-family: var(--boxel-subheading-font-family);
         font-size: var(--boxel-subheading-font-size);
         font-weight: var(--boxel-subheading-font-weight);
         line-height: var(--boxel-subheading-line-height);
       }
-      :global(h4, h5, h6) {
+      :global(.boxel-card-container :is(h4, h5, h6)) {
         font-size: inherit;
       }
-      :global(small) {
+      :global(.boxel-card-container small) {
         font-size: var(--boxel-caption-font-size);
         line-height: var(--boxel-caption-line-height);
       }
