@@ -42,10 +42,10 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // correlation only.
   spawningJobId: number | null;
   // How many publishes were merged into this job while it sat pending.
-  // Dashboard/log correlation only; absent means none. In-flight piggyback
+  // Dashboard/log correlation only; null means none. In-flight piggyback
   // joins can't be counted here — a running worker holds its args in memory,
   // so the queue never writes an update for them.
-  coalescedPublishes?: number;
+  coalescedPublishes: number | null;
 }
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
@@ -85,7 +85,8 @@ function parsePrerenderHtmlArgsForCoalesce(
     generation,
     loaderEpoch,
     spawningJobId: typeof spawningJobId === 'number' ? spawningJobId : null,
-    ...(typeof coalescedPublishes === 'number' ? { coalescedPublishes } : {}),
+    coalescedPublishes:
+      typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
   };
 }
 

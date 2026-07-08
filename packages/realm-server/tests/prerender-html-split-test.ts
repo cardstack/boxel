@@ -30,6 +30,7 @@ function prerenderHtmlArgs(
     generation: 1,
     loaderEpoch: 'epoch-a',
     spawningJobId: 100,
+    coalescedPublishes: null,
     ...overrides,
   };
 }

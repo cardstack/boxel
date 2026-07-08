@@ -63,6 +63,7 @@ export async function enqueuePrerenderHtmlJob(
     generation,
     loaderEpoch,
     spawningJobId,
+    coalescedPublishes: null,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',
