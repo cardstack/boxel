@@ -770,7 +770,9 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
 
 async function waitForQueueIdle(
   databaseName: string,
-  timeout = 30000,
+  // Generous: a template build's queue drains the realm's whole-realm
+  // prerender_html job (every card's HTML) after the index job resolves.
+  timeout = 300000,
 ): Promise<void> {
   await waitUntil(
     async () => {
@@ -780,6 +782,20 @@ async function waitForQueueIdle(
       });
       try {
         await client.connect();
+        // A rejected job means the template would snapshot with silently
+        // missing data (e.g. absent HTML) and surface later as confusing
+        // failures in unrelated tests — fail here, loudly and immediately.
+        let { rows: rejected } = await client.query<{
+          id: number;
+          job_type: string;
+        }>(`SELECT id, job_type FROM jobs WHERE status = 'rejected'`);
+        if (rejected.length > 0) {
+          throw new Error(
+            `job(s) rejected while waiting for queue to become idle: ${rejected
+              .map((row) => `${row.job_type}#${row.id}`)
+              .join(', ')}`,
+          );
+        }
         let {
           rows: [{ count: unfulfilledJobs }],
         } = await client.query<{ count: number }>(

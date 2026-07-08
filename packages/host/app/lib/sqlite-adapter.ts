@@ -423,7 +423,28 @@ export default class SQLiteAdapter implements DBAdapter {
         return `ON CONFLICT (${pkColumns})`;
       })
       .replace(/\(case jsonb_typeof(\([^)]*\)) when 'array' .+ end\)/, '$1')
-      .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
+      .split('ANY_VALUE(')
+      .reduce((acc, segment, index) => {
+        // SQLite has no ANY_VALUE; every non-grouped select column is
+        // implicitly a "some row" pick, so the wrapper is dropped. The
+        // argument can itself contain parentheses (e.g. the effective
+        // error-state CASE/COALESCE expressions), so a regex over `[^)]*`
+        // would cut at the first `)` and corrupt the expression — scan to
+        // the balanced closer instead.
+        if (index === 0) {
+          return segment;
+        }
+        let depth = 1;
+        let close = 0;
+        for (; close < segment.length && depth > 0; close++) {
+          if (segment[close] === '(') {
+            depth++;
+          } else if (segment[close] === ')') {
+            depth--;
+          }
+        }
+        return acc + segment.slice(0, close - 1) + segment.slice(close);
+      }, '')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
       .replace(/ILIKE/g, 'LIKE') // sqlite LIKE is case insensitive
       .replace(/jsonb_array_elements_text\(/g, 'json_each(')

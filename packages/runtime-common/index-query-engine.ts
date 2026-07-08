@@ -816,7 +816,7 @@ export class IndexQueryEngine {
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
-        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation',
+        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation`,
       ];
     } else {
       // The full rendering set: every per-format HTML column whole (the
@@ -2004,13 +2004,20 @@ function prerenderedJoin(opts: WIPOptions | undefined) {
 // render failure lands on `prerendered_html.error_doc` (beside the
 // last-known-good HTML it preserves). A row reads as errored when either
 // channel holds an error. The index error wins the error_doc pick — it
-// carries the dependency chain that error repair fans out over.
+// carries the dependency chain that error repair fans out over. A render
+// error counts only while its row is at-or-newer than the index row's
+// generation: a lower-generation render error predates the row's latest
+// index pass (e.g. the content was since fixed) and must not gate the row —
+// the fresh render lands on its own channel and re-runs live searches via
+// the prerender_html event.
+const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
+
 function effectiveHasError(): string {
-  return `(COALESCE(i.has_error, FALSE) OR (ph.url IS NOT NULL AND ph.error_doc IS NOT NULL))`;
+  return `(COALESCE(i.has_error, FALSE) OR ${RENDER_ERROR_IS_CURRENT})`;
 }
 
 function effectiveErrorDoc(): string {
-  return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ph.url IS NOT NULL AND ph.error_doc IS NOT NULL THEN ph.error_doc ELSE i.error_doc END`;
+  return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc ELSE i.error_doc END`;
 }
 
 // Appended after a `SELECT i.*` alongside DUAL_READ_HTML_OVERRIDES so the

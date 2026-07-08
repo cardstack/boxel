@@ -5,6 +5,7 @@ import {
   isCardResource,
   jobIdentity,
   logger,
+  modulesConsumedInMeta,
   RealmPaths,
   type Batch,
   type IndexWriter,
@@ -20,6 +21,8 @@ import {
 import type { IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import { canonicalURL } from './dependency-url.ts';
+import { uniqueDeps } from './dependency-collections.ts';
 
 export interface PrerenderHtmlPassArgs {
   realmURL: URL;
@@ -123,6 +126,13 @@ export async function runPrerenderHtmlPass({
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;
   let tombstoned = 0;
+  // One-shot loader reset on the pass's first visit, mirroring
+  // IndexRunner's clear-cache-for-next-render semantics. The job may land
+  // on a warm tab whose loader still caches state from before the change
+  // that spawned this pass (e.g. the 404 of a module that has since been
+  // created); rendering through that stale loader would persist an error
+  // row at this pass's generation.
+  let clearCacheForNextRender = true;
   try {
     for (let [href, operation] of operations) {
       if (operation === 'delete') {
@@ -135,6 +145,8 @@ export async function runPrerenderHtmlPass({
         // authoritative for this job.
         resumedSkipped++;
       } else {
+        let clearCache = clearCacheForNextRender;
+        clearCacheForNextRender = false;
         await visitForPrerenderedHtml({
           url: new URL(href),
           realmURL,
@@ -147,6 +159,7 @@ export async function runPrerenderHtmlPass({
           batchId,
           jobInfo,
           jobPriority,
+          clearCache,
           stats,
           log,
         });
@@ -214,6 +227,7 @@ async function visitForPrerenderedHtml({
   batchId,
   jobInfo,
   jobPriority,
+  clearCache,
   stats,
   log,
 }: {
@@ -228,6 +242,7 @@ async function visitForPrerenderedHtml({
   batchId: string;
   jobInfo: JobInfo;
   jobPriority?: number;
+  clearCache: boolean;
   stats: Stats;
   log: ReturnType<typeof logger>;
 }): Promise<void> {
@@ -286,6 +301,7 @@ async function visitForPrerenderedHtml({
     // via the extract pass — no chaining off a prior index visit, no
     // boxel_index read.
     fileExtract: true,
+    ...(clearCache ? { clearCache } : {}),
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),
@@ -308,12 +324,24 @@ async function visitForPrerenderedHtml({
     let card = response.card;
     let cardError = card?.error ?? response.pageUnusableError;
     if (cardError || !card) {
+      let error = cardError?.error ?? {
+        message: `prerenderVisit returned no card result for a card resource`,
+        status: 500,
+        additionalErrors: null,
+      };
+      // Same dep enrichment the index channel's error path applies: the
+      // error doc's deps must cover the modules the card consumes so fixing
+      // one invalidates this row and clears the error.
+      let metaModuleDeps = parsedCardResource.meta
+        ? modulesConsumedInMeta(parsedCardResource.meta).map((m) =>
+            canonicalURL(m, fileURL, virtualNetwork),
+          )
+        : undefined;
       await batch.updatePrerenderedHtmlEntry(url, {
         type: 'instance-error',
-        error: cardError?.error ?? {
-          message: `prerenderVisit returned no card result for a card resource`,
-          status: 500,
-          additionalErrors: null,
+        error: {
+          ...error,
+          deps: uniqueDeps(error.deps, card?.deps ?? undefined, metaModuleDeps),
         },
       });
       stats.instanceErrors++;
@@ -339,12 +367,16 @@ async function visitForPrerenderedHtml({
   let fileRender = response.fileRender;
   let fileError = fileRender?.error ?? response.pageUnusableError;
   if (fileError || !fileRender) {
+    let error = fileError?.error ?? {
+      message: `prerenderVisit returned no file rendering`,
+      status: 500,
+      additionalErrors: null,
+    };
     await batch.updatePrerenderedHtmlEntry(url, {
       type: 'file-error',
-      error: fileError?.error ?? {
-        message: `prerenderVisit returned no file rendering`,
-        status: 500,
-        additionalErrors: null,
+      error: {
+        ...error,
+        deps: uniqueDeps(error.deps, response.fileExtract?.deps),
       },
     });
     stats.fileErrors++;

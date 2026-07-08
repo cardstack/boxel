@@ -255,27 +255,53 @@ export async function currentRealmGeneration(
   return rows[0]?.current_generation;
 }
 
+// The effective dependency graph for a row spans both channels — the index
+// visit's edges on `boxel_index.deps` plus the edges only the format renders
+// discover on `prerendered_html.deps` — matching what the invalidation
+// fan-out consults. Settles the row's realm's prerender channel first (the
+// render edges land when its fire-and-forget job completes), then returns
+// the union.
 export async function depsForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,
   type: 'instance' | 'file' = 'instance',
 ): Promise<string[]> {
-  let rows = (await query(dbAdapter, [
-    `SELECT deps FROM boxel_index WHERE`,
+  let parseDeps = (rawDeps: string[] | string | null | undefined): string[] => {
+    if (Array.isArray(rawDeps)) {
+      return rawDeps;
+    }
+    if (typeof rawDeps === 'string') {
+      return JSON.parse(rawDeps) as string[];
+    }
+    return [];
+  };
+  let indexRows = (await query(dbAdapter, [
+    `SELECT deps, realm_url FROM boxel_index WHERE`,
     ...every([
       ['url =', param(url)],
       ['type =', param(type)],
     ]),
     `ORDER BY generation DESC LIMIT 1`,
+  ] as Expression)) as {
+    deps: string[] | string | null;
+    realm_url: string;
+  }[];
+  if (indexRows[0]?.realm_url) {
+    await settlePrerenderHtmlJobs(dbAdapter, indexRows[0].realm_url);
+  }
+  let htmlRows = (await query(dbAdapter, [
+    `SELECT deps FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
   ] as Expression)) as { deps: string[] | string | null }[];
-  let rawDeps = rows[0]?.deps ?? [];
-  if (Array.isArray(rawDeps)) {
-    return rawDeps;
-  }
-  if (typeof rawDeps === 'string') {
-    return JSON.parse(rawDeps) as string[];
-  }
-  return [];
+  return [
+    ...new Set([
+      ...parseDeps(indexRows[0]?.deps),
+      ...parseDeps(htmlRows[0]?.deps),
+    ]),
+  ];
 }
 
 export async function indexedAtForIndexEntry(
@@ -310,13 +336,29 @@ export async function typeForIndexEntry(
   return rows[0]?.type ?? null;
 }
 
+// Effective error state spans both channels: index-pass failures live on
+// `boxel_index.error_doc`, render failures on `prerendered_html.error_doc`
+// (the latter counting only at-or-above the index row's generation, matching
+// the read path). Settles the realm's prerender channel first so the render
+// verdict is final.
 export async function errorDocForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,
   type: 'instance' | 'file' = 'instance',
 ): Promise<{ hasError: boolean; errorDoc: unknown | null } | null> {
+  let parseDoc = (raw: unknown): unknown => {
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch (_err) {
+        // Keep the original string when DB driver already returns serialized JSON.
+        return raw;
+      }
+    }
+    return raw;
+  };
   let rows = (await query(dbAdapter, [
-    `SELECT has_error, error_doc FROM boxel_index WHERE`,
+    `SELECT has_error, error_doc, generation, realm_url FROM boxel_index WHERE`,
     ...every([
       ['url =', param(url)],
       ['type =', param(type)],
@@ -325,21 +367,41 @@ export async function errorDocForIndexEntry(
   ] as Expression)) as {
     has_error: boolean | null;
     error_doc: unknown | string | null;
+    generation: number;
+    realm_url: string;
   }[];
   let row = rows[0];
   if (!row) {
     return null;
   }
-  let errorDoc = row.error_doc;
-  if (typeof errorDoc === 'string') {
-    try {
-      errorDoc = JSON.parse(errorDoc);
-    } catch (_err) {
-      // Keep the original string when DB driver already returns serialized JSON.
-    }
+  if (row.realm_url) {
+    await settlePrerenderHtmlJobs(dbAdapter, row.realm_url);
+  }
+  if (row.has_error) {
+    return {
+      hasError: true,
+      errorDoc: parseDoc(row.error_doc) ?? null,
+    };
+  }
+  let htmlRows = (await query(dbAdapter, [
+    `SELECT error_doc, generation FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+  ] as Expression)) as {
+    error_doc: unknown | string | null;
+    generation: number;
+  }[];
+  let htmlRow = htmlRows[0];
+  if (htmlRow?.error_doc != null && htmlRow.generation >= row.generation) {
+    return {
+      hasError: true,
+      errorDoc: parseDoc(htmlRow.error_doc) ?? null,
+    };
   }
   return {
-    hasError: Boolean(row.has_error),
-    errorDoc: errorDoc ?? null,
+    hasError: false,
+    errorDoc: parseDoc(row.error_doc) ?? null,
   };
 }

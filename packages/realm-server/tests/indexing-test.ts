@@ -36,6 +36,7 @@ import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
+  settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
@@ -2100,6 +2101,7 @@ module(basename(import.meta.filename), function () {
           export class Intentionally Thrown Error {}
         `,
         );
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let { data: result } = await searchCardsForTest(
           realm.realmIndexQueryEngine,
           {
@@ -2127,6 +2129,7 @@ module(basename(import.meta.filename), function () {
           }
         `,
         );
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         result = (
           await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
@@ -2360,6 +2363,7 @@ module(basename(import.meta.filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2389,6 +2393,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2477,6 +2482,7 @@ module(basename(import.meta.filename), function () {
             // expected while dependencies are missing
           }
 
+          await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
           brokenInstance = await realm.realmIndexQueryEngine.instance(
             new URL(`${testRealm}deep-card`),
           );
@@ -3929,6 +3935,7 @@ module(basename(import.meta.filename), function () {
         // downstream card; instance → instance propagation terminates at
         // the first hop, so the consumers stay indexable. The broken slot
         // renders the placeholder inline.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let childError = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}child-error`),
         );
@@ -3966,6 +3973,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let childErrorAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}child-error`),
         );
@@ -4482,6 +4490,7 @@ module(basename(import.meta.filename), function () {
           }),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4510,6 +4519,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4642,6 +4652,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let { data: result } = await searchCardsForTest(
           realm.realmIndexQueryEngine,
           {
@@ -4659,6 +4670,7 @@ module(basename(import.meta.filename), function () {
 
       test('can incrementally index instance that depends on deleted card source', async function (assert) {
         await realm.delete('post.gts');
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         {
           let { data: result } = await searchCardsForTest(
             realm.realmIndexQueryEngine,
@@ -4858,6 +4870,7 @@ module(basename(import.meta.filename), function () {
            export class Pet extends OnlyExistsInDreams {}`,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}ringo`),
         );
