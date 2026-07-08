@@ -189,6 +189,17 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
       .doesNotExist('the modal closes once the copy completes');
 
+    let workspaceNames = [
+      ...document.querySelectorAll(
+        '[data-test-workspace-list] [data-test-workspace]',
+      ),
+    ].map((el) => el.getAttribute('data-test-workspace'));
+    assert.deepEqual(
+      workspaceNames,
+      ['Workspace A', 'Boxel Skills (Copy)'],
+      'the new copy joins the end of the workspace list',
+    );
+
     assert.strictEqual(
       createRealmCalls.length,
       1,
