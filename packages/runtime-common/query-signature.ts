@@ -9,8 +9,12 @@ import type { VirtualNetwork } from './virtual-network.ts';
 
 // A spelling-tolerant identity signature for a query. Two queries that differ
 // only in how they spell module references (`on`/`type` code refs, sort `on`
-// refs) or reference-field filter values (`id`/`url` under `eq`/`in`) — RRI
-// prefix vs real URL vs virtual alias — produce the same signature.
+// refs) or reference-field filter values (`id`/`url` under `in`) — RRI prefix
+// vs real URL vs virtual alias — produce the same signature. The tolerance
+// mirrors the query engine's exactly: `in` on a reference field matches
+// equivalent spellings, while `eq` stays exact — so two `eq` queries that
+// differ in spelling are genuinely different queries (different result sets)
+// and keep different signatures.
 //
 // The consumer is seed/live query reconciliation: a server-produced seed
 // query (built through the server's VirtualNetwork, URL-form refs) must be
@@ -46,7 +50,7 @@ function canonicalizeNode(
     let out: Record<string, unknown> = {};
     for (let [key, value] of Object.entries(node)) {
       if (
-        (key === 'eq' || key === 'in') &&
+        key === 'in' &&
         value &&
         typeof value === 'object' &&
         !Array.isArray(value)
@@ -55,6 +59,15 @@ function canonicalizeNode(
           value as Record<string, unknown>,
           virtualNetwork,
         );
+      } else if (
+        (key === 'eq' || key === 'contains' || key === 'range') &&
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value)
+      ) {
+        // Exact-match predicates: the engine compares these values verbatim,
+        // so the signature must too — no folding anywhere in the subtree.
+        out[key] = value;
       } else {
         out[key] = canonicalizeNode(value, virtualNetwork);
       }
@@ -75,9 +88,11 @@ function canonicalizeFieldValues(
 ): Record<string, unknown> {
   let out: Record<string, unknown> = {};
   for (let [path, value] of Object.entries(fields)) {
+    // Only reference leaves get the equivalent-spelling fold — the engine
+    // compares every other `in` value verbatim.
     out[path] = isReferenceFilterField(path)
       ? canonicalizeReferenceValue(value, virtualNetwork)
-      : canonicalizeNode(value, virtualNetwork);
+      : value;
   }
   return out;
 }
