@@ -619,9 +619,9 @@ module('Unit | index-writer', function (hooks) {
       },
     );
 
-    let pristine = row.pristine_doc as LooseCardResource;
-    let search = row.search_doc as Record<string, string>;
-    let displayNames = row.display_names as string[];
+    let pristine = row.pristine_doc as unknown as LooseCardResource;
+    let search = row.search_doc as unknown as Record<string, string>;
+    let displayNames = row.display_names as unknown as string[];
 
     assert.strictEqual(
       pristine.attributes?.name,
