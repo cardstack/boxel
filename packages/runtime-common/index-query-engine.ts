@@ -316,7 +316,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -353,7 +353,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -471,7 +471,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedFile | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -480,7 +480,7 @@ export class IndexQueryEngine {
           [`i.file_alias =`, param(url.href)],
         ]),
         ['i.type =', param('file')],
-        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+        [`NOT ${effectiveHasError()}`],
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
@@ -506,7 +506,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}`,
+        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -518,7 +518,7 @@ export class IndexQueryEngine {
             ],
           ]),
           ['i.type =', param('file')],
-          any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+          [`NOT ${effectiveHasError()}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
       ] as Expression)) as unknown as BoxelIndexTable[];
@@ -692,7 +692,7 @@ export class IndexQueryEngine {
         conditions.push(
           every([
             ['i.type =', param(entryType)],
-            any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+            [`NOT ${effectiveHasError()}`],
           ]),
         );
       }
@@ -816,7 +816,7 @@ export class IndexQueryEngine {
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
       selectClauseExpression = [
-        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.generation) as generation',
+        'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation',
       ];
     } else {
       // The full rendering set: every per-format HTML column whole (the
@@ -824,7 +824,7 @@ export class IndexQueryEngine {
       // atom/head columns), plus the live serialization on every row. The
       // caller enumerates candidate renderings and selects from the set.
       selectClauseExpression = [
-        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
+        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
           'fitted_html',
         )}) as fitted_html, ANY_VALUE(${dualReadColumn(
           'embedded_html',
@@ -834,7 +834,7 @@ export class IndexQueryEngine {
           'head_html',
         )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
           'deps',
-        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(i.error_doc) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
+        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
           'generation',
         )}) as html_generation`,
       ];
@@ -1998,6 +1998,28 @@ function prerenderedJoin(opts: WIPOptions | undefined) {
     opts,
   )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type`;
 }
+
+// Effective error state spans both channels: the index pass records
+// dependency/compute failures on `boxel_index.error_doc`, while a format
+// render failure lands on `prerendered_html.error_doc` (beside the
+// last-known-good HTML it preserves). A row reads as errored when either
+// channel holds an error. The index error wins the error_doc pick — it
+// carries the dependency chain that error repair fans out over.
+function effectiveHasError(): string {
+  return `(COALESCE(i.has_error, FALSE) OR (ph.url IS NOT NULL AND ph.error_doc IS NOT NULL))`;
+}
+
+function effectiveErrorDoc(): string {
+  return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ph.url IS NOT NULL AND ph.error_doc IS NOT NULL THEN ph.error_doc ELSE i.error_doc END`;
+}
+
+// Appended after a `SELECT i.*` alongside DUAL_READ_HTML_OVERRIDES so the
+// effective error state wins over the raw boxel_index columns
+// (duplicate result columns resolve to the last one in both adapters).
+const DUAL_READ_ERROR_OVERRIDES = [
+  `${effectiveHasError()} AS has_error`,
+  `${effectiveErrorDoc()} AS error_doc`,
+].join(', ');
 
 // A single dual-read column. A present prerendered_html row is authoritative for
 // the column — its value wins even when NULL — and boxel_index is consulted only

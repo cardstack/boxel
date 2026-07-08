@@ -730,20 +730,15 @@ export function buildPrerenderApp(options: {
       }
 
       // If fileRender is requested without fileData, we need fileExtract so
-      // the composite can chain the extract's resource into render. When
-      // fileExtract isn't requested AND fileData isn't supplied, reject —
-      // the host route model hook requires fileData to populate its model.
-      // A prerender-html visit never runs the extract, so for it fileData
-      // is required outright.
-      if (
-        renderOptions.fileRender &&
-        !fileData &&
-        (!renderOptions.fileExtract || visitType === 'prerender-html')
-      ) {
+      // the composite can chain the extract's resource into render — a
+      // prerender-html visit included: requesting the extract is what makes
+      // the standalone visit self-sufficient, resolving the file's resource
+      // + types from source. When fileExtract isn't requested AND fileData
+      // isn't supplied, reject — the host route model hook requires fileData
+      // to populate its model.
+      if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
         missing.push(
-          visitType === 'prerender-html'
-            ? 'fileData (required when a prerender-html visit requests fileRender)'
-            : 'fileData (required when fileRender pass is requested without fileExtract)',
+          'fileData (required when fileRender pass is requested without fileExtract)',
         );
       }
       // Chaining fileExtract → fileRender also needs fileDefCodeRef so the

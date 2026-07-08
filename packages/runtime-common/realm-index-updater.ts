@@ -220,7 +220,10 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       onSettled?: () => Promise<void> | void;
       clientRequestId?: string | null;
     },
@@ -258,7 +261,7 @@ export class RealmIndexUpdater {
     // (deferred-indexing path).
     let settled = (async () => {
       try {
-        let { invalidations, ignoreData, stats } = await job.done;
+        let { invalidations, ignoreData, stats, generation } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -269,6 +272,7 @@ export class RealmIndexUpdater {
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+            { generation },
           );
         }
         if (opts?.onSettled) {
@@ -289,7 +293,10 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       clientRequestId?: string | null;
     },
   ): Promise<void> {
@@ -300,7 +307,7 @@ export class RealmIndexUpdater {
   async copy(
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
-  ): Promise<void> {
+  ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.add(indexingDeferred);
     try {
@@ -316,12 +323,13 @@ export class RealmIndexUpdater {
         priority: userInitiatedPriority,
         args,
       });
-      let { invalidations } = await job.done;
+      let { invalidations, generation } = await job.done;
       if (onInvalidation) {
         await onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
+      return { generation };
     } catch (e: any) {
       indexingDeferred.reject(e);
       throw e;

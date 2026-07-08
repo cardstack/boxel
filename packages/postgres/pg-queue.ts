@@ -34,6 +34,7 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/in
 // coalesce handlers registered before publish() is called.
 import '@cardstack/runtime-common/tasks/copy';
 import '@cardstack/runtime-common/tasks/full-reindex';
+import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PgAdapter } from './pg-adapter.ts';
 import * as Sentry from '@sentry/node';
 

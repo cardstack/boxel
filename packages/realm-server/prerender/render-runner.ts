@@ -766,9 +766,15 @@ export class RenderRunner {
     let runIndexSteps = visitType !== 'prerender-html';
     let runHtmlSteps = visitType !== 'index';
     let requested = {
-      // The extract belongs to the index half; a prerender-html visit never
-      // runs it even when the flag rides along on shared render options.
-      fileExtract: Boolean(renderOptions?.fileExtract) && runIndexSteps,
+      // The extract belongs to the index half. A standalone 'prerender-html'
+      // visit still runs it when its fileRender pass wasn't handed
+      // `fileData` — that is what makes the visit self-sufficient: it
+      // resolves the file's resource + types from source instead of
+      // chaining off a prior index visit's outputs.
+      fileExtract:
+        Boolean(renderOptions?.fileExtract) &&
+        (runIndexSteps ||
+          (Boolean(renderOptions?.fileRender) && fileData == null)),
       cardRender: Boolean(renderOptions?.cardRender),
       fileRender: Boolean(renderOptions?.fileRender),
     };

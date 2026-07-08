@@ -17,7 +17,7 @@ function parseIncrementalResult(
   if (!isObjectLike(result) || Array.isArray(result)) {
     return undefined;
   }
-  let { invalidations, ignoreData, stats } = result as Record<
+  let { invalidations, ignoreData, stats, generation } = result as Record<
     string,
     PgPrimitive
   >;
@@ -35,6 +35,7 @@ function parseIncrementalResult(
     invalidations,
     ignoreData: ignoreData as Record<string, string>,
     stats: stats as IncrementalResult['stats'],
+    ...(typeof generation === 'number' ? { generation } : {}),
   };
 }
 
