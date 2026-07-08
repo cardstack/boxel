@@ -2,6 +2,8 @@ import { click, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
+import { ri } from '@cardstack/runtime-common';
+
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
@@ -22,6 +24,10 @@ import { setupApplicationTest } from '../helpers/setup';
 // virtual network intercepts its requests before they reach the live server.
 const ownedRealmURL = 'http://test-realm/testuser/workspace-a/';
 const copyRealmURL = 'http://test-realm/testuser/skills-copy/';
+// A realm the user can reach through `_realm-auth` permissions without it
+// appearing in the matrix realms account data — the shape trusted-realm-server
+// sessions produce for shared and system realms.
+const grantedRealmURL = 'http://test-realm/otheruser/granted-workspace/';
 
 const skillMarkdown = `# Test skill
 
@@ -78,6 +84,18 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
         'index.json': cardsGridIndex,
         'README.md': 'A collection of skills.\n',
         'skills/test-skill/SKILL.md': skillMarkdown,
+      },
+    });
+
+    await setupAcceptanceTestRealm({
+      realmURL: grantedRealmURL,
+      mockMatrixUtils,
+      permissions: {
+        '@testuser:localhost': ['read', 'write'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({ name: 'Granted Workspace' }),
+        'index.json': cardsGridIndex,
       },
     });
   });
@@ -211,6 +229,49 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       'Boxel Skills (Copy)',
       "the source's realm.json does not overwrite the duplicate's own config",
     );
+  });
+
+  test('duplicating keeps realms that are not in the matrix account data', async function (assert) {
+    await setupCopyTargetRealm();
+
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    realmServer.createRealm = async () => new URL(copyRealmURL);
+
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    // Simulate a trusted-realm-servers session: the realm list is assembled
+    // from `_realm-auth` and the legacy `app.boxel.realms` account data is
+    // non-authoritative (its change events don't rewrite the list). Realms
+    // granted only via `_realm-auth` — like the skills realm — exist in the
+    // list without appearing in the account data, and must survive list
+    // updates that read the account data.
+    let matrixService = this.owner.lookup('service:matrix-service') as any;
+    matrixService.trustedRealmServersAuthoritative = true;
+    await realmServer.setAvailableRealmIdentifiers([
+      ...realmServer.userRealmIdentifiers,
+      ri(grantedRealmURL),
+    ]);
+    await waitFor(
+      '[data-test-workspace-list] [data-test-workspace="Granted Workspace"]',
+    );
+
+    await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
+    await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+    await click('[data-test-confirm-duplicate-button]');
+
+    await waitFor(
+      '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
+    );
+    assert
+      .dom(
+        '[data-test-workspace-list] [data-test-workspace="Granted Workspace"]',
+      )
+      .exists('the granted realm survives the duplication');
+    assert
+      .dom('[data-test-catalog-list] [data-test-workspace="Boxel Skills"]')
+      .exists('the skills realm catalog tile survives the duplication');
   });
 
   test('an endpoint collision retries with a numbered suffix', async function (assert) {

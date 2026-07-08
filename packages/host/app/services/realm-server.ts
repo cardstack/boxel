@@ -613,13 +613,17 @@ export default class RealmServerService extends Service {
       }
     });
 
-    // pluck out any user realms that aren't a part of userRealmIdentifiers
+    // pluck out any user realms that aren't a part of userRealmIdentifiers;
+    // match on type as well as url so a catalog entry sharing the url of a
+    // plucked user entry is never the one spliced out
     this.availableRealms
       .filter((r) => r.type === 'user')
       .forEach((realm) => {
         if (!userRealmIdentifiers.includes(ri(realm.url))) {
           this.availableRealms.splice(
-            this.availableRealms.findIndex((r) => r.url === realm.url),
+            this.availableRealms.findIndex(
+              (r) => r.type === 'user' && r.url === realm.url,
+            ),
             1,
           );
         }

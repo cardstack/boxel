@@ -778,7 +778,17 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
+    // The legacy `app.boxel.realms` write above is persistence only. On a
+    // trusted-realm-servers session the in-memory list also holds realms
+    // granted via `_realm-auth` that the legacy list never contained, so
+    // replacing the list with `newRealms` would drop those realms until the
+    // next reload. Merge into the current list instead.
+    await this.realmServer.setAvailableRealmIdentifiers([
+      ...new Set([
+        ...this.realmServer.userRealmIdentifiers,
+        ri(realmURLString),
+      ]),
+    ]);
   }
 
   public async removeRealmFromAccountData(realmURLString: string) {
@@ -791,7 +801,13 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
+    // Drop only the removed realm from the current in-memory list; see
+    // appendRealmToAccountData for why the legacy list can't be used here.
+    await this.realmServer.setAvailableRealmIdentifiers(
+      this.realmServer.userRealmIdentifiers.filter(
+        (realmIdentifier) => realmIdentifier !== ri(realmURLString),
+      ),
+    );
   }
 
   public async getRealmServersFromAccountData(): Promise<string[]> {
