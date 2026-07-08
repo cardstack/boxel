@@ -776,4 +776,34 @@ ${REPLACE_MARKER}`;
       );
     }
   });
+
+  test('does not write a stray extra separator into the file', async function (assert) {
+    // Regression: a model emitted a duplicated separator right before the
+    // REPLACE marker, which was applied verbatim as a trailing line of
+    // box-drawing characters in the resulting file.
+    let commandService = getService('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = `{ "old": true }`;
+    const codeBlock = `${SEARCH_MARKER}
+{ "old": true }
+${SEPARATOR_MARKER}
+{ "new": true }
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{ "new": true }`,
+      'the applied file has no trailing separator artifact',
+    );
+    assert.notOk(
+      result.resultContent.includes(SEPARATOR_MARKER),
+      'no separator marker leaks into the file',
+    );
+  });
 });
