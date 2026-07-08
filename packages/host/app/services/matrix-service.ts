@@ -782,11 +782,12 @@ export default class MatrixService extends Service {
     // trusted-realm-servers session the in-memory list also holds realms
     // granted via `_realm-auth` that the legacy list never contained, so
     // replacing the list with `newRealms` would drop those realms until the
-    // next reload. Merge into the current list instead.
+    // next reload. Merge into the current list instead — prepending, since
+    // the list is newest-created-first.
     await this.realmServer.setAvailableRealmIdentifiers([
       ...new Set([
-        ...this.realmServer.userRealmIdentifiers,
         ri(realmURLString),
+        ...this.realmServer.userRealmIdentifiers,
       ]),
     ]);
   }

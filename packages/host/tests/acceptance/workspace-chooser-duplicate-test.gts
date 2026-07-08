@@ -196,8 +196,8 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     ].map((el) => el.getAttribute('data-test-workspace'));
     assert.deepEqual(
       workspaceNames,
-      ['Workspace A', 'Boxel Skills (Copy)'],
-      'the new copy joins the end of the workspace list',
+      ['Boxel Skills (Copy)', 'Workspace A'],
+      'the new copy joins the front of the workspace list',
     );
 
     assert.strictEqual(

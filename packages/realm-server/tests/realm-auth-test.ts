@@ -233,7 +233,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('POST /_realm-auth enumerates realms oldest-created-first', async function (assert) {
+    test('POST /_realm-auth enumerates realms newest-created-first', async function (assert) {
       sinon
         .stub(MatrixClient.prototype, 'createDM')
         .resolves('!ordering-test-session-room:localhost');
@@ -288,8 +288,8 @@ module(basename(import.meta.filename), function () {
       let urls = Object.keys(response.body);
       assert.deepEqual(
         urls.filter((url) => [olderRealmURL, newerRealmURL].includes(url)),
-        [olderRealmURL, newerRealmURL],
-        'registry-backed realms are enumerated oldest-created-first',
+        [newerRealmURL, olderRealmURL],
+        'registry-backed realms are enumerated newest-created-first',
       );
     });
   });

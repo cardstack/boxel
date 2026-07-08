@@ -138,11 +138,11 @@ export default function handleRealmAuth({
       }
     }
 
-    // Enumerate the response's realms oldest-created-first. The workspace
-    // chooser renders this list in response order (and appends realms created
-    // mid-session), so this is what keeps a workspace's position stable
-    // across sessions with new workspaces at the end; without it the
-    // permissions query's UNION returns hash-order rows. JSON object key
+    // Enumerate the response's realms newest-created-first. The workspace
+    // chooser renders this list in response order (and prepends realms
+    // created mid-session), so this is what keeps a workspace's position
+    // stable across sessions with new workspaces at the front; without it
+    // the permissions query's UNION returns hash-order rows. JSON object key
     // order follows insertion order for non-numeric keys, so the ordering
     // survives the trip to the client. Legacy-registered mounts without a
     // realm_registry row (test fixtures, pre-Phase-3 boots) have no creation
@@ -152,7 +152,7 @@ export default function handleRealmAuth({
       let orderedRows = (await query(dbAdapter, [
         'SELECT url FROM realm_registry WHERE url IN (',
         ...separatedByCommas([...registeredUrls].map((url) => [param(url)])),
-        ') ORDER BY created_at, url',
+        ') ORDER BY created_at DESC, url',
       ] as Expression)) as { url: string }[];
       orderedRealmUrls = orderedRows.map(({ url }) => url);
     }

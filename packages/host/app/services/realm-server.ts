@@ -318,9 +318,12 @@ export default class RealmServerService extends Service {
     if (index >= 0) {
       this.archivedRealmsList.splice(index, 1);
     }
+    // Prepend: the list is newest-created-first and the restored realm should
+    // be visible where the user is looking. It settles into its created_at
+    // slot on the next reload.
     await this.setAvailableRealmIdentifiers([
-      ...this.userRealmIdentifiers,
       identifier,
+      ...this.userRealmIdentifiers,
     ]);
   }
 
@@ -604,6 +607,16 @@ export default class RealmServerService extends Service {
 
   async setAvailableRealmIdentifiers(userRealmIdentifiers: RealmIdentifier[]) {
     await this._ready.promise;
+    // Rebuild the user-type entries in the given order — the workspace
+    // chooser renders this list as-is, and `_realm-auth` hands it to us
+    // newest-created-first. Non-user entries (base, catalog) keep their
+    // positions; a url already present as a non-user entry is not added
+    // again as a user entry.
+    for (let i = this.availableRealms.length - 1; i >= 0; i--) {
+      if (this.availableRealms[i].type === 'user') {
+        this.availableRealms.splice(i, 1);
+      }
+    }
     userRealmIdentifiers.forEach((userRealmIdentifier) => {
       if (!this.availableRealms.find((r) => r.url === userRealmIdentifier)) {
         this.availableRealms.push({
@@ -612,22 +625,6 @@ export default class RealmServerService extends Service {
         });
       }
     });
-
-    // pluck out any user realms that aren't a part of userRealmIdentifiers;
-    // match on type as well as url so a catalog entry sharing the url of a
-    // plucked user entry is never the one spliced out
-    this.availableRealms
-      .filter((r) => r.type === 'user')
-      .forEach((realm) => {
-        if (!userRealmIdentifiers.includes(ri(realm.url))) {
-          this.availableRealms.splice(
-            this.availableRealms.findIndex(
-              (r) => r.type === 'user' && r.url === realm.url,
-            ),
-            1,
-          );
-        }
-      });
   }
 
   async fetchCatalogRealms() {
