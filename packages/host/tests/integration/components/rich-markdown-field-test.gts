@@ -36,7 +36,10 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { BaseDef } from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardDef as CardDefType,
+} from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -304,6 +307,76 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert
       .dom(root.querySelector('[data-boxel-bfm-inline-ref]'))
       .exists('card reference placeholder is rendered');
+  });
+
+  test('display path renders a relative card-ref pill in a prefix-mapped realm', async function (assert) {
+    // End-to-end over the whole reference chain in a prefix-mapped realm: the
+    // markdown field extracts the ref in RRI space, the query-backed
+    // linkedCards field searches by that RRI, the index and the client-side
+    // filter matcher tolerate the URL-form instance id, and the pill slot
+    // matches — so the referenced card's atom actually renders. Guards the
+    // regression where the client re-filter dropped the URL-form instance
+    // against the RRI filter value, leaving the pill unresolved.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: { body: { content: `Inline: :card[./Pet/mango]` } },
+            meta: { adoptsFrom: { module: './article', name: 'ArticleCard' } },
+          },
+        },
+      },
+    });
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+    try {
+      let store = getService('store');
+      let article = (await store.get(
+        `${testRealmURL}article-1`,
+      )) as CardDefType;
+      let refs = (article as any).body?.cardReferenceUrls;
+      assert.deepEqual(
+        refs,
+        ['@test/cards/Pet/mango'],
+        'the relative ref resolves against the prefix-form base into RRI space',
+      );
+      await renderCard(loader, article, 'isolated');
+      await waitFor('[data-test-pet-atom]');
+      assert
+        .dom('[data-test-pet-atom]')
+        .hasText('Mango', 'the referenced card renders as a pill');
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
   });
 
   test('renders footnotes', async function (assert) {
