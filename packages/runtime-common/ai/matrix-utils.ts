@@ -133,7 +133,7 @@ export async function sendEventListAsDebugMessage(
   await sendDebugMessage(
     client,
     roomId,
-    'Debug: attached the raw event list.\n\n' + customMessage,
+    'Debug: attached the event list.\n\n' + customMessage,
     {
       attachedFiles: [
         {
