@@ -316,6 +316,7 @@ module(basename(import.meta.filename), function () {
         generation: number;
         is_deleted: boolean | null;
         error_doc: { message?: string } | null;
+        deps: string[] | null;
         last_known_good_deps: string[] | null;
       }[];
       return rows[0];
@@ -448,7 +449,12 @@ module(basename(import.meta.filename), function () {
       ]);
       await batch.updatePrerenderedHtmlEntry(new URL(url), {
         type: 'instance-error',
-        error: { message: 'boom', status: 500, additionalErrors: null },
+        error: {
+          message: 'boom',
+          status: 500,
+          additionalErrors: null,
+          deps: [`${testRealm}broken-module`],
+        },
       });
       await batch.done();
 
@@ -464,6 +470,14 @@ module(basename(import.meta.filename), function () {
         'last-known-good deps are preserved',
       );
       assert.strictEqual(row.error_doc?.message, 'boom');
+      assert.ok(
+        row.deps?.includes(`${testRealm}broken-module`),
+        "the failing render's own deps join the row deps so fixing one fans out to this row",
+      );
+      assert.ok(
+        row.deps?.includes(`${testRealm}dep.gts`),
+        'prior production deps are retained alongside the error deps',
+      );
     });
 
     test('a render error on a URL with no production row lands an error row with empty HTML', async function (assert) {
@@ -582,6 +596,30 @@ module(basename(import.meta.filename), function () {
         laterModuleBatch.loaderEpoch,
         minted,
         'the next module change mints a different epoch',
+      );
+    });
+
+    test('loaderEpoch: noted URLs feed the executable scan without joining the invalidation set', async function (assert) {
+      // The from-scratch pass determines its URL list outside invalidate();
+      // noting the list must fix the epoch before any visit or enqueue.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      batch.noteInvalidatedURLs([
+        `${testRealm}1.json`,
+        `${testRealm}some-module.gts`,
+      ]);
+      assert.notStrictEqual(
+        batch.loaderEpoch,
+        '0',
+        'noting an executable URL mints a fresh epoch',
+      );
+      assert.deepEqual(
+        batch.invalidations,
+        [],
+        'noted URLs do not join the invalidation set',
       );
     });
 

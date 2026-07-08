@@ -86,6 +86,13 @@ type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
   pristine_doc: LooseCardResource | null;
 };
 
+// `loader_epoch` has a database default, so fixture rows may omit it;
+// setupIndex fills in the no-epoch-yet sentinel at insert time.
+export type TestRealmGenerationsRow = Omit<
+  RealmGenerationsTable,
+  'loader_epoch'
+> & { loader_epoch?: string };
+
 export type TestIndexRow =
   | (Pick<RelaxedBoxelIndexTable, 'url'> &
       Partial<Omit<RelaxedBoxelIndexTable, 'url'>>)
@@ -125,19 +132,19 @@ export async function setupIndex(
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  versionRows: RealmGenerationsTable[],
+  versionRows: TestRealmGenerationsRow[],
   indexRows: { working: TestIndexRow[]; production: TestIndexRow[] },
   options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  versionRows: RealmGenerationsTable[],
+  versionRows: TestRealmGenerationsRow[],
   indexRows: TestIndexRow[],
   options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
-  maybeVersionRows: RealmGenerationsTable[] | TestIndexRow[] = [],
+  maybeVersionRows: TestRealmGenerationsRow[] | TestIndexRow[] = [],
   maybeRowsOrOptions?:
     | TestIndexRow[]
     | { working: TestIndexRow[]; production: TestIndexRow[] }
@@ -168,7 +175,7 @@ export async function setupIndex(
     options = maybeOptions;
   }
 
-  let versionRows: RealmGenerationsTable[];
+  let versionRows: TestRealmGenerationsRow[];
   let workingRows: TestIndexRow[] = [];
   let productionRows: TestIndexRow[] = [];
   if (!maybeWorkingProductionRows) {
@@ -176,7 +183,7 @@ export async function setupIndex(
     workingRows = maybeVersionRows as TestIndexRow[];
     productionRows = maybeVersionRows as TestIndexRow[];
   } else {
-    versionRows = maybeVersionRows as RealmGenerationsTable[];
+    versionRows = maybeVersionRows as TestRealmGenerationsRow[];
     if (Array.isArray(maybeWorkingProductionRows)) {
       workingRows = maybeWorkingProductionRows as TestIndexRow[];
       productionRows = maybeWorkingProductionRows as TestIndexRow[];
@@ -198,7 +205,12 @@ export async function setupIndex(
     client,
     columnSourceTable: 'boxel_index',
   });
-  let versionExpressions = versionRows.map((r) => asExpressions(r));
+  let versionExpressions = versionRows.map((r) =>
+    asExpressions({
+      loader_epoch: '0',
+      ...r,
+    } satisfies RealmGenerationsTable),
+  );
 
   if (workingIndexedCardsExpressions.length > 0) {
     await query(

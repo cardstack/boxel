@@ -346,6 +346,20 @@ export class Batch {
     return this.#priorLoaderEpoch;
   }
 
+  // Feed URLs into the loader-epoch executable scan without adding them to
+  // the batch's invalidation set. The from-scratch pass determines its URL
+  // list outside `invalidate()` (rows join `#invalidations` one visit at a
+  // time via `updateEntry`), so without this the epoch read at announce
+  // time — and by the pass's early visits — would predate the module scan
+  // and disagree with the epoch the pass ultimately commits.
+  noteInvalidatedURLs(urls: string[]): void {
+    if (!this.#hasExecutableInvalidation) {
+      this.#hasExecutableInvalidation = urls.some((url) =>
+        hasExecutableExtension(url),
+      );
+    }
+  }
+
   private isRegisteredPrefix(reference: string): boolean {
     return this.virtualNetwork.isRegisteredPrefix(reference);
   }
@@ -1058,6 +1072,7 @@ export class Batch {
           url,
           type,
         );
+        let errorDoc = this.normalizeErrorDoc(entry.error, url);
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,
@@ -1066,9 +1081,15 @@ export class Batch {
           head_html: production?.head_html ?? null,
           isolated_html: production?.isolated_html ?? null,
           markdown: production?.markdown ?? null,
-          deps: production?.deps ?? null,
+          // The failing render's own dependencies join the row's deps —
+          // `itemsThatReference` scans this column, so fixing one of them
+          // must fan out to this row and clear the error. Mirrors the
+          // error-deps merge on the index channel's error path.
+          deps: [
+            ...new Set([...(production?.deps ?? []), ...(errorDoc.deps ?? [])]),
+          ],
           last_known_good_deps: production?.last_known_good_deps ?? null,
-          error_doc: this.normalizeErrorDoc(entry.error, url),
+          error_doc: errorDoc,
         };
         break;
       }

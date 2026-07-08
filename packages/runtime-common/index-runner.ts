@@ -259,6 +259,10 @@ export class IndexRunner {
       mtimes,
     );
     invalidations = discoverResult.urls.map((href) => new URL(href));
+    // The from-scratch URL list lives outside the batch's invalidation set
+    // until each visit writes its row; feed the loader-epoch scan up front
+    // so the epoch is fixed before the enqueue and the first visit.
+    current.batch.noteInvalidatedURLs(discoverResult.urls);
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
     );
