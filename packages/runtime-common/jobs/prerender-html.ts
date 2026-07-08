@@ -30,9 +30,17 @@ export interface PrerenderHtmlEnqueueArgs {
   timeoutSec: number;
 }
 
+// Every realm's prerender-html jobs share one concurrency group so they
+// serialize — which is what makes pending-join coalescing and tombstone
+// ordering safe. Anything that reasons about a realm's HTML jobs as a set
+// (enqueue, teardown) must use this same name.
+export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
+  return `prerender-html:${realmURL}`;
+}
+
 // Publish a `prerender_html` job through the normal queue-publish path. The
 // registered coalesce handler (tasks/prerender-html.ts) merges same-realm
-// publishes: delete-sticky URL union, max generation/priority/timeout.
+// publishes: per-URL update-wins merge, max generation/priority/timeout.
 // Callers fire-and-forget — an index pass must never block on, or fail
 // with, its prerender enqueue; a missed enqueue self-heals on the next pass.
 export async function enqueuePrerenderHtmlJob(
@@ -59,9 +67,8 @@ export async function enqueuePrerenderHtmlJob(
   return await queuePublisher.publish({
     jobType: 'prerender_html',
     // Separate from `indexing:${realmURL}` so HTML work never blocks
-    // indexing, while same-realm HTML jobs still serialize — which is what
-    // makes pending-join coalescing and tombstone ordering safe.
-    concurrencyGroup: `prerender-html:${realmURL}`,
+    // indexing.
+    concurrencyGroup: prerenderHtmlConcurrencyGroup(realmURL),
     priority: prerenderHtmlPriority(spawningPriority),
     timeout: timeoutSec,
     args,

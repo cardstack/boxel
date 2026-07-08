@@ -16,7 +16,6 @@ import {
   incrementalChangesCover,
   isObjectLike,
   maxPriorityAndTimeout,
-  mergeIncrementalChanges,
   type IncrementalChange,
 } from './indexer.ts';
 import type { Stats } from '../worker.ts';
@@ -83,14 +82,38 @@ function parsePrerenderHtmlArgsForCoalesce(
   };
 }
 
+// When two publishes carry the same URL, the merged job keeps 'update':
+// the render consults disk truth, so an update-tagged URL whose file is
+// gone still lands as a tombstone (the visit writes nothing over the
+// up-front tombstone), while a delete-tagged URL is never visited at all —
+// so a delete from one pass must not swallow a later pass's re-create, or
+// the re-created card's HTML would stay tombstoned at a generation the
+// index channel considers current.
+function mergePrerenderHtmlChanges(
+  existing: IncrementalChange[],
+  incoming: IncrementalChange[],
+): IncrementalChange[] {
+  let byUrl = new Map<string, IncrementalChange>();
+  for (let change of [...existing, ...incoming]) {
+    let previous = byUrl.get(change.url);
+    if (
+      !previous ||
+      (previous.operation === 'delete' && change.operation === 'update')
+    ) {
+      byUrl.set(change.url, change);
+    }
+  }
+  return [...byUrl.values()];
+}
+
 // Modeled on `chooseIncrementalCoalesceDecision`: a same-realm pending
-// publish joins by merging the URL sets (delete-sticky) and taking the max
-// generation — the job renders from current source, so the newest pass's
-// stamp is the right one for every merged URL. A publish can piggyback on an
-// in-flight job only when that job's args already cover every incoming
-// (url, operation) at an equal-or-newer generation; otherwise it inserts a
-// fresh row, which the per-realm concurrency group serializes behind the
-// running job.
+// publish joins by merging the URL sets (update wins per URL — see
+// `mergePrerenderHtmlChanges`) and taking the max generation — the job
+// renders from current source, so the newest pass's stamp is the right one
+// for every merged URL. A publish can piggyback on an in-flight job only
+// when that job's args already cover every incoming (url, operation) at an
+// equal-or-newer generation; otherwise it inserts a fresh row, which the
+// per-realm concurrency group serializes behind the running job.
 function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
@@ -127,7 +150,7 @@ function choosePrerenderHtmlCoalesceDecision(
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
         args: {
           ...existingArgs,
-          changes: mergeIncrementalChanges(
+          changes: mergePrerenderHtmlChanges(
             existingArgs.changes,
             incomingArgs.changes,
           ),

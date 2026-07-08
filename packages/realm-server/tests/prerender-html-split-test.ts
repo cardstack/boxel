@@ -80,7 +80,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'insert' });
     });
 
-    test('joins a pending job, merging changes delete-sticky and taking the max generation', function (assert) {
+    test('joins a pending job, merging changes update-wins and taking the max generation', function (assert) {
       let existing = prerenderHtmlArgs({
         changes: [
           { url: `${testRealm}1.json`, operation: 'delete' },
@@ -141,12 +141,51 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         byUrl.get(`${testRealm}1.json`),
-        'delete',
-        'delete is sticky across merged changes',
+        'update',
+        'update wins across merged changes: a pending delete must not swallow a later re-create',
       );
       assert.strictEqual(byUrl.get(`${testRealm}2.json`), 'update');
       assert.strictEqual(byUrl.get(`${testRealm}3.json`), 'update');
       assert.strictEqual(mergedArgs.changes.length, 3, 'URLs are deduped');
+    });
+
+    test('a pending merge keeps update over a later delete: the visit consults disk truth', function (assert) {
+      // The render of an update-tagged URL whose file is gone writes
+      // nothing, so the up-front tombstone lands the deletion anyway —
+      // keeping 'update' is safe in both merge directions.
+      let existing = prerenderHtmlArgs({
+        changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+        generation: 3,
+        loaderEpoch: 'epoch-1',
+        spawningJobId: 100,
+      });
+      let incoming = prerenderHtmlArgs({
+        changes: [{ url: `${testRealm}1.json`, operation: 'delete' }],
+        generation: 4,
+        loaderEpoch: 'epoch-1',
+        spawningJobId: 200,
+      });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming, { priority: 0, timeout: 300 }),
+          candidates: [candidate(42, existing, { priority: 0, timeout: 300 })],
+        }),
+      );
+      assert.strictEqual(decision.type, 'join');
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.deepEqual(
+        mergedArgs.changes,
+        [{ url: `${testRealm}1.json`, operation: 'update' }],
+        'the merged job visits the URL and lets the missing file tombstone it',
+      );
+      assert.strictEqual(
+        mergedArgs.generation,
+        4,
+        'generation is still the max across publishes',
+      );
     });
 
     test('joins a pending job with only priority/timeout when args are unparseable', function (assert) {

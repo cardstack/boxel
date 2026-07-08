@@ -1039,8 +1039,17 @@ module(basename(import.meta.filename), function () {
             // FIXME is there a better way?
             let actualEvent = matchRealmEvent(messages, expectedEvent);
 
+            let generation = (actualEvent?.content as any)?.generation;
+            if (generation !== undefined) {
+              let hasPositiveGeneration =
+                typeof generation === 'number' && generation > 0;
+              assert.true(
+                hasPositiveGeneration,
+                `incremental event carries a positive generation: ${generation}`,
+              );
+            }
             assert.deepEqual(
-              actualEvent?.content,
+              withoutGeneration(actualEvent?.content),
               expectedEvent.content,
               'expected event was broadcast',
             );
@@ -1535,6 +1544,23 @@ module(basename(import.meta.filename), function () {
 
 function matchRealmEvent(events: MatrixEvent[], event: any) {
   return events.find(
-    (m) => m.type === event.type && isEqual(event.content, m.content),
+    (m) =>
+      m.type === event.type &&
+      isEqual(event.content, withoutGeneration(m.content)),
   );
+}
+
+// Incremental index events carry the committed realm generation, whose
+// value varies with the fixture's indexing history — matching and content
+// comparison ignore it; its shape is asserted separately.
+function withoutGeneration(content: any) {
+  if (
+    content &&
+    typeof content === 'object' &&
+    content.generation !== undefined
+  ) {
+    let { generation: _generation, ...rest } = content;
+    return rest;
+  }
+  return content;
 }

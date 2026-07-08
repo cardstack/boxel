@@ -6,6 +6,7 @@ import {
   param,
   separatedByCommas,
 } from '@cardstack/runtime-common';
+import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import fsExtra from 'fs-extra';
 const { pathExistsSync, readdirSync, removeSync } = fsExtra;
 import { join, relative } from 'path';
@@ -73,34 +74,40 @@ export async function removeRealmDatabaseArtifacts(args: {
 }) {
   let { dbAdapter, realmURL, querier } = args;
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  await cancelRunningJobsInConcurrencyGroup(
-    dbAdapter,
+  // Both of the realm's job lanes must be drained: a surviving
+  // prerender_html job would run against whatever realm later occupies this
+  // URL and stamp this realm's (higher) generation into its
+  // prerendered_html rows, silently pinning them against the monotonic swap
+  // guard until the new realm's generation catches up.
+  for (let concurrencyGroup of [
     `indexing:${realmURL}`,
-    q,
-  );
+    prerenderHtmlConcurrencyGroup(realmURL),
+  ]) {
+    await cancelRunningJobsInConcurrencyGroup(dbAdapter, concurrencyGroup, q);
 
-  let pendingJobs = (await q([
-    `SELECT id FROM jobs WHERE concurrency_group =`,
-    param(`indexing:${realmURL}`),
-    ` AND status = 'unfulfilled'`,
-  ])) as { id: number }[];
+    let pendingJobs = (await q([
+      `SELECT id FROM jobs WHERE concurrency_group =`,
+      param(concurrencyGroup),
+      ` AND status = 'unfulfilled'`,
+    ])) as { id: number }[];
 
-  if (pendingJobs.length > 0) {
-    let jobIdList: Expression[] = pendingJobs.map(({ id }) => [param(id)]);
-    // separatedByCommas/addExplicitParens overload resolution picks the wider
-    // CardExpression overload first, so we cast back to Expression for the
-    // Querier (which only accepts Expression).
+    if (pendingJobs.length > 0) {
+      let jobIdList: Expression[] = pendingJobs.map(({ id }) => [param(id)]);
+      // separatedByCommas/addExplicitParens overload resolution picks the wider
+      // CardExpression overload first, so we cast back to Expression for the
+      // Querier (which only accepts Expression).
+      await q([
+        `DELETE FROM job_reservations WHERE job_id IN`,
+        ...(addExplicitParens(separatedByCommas(jobIdList)) as Expression),
+      ]);
+    }
+
     await q([
-      `DELETE FROM job_reservations WHERE job_id IN`,
-      ...(addExplicitParens(separatedByCommas(jobIdList)) as Expression),
+      `DELETE FROM jobs WHERE concurrency_group =`,
+      param(concurrencyGroup),
+      ` AND status = 'unfulfilled'`,
     ]);
   }
-
-  await q([
-    `DELETE FROM jobs WHERE concurrency_group =`,
-    param(`indexing:${realmURL}`),
-    ` AND status = 'unfulfilled'`,
-  ]);
   await q([`DELETE FROM modules WHERE resolved_realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM boxel_index_working WHERE realm_url =`,
