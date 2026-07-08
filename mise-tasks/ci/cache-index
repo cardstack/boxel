@@ -69,13 +69,14 @@ done
 wait "$WAIT_ON_PID"
 
 echo "All realms ready. Dumping index tables..."
-# Tables that make up the cache. Keep in sync with the TRUNCATE list in
-# scripts/import-cached-index.sh. pg_dump only *warns* (exit 0) when a -t
-# pattern matches no table, so a renamed/removed table would silently drop
-# out of the cache — the guard below turns that into a hard failure.
-CACHE_TABLES=(boxel_index realm_generations realm_meta)
+# Tables that make up the cache. This is the single source of truth: the same
+# list drives pg_dump's -t args and the completeness check in the separate
+# "Verify index cache" CI step (via the sidecar written below). Keep the
+# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_working
+# tables are deliberately excluded — they are transient UNLOGGED scratch space.
+CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
 # TEMP(index-cache-fix-cs-11814): sentinel table that does not exist, to prove
-# the guard below fails the job when a table drops out of the dump. Revert before merge.
+# the verify step fails the job when a table drops out of the dump. Revert before merge.
 CACHE_TABLES+=(__guard_demo_missing_table)
 
 DUMP_ARGS=()
@@ -87,16 +88,8 @@ docker exec boxel-pg pg_dump -U postgres --data-only \
   "${DUMP_ARGS[@]}" \
   boxel > /tmp/boxel-index-cache.sql
 
-# Every expected table must have produced a COPY block. A missing block means
-# pg_dump matched no such table (typically a rename), so the cache would be
-# incomplete but the job would otherwise "succeed" — fail instead.
-for t in "${CACHE_TABLES[@]}"; do
-  if ! grep -q "^COPY public\.${t} " /tmp/boxel-index-cache.sql; then
-    echo "ERROR: no COPY block for table '${t}' in the dump — did it get renamed?"
-    echo "Update CACHE_TABLES here and the TRUNCATE list in scripts/import-cached-index.sh."
-    exit 1
-  fi
-done
+# Record exactly which tables we dumped so the verify step checks the same set.
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache.tables
 
 gzip /tmp/boxel-index-cache.sql
 
