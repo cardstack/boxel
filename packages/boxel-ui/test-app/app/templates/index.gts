@@ -56,75 +56,102 @@ function importStatementFor(title: string): string {
 class IndexComponent extends Component {
   <template>
     {{pageTitle 'Boxel Components'}}
-    <CardContainer
-      class='boxel-freestyle-guide-container'
-      @isThemed={{true}}
-      style={{this.theme.styles}}
-    >
-      <BasicDropdownWormhole />
-
-      <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
-      <FreestyleGuide
-        class='boxel-freestyle-guide'
-        @title='Boxel UI Components'
-        @subtitle='Living Component Documentation'
+    {{! data-theme sets the inherited --boxel-color-scheme signal (theme.css)
+        that the scoped theme stylesheet's dark container query reads, so it
+        must live on an ancestor of the themed CardContainer. }}
+    <div class='boxel-freestyle-mode-wrapper' data-theme={{this.mode}}>
+      <CardContainer
+        class='boxel-freestyle-guide-container'
+        @isThemed={{true}}
+        @themeCss={{this.theme.cssVariables}}
+        @themeScope='boxel-freestyle-guide'
       >
-        <BoxelContainer class='boxel-freestyle-theme-settings' @display='flex'>
-          <FieldContainer @label='Theme' @tag='label'>
-            <BoxelSelect
-              class='boxel-freestyle-theme-selector'
-              @placeholder='Select Theme'
-              @selected={{this.theme}}
-              @options={{this.themes}}
-              @onChange={{this.selectTheme}}
-              as |theme|
-            >
-              {{theme.name}}
-            </BoxelSelect>
-          </FieldContainer>
-          <FieldContainer @label='Cycle Themes' @tag='label'>
-            <Switch
-              @label='Cycle Themes'
-              @isEnabled={{this.isCycleThemesEnabled}}
-              @onChange={{this.toggleCycling}}
-            />
-          </FieldContainer>
-        </BoxelContainer>
-        <FreestyleSection @name='Icons' class='freestyle-components-section'>
-          <IconsGrid />
-        </FreestyleSection>
-        <FreestyleSection
-          @name='Components'
-          class='freestyle-components-section'
-          as |Section|
+        <BasicDropdownWormhole />
+
+        <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
+        <FreestyleGuide
+          class='boxel-freestyle-guide'
+          @title='Boxel UI Components'
+          @subtitle='Living Component Documentation'
         >
-          {{#each this.usageComponents key='title' as |c|}}
-            <Section.subsection @name={{formatComponentName c.title}}>
-              <BoxelContainer>
-                <div class='subsection-import'>
-                  <code
-                    class='subsection-import-code'
-                  >{{c.importStatement}}</code>
-                  <CopyButton
-                    @textToCopy={{c.importStatement}}
-                    @tooltipText='Copy import'
-                    @ariaLabel='Copy import statement'
-                    @size='small'
-                  />
-                </div>
-                <CardContainer
-                  class='subsection-card'
-                  @displayBoundaries={{true}}
+          <BoxelContainer
+            class='boxel-freestyle-theme-settings'
+            @display='flex'
+          >
+            <div class='boxel-freestyle-theme-row'>
+              <FieldContainer
+                class='boxel-freestyle-theme-field'
+                @inline={{true}}
+                @label='Theme'
+                @tag='label'
+              >
+                <BoxelSelect
+                  class='boxel-freestyle-theme-selector'
+                  @placeholder='Select Theme'
+                  @selected={{this.theme}}
+                  @options={{this.themes}}
+                  @onChange={{this.selectTheme}}
+                  as |theme|
                 >
-                  <c.component />
-                </CardContainer>
-              </BoxelContainer>
-            </Section.subsection>
-          {{/each}}
-        </FreestyleSection>
-      </FreestyleGuide>
-    </CardContainer>
+                  {{theme.name}}
+                </BoxelSelect>
+              </FieldContainer>
+              <FieldContainer @inline={{true}} @label='Dark Mode' @tag='label'>
+                <Switch
+                  @label='Dark Mode'
+                  @isEnabled={{this.isDarkMode}}
+                  @onChange={{this.toggleMode}}
+                />
+              </FieldContainer>
+            </div>
+            <FieldContainer @inline={{true}} @label='Cycle Themes' @tag='label'>
+              <Switch
+                @label='Cycle Themes'
+                @isEnabled={{this.isCycleThemesEnabled}}
+                @onChange={{this.toggleCycling}}
+              />
+            </FieldContainer>
+          </BoxelContainer>
+          <FreestyleSection @name='Icons' class='freestyle-components-section'>
+            <IconsGrid />
+          </FreestyleSection>
+          <FreestyleSection
+            @name='Components'
+            class='freestyle-components-section'
+            as |Section|
+          >
+            {{#each this.usageComponents key='title' as |c|}}
+              <Section.subsection @name={{formatComponentName c.title}}>
+                <BoxelContainer>
+                  <div class='subsection-import'>
+                    <code
+                      class='subsection-import-code'
+                    >{{c.importStatement}}</code>
+                    <CopyButton
+                      @textToCopy={{c.importStatement}}
+                      @tooltipText='Copy import'
+                      @ariaLabel='Copy import statement'
+                      @size='small'
+                    />
+                  </div>
+                  <CardContainer
+                    class='subsection-card'
+                    @displayBoundaries={{true}}
+                  >
+                    <c.component />
+                  </CardContainer>
+                </BoxelContainer>
+              </Section.subsection>
+            {{/each}}
+          </FreestyleSection>
+        </FreestyleGuide>
+      </CardContainer>
+    </div>
     <style scoped>
+      .boxel-freestyle-mode-wrapper {
+        height: 100%;
+        background-color: var(--background);
+      }
       .boxel-freestyle-guide-container {
         border-radius: 0;
       }
@@ -136,6 +163,11 @@ class IndexComponent extends Component {
         top: var(--boxel-sp-lg);
         right: var(--boxel-sp-4xl);
         width: min-content;
+      }
+      .boxel-freestyle-theme-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
       .boxel-freestyle-theme-selector {
         min-width: 10rem;
@@ -324,7 +356,12 @@ class IndexComponent extends Component {
   @service declare private router: RouterService;
 
   @tracked private theme?: Theme;
+  @tracked private mode: 'light' | 'dark' = 'light';
   @tracked private isCycleThemesEnabled = false;
+
+  private get isDarkMode() {
+    return this.mode === 'dark';
+  }
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -332,7 +369,11 @@ class IndexComponent extends Component {
     if (!queryParams) {
       return;
     }
-    let { cycleThemes, theme } = queryParams;
+    let { cycleThemes, mode, theme } = queryParams;
+
+    if (mode === 'dark') {
+      this.mode = 'dark';
+    }
 
     let currentTheme = this.themes.find((t) => t.name === theme);
     this.selectTheme(currentTheme);
@@ -347,6 +388,13 @@ class IndexComponent extends Component {
     this.theme = theme;
     this.router.replaceWith('index', {
       queryParams: { theme: this.theme?.name },
+    });
+  }
+
+  @action private toggleMode() {
+    this.mode = this.mode === 'dark' ? 'light' : 'dark';
+    this.router.replaceWith('index', {
+      queryParams: { mode: this.mode === 'dark' ? 'dark' : null },
     });
   }
 

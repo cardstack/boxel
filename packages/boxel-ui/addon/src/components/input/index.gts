@@ -284,7 +284,7 @@ export default class BoxelInput extends Component<Signature> {
             var(--boxel-form-control-height)
           );
           padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-          background-color: var(--background, var(--boxel-light));
+          background-color: var(--input, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
           border: 1px solid
             var(--border, var(--boxel-form-control-border-color));
@@ -357,7 +357,7 @@ export default class BoxelInput extends Component<Signature> {
         .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
             .search
           ) {
-          border-color: var(--border, currentColor);
+          border-color: currentColor;
         }
 
         .invalid:not(:disabled) {
@@ -585,7 +585,7 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
-          border-color: var(--boxel-dark);
+          border-color: currentColor;
         }
 
         .boxel-input[type='checkbox']:hover:not(:disabled):checked {

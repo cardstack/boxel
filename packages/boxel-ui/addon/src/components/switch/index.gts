@@ -38,20 +38,25 @@ export default class Switch extends Component<SwitchSiganture> {
     <style scoped>
       @layer {
         .switch {
-          width: 34px;
-          height: 20px;
-          border-radius: 20px;
-          padding: 2.5px;
+          --_switch-bg-color: var(--boxel-switch-background, var(--input));
+          --_switch-active-color: var(
+            --boxel-switch-active-background,
+            var(--success, var(--primary))
+          );
+          --_switch-thumb-color: var(--boxel-switch-thumb, var(--background));
+
+          width: var(--boxel-switch-width, 2.125rem);
+          height: var(--boxel-switch-height, 1.25rem);
+          border-radius: 1.25rem;
+          padding: 1px;
           display: inline-flex;
           align-items: center;
           transition: background-color 0.1s ease-in;
           position: relative;
-
-          --switch-bg-color: var(--boxel-400);
-          --switch-active-color: var(--primary, var(--boxel-dark-green));
-          --switch-thumb-color: var(--boxel-light);
-
-          background-color: var(--switch-bg-color);
+          background-color: var(--_switch-bg-color);
+          color: var(--boxel-switch-foreground, var(--foreground));
+          border: 1px solid var(--border);
+          box-shadow: var(--shadow-xs);
         }
 
         input[type='checkbox'] {
@@ -62,14 +67,14 @@ export default class Switch extends Component<SwitchSiganture> {
           margin: 0;
           height: 100%;
           aspect-ratio: 1;
-          background-color: var(--switch-thumb-color);
+          background-color: var(--_switch-thumb-color);
           border-radius: 50%;
           margin-left: 0;
           transition: margin-left 0.1s ease-in;
         }
 
         .switch.checked {
-          background-color: var(--switch-active-color);
+          background-color: var(--_switch-active-color);
         }
 
         .switch.checked .switch-input {
