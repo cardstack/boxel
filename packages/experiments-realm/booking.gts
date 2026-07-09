@@ -5,9 +5,9 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 import { Person } from './person';
 import CalendarCheck from '@cardstack/boxel-icons/calendar-check';
 

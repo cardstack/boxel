@@ -1,6 +1,6 @@
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 import { Seller as SellerCard } from './seller';
 import {
   MonetaryAmount as MonetaryAmountField,
@@ -14,8 +14,8 @@ import {
   containsMany,
   StringField,
   FieldsTypeFor,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

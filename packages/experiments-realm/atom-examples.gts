@@ -10,8 +10,8 @@ import {
   Component,
   FieldDef,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
 import AtomIcon from '@cardstack/boxel-icons/atom';
 import { Button } from '@cardstack/boxel-ui/components';
 import { Author } from './author';

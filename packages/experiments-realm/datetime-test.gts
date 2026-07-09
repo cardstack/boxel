@@ -3,9 +3,9 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import DateTimeField from '@cardstack/base/datetime';
+import StringField from '@cardstack/base/string';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 export class DateTimeTest extends CardDef {

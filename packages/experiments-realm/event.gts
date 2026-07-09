@@ -1,5 +1,5 @@
 import { Person as PersonCard } from './person';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
@@ -10,7 +10,7 @@ import {
   CardDef,
   linksTo,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import TextAreaField from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';

@@ -6,7 +6,7 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import {
   FieldContainer,
   Pill,

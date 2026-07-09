@@ -5,7 +5,7 @@ import {
   StringField,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import UseAiAssistantTool from '@cardstack/boxel-host/commands/ai-assistant';
 import SendBotTriggerEventTool from '@cardstack/boxel-host/commands/send-bot-trigger-event';

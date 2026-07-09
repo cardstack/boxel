@@ -5,15 +5,15 @@ import type Owner from '@ember/owner';
 
 import { identifyCard, type getCards } from '@cardstack/runtime-common';
 
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import {
   CardDef,
   Component,
   field,
   contains,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 // A single item the playground lists, creates, edits, and deletes. The status
 // field drives which live query a widget belongs to; priority drives the sort.

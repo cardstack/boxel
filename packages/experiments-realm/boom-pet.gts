@@ -6,7 +6,7 @@ import {
   FieldDef,
   StringField,
   serialize,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 // this field explodes when serialized (saved)
 export class BoomField extends FieldDef {
