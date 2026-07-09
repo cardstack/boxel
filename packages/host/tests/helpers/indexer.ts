@@ -97,6 +97,17 @@ export type TestIndexRow =
       >;
     };
 
+export interface SetupIndexOptions {
+  // When `false`, `setupIndex` seeds only `boxel_index(_working)` and leaves
+  // `prerendered_html(_working)` empty. The default projects the HTML/markdown
+  // columns and generation onto `prerendered_html(_working)` — mirroring the
+  // production backfill + dual-write — so tests read HTML/markdown through the
+  // real `prerendered_html` path rather than the transitional `boxel_index`
+  // fallback. Only a test that manages `prerendered_html` rows itself (to
+  // exercise the fallback vs the mirror) needs to opt out.
+  prerenderedHtml?: boolean;
+}
+
 // There are 3 ways to setup an index:
 // 1. provide the raw data for each row in the boxel_index table
 // 2. provide a card instance for each row in the boxel_index table
@@ -110,24 +121,53 @@ export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   indexRows: TestIndexRow[],
+  options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   versionRows: RealmGenerationsTable[],
   indexRows: { working: TestIndexRow[]; production: TestIndexRow[] },
+  options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   versionRows: RealmGenerationsTable[],
   indexRows: TestIndexRow[],
+  options?: SetupIndexOptions,
 ): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
   maybeVersionRows: RealmGenerationsTable[] | TestIndexRow[] = [],
-  maybeWorkingProductionRows?:
+  maybeRowsOrOptions?:
     | TestIndexRow[]
-    | { working: TestIndexRow[]; production: TestIndexRow[] },
+    | { working: TestIndexRow[]; production: TestIndexRow[] }
+    | SetupIndexOptions,
+  maybeOptions: SetupIndexOptions = {},
 ): Promise<void> {
+  // The two-arg form `setupIndex(client, indexRows, options?)` passes options in
+  // the third position; the versionRows forms pass rows there and options
+  // fourth. Options are the only third-arg shape that is neither an array nor a
+  // `{ working, production }` object, so disambiguate on that.
+  let maybeWorkingProductionRows:
+    | TestIndexRow[]
+    | { working: TestIndexRow[]; production: TestIndexRow[] }
+    | undefined;
+  let options: SetupIndexOptions;
+  if (
+    maybeRowsOrOptions != null &&
+    !Array.isArray(maybeRowsOrOptions) &&
+    !('working' in maybeRowsOrOptions)
+  ) {
+    maybeWorkingProductionRows = undefined;
+    options = maybeRowsOrOptions;
+  } else {
+    maybeWorkingProductionRows = maybeRowsOrOptions as
+      | TestIndexRow[]
+      | { working: TestIndexRow[]; production: TestIndexRow[] }
+      | undefined;
+    options = maybeOptions;
+  }
+
   let versionRows: RealmGenerationsTable[];
   let workingRows: TestIndexRow[] = [];
   let productionRows: TestIndexRow[] = [];
@@ -217,6 +257,72 @@ export async function setupIndex(
       coerceTypes,
     );
   }
+
+  if (options.prerenderedHtml !== false) {
+    if (workingIndexedCardsExpressions.length > 0) {
+      await projectPrerenderedHtml(client, 'working');
+    }
+    if (productionIndexedCardsExpressions.length > 0) {
+      await projectPrerenderedHtml(client, 'production');
+    }
+  }
+}
+
+// Project the HTML/markdown columns (and generation) of the `boxel_index(_working)`
+// rows onto `prerendered_html(_working)`, matching the production backfill +
+// dual-write (`IndexWriter.syncPrerenderedHtmlFromWorking`): same column mapping,
+// `indexed_at` seeds `rendered_at`, and `icon_html` stays on `boxel_index`. The
+// SELECT covers every row in the source table — in a freshly-seeded test DB
+// those are exactly the rows `setupIndex` just wrote — and the upsert keeps the
+// projection idempotent. This lets tests read HTML/markdown through the real
+// `prerendered_html` path — the path that remains once the `boxel_index` HTML
+// columns and the dual-read fallback are dropped.
+async function projectPrerenderedHtml(
+  client: DBAdapter,
+  table: 'working' | 'production',
+) {
+  let source = table === 'working' ? 'boxel_index_working' : 'boxel_index';
+  let target =
+    table === 'working' ? 'prerendered_html_working' : 'prerendered_html';
+  // `job_id` exists only on the working tables.
+  let jobIdColumn = table === 'working' ? ', job_id' : '';
+  let mutableColumns = [
+    'file_alias',
+    'fitted_html',
+    'embedded_html',
+    'atom_html',
+    'head_html',
+    'isolated_html',
+    'markdown',
+    'deps',
+    'last_known_good_deps',
+    'generation',
+    'is_deleted',
+    'error_doc',
+    'rendered_at',
+    ...(table === 'working' ? ['job_id'] : []),
+  ];
+  await query(
+    client,
+    [
+      `INSERT INTO ${target} (
+         url, file_alias, realm_url, type,
+         fitted_html, embedded_html, atom_html, head_html, isolated_html,
+         markdown, deps, last_known_good_deps,
+         generation, is_deleted, error_doc, rendered_at${jobIdColumn}
+       )
+       SELECT
+         url, file_alias, realm_url, type,
+         fitted_html, embedded_html, atom_html, head_html, isolated_html,
+         markdown, deps, last_known_good_deps,
+         generation, is_deleted, error_doc, indexed_at${jobIdColumn}
+       FROM ${source}
+       WHERE 1=1
+       ON CONFLICT ON CONSTRAINT ${target}_pkey DO UPDATE SET ` +
+        mutableColumns.map((name) => `${name}=EXCLUDED.${name}`).join(', '),
+    ] as Expression,
+    coerceTypes,
+  );
 }
 
 async function indexedCardsExpressions({

@@ -28,6 +28,7 @@ import {
 import { MatrixClient } from './matrix-client.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -99,6 +100,7 @@ export class Worker {
   #secretSeed: string;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #reportProgress: ((event: IndexingProgressEvent) => void) | undefined;
+  #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #createPrerenderAuth: (
     userId: string,
@@ -116,6 +118,7 @@ export class Worker {
     secretSeed,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
   }: {
@@ -130,6 +133,7 @@ export class Worker {
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
     reportProgress?: (event: IndexingProgressEvent) => void;
+    reportRealmEvent?: (event: RealmEventContent) => void;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -142,6 +146,7 @@ export class Worker {
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
     this.#reportProgress = reportProgress;
+    this.#reportRealmEvent = reportRealmEvent;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
@@ -169,6 +174,7 @@ export class Worker {
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
       reportProgress: this.reportProgress.bind(this),
+      reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
     };
 
@@ -265,6 +271,10 @@ export class Worker {
 
   private reportProgress(event: IndexingProgressEvent) {
     this.#reportProgress?.(event);
+  }
+
+  private reportRealmEvent(event: RealmEventContent) {
+    this.#reportRealmEvent?.(event);
   }
 }
 

@@ -4,6 +4,7 @@ import type OpenAI from 'openai';
 import { errorReporter } from './sentry.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import {
+  constructHistory,
   getPromptParts,
   isRecognisedDebugCommand,
   sendErrorEvent,
@@ -31,8 +32,10 @@ To get the prompt sent to the AI with the last user message:\n
   debug:prompt\n
 To get the prompt but with some events removed:\n
   debug:prompt:(number of events to remove)\n
-To get the raw event list:\n
+To get the event list with streaming edits applied (what the model sees):\n
   debug:eventlist\n
+To get the raw event list, without streaming edits applied:\n
+  debug:eventlist:raw\n
 To set the room name:\n
   debug:title:set:\n
 To throw an error:\n
@@ -90,8 +93,42 @@ To patch a card:\n
     }
   }
 
-  if (eventBody.startsWith('debug:eventlist')) {
-    await sendEventListAsDebugMessage(client, roomId, eventList);
+  if (eventBody.startsWith('debug:eventlist:raw')) {
+    await sendEventListAsDebugMessage(
+      client,
+      roomId,
+      eventList,
+      'This is the raw timeline: streamed messages show their original placeholder content, not their final edits.',
+    );
+  } else if (eventBody.startsWith('debug:eventlist')) {
+    try {
+      // constructHistory mutates the events it is given; aggregate a clone so
+      // the fallback below still dumps the untouched raw timeline
+      let aggregatedEventList = await constructHistory(
+        structuredClone(eventList),
+        client,
+      );
+      await sendEventListAsDebugMessage(
+        client,
+        roomId,
+        aggregatedEventList,
+        'Each message shows its final content, with streaming edits applied and continuations joined. Use debug:eventlist:raw for the unaggregated timeline.',
+      );
+    } catch (error) {
+      errorReporter.captureException(error, {
+        extra: {
+          roomId: roomId,
+          userId: userId,
+          eventBody: eventBody,
+        },
+      });
+      await sendEventListAsDebugMessage(
+        client,
+        roomId,
+        eventList,
+        `Failed to apply streaming edits (${error}); this is the raw timeline instead.`,
+      );
+    }
   }
   // Explicitly set the room name
   if (eventBody.startsWith('debug:title:set:')) {

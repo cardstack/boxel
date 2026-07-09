@@ -526,6 +526,105 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('sanitizes jsonb-illegal code points in content columns before write', async function (assert) {
+    // Postgres rejects the NUL character and unpaired UTF-16 surrogate halves
+    // inside a jsonb value's text (22P05), which aborts the whole upsert batch
+    // — a single bad card strands an entire realm's from-scratch index. These
+    // code points reach the writer inside rendered card content: a stray NUL
+    // folded in from an upstream resolver, or a valid astral-plane emoji whose
+    // surrogate pair was split by an upstream truncation. updateEntry must
+    // strip them from every content column while leaving valid content intact.
+    const NUL = '\u0000';
+    const LONE_HIGH = '\uD83E'; // high surrogate with no trailing low
+    const LONE_LOW = '\uDDE9'; // low surrogate with no leading high
+    const VALID_EMOJI = '🧩'; // 🧩 — a well-formed surrogate pair
+    const REPLACEMENT = '\uFFFD';
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+
+    let resource: CardResource = {
+      id: testRRI('1.json'),
+      type: 'card',
+      attributes: {
+        name: `Van${NUL}Gogh`,
+        bio: `high:${LONE_HIGH} emoji:${VALID_EMOJI} low:${LONE_LOW}`,
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri(`./person`),
+          name: 'Person',
+        },
+      },
+    };
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'instance',
+      resource,
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: {
+        name: `Van${NUL}Gogh`,
+        bio: `high:${LONE_HIGH} emoji:${VALID_EMOJI} low:${LONE_LOW}`,
+      },
+      markdown: `# Title${NUL} ${LONE_HIGH} keep ${VALID_EMOJI}`,
+      deps: new Set([`${testRealmURL}person`]),
+      displayNames: [`Person${NUL}`],
+      types: [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+        (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+      ),
+    });
+
+    let [row] = await adapter.execute(
+      `SELECT pristine_doc, search_doc, display_names, markdown FROM boxel_index_working WHERE url = $1`,
+      {
+        bind: [`${testRealmURL}1.json`],
+        coerceTypes: {
+          pristine_doc: 'JSON',
+          search_doc: 'JSON',
+          display_names: 'JSON',
+        },
+      },
+    );
+
+    let pristine = row.pristine_doc as unknown as LooseCardResource;
+    let search = row.search_doc as unknown as Record<string, string>;
+    let displayNames = row.display_names as unknown as string[];
+
+    assert.strictEqual(
+      pristine.attributes?.name,
+      `Van${REPLACEMENT}Gogh`,
+      'NUL in pristine_doc string is replaced',
+    );
+    assert.strictEqual(
+      search.name,
+      `Van${REPLACEMENT}Gogh`,
+      'NUL in search_doc string is replaced',
+    );
+    assert.strictEqual(
+      search.bio,
+      `high:${REPLACEMENT} emoji:${VALID_EMOJI} low:${REPLACEMENT}`,
+      'lone surrogates are replaced while the valid emoji pair is preserved',
+    );
+    assert.strictEqual(
+      row.markdown,
+      `# Title${REPLACEMENT} ${REPLACEMENT} keep ${VALID_EMOJI}`,
+      'markdown column is sanitized and keeps the valid emoji',
+    );
+    assert.deepEqual(
+      displayNames,
+      [`Person${REPLACEMENT}`],
+      'display_names entries are sanitized',
+    );
+  });
+
   test('dual-writes prerendered HTML on index and swaps it into production on done', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
@@ -753,6 +852,8 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
+    // setupIndex seeds the source realm's prerendered_html (as the backfill +
+    // dual-write do in production), so the copy has a rendering to source.
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL2),
       virtualNetwork,
@@ -784,15 +885,317 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('copyFrom sources HTML from prerendered_html and rewrites realm keys', async function (assert) {
+    let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
+      (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+    );
+    let destTypes = [
+      { module: rri(`./person`), name: 'Person' },
+      baseCardRef,
+    ].map((i) => internalKeyFor(i, new URL(testRealmURL2), virtualNetwork));
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          last_known_good_deps: [`${testRealmURL}person`],
+          types,
+          embedded_html: Object.fromEntries(
+            types.map((type) => [type, `<div class="embedded">${type}</div>`]),
+          ),
+          fitted_html: Object.fromEntries(
+            types.map((type) => [type, `<div class="fitted">${type}</div>`]),
+          ),
+          // The boxel_index HTML deliberately diverges from what we write onto
+          // prerendered_html below, so the copied HTML can only be correct if it
+          // was sourced from prerendered_html rather than the boxel_index column.
+          isolated_html: `<div class="isolated">FROM boxel_index (stale)</div>`,
+          markdown: 'boxel_index markdown (stale)',
+        },
+      ],
+    );
+    // setupIndex seeds the source realm's prerendered_html (backfill +
+    // dual-write do this in production); diverge its rendering from the
+    // boxel_index column with a sentinel a boxel_index-sourced copy could never
+    // produce.
+    await adapter.execute(
+      `UPDATE prerendered_html SET isolated_html = $1, markdown = $2 WHERE url = $3 AND realm_url = $4`,
+      {
+        bind: [
+          `<div class="isolated">FROM prerendered_html</div>`,
+          'prerendered_html markdown',
+          `${testRealmURL}1.json`,
+          testRealmURL,
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT url, file_alias, realm_url, isolated_html, markdown, fitted_html, embedded_html, deps, last_known_good_deps, generation, is_deleted
+       FROM prerendered_html WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL2],
+        coerceTypes: {
+          fitted_html: 'JSON',
+          embedded_html: 'JSON',
+          deps: 'JSON',
+          last_known_good_deps: 'JSON',
+          is_deleted: 'BOOLEAN',
+        },
+      },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+
+    assert.deepEqual(
+      rendered,
+      {
+        url: `${testRealmURL2}1.json`,
+        file_alias: `${testRealmURL2}1`,
+        realm_url: testRealmURL2,
+        // Sourced from prerendered_html, not the (divergent) boxel_index column.
+        isolated_html: `<div class="isolated">FROM prerendered_html</div>`,
+        markdown: 'prerendered_html markdown',
+        // Render-type keys rewritten to the destination realm.
+        fitted_html: Object.fromEntries(
+          destTypes.map((type, i) => [
+            type,
+            `<div class="fitted">${types[i]}</div>`,
+          ]),
+        ),
+        embedded_html: Object.fromEntries(
+          destTypes.map((type, i) => [
+            type,
+            `<div class="embedded">${types[i]}</div>`,
+          ]),
+        ),
+        deps: [`${testRealmURL2}person`],
+        last_known_good_deps: [`${testRealmURL2}person`],
+        generation: 2,
+        // Preserved from the source row (a live row; the copy carries its
+        // is_deleted through, matching the boxel_index copy).
+        is_deleted: null,
+      },
+      'copied prerendered_html is sourced from prerendered_html with realm keys/deps rewritten and the dest generation stamped',
+    );
+
+    // The boxel_index HTML column is also copied (the dual-read fallback), and
+    // it legitimately differs from the prerendered_html rendering — so the
+    // assertion above is not trivially satisfied.
+    let [indexRow] = (await adapter.execute(
+      `SELECT isolated_html FROM boxel_index WHERE url = $1`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as BoxelIndexTable[];
+    assert.strictEqual(
+      indexRow.isolated_html,
+      `<div class="isolated">FROM boxel_index (stale)</div>`,
+      'boxel_index HTML is copied independently and diverges from prerendered_html',
+    );
+  });
+
+  test('copyFrom refreshes a destination prerendered_html row whose source has none', async function (assert) {
+    // Source row has boxel_index HTML but no prerendered_html row (an indexed
+    // row without a rendering). The destination already carries a stale
+    // prerendered_html row for the same URL. The copy must refresh it (via the
+    // boxel_index projection, which the prerendered_html overlay leaves in place
+    // for a row the source lacks) rather than leave the stale rendering for the
+    // dual-read to prefer.
+    let resource: CardResource = {
+      id: testRRI('1'),
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          isolated_html: `<div class="isolated">SOURCE via boxel_index</div>`,
+          markdown: 'source boxel_index markdown',
+        },
+      ],
+    );
+    // Drop the source's prerendered_html row that setupIndex seeded so this row
+    // is a gap the copy must fill from boxel_index. Pre-seed a stale destination
+    // prerendered_html row for the URL the copy will write.
+    await adapter.execute(
+      `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2`,
+      { bind: [`${testRealmURL}1.json`, testRealmURL] },
+    );
+    await adapter.execute(
+      `INSERT INTO prerendered_html (url, file_alias, realm_url, type, isolated_html, markdown, generation, is_deleted, rendered_at)
+       VALUES ($1, $2, $3, 'instance', $4, $5, 1, false, $6)`,
+      {
+        bind: [
+          `${testRealmURL2}1.json`,
+          `${testRealmURL2}1`,
+          testRealmURL2,
+          `<div class="isolated">STALE destination</div>`,
+          'stale destination markdown',
+          String(Date.now()),
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let [rendered] = (await adapter.execute(
+      `SELECT isolated_html, markdown, generation FROM prerendered_html WHERE url = $1`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.strictEqual(
+      rendered?.isolated_html,
+      `<div class="isolated">SOURCE via boxel_index</div>`,
+      'the stale destination rendering is refreshed from the copied boxel_index HTML',
+    );
+    assert.strictEqual(
+      rendered?.markdown,
+      'source boxel_index markdown',
+      'markdown is refreshed too',
+    );
+    assert.strictEqual(
+      rendered?.generation,
+      2,
+      'the refreshed row is stamped at the dest-realm generation',
+    );
+  });
+
+  test('copyFrom fills every (url, type) even when the source prerendered_html covers only one type', async function (assert) {
+    // The same URL can carry both an instance and a file boxel_index row. If the
+    // source's prerendered_html has a row for only one of them, the copy must
+    // still land a prerendered_html row for both — the covered type sourced from
+    // prerendered_html, the other filled from the boxel_index projection — so no
+    // type is left without a rendering.
+    let resource: LooseCardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: { name: 'Mango' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          type: 'instance',
+          generation: 1,
+          realm_url: testRealmURL,
+          pristine_doc: resource,
+          search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
+          deps: [`${testRealmURL}person`],
+          isolated_html: `<div class="isolated">instance boxel_index</div>`,
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          type: 'file',
+          generation: 1,
+          realm_url: testRealmURL,
+          search_doc: { name: '1.json' },
+          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
+        },
+      ],
+    );
+    // setupIndex seeds prerendered_html for both types; drop the file row so the
+    // source covers only the instance, then diverge the instance rendering with
+    // a sentinel.
+    await adapter.execute(
+      `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2 AND type = 'file'`,
+      { bind: [`${testRealmURL}1.json`, testRealmURL] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 AND realm_url = $3 AND type = 'instance'`,
+      {
+        bind: [
+          `<div class="isolated">INSTANCE from prerendered_html</div>`,
+          `${testRealmURL}1.json`,
+          testRealmURL,
+        ],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL2),
+      virtualNetwork,
+    );
+    await batch.copyFrom(new URL(testRealmURL));
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT type, isolated_html, generation FROM prerendered_html WHERE url = $1 ORDER BY type COLLATE "POSIX"`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as Partial<PrerenderedHtmlTable>[];
+    assert.deepEqual(
+      rows,
+      [
+        {
+          type: 'file',
+          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
+          generation: 2,
+        },
+        {
+          type: 'instance',
+          isolated_html: `<div class="isolated">INSTANCE from prerendered_html</div>`,
+          generation: 2,
+        },
+      ],
+      'both types land a prerendered_html row: instance sourced from prerendered_html, file from the boxel_index projection',
+    );
+  });
+
   test('promotes prerendered_html for rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
     // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
     // (with HTML) but never mirrored it onto prerendered_html_working — the
     // crash-window / pre-dual-write-deploy case. prerendered_html_working is
-    // left empty. A resuming batch re-adds the URL to the invalidation set but
-    // never re-runs updateEntry, so the batch-commit projection must source
-    // from boxel_index_working or the row lands in boxel_index but is silently
-    // skipped in prerendered_html.
+    // left empty (prerenderedHtml: false), so the batch-commit projection is the
+    // only thing that can promote the row: a resuming batch re-adds the URL to
+    // the invalidation set but never re-runs updateEntry, so the projection must
+    // source from boxel_index_working or the row lands in boxel_index but is
+    // silently skipped in prerendered_html. Auto-seeding prerendered_html_working
+    // here would mask a regression in that projection.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -814,6 +1217,7 @@ module('Unit | index-writer', function (hooks) {
         ],
         production: [],
       },
+      { prerenderedHtml: false },
     );
 
     let batch = await indexWriter.createBatch(
@@ -1234,6 +1638,56 @@ module('Unit | index-writer', function (hooks) {
       errorDocDiagnostics,
       diagnostics,
       'error_doc.diagnostics mirrors diagnostics',
+    );
+  });
+
+  test('error entry keeps freshly-stamped synthetic search keys over the last-known-good doc', async function (assert) {
+    // Rollout case: a `file` row indexed before `_isCardInstance` / `_title`
+    // existed, then hit by a dependency-error reindex. The fresh searchData
+    // carries the synthetic keys and must survive rather than being clobbered
+    // by the production doc, while last-known-good fields (here `extra`) still
+    // carry forward.
+    let timestamp = Date.now();
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: '1.json', extra: 'keep-me' },
+          last_modified: String(timestamp),
+          resource_created_at: String(timestamp),
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'file-error',
+      error: { message: 'dep in error', status: 500, additionalErrors: [] },
+      searchData: { name: '1.json', _isCardInstance: true, _title: '1.json' },
+    });
+    await batch.done();
+
+    let [row] = (await adapter.execute(
+      "SELECT search_doc FROM boxel_index WHERE generation = 2 AND type = 'file' AND has_error = TRUE",
+      { coerceTypes },
+    )) as unknown as BoxelIndexTable[];
+    assert.deepEqual(
+      row.search_doc,
+      {
+        name: '1.json',
+        extra: 'keep-me',
+        _isCardInstance: true,
+        _title: '1.json',
+      },
+      'error row merges freshly-stamped synthetic keys onto the last-known-good doc',
     );
   });
 

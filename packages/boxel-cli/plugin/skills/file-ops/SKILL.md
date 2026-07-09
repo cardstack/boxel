@@ -10,15 +10,15 @@ Wraps the `boxel file` subcommands that operate on a single path inside a realm.
 
 The realm URL is always passed via `--realm`, the realm-relative path is positional.
 
-| Ask | Run |
-|---|---|
-| "read a file from the realm" | `boxel file read <path> --realm <realm-url>` |
-| "write / upload one file" | `boxel file write <path> --realm <realm-url>` (content from stdin or `--file`) |
-| "list files in a realm" | `boxel file list --realm <realm-url>` |
-| "delete a file from the realm" | `boxel file delete <path> --realm <realm-url>` |
-| "lint a card definition" / "check for errors" | `boxel file lint <path> --realm <realm-url>` |
-| "force re-index this file" | `boxel file touch <path> --realm <realm-url>` |
-| "force re-index everything" | `boxel file touch --all --realm <realm-url>` (use sparingly) |
+| Ask                                           | Run                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------ |
+| "read a file from the realm"                  | `boxel file read <path> --realm <realm-url>`                                   |
+| "write / upload one file"                     | `boxel file write <path> --realm <realm-url>` (content from stdin or `--file`) |
+| "list files in a realm"                       | `boxel file list --realm <realm-url>`                                          |
+| "delete a file from the realm"                | `boxel file delete <path> --realm <realm-url>`                                 |
+| "lint a card definition" / "check for errors" | `boxel file lint <path> --realm <realm-url>`                                   |
+| "force re-index this file"                    | `boxel file touch <path> --realm <realm-url>`                                  |
+| "force re-index everything"                   | `boxel file touch --all --realm <realm-url>` (use sparingly)                   |
 
 ## `touch` — when it matters
 
@@ -50,6 +50,7 @@ Read a file from a realm
 **Options:**
 
 - `--realm <realm-url>` — The realm URL to read from
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--json` — Output raw JSON response
 
 ### `boxel file write <path>`
@@ -64,6 +65,7 @@ Write a file to a realm (reads content from STDIN or --file)
 
 - `--realm <realm-url>` — The realm URL to write to
 - `--file <filepath>` — Read content from a local file instead of STDIN
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--json` — Output raw JSON response
 
 ### `boxel file list`

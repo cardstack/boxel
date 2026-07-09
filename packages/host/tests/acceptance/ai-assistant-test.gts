@@ -1005,6 +1005,39 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
   });
 
+  test('"Go to current system card" closes the workspace chooser', async function (assert) {
+    await visitOperatorMode({
+      workspaceChooserOpened: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .exists('workspace chooser is open');
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+    await click('[data-test-go-to-system-card]');
+
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .doesNotExist('workspace chooser is closed after going to system card');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}SystemCard/default"]`)
+      .exists('the system card is shown on the stack');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
   test('LLM select footer shows "Restore default" when non-default system card is active', async function (assert) {
     await visitOperatorMode({
       stacks: [

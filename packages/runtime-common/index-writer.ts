@@ -47,6 +47,7 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
+  type PrerenderedHtmlTable,
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -212,6 +213,10 @@ export class Batch {
   #currentInvalidationId: string;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  // The source realm of a copy batch, set by `copyFrom`. `applyBatchUpdates`
+  // uses it to overlay the destination's prerendered HTML from the source
+  // realm's `prerendered_html` rows after the `boxel_index` projection runs.
+  #copyFromSourceRealm: URL | undefined;
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -441,6 +446,87 @@ export class Batch {
         values,
       ),
     ]);
+
+    // `applyBatchUpdates` overlays the source realm's prerendered HTML after the
+    // `boxel_index` projection runs.
+    this.#copyFromSourceRealm = sourceRealmURL;
+  }
+
+  // Overlay the source realm's `prerendered_html` rows onto the destination's
+  // `prerendered_html_working`, so a copied realm keeps its prerendered HTML
+  // without re-rendering — sourced from the `prerendered_html` channel rather
+  // than the `boxel_index` HTML columns. Runs after the `boxel_index`
+  // projection in `applyBatchUpdates` and overwrites the rows it covers, so a
+  // rendering that exists in the source's `prerendered_html` wins, while a row
+  // absent there keeps the `boxel_index`-projected HTML (the copy fills every
+  // row and leaves no gap). Mirrors the `boxel_index` copy's transforms — URL
+  // rewrite (`url`, `realm_url`, `file_alias`), render-type-key rewrite of
+  // `fitted_html` / `embedded_html`, deps rewrite (scoped-CSS URLs ride in
+  // `deps`), and `error_doc` normalization — and stamps the destination
+  // generation so the copied instances read as fresh
+  // (`prerendered_html.generation == boxel_index.generation`). Tombstoned
+  // source rows are skipped, matching the `boxel_index` copy.
+  private async copyPrerenderedHtmlFrom(sourceRealmURL: URL): Promise<void> {
+    let now = String(Date.now());
+    let sources = (await this.#query([
+      `SELECT * FROM prerendered_html WHERE`,
+      ...every([
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [`realm_url =`, param(sourceRealmURL.href)],
+      ]),
+    ] as Expression)) as unknown as PrerenderedHtmlTable[];
+    let copyURL = (value: string) =>
+      this.isRegisteredPrefix(value)
+        ? value
+        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
+    let columns: string[][] | undefined;
+    let values = sources.map((entry) => {
+      let destURL = copyURL(entry.url);
+      // The source's `prerendered_html` rows are a subset of its `boxel_index`
+      // rows, so `copyFrom` already seeded these into `#invalidations`; add
+      // defensively so the swap below promotes every overlaid HTML row.
+      this.#invalidations.add(destURL);
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.file_alias = copyURL(entry.file_alias);
+      entry.generation = this.generation;
+      entry.rendered_at = now;
+      entry.job_id = this.jobInfo?.jobId ?? null;
+      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
+      entry.last_known_good_deps = entry.last_known_good_deps
+        ? entry.last_known_good_deps.map(copyURL)
+        : entry.last_known_good_deps;
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
+        : entry.embedded_html;
+      if (entry.error_doc) {
+        entry.error_doc = this.normalizeErrorDoc(
+          entry.error_doc,
+          new URL(entry.url),
+          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
+        );
+      }
+      let { valueExpressions, nameExpressions } = asExpressions(entry);
+      columns = nameExpressions;
+      return valueExpressions;
+    });
+    if (!columns) {
+      // Source realm has no prerendered HTML to overlay (e.g. never rendered);
+      // the `boxel_index` projection already filled the working rows.
+      return;
+    }
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
@@ -489,12 +575,14 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
-    let diagnostics: Diagnostics = sanitizeForJsonb({
+    // jsonb-illegal bytes are stripped once at the write boundary below
+    // (see the sanitizeForJsonb call before asExpressions), so this and every
+    // other content column is covered in one place.
+    let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    });
+    };
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -563,15 +651,23 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'file-error':
+      case 'file-error': {
+        let production: Record<string, any> =
+          (await this.getProductionVersion(url, baseTypeFromError(entry))) ??
+          {};
         entryPayload = {
           types: entry.types,
-          search_doc: entry.searchData,
           // favor the last known good types over the types derived from the error state
-          ...((await this.getProductionVersion(
-            url,
-            baseTypeFromError(entry),
-          )) ?? {}),
+          ...production,
+          // Assign search_doc AFTER the production spread so the freshly-stamped
+          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // rather than being clobbered by the last-known-good doc. Overlaying
+          // the current searchData onto that doc keeps an instance's rich fields
+          // when it degrades to a sparse error searchData, while a file /
+          // dependency-error row (full searchData) wins outright.
+          search_doc: entry.searchData
+            ? { ...(production.search_doc ?? {}), ...entry.searchData }
+            : (production.search_doc ?? null),
           // preserve last_known_good_deps through error cycles (may have been cleared
           // by getProductionVersion if it returned undefined, so we explicitly preserve it)
           last_known_good_deps: await this.getLastKnownGoodDeps(
@@ -579,11 +675,12 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
+          error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
           diagnostics: diagnostics,
         };
         break;
+      }
       default:
         throw new Error(
           `Unsupported index entry type: ${(entry as { type: string }).type}`,
@@ -634,11 +731,24 @@ export class Batch {
       );
     }
 
-    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
-      jsonFields: [...Object.entries(coerceTypes)]
-        .filter(([_, type]) => type === 'JSON')
-        .map(([column]) => column),
-    });
+    // Strip jsonb-illegal code points from the entire row before persisting.
+    // Postgres rejects the NUL character and unpaired UTF-16 surrogate halves
+    // inside a jsonb value's text (22P05); a single such code point anywhere in
+    // the row aborts the whole upsert batch and, during a from-scratch index,
+    // strands every other card in the realm behind it. Sanitizing the prepared
+    // row here — rather than per-field — covers every content column
+    // (pristine_doc, search_doc, markdown, the *_html columns, deps,
+    // display_names, diagnostics, error_doc) in one place, including rendered
+    // card content that can carry a split emoji surrogate or a stray NUL folded
+    // in from an upstream resolver.
+    let { nameExpressions, valueExpressions } = asExpressions(
+      sanitizeForJsonb(preparedEntry),
+      {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      },
+    );
 
     await this.#query([
       ...upsert(
@@ -854,6 +964,16 @@ export class Batch {
       // and the dual-write deploy, so the swap below can never silently skip a
       // promoted URL.
       await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+
+      // For a copy, overlay the source realm's `prerendered_html` on top of the
+      // projection: a rendering the source has in `prerendered_html` overwrites
+      // the `boxel_index`-projected row (matched per `(url, type)`), and a row
+      // the source lacks there keeps the projected HTML — so the copy sources
+      // HTML from `prerendered_html` and also fills every row, leaving no
+      // stale destination row behind.
+      if (this.#copyFromSourceRealm) {
+        await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
+      }
 
       // Swap the mirrored HTML rows into production in the same transaction,
       // keyed by the same invalidation set and generation. `prerendered_html`

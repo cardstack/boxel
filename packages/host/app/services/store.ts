@@ -2240,6 +2240,13 @@ export default class StoreService extends Service implements StoreInterface {
         },
       );
       this.setIdentityContext(fileInstance as unknown as FileDef, 'file-meta');
+      // The realm may serve the doc id in canonical prefix form (e.g.
+      // `@cardstack/skills/...`) while the caller asked by URL. Register the
+      // requested id as an alias — mirroring the card path — so later lookups
+      // by either form find this instance instead of silently missing.
+      if (fileMetaDoc.data.id && fileMetaDoc.data.id !== id) {
+        this.store.setFileMeta(id, fileInstance as unknown as FileDef);
+      }
       deferred.fulfill(fileInstance as T);
       return fileInstance as T;
     } catch (error: any) {

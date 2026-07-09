@@ -37,7 +37,6 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
@@ -127,9 +126,9 @@ import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
 import {
+  sourceCodeEditingSkillUrl,
   devSkillId,
   envSkillId,
-  codeModeEntryPointSkillUrl,
 } from '../lib/utils';
 import { importResource } from '../resources/import';
 
@@ -1931,7 +1930,22 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists any default skills — legacy `Skill` cards, `.md` skill
+  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
+  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
+  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = [
+      ...(this.systemCard?.defaultSkillCards ?? []),
+      ...(this.systemCard?.defaultSkillFiles ?? []),
+    ]
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
+    }
+
     let interactModeDefaultSkills = [envSkillId];
 
     // Code editing is covered by the code-mode entry-point skill (see
@@ -1941,22 +1955,9 @@ export default class MatrixService extends Service {
     // bot supports commands on markdown skills, after which this list shrinks.
     let codeModeDefaultSkills = [devSkillId, envSkillId];
 
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
-    }
-
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -2813,19 +2814,6 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
-  // Enables the code-mode entry-point skill in a room. Every room gets it at
-  // creation: its body is small, and it routes code requests (load skills on
-  // demand, switch mode) from any submode.
-  async activateCodeModeEntryPoint(roomId: string) {
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
-    );
-    await updateRoomSkillsCommand.execute({
-      roomId,
-      skillCardIdsToActivate: [codeModeEntryPointSkillUrl],
-    });
-  }
-
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
@@ -2834,13 +2822,13 @@ export default class MatrixService extends Service {
     let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills are still pushed in full;
-      // as they convert to markdown the pushed set shrinks. The entry-point
-      // skill needs nothing here — every room enables it at creation.
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills activate alongside the
+      // markdown source-code-editing skill. All are pushed for now; the
+      // on-demand entry point returns as a catalog listing.
+      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
     });
   }
 

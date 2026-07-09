@@ -1163,6 +1163,9 @@ export default class Room extends Component<Signature> {
   private goToSystemCard() {
     let systemCardId = this.systemCardId;
     if (systemCardId) {
+      if (this.operatorModeStateService.workspaceChooserOpened) {
+        this.operatorModeStateService.closeWorkspaceChooser();
+      }
       let stackIndex = Math.min(
         this.operatorModeStateService.numberOfStacks(),
         1,

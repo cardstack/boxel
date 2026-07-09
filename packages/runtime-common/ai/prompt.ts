@@ -55,7 +55,10 @@ import {
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants.ts';
-import { decodeCommandRequest } from '../commands.ts';
+import {
+  buildCommandFunctionNameFromResolvedRef,
+  decodeCommandRequest,
+} from '../commands.ts';
 import type { CommandRequest } from '../commands.ts';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
@@ -450,7 +453,7 @@ async function getEnabledSkills(
           // choke on non-JSON. The JSON.parse fallthrough is the legacy
           // pushed-card path; it is removed when the push model is retired.
           if (isMarkdownSkillFile(cardFileDef)) {
-            let { title, body, kind } = parseMarkdownSkill(
+            let { title, body, kind, commands } = parseMarkdownSkill(
               content,
               cardFileDef,
             );
@@ -459,7 +462,7 @@ async function getEnabledSkills(
             }
             return {
               id: cardFileDef.sourceUrl,
-              attributes: { title, instructions: body },
+              attributes: { title, instructions: body, commands },
             };
           }
           return (JSON.parse(content) as LooseSingleCardDocument)?.data;
@@ -488,8 +491,17 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
   return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
 }
 
-// Splits a markdown skill into its instruction body, a title, and its
-// declared boxel.kind. The body is everything after the leading
+// A command a markdown skill contributes via its `boxel.commands`
+// frontmatter, with the functionName the host derives for the same code ref —
+// so getTools can match it against the room's uploaded command definitions.
+export interface MarkdownSkillCommand {
+  codeRef: { module: string; name: string };
+  functionName: string;
+  requiresApproval: boolean;
+}
+
+// Splits a markdown skill into its instruction body, a title, its declared
+// boxel.kind, and its frontmatter commands. The body is everything after the
 // `--- frontmatter ---` block (the frontmatter is metadata, not
 // instructions); the title is the frontmatter `name`, falling back to the
 // file name. Invalid frontmatter YAML degrades to the raw content as body —
@@ -497,10 +509,16 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
 export function parseMarkdownSkill(
   content: string,
   fileDef: SerializedFileDef,
-): { title: string; body: string; kind?: string } {
+): {
+  title: string;
+  body: string;
+  kind?: string;
+  commands: MarkdownSkillCommand[];
+} {
   let body = content;
   let title: string | undefined;
   let kind: string | undefined;
+  let commands: MarkdownSkillCommand[] = [];
   try {
     let { data, body: parsedBody } = parseFrontmatter(content);
     body = parsedBody;
@@ -514,6 +532,7 @@ export function parseMarkdownSkill(
     if (typeof boxel?.kind === 'string') {
       kind = boxel.kind;
     }
+    commands = markdownSkillCommands(data, fileDef.sourceUrl);
   } catch {
     // Malformed frontmatter: keep the full content as the body.
   }
@@ -521,7 +540,63 @@ export function parseMarkdownSkill(
     let path = fileDef.sourceUrl ?? fileDef.name ?? '';
     title = path.split('/').filter(Boolean).pop() ?? 'Skill';
   }
-  return { title, body: body.trim(), kind };
+  return { title, body: body.trim(), kind, commands };
+}
+
+// Extracts `boxel.commands` from parsed frontmatter and computes each
+// command's functionName the way the host does when it uploads the room's
+// command definitions. Package specifiers (e.g. @cardstack/boxel-host/...)
+// resolve verbatim on the host, so hashing the literal module gives the same
+// name; relative modules resolve against the skill's own URL.
+function markdownSkillCommands(
+  frontmatter: Record<string, unknown>,
+  skillUrl: string | undefined,
+): MarkdownSkillCommand[] {
+  let boxel =
+    frontmatter.boxel &&
+    typeof frontmatter.boxel === 'object' &&
+    !Array.isArray(frontmatter.boxel)
+      ? (frontmatter.boxel as Record<string, unknown>)
+      : undefined;
+  if (!Array.isArray(boxel?.commands)) {
+    return [];
+  }
+  let commands: MarkdownSkillCommand[] = [];
+  for (let entry of boxel.commands) {
+    let codeRef = (entry as { codeRef?: { module?: string; name?: string } })
+      ?.codeRef;
+    if (
+      typeof codeRef?.module !== 'string' ||
+      typeof codeRef?.name !== 'string'
+    ) {
+      continue;
+    }
+    let module = codeRef.module;
+    // Match the host's isUrlLike semantics: both `.`- and `/`-prefixed
+    // modules resolve against the skill's own URL. Known limitation: the
+    // host hashes relative refs against the skill's canonical document id,
+    // which in a prefix-form realm differs from the room-state sourceUrl we
+    // resolve against — so relative command modules in prefix-form realms
+    // may not match. Package specifiers and absolute URLs (all current
+    // skills) hash identically on both sides.
+    if ((module.startsWith('.') || module.startsWith('/')) && skillUrl) {
+      try {
+        module = new URL(module, skillUrl).href;
+      } catch {
+        // keep the module as authored; a bad relative ref simply won't match
+      }
+    }
+    let resolvedRef = { module, name: codeRef.name };
+    commands.push({
+      codeRef: resolvedRef,
+      functionName: buildCommandFunctionNameFromResolvedRef(resolvedRef),
+      // Missing means approval required, matching how the host treats an
+      // absent requiresApproval on a skill command.
+      requiresApproval:
+        (entry as { requiresApproval?: unknown }).requiresApproval !== false,
+    });
+  }
+  return commands;
 }
 
 export async function getDisabledSkillIds(
@@ -1030,6 +1105,14 @@ async function toResultMessages(
           content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
+        }
+        // Surface the failure reason to the model — without it a failed (or
+        // partially fulfilled, e.g. a multi-file read where one file 404ed)
+        // tool call reads as a bare status with nothing to act on.
+        // Check-correctness results fold their reason in above.
+        let failureReason = commandResult.content.failureReason;
+        if (!isCheckCorrectnessRequest && failureReason) {
+          content = `${content}${failureReason}\n`;
         }
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
@@ -2278,6 +2361,68 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
+// Skill bodies (a SKILL.md, the skills index) are authored with links relative
+// to the file's own location, so the same source resolves on the coding
+// harness's filesystem. The ai-bot has no filesystem: it reads referenced
+// files over HTTP via `readRealmFile`, which needs a full URL — a relative
+// path gives the model nothing reliable to resolve it against. Resolving
+// every relative markdown link against the skill's own URL up front hands the
+// model a copy-ready absolute URL, so one relative-authored document works
+// for both agents.
+export function absolutizeSkillLinks(
+  markdown: string,
+  baseUrl: string | undefined,
+): string {
+  if (!baseUrl) {
+    return markdown;
+  }
+  let base: URL;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    // A non-absolute id (e.g. an unresolved `@cardstack/skills/…` ref) can't
+    // anchor resolution; leave the body untouched.
+    return markdown;
+  }
+  return markdown.replace(
+    /\[([^\]]*)\]\(([^)]+)\)/g,
+    (whole, text, destination) => {
+      let trimmed = destination.trim();
+      let spaceIndex = trimmed.search(/\s/);
+      let target = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
+      let title = spaceIndex === -1 ? '' : trimmed.slice(spaceIndex);
+      let bare = target.replace(/^<|>$/g, '');
+      if (!isRelativeLink(bare)) {
+        return whole;
+      }
+      let resolved: string;
+      try {
+        resolved = new URL(bare, base).href;
+      } catch {
+        return whole;
+      }
+      return `[${text}](${resolved}${title})`;
+    },
+  );
+}
+
+// A markdown link destination we resolve — document-relative paths only.
+// Absolute URLs, protocol- and root-relative refs, bare fragments, and
+// non-navigational schemes (mailto:, etc.) are left as authored.
+function isRelativeLink(target: string): boolean {
+  if (!target) {
+    return false;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    return false; // has a scheme
+  }
+  return !(
+    target.startsWith('//') ||
+    target.startsWith('/') ||
+    target.startsWith('#')
+  );
+}
+
 export const skillCardsToMessages = (cards: EnabledSkill[]) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
@@ -2289,7 +2434,7 @@ export const skillCardsToMessages = (cards: EnabledSkill[]) => {
     let instructions =
       card.attributes?.instructions?.trim() ?? 'No instructions provided.';
 
-    return `${header}\n${instructions}`;
+    return `${header}\n${absolutizeSkillLinks(instructions, card.id)}`;
   });
 };
 
