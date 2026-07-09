@@ -476,7 +476,7 @@ export interface PrerenderResponseMeta {
 // index visit's breakdown, `prerendered_html` for the prerender-html visit's
 // (the two visits' costs are independently queryable per row; join them on
 // url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
-// no longer purely about timing: it also carries `brokenLinks`, the
+// not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
 // `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
 // write-side stamps applied at `IndexWriter.updateEntry` time:

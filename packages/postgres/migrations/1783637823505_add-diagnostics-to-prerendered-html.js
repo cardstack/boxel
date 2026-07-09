@@ -5,13 +5,14 @@ exports.shorthands = undefined;
 // Per-row render diagnostics for the prerendered-HTML channel. The
 // prerender-html visit's breakdown (launch/wait timings, render elapsed,
 // per-format render timings, the visit's HTTP correlation id) rides here,
-// while the index visit's breakdown stays on `boxel_index.diagnostics` — a
+// while the index visit's breakdown rides on `boxel_index.diagnostics` — a
 // row's indexing cost and its prerendering cost are independently queryable.
 // For render-error rows the same payload is mirrored onto
 // `error_doc.diagnostics`, matching the `boxel_index` pattern.
 //
-// No backfill: rows written by the fused pass keep their combined breakdown
-// on `boxel_index.diagnostics`; new writes split by visit.
+// No backfill: a row written by a fused single-visit pass carries one
+// combined breakdown on `boxel_index.diagnostics`; a row this column is
+// null for simply has no persisted render breakdown.
 
 exports.up = (pgm) => {
   pgm.addColumns('prerendered_html', { diagnostics: 'jsonb' });

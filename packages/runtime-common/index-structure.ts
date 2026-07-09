@@ -80,7 +80,7 @@ export interface PrerenderedHtmlTable {
   rendered_at: string | null; // pg represents big integers as strings in javascript
   // The prerender-html visit's render diagnostics (launch/wait timings,
   // render elapsed, per-format render timings, the visit's HTTP correlation
-  // id under `prerenderHtmlRequestId`). The index visit's breakdown stays on
+  // id under `prerenderHtmlRequestId`). The index visit's breakdown rides on
   // `boxel_index.diagnostics`, so a row's indexing cost and its prerendering
   // cost are independently queryable. For render-error rows the same payload
   // is mirrored onto `error_doc.diagnostics`, matching the `boxel_index`
