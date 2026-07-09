@@ -70,12 +70,6 @@ import {
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type {
-  CardContext,
-  CardCrudFunctions,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -93,6 +87,11 @@ import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+} from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;

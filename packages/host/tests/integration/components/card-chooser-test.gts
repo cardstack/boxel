@@ -45,11 +45,11 @@ module('Integration | card-chooser', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let textArea: typeof import('https://cardstack.com/base/text-area');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let textArea: typeof import('@cardstack/base/text-area');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let spec: typeof import('@cardstack/base/spec');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);

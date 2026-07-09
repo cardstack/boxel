@@ -94,32 +94,6 @@ import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  CardForAttachmentCard,
-  FileForAttachmentCard,
-} from 'https://cardstack.com/base/command';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type {
-  ActiveLLMEvent,
-  BoxelContext,
-  BotTriggerContent,
-  CardMessageContent,
-  MatrixEvent as DiscreteMatrixEvent,
-  CodePatchResultContent,
-  CodePatchStatus,
-  ToolResultWithNoOutputContent,
-  ToolResultWithOutputContent,
-  RealmEventContent,
-  Tool,
-  ToolResultStatus,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-import type { SystemCard } from 'https://cardstack.com/base/system-card';
-
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
@@ -153,6 +127,30 @@ import type ResetService from './reset';
 import type StoreService from './store';
 import type ToolService from './tool-service';
 import type { RoomResource } from '../resources/room';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type {
+  CardForAttachmentCard,
+  FileForAttachmentCard,
+} from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
+import type * as FileAPI from '@cardstack/base/file-api';
+import type {
+  ActiveLLMEvent,
+  BoxelContext,
+  BotTriggerContent,
+  CardMessageContent,
+  MatrixEvent as DiscreteMatrixEvent,
+  CodePatchResultContent,
+  CodePatchStatus,
+  ToolResultWithNoOutputContent,
+  ToolResultWithOutputContent,
+  RealmEventContent,
+  Tool,
+  ToolResultStatus,
+} from '@cardstack/base/matrix-event';
+import type * as SkillModule from '@cardstack/base/skill';
+import type { SystemCard } from '@cardstack/base/system-card';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type {
   LoginResponse,

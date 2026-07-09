@@ -48,8 +48,8 @@ module(
           mockMatrixUtils,
           contents: {
             'person.gts': `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -87,8 +87,8 @@ module(
       assert.strictEqual(
         response,
         `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -135,8 +135,8 @@ module(
       assert.strictEqual(
         response,
         `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);

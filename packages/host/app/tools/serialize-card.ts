@@ -1,12 +1,11 @@
 import { service } from '@ember/service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class SerializeCardTool extends HostBaseTool<
   typeof BaseToolModule.CardIdCard,

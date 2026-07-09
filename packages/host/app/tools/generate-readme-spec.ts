@@ -2,10 +2,6 @@ import { service } from '@ember/service';
 
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { SpecType } from 'https://cardstack.com/base/spec';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { devSkillId } from '../lib/utils';
 
@@ -13,6 +9,9 @@ import OneShotLlmRequestTool from './one-shot-llm-request';
 import PatchCardInstanceTool from './patch-card-instance';
 
 import type ToolService from '../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { SpecType } from '@cardstack/base/spec';
 
 export default class GenerateReadmeSpecTool extends HostBaseTool<
   typeof BaseToolModule.GenerateReadmeSpecInput,

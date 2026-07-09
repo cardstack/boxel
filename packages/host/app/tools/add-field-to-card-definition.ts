@@ -3,15 +3,14 @@ import { service } from '@ember/service';
 import { rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-import type { FieldType } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import WriteTextFileTool from './write-text-file';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
+import type { FieldType } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class AddFieldToCardDefinitionTool extends HostBaseTool<
   typeof BaseToolModule.AddFieldToCardDefinitionInput

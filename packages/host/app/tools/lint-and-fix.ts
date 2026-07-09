@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import {
   formatLintIssues,
@@ -11,6 +9,7 @@ import {
 } from '../utils/lint-formatting';
 
 import type NetworkService from '../services/network';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class LintAndFixTool extends HostBaseTool<
   typeof BaseToolModule.LintAndFixInput,

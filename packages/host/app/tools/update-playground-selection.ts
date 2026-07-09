@@ -2,12 +2,11 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type PlaygroundPanelService from '../services/playground-panel-service';
+import type { Format } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class UpdatePlaygroundSelectionTool extends HostBaseTool<
   typeof BaseToolModule.UpdatePlaygroundSelectionInput

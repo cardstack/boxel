@@ -17,10 +17,6 @@ import type ToolService from '@cardstack/host/services/tool-service';
 import UseAiAssistantTool from '@cardstack/host/tools/ai-assistant';
 import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -32,6 +28,9 @@ import {
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
+import type { Skill } from '@cardstack/base/skill';
 
 let toolService: ToolService;
 

@@ -220,7 +220,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     let { CardsGrid } = cardsGrid;
 

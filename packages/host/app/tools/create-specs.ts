@@ -18,11 +18,6 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { SpecType } from 'https://cardstack.com/base/spec';
-
 import HostBaseTool from '../lib/host-base-tool';
 import {
   type CardOrFieldDeclaration,
@@ -38,6 +33,10 @@ import type ModuleContentsService from '../services/module-contents-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { SpecType } from '@cardstack/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 class SpecTypeGuesser {
   constructor(private declaration: ModuleDeclaration) {}

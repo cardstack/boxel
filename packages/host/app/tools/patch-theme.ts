@@ -1,9 +1,9 @@
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import UseAiAssistantTool from './ai-assistant';
+
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 export default class PatchThemeTool extends HostBaseTool<
   typeof BaseToolModule.PatchThemeInput,

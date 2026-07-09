@@ -15,15 +15,10 @@ import {
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
-import type {
-  BoxComponent,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-
 import { getClass, getTypes } from './meta';
 
 import type { Model as ParentModel } from '../render';
+import type { BoxComponent, CardDef, Format } from '@cardstack/base/card-api';
 
 // Stable internal key for the base CardsGrid type. We compare against
 // the internalKeyFor representation of the cards-grid module + name so

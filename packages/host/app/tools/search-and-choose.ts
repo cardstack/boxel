@@ -2,12 +2,12 @@ import { logger } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import OneShotLlmRequestTool from './one-shot-llm-request';
 import { SearchCardsByTypeAndTitleTool } from './search-cards';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Command-level logger (general lifecycle + decisions)
 const log = logger('commands:search-and-choose');

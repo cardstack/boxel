@@ -16,7 +16,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 
 import type { FieldOfType } from '@cardstack/host/services/card-type-service';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {

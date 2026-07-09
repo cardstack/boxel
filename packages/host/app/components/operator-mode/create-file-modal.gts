@@ -57,10 +57,6 @@ import config from '@cardstack/host/config/environment';
 import type RealmService from '@cardstack/host/services/realm';
 import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { SpecType } from 'https://cardstack.com/base/spec';
-
 import { cleanseString } from '../../lib/utils';
 
 import ModalContainer from '../modal-container';
@@ -75,6 +71,9 @@ import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 export type NewFileType =
   | 'duplicate-instance'

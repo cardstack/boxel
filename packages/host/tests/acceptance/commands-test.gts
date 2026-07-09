@@ -45,10 +45,6 @@ import {
   waitForRealmState,
 } from '@cardstack/host/tools/utils';
 
-import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import {
   addSkillToAiAssistant,
   setupLocalIndexing,
@@ -80,6 +76,9 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
+
+import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;

@@ -19,7 +19,7 @@ import PillMenu from '@cardstack/host/components/pill-menu';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 // A skill expressed as a markdown file is a `MarkdownDef` whose frontmatter
 // declares `boxel.kind: skill`. The file chooser is scoped to exactly those.

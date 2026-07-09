@@ -4,7 +4,7 @@ import type { Query, Store } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 // The card boundary, codified at the type level: the `Store` interface cards
 // receive via `@context.store` exposes instances-level search only. The raw

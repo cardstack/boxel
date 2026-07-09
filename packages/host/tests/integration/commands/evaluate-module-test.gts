@@ -14,8 +14,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const VALID_MODULE = `
-  import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class ValidCard extends CardDef {
     static displayName = 'Valid Card';
     @field name = contains(StringField);
@@ -23,7 +23,7 @@ const VALID_MODULE = `
 `;
 
 const BROKEN_IMPORT_MODULE = `
-  import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+  import { CardDef, field, contains } from "@cardstack/base/card-api";
   import { Foo } from "./does-not-exist";
   export class BrokenImportCard extends CardDef {
     static displayName = 'Broken Import Card';

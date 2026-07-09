@@ -6,11 +6,10 @@ import {
 } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class OpenCreateListingModalTool extends HostBaseTool<
   typeof BaseToolModule.ListingCreateInput

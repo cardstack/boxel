@@ -57,7 +57,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 type CustomSubdomainSelection = {
   url: string;

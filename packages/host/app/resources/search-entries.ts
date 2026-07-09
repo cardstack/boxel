@@ -36,11 +36,6 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-import type {
-  RealmEventContent,
-  PrerenderHtmlEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
@@ -49,6 +44,10 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type {
+  RealmEventContent,
+  PrerenderHtmlEventContent,
+} from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
 

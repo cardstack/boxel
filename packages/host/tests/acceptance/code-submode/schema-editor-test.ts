@@ -69,7 +69,7 @@ async function waitForRealmIcon(selector: string, timeoutMs = 5000) {
 }
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -85,7 +85,7 @@ const indexCardSource = `
 const personOwnFieldCount = 5;
 const personTotalFieldCount = `${cardDefFieldCount + personOwnFieldCount}`;
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -126,10 +126,10 @@ const employeeCardSource = `
     linksTo,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import BooleanField from 'https://cardstack.com/base/boolean';
-  import DateField from 'https://cardstack.com/base/date';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import BooleanField from '@cardstack/base/boolean';
+  import DateField from '@cardstack/base/date';
   import { Person } from './person';
 
   class Supervisor extends Person {
@@ -182,8 +182,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -228,8 +228,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -264,7 +264,7 @@ const ambiguousDisplayNamesCardSource = `
     field,
     linksTo,
     Component,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   export class Editor extends CardDef {
     static displayName = 'Author Bio';
@@ -1066,7 +1066,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -1130,7 +1130,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {

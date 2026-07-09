@@ -4,14 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const maybeBuffer = (globalThis as any).Buffer as

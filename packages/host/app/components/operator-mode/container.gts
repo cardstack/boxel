@@ -34,8 +34,6 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import CardChooserModal from '../card-chooser/modal';
 import SearchResults from '../card-search/search-results';
 import FileChooserModal from '../file-chooser/modal';
@@ -50,6 +48,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
+import type { CardContext } from '@cardstack/base/card-api';
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {

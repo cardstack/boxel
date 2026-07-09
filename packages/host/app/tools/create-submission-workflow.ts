@@ -5,8 +5,6 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { Listing } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import UseAiAssistantTool from './ai-assistant';
@@ -17,6 +15,7 @@ import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class CreateSubmissionWorkflowTool extends HostBaseTool<
   typeof BaseToolModule.CreateListingPRRequestInput

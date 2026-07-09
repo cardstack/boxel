@@ -17,12 +17,8 @@ import FittedFormatGallery from '@cardstack/host/components/operator-mode/previe
 import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import type {
-  CardDef,
-  FieldDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef, FieldDef, Format } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Args: {

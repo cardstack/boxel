@@ -33,9 +33,6 @@ import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -52,6 +49,8 @@ import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;

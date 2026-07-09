@@ -2,11 +2,6 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import CreateAiAssistantRoomTool from './create-ai-assistant-room';
@@ -19,6 +14,9 @@ import UpdateRoomSkillsTool from './update-room-skills';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 export default class UseAiAssistantTool extends HostBaseTool<
   typeof BaseToolModule.UseAiAssistantInput,

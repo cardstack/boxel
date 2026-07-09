@@ -41,9 +41,9 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
 import ContextMenuButton from './context-menu-button';
+
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {

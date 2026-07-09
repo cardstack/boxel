@@ -5,15 +5,6 @@ import {
   getToolDefinitions,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type {
-  FileDef,
-  SerializedFile,
-} from 'https://cardstack.com/base/file-api';
-
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-
 import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -25,6 +16,10 @@ import {
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { FileDef, SerializedFile } from '@cardstack/base/file-api';
+import type * as SkillModule from '@cardstack/base/skill';
 
 export default class UpdateRoomSkillsTool extends HostBaseTool<
   typeof BaseToolModule.UpdateRoomSkillsInput

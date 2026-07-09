@@ -1,12 +1,11 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class OpenAiAssistantRoomTool extends HostBaseTool<
   typeof BaseToolModule.OpenAiAssistantRoomInput

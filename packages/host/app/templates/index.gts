@@ -42,14 +42,13 @@ import type ToolService from '@cardstack/host/services/tool-service';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
+import type HostModeService from '../services/host-mode-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type {
   CardContext,
   CardDef,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import type HostModeService from '../services/host-mode-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
+} from '@cardstack/base/card-api';
 
 export interface IndexComponentComponentSignature {
   Args: {

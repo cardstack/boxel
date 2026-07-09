@@ -12,11 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type {
-  CardDef as CardDefType,
-  RelationshipState as RelationshipStateType,
-} from 'https://cardstack.com/base/card-api';
-
 import {
   provideConsumeContext,
   saveCard,
@@ -39,6 +34,11 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  CardDef as CardDefType,
+  RelationshipState as RelationshipStateType,
+} from '@cardstack/base/card-api';
 
 const MANGO_URL = `${testRealmURL}Pet/mango`;
 const VANGOGH_URL = `${testRealmURL}Pet/vangogh`;

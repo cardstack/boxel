@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import { Submodes } from '../components/submode-switcher';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -12,6 +10,7 @@ import WriteTextFileTool from './write-text-file';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class SwitchSubmodeTool extends HostBaseTool<
   typeof BaseToolModule.SwitchSubmodeInput,

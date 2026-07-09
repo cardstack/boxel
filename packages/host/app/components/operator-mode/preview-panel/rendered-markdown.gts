@@ -39,11 +39,7 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type {
-  CardContext,
-  CardDef,
-  FileDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef, FileDef } from '@cardstack/base/card-api';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';

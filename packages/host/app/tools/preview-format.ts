@@ -1,13 +1,12 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import ShowCardTool from './show-card';
 import SwitchSubmodeTool from './switch-submode';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class PreviewFormatTool extends HostBaseTool<
   typeof BaseToolModule.PreviewFormatInput

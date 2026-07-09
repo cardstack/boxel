@@ -1,8 +1,8 @@
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import SendRequestViaProxyTool from './send-request-via-proxy';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class SearchGoogleImagesTool extends HostBaseTool<
   typeof BaseToolModule.SearchGoogleImagesInput,

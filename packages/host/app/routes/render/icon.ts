@@ -3,9 +3,8 @@ import type Transition from '@ember/routing/transition';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
 
-import type { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
-
 import type { Model as ParentModel } from '../render';
+import type { CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 
 export interface Model {
   Component: CardOrFieldTypeIcon;

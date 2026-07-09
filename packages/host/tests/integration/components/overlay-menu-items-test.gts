@@ -18,8 +18,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { GetMenuItemParams } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   testModuleRealm,
@@ -34,6 +32,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { GetMenuItemParams } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let setCardInOperatorModeState: (leftCards: string[]) => void;
@@ -76,9 +76,9 @@ module('Integration | overlay-menu-items', function (hooks) {
       });
     };
 
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let markdownFileDef: typeof import('https://cardstack.com/base/markdown-file-def');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let markdownFileDef: typeof import('@cardstack/base/markdown-file-def');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);

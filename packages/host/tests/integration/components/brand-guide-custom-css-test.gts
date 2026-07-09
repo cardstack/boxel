@@ -5,11 +5,11 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type * as BrandGuideModule from 'https://cardstack.com/base/brand-guide';
-
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandGuideModule from '@cardstack/base/brand-guide';
 
 module('Integration | brand-guide | custom-css section', function (hooks) {
   setupRenderingTest(hooks);

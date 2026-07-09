@@ -80,16 +80,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
-import type {
-  CardContext,
-  CardDef,
-  FieldDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import SearchResults from '../../../card-search/search-results';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
@@ -99,6 +89,16 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
+
+import type {
+  CardContext,
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 export type SelectedInstance = {
   card: CardDef | FileDef;

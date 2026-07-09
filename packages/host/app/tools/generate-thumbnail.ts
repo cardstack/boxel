@@ -2,15 +2,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import PatchCardInstanceTool from './patch-card-instance';
 import SendRequestViaProxyTool from './send-request-via-proxy';
 import WriteBinaryFileTool from './write-binary-file';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const maybeBuffer = (globalThis as any).Buffer;

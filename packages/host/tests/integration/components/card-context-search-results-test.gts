@@ -25,8 +25,6 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -43,6 +41,8 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardContext } from '@cardstack/base/card-api';
 
 // The search surface is the card-facing `@context.searchResultsComponent`,
 // codified at the type level: the member exists and carries the component

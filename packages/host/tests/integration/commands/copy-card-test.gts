@@ -7,8 +7,6 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
 import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -18,6 +16,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
@@ -39,8 +39,8 @@ module('Integration | commands | copy-card', function (hooks) {
         realmURL: testRealmURL,
         contents: {
           'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field firstName = contains(StringField);

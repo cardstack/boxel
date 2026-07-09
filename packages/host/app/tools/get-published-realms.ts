@@ -2,11 +2,10 @@ import { service } from '@ember/service';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Lists a source realm's published destinations and when each was last
 // published. The data comes from the source realm's `_info` response, whose

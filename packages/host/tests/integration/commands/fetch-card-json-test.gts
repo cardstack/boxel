@@ -51,8 +51,8 @@ module('Integration | commands | fetch-card-json', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-            import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-            import StringField from 'https://cardstack.com/base/string';
+            import { CardDef, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
 
             export class Person extends CardDef {
               static displayName = 'Person';

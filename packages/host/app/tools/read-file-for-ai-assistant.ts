@@ -1,11 +1,10 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class ReadFileForAssistantTool extends HostBaseTool<
   typeof BaseToolModule.FileIdentifierCard,

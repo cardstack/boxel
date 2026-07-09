@@ -51,14 +51,6 @@ import {
 
 import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 
-import type {
-  BaseDef,
-  CardCrudFunctions,
-  CardDef,
-  FileDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-
 import { htmlComponent } from '../../lib/html-component';
 import { knownFileMetaUrls } from '../../lib/known-file-meta-urls';
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
@@ -69,6 +61,13 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
+import type {
+  BaseDef,
+  CardCrudFunctions,
+  CardDef,
+  FileDef,
+  Format,
+} from '@cardstack/base/card-api';
 
 // Adorn's `@compact` variant shrinks the label and selection chip
 // for narrow atom-format cards. The threshold mirrors what the

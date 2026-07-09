@@ -61,8 +61,8 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'note.gts': `
-              import { CardDef, Component, contains, field, StringField } from 'https://cardstack.com/base/card-api';
-              import { RichMarkdownField } from 'https://cardstack.com/base/rich-markdown';
+              import { CardDef, Component, contains, field, StringField } from '@cardstack/base/card-api';
+              import { RichMarkdownField } from '@cardstack/base/rich-markdown';
               export class Note extends CardDef {
                 static displayName = 'Note';
                 @field title = contains(StringField);
@@ -86,7 +86,7 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
               }
             `,
           'pet.gts': `
-              import { CardDef, Component, contains, field, StringField } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component, contains, field, StringField } from '@cardstack/base/card-api';
               export class Pet extends CardDef {
                 static displayName = 'Pet';
                 @field name = contains(StringField);

@@ -86,16 +86,16 @@ module('Integration | commands | search-and-choose', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
-    const choiceSource = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+    const choiceSource = `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 // choice-source-marker
 export class Choice extends CardDef {
   static displayName = 'Choice';
   @field cardTitle = contains(StringField);
 }`;
-    const contextSource = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+    const contextSource = `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 // context-source-marker
 export class ContextCard extends CardDef {

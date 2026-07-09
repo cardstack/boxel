@@ -1,10 +1,10 @@
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import GetAvailableRealmIdentifiersTool from './get-available-realm-identifiers';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class ValidateRealmTool extends HostBaseTool<
   typeof BaseToolModule.ValidateRealmInput,

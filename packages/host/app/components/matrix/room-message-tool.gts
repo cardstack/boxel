@@ -37,12 +37,11 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
 import type { ApplyButtonState } from '../ai-assistant/apply-button';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLDivElement;

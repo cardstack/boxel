@@ -14,8 +14,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const VALID_MODULE = `
-  import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class ValidCard extends CardDef {
     static displayName = 'Valid Card';
     @field name = contains(StringField);
@@ -23,8 +23,8 @@ const VALID_MODULE = `
 `;
 
 const TAGS_MODULE = `
-  import { CardDef, field, contains, containsMany } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { CardDef, field, contains, containsMany } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class TagsCard extends CardDef {
     static displayName = 'Tags Card';
     @field name = contains(StringField);

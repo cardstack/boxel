@@ -2,9 +2,6 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import CopyCardToRealmTool from './copy-card';
@@ -12,6 +9,8 @@ import CopyCardToRealmTool from './copy-card';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class CopyAndEditTool extends HostBaseTool<
   typeof BaseToolModule.CopyAndEditInput,

@@ -12,7 +12,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface AttachButtonTriggerSignature {
   Element: HTMLButtonElement;

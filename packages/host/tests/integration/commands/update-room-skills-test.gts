@@ -16,9 +16,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import RealmService from '@cardstack/host/services/realm';
 import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -32,6 +29,9 @@ import {
 import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

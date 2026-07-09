@@ -5,7 +5,7 @@ import {
   isValidCommandDefinition,
 } from '@cardstack/host/lib/tool-definitions';
 
-import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type * as SkillModule from '@cardstack/base/skill';
 
 function asCommand(command: unknown): SkillModule.ToolField {
   return command as unknown as SkillModule.ToolField;

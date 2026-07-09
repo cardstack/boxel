@@ -5,16 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type * as AddressFieldModule from 'https://cardstack.com/base/address';
-import type * as ColorFieldModule from 'https://cardstack.com/base/color';
-import type * as CoordinateFieldModule from 'https://cardstack.com/base/coordinate';
-import type * as CountryFieldModule from 'https://cardstack.com/base/country';
-import type * as DateRangeFieldModule from 'https://cardstack.com/base/date-range-field';
-import type * as LLMModelFieldModule from 'https://cardstack.com/base/llm-model';
-import type * as PercentageFieldModule from 'https://cardstack.com/base/percentage';
-import type * as UrlFieldModule from 'https://cardstack.com/base/url';
-import type * as WebsiteFieldModule from 'https://cardstack.com/base/website';
-
 import {
   BigIntegerField,
   BooleanField,
@@ -31,8 +21,20 @@ import {
   field,
   setupBaseRealm,
 } from '../../helpers/base-realm';
+
 import { renderCard } from '../../helpers/render-component';
+
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as AddressFieldModule from '@cardstack/base/address';
+import type * as ColorFieldModule from '@cardstack/base/color';
+import type * as CoordinateFieldModule from '@cardstack/base/coordinate';
+import type * as CountryFieldModule from '@cardstack/base/country';
+import type * as DateRangeFieldModule from '@cardstack/base/date-range-field';
+import type * as LLMModelFieldModule from '@cardstack/base/llm-model';
+import type * as PercentageFieldModule from '@cardstack/base/percentage';
+import type * as UrlFieldModule from '@cardstack/base/url';
+import type * as WebsiteFieldModule from '@cardstack/base/website';
 
 // Verifies the explicit `static markdown` templates added per CS-10786 to
 // specialized fields. Each primitive/composite field renders through a

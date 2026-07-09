@@ -52,9 +52,9 @@ module('Integration | commands | patch-code', function (hooks) {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
   @field cardTitle = contains(StringField);
@@ -135,9 +135,9 @@ import {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
   @field cardTitle = contains(StringField);

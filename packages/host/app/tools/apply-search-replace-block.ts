@@ -4,10 +4,10 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { stripTrailingSeparatorMarker } from '../lib/search-replace-block-parsing';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 let standardErrorMessage =
   'Unable to process the code patch due to invalid code coming from AI';

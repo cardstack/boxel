@@ -14,15 +14,15 @@ import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import HostModeBreadcrumbs from './breadcrumbs';
+import HostModeCard from './card';
+import HostModeStack from './stack';
+
 import type {
   CardDef,
   ViewCardFn,
   CardCrudFunctions,
-} from 'https://cardstack.com/base/card-api';
-
-import HostModeBreadcrumbs from './breadcrumbs';
-import HostModeCard from './card';
-import HostModeStack from './stack';
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;

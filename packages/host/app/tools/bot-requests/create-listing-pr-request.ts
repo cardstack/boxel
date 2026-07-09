@@ -4,8 +4,6 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { Listing } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../../lib/host-base-tool';
 
 import UseAiAssistantTool from '../ai-assistant';
@@ -14,6 +12,7 @@ import SendBotTriggerEventTool from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class CreateListingPRRequestTool extends HostBaseTool<
   typeof BaseToolModule.CreateListingPRRequestInput

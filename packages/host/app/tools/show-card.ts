@@ -8,15 +8,14 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class ShowCardTool extends HostBaseTool<
   typeof BaseToolModule.ShowCardInput,

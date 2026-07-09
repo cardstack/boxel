@@ -51,7 +51,7 @@ module('Acceptance | prerender | module', function (hooks) {
     optionsSegment = DEFAULT_MODULE_OPTIONS_SEGMENT,
   ) => `/module/${encodeURIComponent(url)}/${nonce}/${optionsSegment}`;
   const PERSON_MODULE = `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -59,7 +59,7 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const PARENT_MODULE = `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Parent extends CardDef {
       static displayName = 'Parent';
@@ -68,7 +68,7 @@ module('Acceptance | prerender | module', function (hooks) {
   `;
   const CHILD_MODULE = `
     import { Parent } from './parent';
-    import { field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Child extends Parent {
       static displayName = 'Child';
@@ -80,7 +80,7 @@ module('Acceptance | prerender | module', function (hooks) {
   // (reviewer → bogus). Definition-build validation records only the bad path
   // on `meta.diagnostics.searchablePathIssues`, tagged with its owning def.
   const SEARCHABLE_MODULE = `
-    import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
 
     export class SearchAuthor extends CardDef {
       static displayName = 'SearchAuthor';
@@ -206,7 +206,7 @@ module('Acceptance | prerender | module', function (hooks) {
   test('identifies shimmed modules', async function (assert) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardApi: typeof import('@cardstack/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
 
     let { field, contains, CardDef, StringField } = cardApi;
@@ -331,7 +331,7 @@ module('Acceptance | prerender | module', function (hooks) {
     await adapter.write(
       'person.gts',
       `
-      import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
       export class Person extends CardDef {
         static displayName = 'Updated Person';

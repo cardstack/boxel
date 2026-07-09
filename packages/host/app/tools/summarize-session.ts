@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import SendRequestViaProxyTool from './send-request-via-proxy';
@@ -9,6 +7,7 @@ import SendRequestViaProxyTool from './send-request-via-proxy';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type ToolService from '../services/tool-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class SummarizeSessionTool extends HostBaseTool<
   typeof BaseToolModule.SummarizeSessionInput,

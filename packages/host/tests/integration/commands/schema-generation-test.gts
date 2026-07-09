@@ -10,9 +10,9 @@ import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type HostBaseTool from '@cardstack/host/lib/host-base-tool';
 import { HostToolClasses } from '@cardstack/host/tools';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 module(
   'Integration | Command | host command schema generation test',

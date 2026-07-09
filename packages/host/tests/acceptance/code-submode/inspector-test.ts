@@ -33,8 +33,6 @@ import type { SerializedState } from '@cardstack/host/services/operator-mode-sta
 
 import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   elementIsVisible,
   getMonacoContent,
@@ -62,6 +60,7 @@ import { assertRecentFileURLs } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {

@@ -19,9 +19,9 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { testRealmURL, p } from '../helpers';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
 
@@ -55,7 +55,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
     });
 
     let cardApi = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
+      typeof import('@cardstack/base/card-api')
     >(`${baseRealm.url}card-api`);
     let string = await loader.import<any>(`${baseRealm.url}string`);
     let number = await loader.import<any>(`${baseRealm.url}number`);

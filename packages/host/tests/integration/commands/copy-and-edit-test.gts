@@ -8,8 +8,6 @@ import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 import CopyAndEditTool from '@cardstack/host/tools/copy-and-edit';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -19,6 +17,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://other-realm/test2/';
 
@@ -40,8 +40,8 @@ module('Integration | commands | copy-and-edit', function (hooks) {
         realmURL: testRealmURL,
         contents: {
           'content-card.gts': `
-          import { CardDef, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, contains, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Child extends CardDef {
             static displayName = 'Child';
@@ -93,8 +93,8 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             },
           },
           'simple-card.gts': `
-          import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, field, contains } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Theme extends CardDef {
             static displayName = 'Theme';
@@ -150,8 +150,8 @@ module('Integration | commands | copy-and-edit', function (hooks) {
         realmURL: otherRealmURL,
         contents: {
           'content-card.gts': `
-          import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, contains, field } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Child extends CardDef {
             static displayName = 'Child';

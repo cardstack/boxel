@@ -12,11 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type {
-  RelationshipState as RelationshipStateType,
-  RelationshipStatus as RelationshipStatusType,
-} from 'https://cardstack.com/base/card-api';
-
 import {
   provideConsumeContext,
   saveCard,
@@ -39,6 +34,11 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  RelationshipState as RelationshipStateType,
+  RelationshipStatus as RelationshipStatusType,
+} from '@cardstack/base/card-api';
 
 type RelationshipState = RelationshipStateType;
 type NotLoadedSentinel = { type: 'not-loaded'; reference: string };

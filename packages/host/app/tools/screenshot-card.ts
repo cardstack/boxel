@@ -4,14 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import WriteBinaryFileTool from './write-binary-file';
 
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 function generateFilenameFromCard(cardId: string): string {
   const uniqueId = uuidv4().split('-')[0];

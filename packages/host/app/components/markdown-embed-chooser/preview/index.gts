@@ -12,11 +12,7 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type {
-  CardDef,
-  FileDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, FileDef, Format } from '@cardstack/base/card-api';
 
 type EmbedFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 

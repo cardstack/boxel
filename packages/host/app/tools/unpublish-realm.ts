@@ -9,11 +9,10 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Unpublishes a realm from a single published destination. Resolves once the
 // realm-server accepts the request; there is no reindex on unpublish (the

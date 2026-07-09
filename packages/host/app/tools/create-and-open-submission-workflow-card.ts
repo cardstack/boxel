@@ -1,8 +1,8 @@
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import CreateSubmissionWorkflowTool from './create-submission-workflow';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseTool<
   typeof BaseToolModule.CreateListingPRRequestInput

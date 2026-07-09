@@ -1,14 +1,12 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type { RoomResource } from '../resources/room';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 export default class GetEventsFromRoomTool extends HostBaseTool<
   typeof BaseToolModule.GetEventsFromRoomInput,

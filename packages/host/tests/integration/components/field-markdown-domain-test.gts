@@ -5,21 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type * as BrandFunctionalPaletteModule from 'https://cardstack.com/base/brand-functional-palette';
-import type * as BrandLogoModule from 'https://cardstack.com/base/brand-logo';
-import type * as CSSValueFieldModule from 'https://cardstack.com/base/css-value';
-import type * as CsvFileDefModule from 'https://cardstack.com/base/csv-file-def';
-import type * as GtsFileDefModule from 'https://cardstack.com/base/gts-file-def';
-import type * as ImageFileDefModule from 'https://cardstack.com/base/image-file-def';
-import type * as JsonFileDefModule from 'https://cardstack.com/base/json-file-def';
-import type * as MarkdownFileDefModule from 'https://cardstack.com/base/markdown-file-def';
-import type * as ResponseFieldModule from 'https://cardstack.com/base/response-field';
-import type * as StructuredThemeModule from 'https://cardstack.com/base/structured-theme';
-import type * as StructuredThemeVarsModule from 'https://cardstack.com/base/structured-theme-variables';
-import type * as TextFileDefModule from 'https://cardstack.com/base/text-file-def';
-import type * as TsFileDefModule from 'https://cardstack.com/base/ts-file-def';
-import type * as TypographyFieldModule from 'https://cardstack.com/base/typography';
-
 import {
   CardDef,
   CardInfoField,
@@ -31,8 +16,25 @@ import {
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
+
 import { renderCard } from '../../helpers/render-component';
+
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandFunctionalPaletteModule from '@cardstack/base/brand-functional-palette';
+import type * as BrandLogoModule from '@cardstack/base/brand-logo';
+import type * as CSSValueFieldModule from '@cardstack/base/css-value';
+import type * as CsvFileDefModule from '@cardstack/base/csv-file-def';
+import type * as GtsFileDefModule from '@cardstack/base/gts-file-def';
+import type * as ImageFileDefModule from '@cardstack/base/image-file-def';
+import type * as JsonFileDefModule from '@cardstack/base/json-file-def';
+import type * as MarkdownFileDefModule from '@cardstack/base/markdown-file-def';
+import type * as ResponseFieldModule from '@cardstack/base/response-field';
+import type * as StructuredThemeModule from '@cardstack/base/structured-theme';
+import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
+import type * as TextFileDefModule from '@cardstack/base/text-file-def';
+import type * as TsFileDefModule from '@cardstack/base/ts-file-def';
+import type * as TypographyFieldModule from '@cardstack/base/typography';
 
 // Verifies the explicit `static markdown` templates added per CS-10787 to
 // domain/reference/file/theme fields. Fields are tested via a CardDef wrapper
