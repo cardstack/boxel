@@ -5,8 +5,8 @@ import {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Friend extends CardDef {
   @field firstName = contains(StringField);

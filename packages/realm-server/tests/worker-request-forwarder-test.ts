@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import {
   decodeWorkerRequestIpc,
   dispatchWorkerRequest,

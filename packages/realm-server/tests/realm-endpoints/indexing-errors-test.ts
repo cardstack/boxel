@@ -34,8 +34,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       realmURL,
       fileSystem: {
         'good-card.gts': `
-              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class GoodCard extends CardDef {
                 @field label = contains(StringField);
               }
@@ -86,8 +86,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           fileSystem: {
             'broken-card.gts': `
-        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { CardDef, field, contains } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class BrokenCard extends CardDef {
           @field title = contains(StringField);

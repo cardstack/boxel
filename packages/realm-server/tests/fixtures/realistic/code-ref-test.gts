@@ -3,8 +3,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
+} from '@cardstack/base/card-api';
+import CodeRefField from '@cardstack/base/code-ref';
 
 export class TestCard extends CardDef {
   @field ref = contains(CodeRefField);

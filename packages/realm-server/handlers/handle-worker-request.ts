@@ -1,6 +1,6 @@
 import type Koa from 'koa';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {

@@ -204,7 +204,7 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
