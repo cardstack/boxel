@@ -4347,6 +4347,37 @@ export class Realm {
     return await this.#adapter.exists(localPath);
   }
 
+  // File-meta response for a file path, preferring the index-enriched
+  // document: consumers rely on index-derived attributes (e.g. a markdown
+  // skill only counts as a skill when its file-meta carries `kind:
+  // 'skill'`). Falls back to the raw-file form when the file isn't indexed.
+  // Serves both the file-meta route and card-mime requests that turn out to
+  // target files, such as cross-realm file links fetched by loadLinks; the
+  // response is labeled with the mime the route was matched on, and callers
+  // discriminate the payload via `data.type`.
+  private async fileMetaResponse(
+    requestContext: RequestContext,
+    localPath: LocalPath,
+    responseContentType: SupportedMimeType,
+  ): Promise<Response | undefined> {
+    let fileEntry = await this.#realmIndexQueryEngine.file(
+      this.paths.fileURL(localPath),
+    );
+    if (fileEntry) {
+      return await this.fileMetaDocumentFromIndex(
+        requestContext,
+        localPath,
+        fileEntry,
+        responseContentType,
+      );
+    }
+    return await this.fileMetaDocument(
+      requestContext,
+      localPath,
+      responseContentType,
+    );
+  }
+
   private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
@@ -4410,6 +4441,7 @@ export class Realm {
     requestContext: RequestContext,
     localPath: LocalPath,
     fileEntry: IndexedFile,
+    responseContentType: SupportedMimeType = SupportedMimeType.FileMeta,
   ): Promise<Response> {
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
@@ -4495,7 +4527,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': SupportedMimeType.FileMeta,
+          'content-type': responseContentType,
         },
       },
       requestContext,
@@ -4510,17 +4542,7 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    let fileEntry = await this.#realmIndexQueryEngine.file(
-      this.paths.fileURL(localPath),
-    );
-    if (fileEntry) {
-      return await this.fileMetaDocumentFromIndex(
-        requestContext,
-        localPath,
-        fileEntry,
-      );
-    }
-    let fileResponse = await this.fileMetaDocument(
+    let fileResponse = await this.fileMetaResponse(
       requestContext,
       localPath,
       SupportedMimeType.FileMeta,
@@ -5160,7 +5182,7 @@ export class Realm {
             // document so the caller receives valid JSON it can
             // discriminate via `data.type === 'file-meta'` — instead of
             // raw binary bytes that crash a downstream `response.json()`.
-            let fileMeta = await this.fileMetaDocument(
+            let fileMeta = await this.fileMetaResponse(
               requestContext,
               localPath,
               SupportedMimeType.CardJson,
@@ -5210,7 +5232,7 @@ export class Realm {
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          let fileMeta = await this.fileMetaDocument(
+          let fileMeta = await this.fileMetaResponse(
             requestContext,
             localPath,
             SupportedMimeType.CardJson,

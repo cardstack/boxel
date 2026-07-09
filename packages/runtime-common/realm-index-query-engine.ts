@@ -1372,14 +1372,23 @@ export class RealmIndexQueryEngine {
     urls: string[],
     invocationId: string,
     layerIndex: number,
-    linkContext?: Map<string, { fieldName: string }>,
+    linkContext?: Map<string, { fieldName: string; expectsFileMeta: boolean }>,
   ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
+        // A file link is requested with the file-meta mime so the serving
+        // realm returns the index-enriched document (consumers rely on
+        // index-derived attributes like a markdown skill's `kind`). When the
+        // link type isn't known, fall back to the card mime — the serving
+        // realm answers a card-mime request for a file path with a file-meta
+        // document, enriched the same way.
+        let accept = linkContext?.get(url)?.expectsFileMeta
+          ? SupportedMimeType.FileMeta
+          : SupportedMimeType.CardJson;
         try {
           response = await this.#fetch(url, {
-            headers: { Accept: SupportedMimeType.CardJson },
+            headers: { Accept: accept },
           });
         } catch (err: unknown) {
           let message =
@@ -1602,9 +1611,13 @@ export class RealmIndexQueryEngine {
       let inRealmCardURLs = new Set<string>();
       let inRealmFileURLs = new Set<string>();
       let crossRealmURLs = new Set<string>();
-      // Maps each cross-realm URL to the field that produced it, so a
-      // non-card link can name the offending field in its error.
-      let crossRealmFieldNames = new Map<string, { fieldName: string }>();
+      // Maps each cross-realm URL to the field that produced it — so a
+      // non-card link can name the offending field in its error, and so the
+      // fetch can request the file-meta representation for file links.
+      let crossRealmLinkContext = new Map<
+        string,
+        { fieldName: string; expectsFileMeta: boolean }
+      >();
 
       for (let item of layer) {
         let { resource, applyLinkFields } = item;
@@ -1714,8 +1727,11 @@ export class RealmIndexQueryEngine {
             }
           } else {
             crossRealmURLs.add(linkURL.href);
-            if (!crossRealmFieldNames.has(linkURL.href)) {
-              crossRealmFieldNames.set(linkURL.href, { fieldName });
+            if (!crossRealmLinkContext.has(linkURL.href)) {
+              crossRealmLinkContext.set(linkURL.href, {
+                fieldName,
+                expectsFileMeta,
+              });
             }
           }
 
@@ -1764,7 +1780,7 @@ export class RealmIndexQueryEngine {
                 [...crossRealmURLs],
                 invocationId,
                 currentLayerIndex,
-                crossRealmFieldNames,
+                crossRealmLinkContext,
               )
             : Promise.resolve(
                 new Map<string, CardResource<Saved> | FileMetaResource>(),
