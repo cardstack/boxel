@@ -481,7 +481,7 @@ export class SearchEntriesResource extends Resource<Args> {
   // held rows are page-limited, so no splice), not full-text (matches
   // membership can change), and with a rendering selection / fieldset the GET
   // can spell as query params. When false the prerender_html event falls
-  // through to the coarse re-run — the CS-11763 behavior — so nothing regresses.
+  // through to the coarse re-run, which handles every case.
   #canSelectivelyRefresh(): boolean {
     let query = this.#previousQuery;
     if (query === undefined || !this.hasCompletedFullRun) {
