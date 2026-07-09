@@ -9,6 +9,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 
 export interface DeleteResult {
   ok: boolean;
@@ -50,6 +51,12 @@ export async function deleteFile(
       error: `Cannot delete protected file: ${path}`,
     };
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 

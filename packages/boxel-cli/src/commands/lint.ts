@@ -11,6 +11,7 @@ import { cliLog } from '../lib/cli-log.ts';
 import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
 import { lint as lintSingleFile, type LintMessage } from './file/lint.ts';
 import { listFiles } from './file/list.ts';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 
 const LINTABLE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'] as const;
 
@@ -56,6 +57,12 @@ export async function lintRealm(
   if (!active) {
     return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return emptyErrorResult(resolvedRealm.error);
+  }
+  realmUrl = resolvedRealm.url;
 
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
   let startedAt = Date.now();

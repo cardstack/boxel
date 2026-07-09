@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { readFileSync } from 'fs';
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -48,6 +49,13 @@ export async function write(
   content: string | Uint8Array,
   options?: WriteCommandOptions,
 ): Promise<WriteResult> {
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options?.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
   let resolution = resolveRealmAuthenticator({
     realmUrl,
     realmSecretSeed: options?.realmSecretSeed,

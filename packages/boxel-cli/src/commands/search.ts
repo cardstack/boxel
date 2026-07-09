@@ -5,6 +5,7 @@ import {
   type ProfileManager,
 } from '../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { resourceIdentity } from '@cardstack/runtime-common/resource-identity';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
@@ -226,9 +227,14 @@ export async function search(
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
   let searchUrl = `${realmServerUrl}/_federated-search`;
 
-  let realms = (Array.isArray(realmUrls) ? realmUrls : [realmUrls]).map(
-    ensureTrailingSlash,
-  );
+  let realms: string[] = [];
+  for (let realm of Array.isArray(realmUrls) ? realmUrls : [realmUrls]) {
+    let resolved = resolveRealmIdentifier(realm, { profileManager: pm });
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+    realms.push(ensureTrailingSlash(resolved.url));
+  }
 
   let body: SearchEntryRequestBody;
   try {

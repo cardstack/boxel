@@ -1,6 +1,10 @@
 import type { Command } from 'commander';
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import {
+  resolveRealmIdentifier,
+  splitRealmResourceIdentifier,
+} from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -32,9 +36,43 @@ export interface ReadCommandOptions {
 }
 
 interface ReadCliOptions {
-  realm: string;
+  realm?: string;
   json?: boolean;
   realmSecretSeed?: boolean;
+}
+
+export type ReadTarget =
+  | { ok: true; realm: string; path: string }
+  | { ok: false; error: string };
+
+/**
+ * Derive the realm identifier and realm-relative path for `file read` from
+ * its CLI inputs: a full @cardstack/ identifier as <path> carries its own
+ * realm; otherwise --realm is required.
+ */
+export function resolveReadTarget(
+  path: string,
+  realm: string | undefined,
+): ReadTarget {
+  let split = splitRealmResourceIdentifier(path);
+  if (split) {
+    if (realm) {
+      return {
+        ok: false,
+        error:
+          'Pass either a full @cardstack/ identifier as <path> or --realm with a realm-relative path, not both',
+      };
+    }
+    return { ok: true, ...split };
+  }
+  if (!realm) {
+    return {
+      ok: false,
+      error:
+        '--realm is required unless <path> is a full @cardstack/ identifier',
+    };
+  }
+  return { ok: true, realm, path };
 }
 
 /**
@@ -52,6 +90,13 @@ export async function read(
   path: string,
   options?: ReadCommandOptions,
 ): Promise<ReadResult> {
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options?.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
   let resolution = resolveRealmAuthenticator({
     realmUrl,
     realmSecretSeed: options?.realmSecretSeed,
@@ -102,15 +147,24 @@ export function registerReadCommand(parent: Command): void {
     .description('Read a file from a realm')
     .argument(
       '<path>',
-      'Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts)',
+      'Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts), or a full @cardstack/ identifier (e.g., @cardstack/catalog/hello.gts) in which case --realm is omitted',
     )
-    .requiredOption('--realm <realm-url>', 'The realm URL to read from')
+    .option(
+      '--realm <realm-url>',
+      'The realm URL or @cardstack/<realm>/ identifier to read from (required unless <path> is a full @cardstack/ identifier)',
+    )
     .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: ReadCliOptions) => {
+      let target = resolveReadTarget(filePath, opts.realm);
+      if (!target.ok) {
+        console.error(`${FG_RED}Error:${RESET} ${target.error}`);
+        process.exit(1);
+      }
+
       let result: ReadResult;
       try {
         // Inside the try so a seed-resolution throw (e.g. --realm-secret-seed
@@ -118,7 +172,7 @@ export function registerReadCommand(parent: Command): void {
         let realmSecretSeed = await resolveRealmSecretSeed(
           opts.realmSecretSeed === true,
         );
-        result = await read(opts.realm, filePath, { realmSecretSeed });
+        result = await read(target.realm, target.path, { realmSecretSeed });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,

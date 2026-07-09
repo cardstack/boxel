@@ -11,6 +11,7 @@ import {
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   type SyncManifest,
@@ -398,6 +399,14 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
+  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    console.error(`Error: ${resolvedRealm.error}`);
+    process.exit(1);
+  }
+  realmUrl = resolvedRealm.url;
   const resolution = resolveRealmAuthenticator({
     realmUrl,
     realmSecretSeed: options.realmSecretSeed,
