@@ -2031,9 +2031,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     let roomResource = matrixService.roomResources.get(roomId)!;
-    let message = roomResource.messages.find(
-      (m: any) => m.tools?.length === 2,
-    );
+    let message = roomResource.messages.find((m: any) => m.tools?.length === 2);
     assert.ok(message, 'two-command bot message lands in the room resource');
 
     let captured: Array<{ toolCallId: string; failureReason?: string }> = [];
