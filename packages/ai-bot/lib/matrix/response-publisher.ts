@@ -1,5 +1,5 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   READ_REALM_FILE_TOOL_NAME,
@@ -21,9 +21,9 @@ let log = logger('ai-bot');
 
 function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-): Partial<CommandRequest> {
+): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
-  let result = {} as Partial<CommandRequest>;
+  let result = {} as Partial<ToolRequest>;
   if (id) {
     result['id'] = id;
   }

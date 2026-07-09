@@ -23,7 +23,7 @@ import {
   CardContextName,
   CardError,
   CodeRef,
-  CommandContext,
+  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -344,7 +344,7 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  commandContext?: CommandContext;
+  commandContext?: ToolContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {

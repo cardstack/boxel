@@ -1,7 +1,7 @@
 import { getOwner, setOwner } from '@ember/-internals/owner';
 import { service } from '@ember/service';
 
-import { Command, type CommandContext } from '@cardstack/runtime-common';
+import { Command, type ToolContext } from '@cardstack/runtime-common';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -14,7 +14,7 @@ export default abstract class HostBaseTool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > extends Command<CardInputType, CardResultType> {
-  constructor(commandContext: CommandContext) {
+  constructor(commandContext: ToolContext) {
     super(commandContext);
     setOwner(this, getOwner(commandContext)!);
   }

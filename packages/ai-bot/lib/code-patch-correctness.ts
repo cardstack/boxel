@@ -9,19 +9,19 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import {
-  encodeCommandRequests,
-  type CommandRequest,
+  encodeToolRequests,
+  type ToolRequest,
 } from '@cardstack/runtime-common/commands';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from '@cardstack/runtime-common/ai/correctness-constants';
 
-export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+export const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
 
 export async function publishCodePatchCorrectnessMessage(
   summary: PendingCodePatchCorrectnessCheck,
   client: MatrixClient,
 ) {
   let body = '';
-  let commandRequests = buildCheckCorrectnessCommandRequests(summary);
+  let toolRequests = buildCheckCorrectnessCommandRequests(summary);
   let baseContent = {
     body,
     msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
@@ -46,17 +46,16 @@ export async function publishCodePatchCorrectnessMessage(
   if (Object.keys(data).length > 0) {
     content.data = data;
   }
-  if (commandRequests.length) {
-    content[APP_BOXEL_TOOL_REQUESTS_KEY] =
-      encodeCommandRequests(commandRequests);
+  if (toolRequests.length) {
+    content[APP_BOXEL_TOOL_REQUESTS_KEY] = encodeToolRequests(toolRequests);
   }
   await client.sendEvent(summary.roomId, 'm.room.message', content);
 }
 
 export function buildCheckCorrectnessCommandRequests(
   summary: PendingCodePatchCorrectnessCheck,
-): Partial<CommandRequest>[] {
-  let requests: Partial<CommandRequest>[] = [];
+): Partial<ToolRequest>[] {
+  let requests: Partial<ToolRequest>[] = [];
   let attemptsByTargetKey = summary.attemptsByTargetKey ?? {};
   for (let file of summary.files) {
     let sourceRef = file.sourceUrl || file.displayName;
@@ -70,7 +69,7 @@ export function buildCheckCorrectnessCommandRequests(
     let lintIssues = file.lintIssues;
     requests.push({
       id: `check-${uuidv4()}`,
-      name: CHECK_CORRECTNESS_COMMAND_NAME,
+      name: CHECK_CORRECTNESS_TOOL_NAME,
       arguments: {
         description: `Check correctness of ${file.displayName}`,
         attributes: {
@@ -94,7 +93,7 @@ export function buildCheckCorrectnessCommandRequests(
     }
     requests.push({
       id: `check-${uuidv4()}`,
-      name: CHECK_CORRECTNESS_COMMAND_NAME,
+      name: CHECK_CORRECTNESS_TOOL_NAME,
       arguments: {
         description: `Check correctness of ${card.cardId}`,
         attributes: {

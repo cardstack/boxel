@@ -584,7 +584,7 @@ module('getLatestResultMessage', (hooks) => {
     );
 
     // Create a command result event that references the command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
@@ -600,7 +600,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Verify the function returns the expected message
@@ -649,7 +649,7 @@ module('getLatestResultMessage', (hooks) => {
     ];
 
     // Create a command result event that references a non-existent command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: 'test-event-id',
@@ -665,7 +665,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Function should gracefully handle the missing command request and return an empty array
@@ -724,7 +724,7 @@ module('getLatestResultMessage', (hooks) => {
     ];
 
     // Create a command result event that references the second command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
@@ -740,7 +740,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Verify the function returns the expected message based on the correct command
@@ -847,7 +847,7 @@ module('setTitle', () => {
     ];
 
     // Create command result event
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
@@ -866,7 +866,7 @@ module('setTitle', () => {
       'test-room-id',
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
     // The assertions are inside the mock matrixClient.setRoomName function
   });

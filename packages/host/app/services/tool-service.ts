@@ -13,10 +13,10 @@ import { task, timeout, all } from 'ember-concurrency';
 import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { Command, CommandContext } from '@cardstack/runtime-common';
+import type { Command, ToolContext } from '@cardstack/runtime-common';
 import {
   Deferred,
-  CommandContextStamp,
+  ToolContextStamp,
   delay,
   getClass,
   identifyCard,
@@ -624,9 +624,9 @@ export default class ToolService extends Service {
     }
   }
 
-  get commandContext(): CommandContext {
+  get commandContext(): ToolContext {
     let result = {
-      [CommandContextStamp]: true,
+      [ToolContextStamp]: true,
     };
     setOwner(result, getOwner(this)!);
 
@@ -707,7 +707,7 @@ export default class ToolService extends Service {
         let ToolConstructor = (await getClass(
           commandCodeRef,
           this.loaderService.loader,
-        )) as { new (context: CommandContext): Command<any, any> };
+        )) as { new (context: ToolContext): Command<any, any> };
         commandToRun = new ToolConstructor(this.commandContext);
       }
 
@@ -815,7 +815,7 @@ export default class ToolService extends Service {
       let ToolConstructor = (await getClass(
         commandCodeRef,
         this.loaderService.loader,
-      )) as { new (context: CommandContext): Command<any, any> };
+      )) as { new (context: ToolContext): Command<any, any> };
       if (!ToolConstructor) {
         error = `No command for the name "${command.name}" was found`;
       } else {

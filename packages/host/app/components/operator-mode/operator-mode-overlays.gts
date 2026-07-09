@@ -33,7 +33,7 @@ import {
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  type CommandContext,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 
 import {
@@ -86,7 +86,7 @@ export default class OperatorModeOverlays extends Overlays {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @consume(CommandContextName)
-  declare private commandContext: CommandContext;
+  declare private commandContext: ToolContext;
 
   get renderedCardsForOverlayActionsWithEvents() {
     return super

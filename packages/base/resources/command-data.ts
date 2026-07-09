@@ -6,7 +6,7 @@ import type {
   CardInstance,
 } from '@cardstack/runtime-common';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 
 import type { CardContext, CardDefConstructor } from '../card-api';
 
@@ -69,7 +69,7 @@ export class CommandExecutionState<
 export function commandData<CardResultType extends CardDefConstructor>(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<undefined, CardResultType>,
 ): CommandExecutionState<CardResultType>;
 export function commandData<
@@ -78,7 +78,7 @@ export function commandData<
 >(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<CardInputType, CardResultType>,
   executeArgs: () => Parameters<
     Command<CardInputType, CardResultType>['execute']
@@ -90,7 +90,7 @@ export function commandData<
 >(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<CardInputType, CardResultType>,
   executeArgs?: () => Parameters<
     Command<CardInputType, CardResultType>['execute']

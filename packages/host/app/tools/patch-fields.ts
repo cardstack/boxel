@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   generateJsonSchemaForCardType,
   basicMappings,
@@ -35,7 +35,7 @@ export default class PatchFieldsTool extends HostBaseTool<
   requireInputFields = ['cardId', 'fieldUpdates'];
 
   constructor(
-    commandContext: CommandContext,
+    commandContext: ToolContext,
     private readonly configuration?: Configuration,
   ) {
     super(commandContext);

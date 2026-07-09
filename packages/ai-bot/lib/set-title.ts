@@ -3,9 +3,9 @@ import type OpenAI from 'openai';
 import type { MatrixClient, IRoomEvent } from 'matrix-js-sdk';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  CommandResultWithOutputContent,
-  CommandResultWithNoOutputContent,
-  EncodedCommandRequest,
+  ToolResultWithOutputContent,
+  ToolResultWithNoOutputContent,
+  EncodedToolRequest,
   CodePatchResultContent,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -13,7 +13,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,
   isCodePatchResultStatusApplied,
-  isCommandResultStatusApplied,
+  isToolResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
 } from '@cardstack/runtime-common/ai';
@@ -106,8 +106,8 @@ export const getLatestResultMessage = (
     return [];
   }
   let eventContent = event.getContent() as
-    | CommandResultWithOutputContent
-    | CommandResultWithNoOutputContent
+    | ToolResultWithOutputContent
+    | ToolResultWithNoOutputContent
     | CodePatchResultContent;
   let messageRelation: IEventRelation | undefined =
     eventContent['m.relates_to'];
@@ -122,27 +122,23 @@ export const getLatestResultMessage = (
   );
 
   let commandRequestId = (
-    eventContent as
-      | CommandResultWithOutputContent
-      | CommandResultWithNoOutputContent
+    eventContent as ToolResultWithOutputContent | ToolResultWithNoOutputContent
   ).commandRequestId;
   if (commandRequestId) {
-    let commandRequests = getToolRequests<Partial<EncodedCommandRequest>>(
+    let toolRequests = getToolRequests<Partial<EncodedToolRequest>>(
       resultSourceEvent.content as CardMessageContent,
     );
-    if (commandRequests) {
-      let commandRequest = commandRequests.find(
-        (cr: Partial<EncodedCommandRequest>) => {
-          return cr.id === commandRequestId;
-        },
-      );
-      if (!commandRequest) {
+    if (toolRequests) {
+      let toolRequest = toolRequests.find((cr: Partial<EncodedToolRequest>) => {
+        return cr.id === commandRequestId;
+      });
+      if (!toolRequest) {
         return [];
       }
       return [
         {
           role: 'user',
-          content: `Applying tool call ${commandRequest.name} with args ${commandRequest.arguments}. Cards shared are: ${attachedCardsToMessage(
+          content: `Applying tool call ${toolRequest.name} with args ${toolRequest.arguments}. Cards shared are: ${attachedCardsToMessage(
             mostRecentlyAttachedCard,
             attachedCards,
           )}`,
@@ -190,7 +186,7 @@ export function shouldSetRoomTitle(
   event?: MatrixEvent,
 ) {
   return (
-    (isCommandResultStatusApplied(event) ||
+    (isToolResultStatusApplied(event) ||
       isCodePatchResultStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)

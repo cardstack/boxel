@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   type AttributesSchema,
   type CardSchema,
@@ -32,7 +32,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
   static actionVerb = 'Update Card';
 
   constructor(
-    commandContext: CommandContext,
+    commandContext: ToolContext,
     private readonly configuration: Configuration,
   ) {
     super(commandContext);

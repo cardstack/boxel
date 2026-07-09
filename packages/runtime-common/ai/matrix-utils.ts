@@ -7,8 +7,8 @@ import {
 } from '../constants.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
-import type { CommandRequest } from '../commands.ts';
-import { encodeCommandRequests } from '../commands.ts';
+import type { ToolRequest } from '../commands.ts';
+import { encodeToolRequests } from '../commands.ts';
 import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_RELOAD_BILLING_DATA_KEY,
@@ -55,7 +55,7 @@ export async function sendMessageEvent(
   body: string,
   eventIdToReplace: string | undefined,
   data: any = {},
-  commandRequests: Partial<CommandRequest>[] = [],
+  toolRequests: Partial<ToolRequest>[] = [],
   reasoning: string | undefined = undefined,
 ) {
   getLog().debug('sending message', body);
@@ -65,7 +65,7 @@ export async function sendMessageEvent(
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_TOOL_REQUESTS_KEY]: encodeCommandRequests(commandRequests),
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: encodeToolRequests(toolRequests),
     },
     ...data,
   };
@@ -425,7 +425,7 @@ export async function downloadFileAsBase64DataUrl(
   return `data:${contentType};base64,${base64}`;
 }
 
-export function isCommandOrCodePatchResult(
+export function isToolOrCodePatchResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
   let type =

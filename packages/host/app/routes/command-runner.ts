@@ -8,12 +8,12 @@ import { tracked } from '@glimmer/tracking';
 
 import type {
   Command,
-  CommandContext,
+  ToolContext,
   CommandInvocation,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
-  CommandContextStamp,
+  ToolContextStamp,
   getClass,
   parseBoxelHostCommandSpecifier,
   rri,
@@ -45,7 +45,7 @@ type GenericCommand = Command<
   CardDefConstructor
 >;
 type GenericCommandConstructor = {
-  new (context: CommandContext): GenericCommand;
+  new (context: ToolContext): GenericCommand;
 };
 
 class CommandRunState implements CommandInvocation<CardDefConstructor> {
@@ -119,10 +119,10 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     return model;
   }
 
-  get commandContext(): CommandContext {
+  get commandContext(): ToolContext {
     let result = {
-      [CommandContextStamp]: true,
-    } as CommandContext;
+      [ToolContextStamp]: true,
+    } as ToolContext;
     setOwner(result, getOwner(this)!);
     return result;
   }

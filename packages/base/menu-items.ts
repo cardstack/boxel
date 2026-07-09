@@ -13,7 +13,7 @@ import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-
 import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
 import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 import type {
-  CommandContext,
+  ToolContext,
   Format,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -51,7 +51,7 @@ type MenuContext =
 export type GetMenuItemParams = {
   canEdit: boolean;
   cardCrudFunctions: Partial<CardCrudFunctions>;
-  commandContext: CommandContext;
+  commandContext: ToolContext;
   format?: Format;
   useBaseTemplate?: boolean;
 } & MenuContext;
