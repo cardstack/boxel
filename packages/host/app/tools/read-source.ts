@@ -4,11 +4,11 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
-export default class ReadSourceCommand extends HostBaseCommand<
+export default class ReadSourceTool extends HostBaseTool<
   typeof BaseCommandModule.ReadSourceInput,
   typeof BaseCommandModule.FileContents
 > {

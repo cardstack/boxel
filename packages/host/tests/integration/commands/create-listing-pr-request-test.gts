@@ -8,7 +8,7 @@ import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
-import CreateListingPRRequestCommand from '@cardstack/host/tools/bot-requests/create-listing-pr-request';
+import CreateListingPRRequestTool from '@cardstack/host/tools/bot-requests/create-listing-pr-request';
 
 import {
   setupIntegrationTestRealm,
@@ -74,7 +74,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
     let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new CreateListingPRRequestCommand(toolService.commandContext);
+    let command = new CreateListingPRRequestTool(toolService.commandContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
@@ -130,7 +130,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
     let matrixService = getService('matrix-service') as MatrixService;
     let previousCurrentRoomId = matrixService.currentRoomId;
 
-    let command = new CreateListingPRRequestCommand(toolService.commandContext);
+    let command = new CreateListingPRRequestTool(toolService.commandContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,

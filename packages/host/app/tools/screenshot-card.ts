@@ -6,9 +6,9 @@ import { rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import WriteBinaryFileCommand from './write-binary-file';
+import WriteBinaryFileTool from './write-binary-file';
 
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
@@ -31,7 +31,7 @@ function generateFilenameFromCard(cardId: string): string {
   return slug ? `${slug}-${uniqueId}` : `screenshot-${uniqueId}`;
 }
 
-export default class ScreenshotCardCommand extends HostBaseCommand<
+export default class ScreenshotCardTool extends HostBaseTool<
   typeof BaseCommandModule.ScreenshotCardInput,
   typeof BaseCommandModule.ScreenshotCardOutput
 > {
@@ -130,7 +130,7 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
     // promotes the PNG into a PngDef / ImageDef card automatically.
     let filename = `${generateFilenameFromCard(cardURL)}.png`;
     let filePath = `Screenshots/${filename}`;
-    let writeResult = await new WriteBinaryFileCommand(
+    let writeResult = await new WriteBinaryFileTool(
       this.commandContext,
     ).execute({
       path: filePath,

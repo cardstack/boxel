@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import ValidateRealmCommand from '@cardstack/host/tools/validate-realm';
+import ValidateRealmTool from '@cardstack/host/tools/validate-realm';
 
 import {
   setupIntegrationTestRealm,
@@ -58,14 +58,14 @@ module('Integration | commands | validate-realm', function (hooks) {
 
   test('returns normalized realm URL for a valid realm', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ValidateRealmCommand(toolService.commandContext);
+    let command = new ValidateRealmTool(toolService.commandContext);
     let result = await command.execute({ realmIdentifier: testRealmURL });
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
   test('throws error for an invalid realm URL', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ValidateRealmCommand(toolService.commandContext);
+    let command = new ValidateRealmTool(toolService.commandContext);
     try {
       await command.execute({
         realmIdentifier: 'https://invalid.example.com/realm/',

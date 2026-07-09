@@ -6,16 +6,16 @@ import type { Listing } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../../lib/host-base-command';
+import HostBaseTool from '../../lib/host-base-tool';
 
-import UseAiAssistantCommand from '../ai-assistant';
+import UseAiAssistantTool from '../ai-assistant';
 
-import SendBotTriggerEventCommand from './send-bot-trigger-event';
+import SendBotTriggerEventTool from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
 
-export default class CreateListingPRRequestCommand extends HostBaseCommand<
+export default class CreateListingPRRequestTool extends HostBaseTool<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
@@ -46,7 +46,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       listingSummary = listing.summary ?? undefined;
     }
 
-    let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
+    let useAiAssistantCommand = new UseAiAssistantTool(this.commandContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
       roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
@@ -61,7 +61,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
     let submittedBy = this.matrixService.userId ?? undefined;
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.commandContext).execute({
       roomId,
       realm,
       type: 'pr-listing-create',

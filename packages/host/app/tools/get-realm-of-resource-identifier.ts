@@ -4,11 +4,11 @@ import { rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
-export default class GetRealmOfResourceIdentifierCommand extends HostBaseCommand<
+export default class GetRealmOfResourceIdentifierTool extends HostBaseTool<
   typeof BaseCommandModule.GetRealmOfResourceIdentifierInput,
   typeof BaseCommandModule.GetRealmOfResourceIdentifierResult
 > {

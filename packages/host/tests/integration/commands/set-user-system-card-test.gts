@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import SetUserSystemCardCommand from '@cardstack/host/tools/set-user-system-card';
+import SetUserSystemCardTool from '@cardstack/host/tools/set-user-system-card';
 
 import {
   setupIntegrationTestRealm,
@@ -54,7 +54,7 @@ module('Integration | commands | set-user-system-card', function (hooks) {
 
   test('sets the system card account data', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new SetUserSystemCardCommand(toolService.commandContext);
+    let command = new SetUserSystemCardTool(toolService.commandContext);
 
     let systemCardId = `${testRealmURL}SystemCard/default`;
 
@@ -69,7 +69,7 @@ module('Integration | commands | set-user-system-card', function (hooks) {
 
   test('clears system card account data when cardId is empty', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new SetUserSystemCardCommand(toolService.commandContext);
+    let command = new SetUserSystemCardTool(toolService.commandContext);
 
     // First set a system card
     let systemCardId = `${testRealmURL}SystemCard/default`;
@@ -95,7 +95,7 @@ module('Integration | commands | set-user-system-card', function (hooks) {
 
   test('clears system card account data when cardId is omitted', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new SetUserSystemCardCommand(toolService.commandContext);
+    let command = new SetUserSystemCardTool(toolService.commandContext);
 
     // First set a system card
     let systemCardId = `${testRealmURL}SystemCard/default`;

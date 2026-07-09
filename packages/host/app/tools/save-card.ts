@@ -5,11 +5,11 @@ import { isCardInstance } from '@cardstack/runtime-common';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 
-export default class SaveCardCommand extends HostBaseCommand<
+export default class SaveCardTool extends HostBaseTool<
   typeof BaseCommandModule.SaveCardInput,
   typeof CardDef
 > {

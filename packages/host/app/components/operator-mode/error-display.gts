@@ -18,7 +18,7 @@ import {
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 import type ToolService from '@cardstack/host/services/tool-service';
-import SwitchSubmodeCommand from '@cardstack/host/tools/switch-submode';
+import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
@@ -98,7 +98,7 @@ export default class ErrorDisplay
   }
 
   private viewInCodeMode = dropTask(async () => {
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       this.toolService.commandContext,
     );
     await switchSubmodeCommand.execute({

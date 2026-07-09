@@ -2,11 +2,11 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
-export default class FetchCardJsonCommand extends HostBaseCommand<
+export default class FetchCardJsonTool extends HostBaseTool<
   typeof BaseCommandModule.FetchCardJsonInput,
   typeof BaseCommandModule.FetchCardJsonResult
 > {

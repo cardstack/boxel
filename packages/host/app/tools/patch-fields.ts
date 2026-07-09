@@ -11,7 +11,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
@@ -22,7 +22,7 @@ interface Configuration {
   cardType: typeof CardDef;
 }
 
-export default class PatchFieldsCommand extends HostBaseCommand<
+export default class PatchFieldsTool extends HostBaseTool<
   typeof BaseCommandModule.PatchFieldsInput,
   typeof BaseCommandModule.PatchFieldsOutput
 > {
@@ -91,7 +91,7 @@ export default class PatchFieldsCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.PatchFieldsOutput> {
     if (!input.cardId || !input.fieldUpdates) {
       throw new Error(
-        "PatchFieldsCommand can't run because it doesn't have all the required fields",
+        "PatchFieldsTool can't run because it doesn't have all the required fields",
       );
     }
 
@@ -192,7 +192,7 @@ export default class PatchFieldsCommand extends HostBaseCommand<
         errors,
       });
     } catch (error: any) {
-      console.log('PatchFieldsCommand: Caught error:', error.message);
+      console.log('PatchFieldsTool: Caught error:', error.message);
       // If the whole operation fails, mark all fields as failed
       Object.keys(input.fieldUpdates).forEach((fieldPath) => {
         errors[fieldPath] = error.message || 'Update failed';

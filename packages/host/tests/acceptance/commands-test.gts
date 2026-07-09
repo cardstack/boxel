@@ -34,12 +34,12 @@ import {
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CreateAiAssistantRoomCommand from '@cardstack/host/tools/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
-import SaveCardCommand from '@cardstack/host/tools/save-card';
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/tools/search-cards';
-import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
-import ShowCardCommand from '@cardstack/host/tools/show-card';
+import CreateAiAssistantRoomTool from '@cardstack/host/tools/create-ai-assistant-room';
+import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
+import SaveCardTool from '@cardstack/host/tools/save-card';
+import { SearchCardsByTypeAndTitleTool } from '@cardstack/host/tools/search-cards';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 import {
   waitForCompletedCommandRequest,
   waitForRealmState,
@@ -175,20 +175,20 @@ module('Acceptance | Commands tests', function (hooks) {
           topic: 'unset topic',
           participants: input.participants,
         });
-        let saveCardCommand = new SaveCardCommand(this.commandContext);
+        let saveCardCommand = new SaveCardTool(this.commandContext);
         let savedMeeting = await saveCardCommand.execute({
           card: meeting,
           realm: testRealmURL,
         });
         savedMeetingCardId = savedMeeting?.id;
 
-        let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+        let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
           this.commandContext,
         );
         let { roomId } = await createAIAssistantRoomCommand.execute({
           name: 'AI Assistant Room',
         });
-        let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+        let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
           this.commandContext,
         );
         let { eventId } = await sendAiAssistantMessageCommand.execute({
@@ -210,7 +210,7 @@ module('Acceptance | Commands tests', function (hooks) {
           () => meeting.topic === input.topic,
         );
 
-        let showCardCommand = new ShowCardCommand(this.commandContext);
+        let showCardCommand = new ShowCardTool(this.commandContext);
         await showCardCommand.execute({
           cardId: meeting.id,
         });
@@ -240,19 +240,19 @@ module('Acceptance | Commands tests', function (hooks) {
       static displayName = 'SearchAndOpenCardCommand';
       static actionVerb = 'Search';
       async getInputType() {
-        return new SearchCardsByTypeAndTitleCommand(
+        return new SearchCardsByTypeAndTitleTool(
           this.commandContext,
         ).getInputType();
       }
       protected async run(
         input: SearchCardsByTypeAndTitleInput,
       ): Promise<undefined> {
-        let searchCommand = new SearchCardsByTypeAndTitleCommand(
+        let searchCommand = new SearchCardsByTypeAndTitleTool(
           this.commandContext,
         );
         let searchResult = await searchCommand.execute(input);
         if (searchResult.cardIds.length > 0) {
-          let showCardCommand = new ShowCardCommand(this.commandContext);
+          let showCardCommand = new ShowCardTool(this.commandContext);
           await showCardCommand.execute({
             cardId: searchResult.cardIds[0],
           });
@@ -323,7 +323,7 @@ module('Acceptance | Commands tests', function (hooks) {
             return;
           }
 
-          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+          let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
             commandContext,
           );
           await openAiAssistantRoomCommand.execute({
@@ -337,7 +337,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -348,7 +348,7 @@ module('Acceptance | Commands tests', function (hooks) {
               )) as Skill,
             ],
           });
-          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
             commandContext,
           );
           await sendAiAssistantMessageCommand.execute({
@@ -436,7 +436,7 @@ module('Acceptance | Commands tests', function (hooks) {
               commands: [
                 {
                   codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
+                    name: 'SearchCardsByTypeAndTitleTool',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
                   requiresApproval: true,
@@ -484,7 +484,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {
+  test('OpenAiAssistantRoomTool opens the AI assistant room', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
     });
@@ -553,7 +553,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('SaveCardCommand returns the saved card with its id set', async function (assert) {
+  test('SaveCardTool returns the saved card with its id set', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
@@ -564,7 +564,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => savedMeetingCardId !== undefined);
-    assert.ok(savedMeetingCardId, 'SaveCardCommand returned the saved card');
+    assert.ok(savedMeetingCardId, 'SaveCardTool returned the saved card');
     assert.true(
       savedMeetingCardId!.startsWith(testRealmURL),
       'saved card id is a URL within the test realm',
@@ -641,7 +641,7 @@ module('Acceptance | Commands tests', function (hooks) {
     // and otherwise picks aiSessionRooms[0]. The beforeEach createAndJoinRoom
     // also marks aibot as a member (mock createRoom auto-invites), so both
     // rooms qualify — and a stale sessionStorage entry from a prior test
-    // (e.g. OpenAiAssistantRoomCommand racing schedule-meeting and persisting
+    // (e.g. OpenAiAssistantRoomTool racing schedule-meeting and persisting
     // the beforeEach room) can land us in the wrong one. Be explicit instead.
     await click('[data-test-open-ai-assistant]');
     getService('ai-assistant-panel-service').enterRoom(roomId);

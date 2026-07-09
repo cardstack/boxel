@@ -6,11 +6,11 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import PatchCardInstanceCommand from './patch-card-instance';
-import SendRequestViaProxyCommand from './send-request-via-proxy';
-import WriteBinaryFileCommand from './write-binary-file';
+import PatchCardInstanceTool from './patch-card-instance';
+import SendRequestViaProxyTool from './send-request-via-proxy';
+import WriteBinaryFileTool from './write-binary-file';
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const maybeBuffer = (globalThis as any).Buffer;
@@ -68,7 +68,7 @@ function generateFilenameFromCardName(cardName: string | undefined): string {
   return `${words.join('-')}-${uniqueId}`;
 }
 
-export default class GenerateThumbnailCommand extends HostBaseCommand<
+export default class GenerateThumbnailTool extends HostBaseTool<
   typeof BaseCommandModule.GenerateThumbnailInput,
   typeof BaseCommandModule.GenerateThumbnailOutput
 > {
@@ -146,7 +146,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
 
     const model = input.llmModel?.trim() || DEFAULT_IMAGE_GENERATION_LLM;
 
-    const result = await new SendRequestViaProxyCommand(
+    const result = await new SendRequestViaProxyTool(
       this.commandContext,
     ).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -205,7 +205,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
       : filename;
 
     // Write binary to realm → realm indexes as PngDef/ImageDef automatically
-    const writeResult = await new WriteBinaryFileCommand(
+    const writeResult = await new WriteBinaryFileTool(
       this.commandContext,
     ).execute({
       path: filePath,
@@ -226,7 +226,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
         typeof CardAPI
       >('https://cardstack.com/base/card-api');
 
-      await new PatchCardInstanceCommand(this.commandContext, {
+      await new PatchCardInstanceTool(this.commandContext, {
         cardType: cardApiModule.CardDef as unknown as typeof CardDef,
       }).execute({
         cardId: targetCardId,

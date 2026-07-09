@@ -8,11 +8,11 @@ import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class OpenCreateListingModalCommand extends HostBaseCommand<
+export default class OpenCreateListingModalTool extends HostBaseTool<
   typeof BaseCommandModule.ListingCreateInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;

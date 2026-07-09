@@ -55,7 +55,7 @@ import type {
 } from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import CheckDomainAvailabilityCommand from '@cardstack/host/tools/check-domain-availability';
+import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -802,7 +802,7 @@ export default class PublishRealmModal extends Component<Signature> {
       try {
         // Check availability through the same command exposed to boxel-cli so
         // the UI and headless callers share one path.
-        let command = new CheckDomainAvailabilityCommand(
+        let command = new CheckDomainAvailabilityTool(
           this.toolService.commandContext,
         );
         let result = await command.execute({ type: 'custom', name: subdomain });

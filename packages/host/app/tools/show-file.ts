@@ -2,11 +2,11 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class ShowFileCommand extends HostBaseCommand<
+export default class ShowFileTool extends HostBaseTool<
   typeof BaseCommandModule.FileIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;

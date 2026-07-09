@@ -7,20 +7,20 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
+import CreateAiAssistantRoomTool from './create-ai-assistant-room';
+import OpenAiAssistantRoomTool from './open-ai-assistant-room';
 
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
-import SetActiveLLMCommand from './set-active-llm';
-import UpdateRoomSkillsCommand from './update-room-skills';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
+import SetActiveLLMTool from './set-active-llm';
+import UpdateRoomSkillsTool from './update-room-skills';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
-export default class UseAiAssistantCommand extends HostBaseCommand<
+export default class UseAiAssistantTool extends HostBaseTool<
   typeof BaseCommandModule.UseAiAssistantInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
@@ -67,7 +67,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
 
     // Only send message if prompt is provided
     if (input.prompt && input.prompt.trim() !== '') {
-      let sendMessageCommand = new SendAiAssistantMessageCommand(
+      let sendMessageCommand = new SendAiAssistantMessageTool(
         this.commandContext,
       );
       let sendMessageResult = await sendMessageCommand.execute({
@@ -104,7 +104,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     }
 
     // Create a new room if no roomId is provided and no current room exists
-    let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+    let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
       this.commandContext,
     );
     let createRoomResult = await createAIAssistantRoomCommand.execute({
@@ -118,7 +118,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     roomId: string,
   ): Promise<void> {
     if (input.openRoom) {
-      let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+      let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
         this.commandContext,
       );
       await openAiAssistantRoomCommand.execute({
@@ -143,9 +143,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
       return;
     }
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandContext,
-    );
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(this.commandContext);
     await updateRoomSkillsCommand.execute({
       roomId,
       skillCardIdsToActivate: [...skillCardIds],
@@ -184,7 +182,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     roomId: string,
   ): Promise<void> {
     if (input.llmModel) {
-      let setActiveLLMCommand = new SetActiveLLMCommand(this.commandContext);
+      let setActiveLLMCommand = new SetActiveLLMTool(this.commandContext);
       await setActiveLLMCommand.execute({
         roomId,
         model: input.llmModel,

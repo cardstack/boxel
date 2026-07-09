@@ -6,7 +6,7 @@ import {
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { stripTrailingSeparatorMarker } from '../lib/search-replace-block-parsing';
 
 let standardErrorMessage =
@@ -18,7 +18,7 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE: `${standardErrorMessage} (empty search pattern for non-empty file)`,
 } as const;
 
-export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
+export default class ApplySearchReplaceBlockTool extends HostBaseTool<
   typeof BaseCommandModule.ApplySearchReplaceBlockInput,
   typeof BaseCommandModule.ApplySearchReplaceBlockResult
 > {

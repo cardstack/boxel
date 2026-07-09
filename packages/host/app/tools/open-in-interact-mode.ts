@@ -4,11 +4,11 @@ import type { Format } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class OpenInInteractModeCommand extends HostBaseCommand<
+export default class OpenInInteractModeTool extends HostBaseTool<
   typeof BaseCommandModule.ShowCardInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;

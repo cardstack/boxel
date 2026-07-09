@@ -11,7 +11,7 @@ import config from '@cardstack/host/config/environment';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
@@ -23,7 +23,7 @@ import type { PublishabilityViolation } from '../services/realm';
 // thus completes only once every published realm is indexed and viewable.
 // (Readiness is polled over HTTP rather than awaited via realm `index` events,
 // which aren't delivered to the run-command/prerender context.)
-export default class PublishRealmCommand extends HostBaseCommand<
+export default class PublishRealmTool extends HostBaseTool<
   typeof BaseCommandModule.PublishRealmInput,
   typeof BaseCommandModule.PublishRealmResult
 > {

@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
-import CopyAndEditCommand from '@cardstack/host/tools/copy-and-edit';
+import CopyAndEditTool from '@cardstack/host/tools/copy-and-edit';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -209,7 +209,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -266,7 +266,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: originalTheme,
     });
@@ -303,7 +303,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       ),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -328,7 +328,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: simpleCard,
     });
@@ -373,7 +373,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -419,7 +419,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: remoteChild,
     });
@@ -477,7 +477,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: remoteChild,
     });

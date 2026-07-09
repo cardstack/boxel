@@ -5,11 +5,11 @@ import { rri } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type PlaygroundPanelService from '../services/playground-panel-service';
 
-export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
+export default class UpdatePlaygroundSelectionTool extends HostBaseTool<
   typeof BaseCommandModule.UpdatePlaygroundSelectionInput
 > {
   @service declare private playgroundPanelService: PlaygroundPanelService;

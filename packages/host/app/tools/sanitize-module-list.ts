@@ -6,10 +6,10 @@ import {
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CanReadRealmCommand from './can-read-realm';
-import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
+import CanReadRealmTool from './can-read-realm';
+import GetRealmOfResourceIdentifierTool from './get-realm-of-resource-identifier';
 
 const GLOBAL_URL_STEMS = [
   'https://cardstack.com',
@@ -17,7 +17,7 @@ const GLOBAL_URL_STEMS = [
   'https://boxel-icons.boxel.ai',
 ];
 
-export default class SanitizeModuleListCommand extends HostBaseCommand<
+export default class SanitizeModuleListTool extends HostBaseTool<
   typeof BaseCommandModule.SanitizeModuleListInput,
   typeof BaseCommandModule.SanitizeModuleListResult
 > {
@@ -58,14 +58,13 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
         }
 
         // Only allow modules that belong to a realm we can read
-        const { realmIdentifier } =
-          await new GetRealmOfResourceIdentifierCommand(
-            this.commandContext,
-          ).execute({ resourceIdentifier: dep });
+        const { realmIdentifier } = await new GetRealmOfResourceIdentifierTool(
+          this.commandContext,
+        ).execute({ resourceIdentifier: dep });
         if (!realmIdentifier) {
           return null;
         }
-        const { canRead } = await new CanReadRealmCommand(
+        const { canRead } = await new CanReadRealmTool(
           this.commandContext,
         ).execute({ realmIdentifier });
         return canRead ? dep : null;

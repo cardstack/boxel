@@ -55,7 +55,7 @@ import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-re
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
-import CopyCardToRealmCommand from '@cardstack/host/tools/copy-card';
+import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
@@ -929,7 +929,7 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let { newCardId } = await new CopyCardToRealmCommand(
+    let { newCardId } = await new CopyCardToRealmTool(
       this.toolService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,

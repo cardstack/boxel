@@ -11,14 +11,14 @@ import {
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
 
-export default class ShowCardCommand extends HostBaseCommand<
+export default class ShowCardTool extends HostBaseTool<
   typeof BaseCommandModule.ShowCardInput,
   typeof CardDef
 > {

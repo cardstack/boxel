@@ -57,7 +57,7 @@ import {
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
-import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 
 import {
   coerceRenderError,
@@ -2019,7 +2019,7 @@ export async function addSkillToAiAssistant(
     );
   }
 
-  let command = new UpdateRoomSkillsCommand(
+  let command = new UpdateRoomSkillsTool(
     getService('tool-service').commandContext,
   );
   await command.execute({

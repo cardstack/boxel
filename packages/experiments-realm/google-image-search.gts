@@ -11,7 +11,7 @@ import {
   SearchGoogleImagesInput,
   SearchGoogleImagesResult,
 } from 'https://cardstack.com/base/command';
-import SearchGoogleImagesCommand from '@cardstack/boxel-host/commands/search-google-images';
+import SearchGoogleImagesTool from '@cardstack/boxel-host/commands/search-google-images';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 import { IconSearchThick } from '@cardstack/boxel-ui/icons';
 import ArrowRight from '@cardstack/boxel-icons/arrow-right';
@@ -34,7 +34,7 @@ export class GoogleImageSearch extends CardDef {
     searchResource = commandData<
       typeof SearchGoogleImagesInput,
       typeof SearchGoogleImagesResult
-    >(this, SearchGoogleImagesCommand, () => {
+    >(this, SearchGoogleImagesTool, () => {
       return {
         query: this.args.model.searchQuery,
         maxResults: this.args.model.maxResults || 10,

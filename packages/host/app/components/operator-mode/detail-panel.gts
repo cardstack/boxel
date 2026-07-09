@@ -58,7 +58,7 @@ import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import OpenCreateListingModalCommand from '@cardstack/host/tools/open-create-listing-modal';
+import OpenCreateListingModalTool from '@cardstack/host/tools/open-create-listing-modal';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -455,7 +455,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action private async createListing() {
-    const command = new OpenCreateListingModalCommand(
+    const command = new OpenCreateListingModalTool(
       this.toolService.commandContext,
     );
     const targetRealm = this.operatorModeStateService.realmURL;

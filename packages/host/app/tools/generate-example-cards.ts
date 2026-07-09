@@ -19,12 +19,12 @@ import {
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
 } from '../lib/example-card-helpers';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import { prettifyPrompts } from '../utils/prettify-prompts';
 
-import OneShotLlmRequestCommand from './one-shot-llm-request';
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import OneShotLlmRequestTool from './one-shot-llm-request';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type CardService from '../services/card-service';
@@ -33,7 +33,7 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class GenerateExampleCardsCommand extends HostBaseCommand<
+export default class GenerateExampleCardsTool extends HostBaseTool<
   typeof BaseCommandModule.CreateInstancesInput,
   undefined
 > {
@@ -77,7 +77,7 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
       }),
     );
 
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
+    let sendMessageCommand = new SendAiAssistantMessageTool(
       this.commandContext,
     );
 
@@ -91,7 +91,7 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
   }
 }
 
-export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
+export class GenerateExampleCardsOneShotTool extends HostBaseTool<
   typeof BaseCommandModule.CreateInstancesInput,
   typeof BaseCommandModule.CreateInstanceResult
 > {
@@ -159,7 +159,7 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
       }),
     );
 
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.commandContext);
     const attachedFileIdentifiers = buildAttachedFileURLs(input.codeRef.module);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,

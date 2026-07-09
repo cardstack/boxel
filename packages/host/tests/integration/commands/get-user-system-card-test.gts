@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import GetUserSystemCardCommand from '@cardstack/host/tools/get-user-system-card';
+import GetUserSystemCardTool from '@cardstack/host/tools/get-user-system-card';
 
 import {
   setupIntegrationTestRealm,
@@ -55,7 +55,7 @@ module('Integration | commands | get-user-system-card', function (hooks) {
 
   test('returns undefined cardId when no system card is set', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new GetUserSystemCardCommand(toolService.commandContext);
+    let command = new GetUserSystemCardTool(toolService.commandContext);
 
     let result = await command.execute();
     assert.strictEqual(
@@ -77,7 +77,7 @@ module('Integration | commands | get-user-system-card', function (hooks) {
     matrixService._systemCard = new SystemCard({ id: systemCardId });
 
     let toolService = getService('tool-service');
-    let command = new GetUserSystemCardCommand(toolService.commandContext);
+    let command = new GetUserSystemCardTool(toolService.commandContext);
 
     let result = await command.execute();
     assert.strictEqual(result.cardId, systemCardId);

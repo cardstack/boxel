@@ -26,7 +26,7 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import GetEventsFromRoomCommand from './get-events-from-room';
+import GetEventsFromRoomTool from './get-events-from-room';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -38,7 +38,7 @@ export async function waitForMatrixEvent(
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
   let timeoutMs = options.timeoutMs ?? 1000 * 60 * 20; // default to 20 minutes
-  let getEventsFromRoomCommand = new GetEventsFromRoomCommand(commandContext);
+  let getEventsFromRoomCommand = new GetEventsFromRoomTool(commandContext);
   let done = false;
   let allMatrixEvents: MatrixEvent[] = [];
   let lastEventId: string | undefined = undefined;

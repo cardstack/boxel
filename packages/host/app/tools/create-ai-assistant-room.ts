@@ -17,7 +17,7 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { isSkillCard } from '../lib/file-def-manager';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   getSkillSourceTools,
   loadSkillSource,
@@ -27,7 +27,7 @@ import {
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
-export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
+export default class CreateAiAssistantRoomTool extends HostBaseTool<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
   typeof BaseCommandModule.CreateAIAssistantRoomResult
 > {
@@ -88,7 +88,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
 
   // Resolve skill ids to their room-skills-config file defs, uploading skill
   // cards and `.md` skill files by their respective paths (mirrors the split in
-  // `UpdateRoomSkillsCommand`). Returns the uploaded FileDefs plus the resolved
+  // `UpdateRoomSkillsTool`). Returns the uploaded FileDefs plus the resolved
   // skill sources so the caller can gather commands.
   private async resolveSkills(ids: string[]): Promise<{
     fileDefs: FileDef[];
@@ -104,7 +104,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           let source = await loadSkillSource(this.store, id);
           if (!source) {
             console.warn(
-              `[CreateAiAssistantRoomCommand] skipping skill "${id}": not a skill card or skill markdown file`,
+              `[CreateAiAssistantRoomTool] skipping skill "${id}": not a skill card or skill markdown file`,
             );
             return;
           }
@@ -116,7 +116,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           }
         } catch (e) {
           console.warn(
-            `[CreateAiAssistantRoomCommand] skipping skill "${id}": ${e}`,
+            `[CreateAiAssistantRoomTool] skipping skill "${id}": ${e}`,
           );
         }
       }),
@@ -144,9 +144,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     let aiBotFullId = matrixService.aiBotUserId;
 
     if (!userId) {
-      throw new Error(
-        'Requires userId to execute CreateAiAssistantRoomCommand',
-      );
+      throw new Error('Requires userId to execute CreateAiAssistantRoomTool');
     }
 
     let { enabledIds, disabledIds } = this.collectSkillIds(input);

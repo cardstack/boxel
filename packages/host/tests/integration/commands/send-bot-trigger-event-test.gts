@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import SendBotTriggerEventCommand from '@cardstack/host/tools/bot-requests/send-bot-trigger-event';
+import SendBotTriggerEventTool from '@cardstack/host/tools/bot-requests/send-bot-trigger-event';
 
 import {
   setupIntegrationTestRealm,
@@ -62,7 +62,7 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     });
     let toolService = getService('tool-service');
 
-    let command = new SendBotTriggerEventCommand(toolService.commandContext);
+    let command = new SendBotTriggerEventTool(toolService.commandContext);
     await command.execute({
       roomId,
       type: 'pr-listing-create',

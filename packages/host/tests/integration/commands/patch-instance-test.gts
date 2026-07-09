@@ -11,7 +11,7 @@ import {
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import type ToolService from '@cardstack/host/services/tool-service';
-import PatchCardInstanceCommand from '@cardstack/host/tools/patch-card-instance';
+import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -89,7 +89,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('can patch a contains field', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -147,7 +147,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('can patch a containsMany field', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -205,7 +205,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('patching a containsMany field with a shorter array fully replaces it (no stale trailing items)', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -253,7 +253,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('patching a polymorphic containsMany field clears stale field metadata', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -317,7 +317,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('can patch a linksTo field', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -381,7 +381,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test<TestContextWithSave>('can patch a linksToMany field', async function (assert) {
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -447,7 +447,7 @@ module('Integration | commands | patch-instance', function (hooks) {
 
     let storeService = getService('store');
     let cardId = `${testRealmURL}Person/hassan`;
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,
@@ -535,7 +535,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let andrea = new PersonDef({ name: 'Andrea' });
     await store.add(andrea, { realm: testRealmURL, doNotPersist: true });
 
-    let patchInstanceCommand = new PatchCardInstanceCommand(
+    let patchInstanceCommand = new PatchCardInstanceTool(
       toolService.commandContext,
       {
         cardType: PersonDef,

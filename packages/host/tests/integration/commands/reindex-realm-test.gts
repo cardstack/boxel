@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import RealmService from '@cardstack/host/services/realm';
-import ReindexRealmCommand from '@cardstack/host/tools/reindex-realm';
+import ReindexRealmTool from '@cardstack/host/tools/reindex-realm';
 
 import {
   setupIntegrationTestRealm,
@@ -83,7 +83,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     assert.false(
@@ -154,7 +154,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -176,7 +176,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     await command.execute({
@@ -208,7 +208,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
 
   test('description explains lighter reindex semantics', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ReindexRealmCommand(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.commandContext);
 
     assert.true(
       command.description.includes('lighter/default mode'),

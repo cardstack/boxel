@@ -6,12 +6,12 @@ import { assertQuery } from '@cardstack/runtime-common';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
+export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
   typeof BaseCommandModule.SearchCardsByTypeAndTitleInput,
   typeof BaseCommandModule.SearchCardsResult
 > {
@@ -43,7 +43,7 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
     if (input.type) {
       filter.type = input.type;
     }
-    return new SearchCardsByQueryCommand(this.commandContext).execute({
+    return new SearchCardsByQueryTool(this.commandContext).execute({
       query: {
         filter: filter as Filter,
       },
@@ -51,7 +51,7 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
   }
 }
 
-export class SearchCardsByQueryCommand extends HostBaseCommand<
+export class SearchCardsByQueryTool extends HostBaseTool<
   typeof BaseCommandModule.SearchCardsByQueryInput,
   typeof BaseCommandModule.SearchCardsResult
 > {

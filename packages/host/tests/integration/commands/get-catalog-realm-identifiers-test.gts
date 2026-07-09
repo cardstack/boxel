@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import GetCatalogRealmIdentifiersCommand from '@cardstack/host/tools/get-catalog-realm-identifiers';
+import GetCatalogRealmIdentifiersTool from '@cardstack/host/tools/get-catalog-realm-identifiers';
 
 import {
   setupIntegrationTestRealm,
@@ -67,7 +67,7 @@ module(
 
     test('returns the list of catalog realm identifiers', async function (assert) {
       let toolService = getService('tool-service');
-      let command = new GetCatalogRealmIdentifiersCommand(
+      let command = new GetCatalogRealmIdentifiersTool(
         toolService.commandContext,
       );
       let result = await command.execute();

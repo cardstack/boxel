@@ -11,7 +11,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
@@ -21,7 +21,7 @@ import type ToolService from '../services/tool-service';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
-export default class CheckCorrectnessCommand extends HostBaseCommand<
+export default class CheckCorrectnessTool extends HostBaseTool<
   typeof BaseCommandModule.CheckCorrectnessInput,
   typeof BaseCommandModule.CorrectnessResultCard
 > {
@@ -148,7 +148,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       }
     } catch (error) {
       console.warn(
-        `CheckCorrectnessCommand: failed to refresh card ${cardId}`,
+        `CheckCorrectnessTool: failed to refresh card ${cardId}`,
         error,
       );
     } finally {
@@ -300,7 +300,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       return fileUrl.replace(/\.json$/, '');
     } catch (error) {
       console.warn(
-        `CheckCorrectnessCommand: unable to inspect file ${fileUrl} for card content`,
+        `CheckCorrectnessTool: unable to inspect file ${fileUrl} for card content`,
         error,
       );
       return undefined;

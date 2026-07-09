@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import SendRequestViaProxyCommand from '@cardstack/host/tools/send-request-via-proxy';
+import SendRequestViaProxyTool from '@cardstack/host/tools/send-request-via-proxy';
 
 import {
   setupIntegrationTestRealm,
@@ -187,7 +187,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test successful JSON response
   test('successfully sends request and returns JSON response', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -208,7 +208,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test text response
   test('successfully sends request and returns text response', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -229,7 +229,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
     const mockImageData = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header
 
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -262,7 +262,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
     ].join('');
 
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -286,7 +286,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test error response (4xx)
   test('handles 4xx error responses from external API', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -310,7 +310,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test error response (5xx)
   test('handles 5xx error responses from external API', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -334,7 +334,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test realm server error
   test('handles realm server errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -354,7 +354,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test network error
   test('handles network errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -377,7 +377,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
 
     for (const method of methods) {
       const toolService = getService('tool-service');
-      const requestForwardCommand = new SendRequestViaProxyCommand(
+      const requestForwardCommand = new SendRequestViaProxyTool(
         toolService.commandContext,
       );
 
@@ -403,7 +403,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
 
     for (const testCase of testCases) {
       const toolService = getService('tool-service');
-      const requestForwardCommand = new SendRequestViaProxyCommand(
+      const requestForwardCommand = new SendRequestViaProxyTool(
         toolService.commandContext,
       );
 
@@ -427,7 +427,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test with large response
   test('handles large response data', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -455,7 +455,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
     };
 
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -472,7 +472,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test with empty request body
   test('handles empty request body', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 
@@ -489,7 +489,7 @@ module('Integration | commands | send-request-via-proxy', function (hooks) {
   // Test with null/undefined headers
   test('handles null/undefined headers', async function (assert) {
     const toolService = getService('tool-service');
-    const requestForwardCommand = new SendRequestViaProxyCommand(
+    const requestForwardCommand = new SendRequestViaProxyTool(
       toolService.commandContext,
     );
 

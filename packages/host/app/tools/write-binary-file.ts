@@ -6,7 +6,7 @@ import { rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
@@ -34,7 +34,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
   throw new Error('No base64 decoder available in this environment');
 }
 
-export default class WriteBinaryFileCommand extends HostBaseCommand<
+export default class WriteBinaryFileTool extends HostBaseTool<
   typeof BaseCommandModule.WriteBinaryFileInput,
   typeof BaseCommandModule.WriteBinaryFileResult
 > {

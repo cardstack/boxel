@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import EvaluateModuleCommand from '@cardstack/host/tools/evaluate-module';
+import EvaluateModuleTool from '@cardstack/host/tools/evaluate-module';
 
 import {
   setupIntegrationTestRealm,
@@ -57,7 +57,7 @@ module('Integration | commands | evaluate-module', function (hooks) {
 
   test('valid module passes evaluation', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new EvaluateModuleCommand(toolService.commandContext);
+    let command = new EvaluateModuleTool(toolService.commandContext);
 
     let InputType = await command.getInputType();
     let input = new InputType({
@@ -73,7 +73,7 @@ module('Integration | commands | evaluate-module', function (hooks) {
 
   test('module with broken import fails evaluation', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new EvaluateModuleCommand(toolService.commandContext);
+    let command = new EvaluateModuleTool(toolService.commandContext);
 
     let InputType = await command.getInputType();
     let input = new InputType({

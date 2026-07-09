@@ -4,14 +4,14 @@ import {
   type MenuItemOptions,
 } from '@cardstack/boxel-ui/helpers';
 
-import CopyCardAsMarkdownCommand from '@cardstack/boxel-host/commands/copy-card-as-markdown';
+import CopyCardAsMarkdownTool from '@cardstack/boxel-host/commands/copy-card-as-markdown';
 import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
-import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
-import OpenCreateListingModalCommand from '@cardstack/boxel-host/commands/open-create-listing-modal';
-import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
-import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
-import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';
+import OpenCreateListingModalTool from '@cardstack/boxel-host/commands/open-create-listing-modal';
+import OpenInInteractModeTool from '@cardstack/boxel-host/commands/open-in-interact-mode';
+import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
+import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 import type {
   CommandContext,
   Format,
@@ -92,7 +92,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Copy as Markdown',
       action: () =>
-        new CopyCardAsMarkdownCommand(params.commandContext).execute({
+        new CopyCardAsMarkdownTool(params.commandContext).execute({
           cardId,
         }),
       icon: ClipboardCopy,
@@ -176,7 +176,7 @@ export function getDefaultCardMenuItems(
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
-        let showCardCommand = new ShowCardCommand(params.commandContext);
+        let showCardCommand = new ShowCardTool(params.commandContext);
         await showCardCommand.execute({
           cardId: newCardId,
         });
@@ -190,7 +190,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Open in Interact Mode',
       action: () => {
-        new OpenInInteractModeCommand(params.commandContext).execute({
+        new OpenInInteractModeTool(params.commandContext).execute({
           cardId,
           format: params.format === 'edit' ? 'edit' : 'isolated',
         });
@@ -203,7 +203,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Open in Code Mode',
       action: async () => {
-        await new SwitchSubmodeCommand(params.commandContext).execute({
+        await new SwitchSubmodeTool(params.commandContext).execute({
           submode: 'code',
           codePath: cardId,
         });
@@ -224,9 +224,7 @@ export function getDefaultCardMenuItems(
           if (!targetRealm) {
             throw new Error('Unable to determine target realm from card');
           }
-          await new OpenCreateListingModalCommand(
-            params.commandContext,
-          ).execute({
+          await new OpenCreateListingModalTool(params.commandContext).execute({
             codeRef,
             openCardIds: [cardId],
             targetRealm,
@@ -250,7 +248,7 @@ function getSampleDataMenuItems(
     menuItems.push({
       label: `Fill in Sample Data with AI`,
       action: async () =>
-        await new PopulateWithSampleDataCommand(commandContext).execute({
+        await new PopulateWithSampleDataTool(commandContext).execute({
           cardId: card.id,
         }),
       icon: Wand,
@@ -262,7 +260,7 @@ function getSampleDataMenuItems(
     menuItems.push({
       label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
       action: async () => {
-        await new GenerateExampleCardsCommand(commandContext).execute({
+        await new GenerateExampleCardsTool(commandContext).execute({
           count: GENERATED_EXAMPLE_COUNT,
           codeRef: codeRef as ResolvedCodeRef,
           realm: card[realmURL]?.href,

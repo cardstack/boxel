@@ -12,7 +12,7 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from '../services/card-service';
@@ -21,7 +21,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 
-export default class SendAiAssistantMessageCommand extends HostBaseCommand<
+export default class SendAiAssistantMessageTool extends HostBaseTool<
   typeof BaseCommandModule.SendAiAssistantMessageInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {

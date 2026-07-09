@@ -54,7 +54,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import LintAndFixCommand from '@cardstack/host/tools/lint-and-fix';
+import LintAndFixTool from '@cardstack/host/tools/lint-and-fix';
 import { applyBoxelFormatting } from '@cardstack/host/utils/editor/boxel-formatter';
 
 import BinaryFileInfo from './binary-file-info';
@@ -587,7 +587,7 @@ export default class CodeEditor extends Component<Signature> {
     this.updateFormatActionAvailability();
 
     try {
-      let lintCommand = new LintAndFixCommand(this.toolService.commandContext);
+      let lintCommand = new LintAndFixTool(this.toolService.commandContext);
       await applyBoxelFormatting({
         lintAndFix: (input) => lintCommand.execute(input),
         realm: readyFile.realmURL,

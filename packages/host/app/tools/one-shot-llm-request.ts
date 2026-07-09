@@ -7,21 +7,21 @@ const oneShotLogger = logger('llm:oneshot');
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
 
-import ReadSourceCommand from './read-source';
-import ReadTextFileCommand from './read-text-file';
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import ReadSourceTool from './read-source';
+import ReadTextFileTool from './read-text-file';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 
-export default class OneShotLlmRequestCommand extends HostBaseCommand<
+export default class OneShotLlmRequestTool extends HostBaseTool<
   typeof BaseCommandModule.OneShotLLMRequestInput,
   typeof BaseCommandModule.OneShotLLMRequestResult
 > {
@@ -64,7 +64,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       // Read the file contents using the codeRef
       let fileContent = '';
       if (input.codeRef?.module) {
-        const readSourceCommand = new ReadSourceCommand(
+        const readSourceCommand = new ReadSourceTool(
           this.toolService.commandContext,
         );
         const fileContents = await readSourceCommand.execute({
@@ -79,7 +79,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         input.attachedFileIdentifiers &&
         input.attachedFileIdentifiers.length > 0
       ) {
-        const readTextFileCommand = new ReadTextFileCommand(
+        const readTextFileCommand = new ReadTextFileTool(
           this.toolService.commandContext,
         );
 
@@ -163,7 +163,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         skillCards: loadedSkillCards.map((c) => c.id),
       });
 
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
         this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({

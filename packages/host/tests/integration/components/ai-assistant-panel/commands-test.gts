@@ -213,14 +213,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
               commands: [
                 {
                   codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
+                    name: 'SearchCardsByTypeAndTitleTool',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
                   requiresApproval: false,
                 },
                 {
                   codeRef: {
-                    name: 'SearchCardsByQueryCommand',
+                    name: 'SearchCardsByQueryTool',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
                   requiresApproval: false,

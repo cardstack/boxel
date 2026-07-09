@@ -10,7 +10,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
-import PreviewFormatCommand from '@cardstack/host/tools/preview-format';
+import PreviewFormatTool from '@cardstack/host/tools/preview-format';
 
 import {
   setupCardLogs,
@@ -60,7 +60,7 @@ module('Integration | Command | preview-format', function (hooks) {
     autostart: true,
   });
 
-  let command: PreviewFormatCommand;
+  let command: PreviewFormatTool;
 
   setupRealmCacheTeardown(hooks);
 
@@ -110,9 +110,7 @@ module('Integration | Command | preview-format', function (hooks) {
       }),
     );
 
-    command = new PreviewFormatCommand(
-      getService('tool-service').commandContext,
-    );
+    command = new PreviewFormatTool(getService('tool-service').commandContext);
   });
 
   test('switches to code submode and sets up preview', async function (assert) {
@@ -164,7 +162,7 @@ module('Integration | Command | preview-format', function (hooks) {
       'Command has correct description',
     );
     assert.strictEqual(
-      PreviewFormatCommand.actionVerb,
+      PreviewFormatTool.actionVerb,
       'Preview Format',
       'Command has correct action verb',
     );

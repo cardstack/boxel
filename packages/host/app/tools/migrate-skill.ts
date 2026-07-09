@@ -7,7 +7,7 @@ import { rri, skillCardRef } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
@@ -51,7 +51,7 @@ function basenameSlug(id: string): string {
   return slugify(name.replace(/\.[^/.]+$/, ''));
 }
 
-export default class MigrateSkillCommand extends HostBaseCommand<
+export default class MigrateSkillTool extends HostBaseTool<
   typeof BaseCommandModule.MigrateSkillInput,
   typeof BaseCommandModule.MigrateSkillResult
 > {

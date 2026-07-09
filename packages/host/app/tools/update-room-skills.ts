@@ -16,7 +16,7 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { isSkillCard } from '../lib/file-def-manager';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   getSkillSourceTools,
   loadSkillSource,
@@ -26,7 +26,7 @@ import {
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
-export default class UpdateRoomSkillsCommand extends HostBaseCommand<
+export default class UpdateRoomSkillsTool extends HostBaseTool<
   typeof BaseCommandModule.UpdateRoomSkillsInput
 > {
   @service declare private matrixService: MatrixService;
@@ -111,12 +111,12 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
               }
             } else {
               console.warn(
-                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": not a skill card or skill markdown file`,
+                `[UpdateRoomSkillsTool] skipping activation of "${skillId}": not a skill card or skill markdown file`,
               );
             }
           } catch (err) {
             console.warn(
-              `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get threw: ${errorSummary(err)}`,
+              `[UpdateRoomSkillsTool] skipping activation of "${skillId}": store.get threw: ${errorSummary(err)}`,
             );
           }
         }
@@ -160,11 +160,11 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
                 return source;
               }
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": not a skill card or skill markdown file`,
+                `[UpdateRoomSkillsTool] cannot rehydrate enabled skill "${skillId}": not a skill card or skill markdown file`,
               );
             } catch (err) {
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get threw: ${errorSummary(err)}`,
+                `[UpdateRoomSkillsTool] cannot rehydrate enabled skill "${skillId}": store.get threw: ${errorSummary(err)}`,
               );
             }
             return undefined;

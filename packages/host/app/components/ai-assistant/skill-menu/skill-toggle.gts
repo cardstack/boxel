@@ -24,7 +24,7 @@ import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
-import ShowCardCommand from '@cardstack/host/tools/show-card';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 
 interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -100,13 +100,13 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   }
 
   private async openSkillCard() {
-    let showCardCommand = new ShowCardCommand(this.toolService.commandContext);
+    let showCardCommand = new ShowCardTool(this.toolService.commandContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });
   }
 
-  // A skill markdown file is not a card, so `ShowCardCommand` can't open it.
+  // A skill markdown file is not a card, so `ShowCardTool` can't open it.
   // Open it the way any file opens: a file stack item in interact mode, or by
   // pointing the code editor at it in code mode.
   private async openSkillFile() {

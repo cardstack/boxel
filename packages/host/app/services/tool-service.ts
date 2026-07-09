@@ -30,8 +30,8 @@ import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
-import CheckCorrectnessCommand from '@cardstack/host/tools/check-correctness';
-import PatchCodeCommand from '@cardstack/host/tools/patch-code';
+import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
+import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
@@ -714,7 +714,7 @@ export default class ToolService extends Service {
       }
 
       if (!commandToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-        commandToRun = new CheckCorrectnessCommand(this.commandContext);
+        commandToRun = new CheckCorrectnessTool(this.commandContext);
       }
 
       if (commandToRun) {
@@ -809,7 +809,7 @@ export default class ToolService extends Service {
     let commandInstance: GenericCommand | undefined;
 
     if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-      commandInstance = new CheckCorrectnessCommand(this.commandContext);
+      commandInstance = new CheckCorrectnessTool(this.commandContext);
     } else if (!commandCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
@@ -933,7 +933,7 @@ export default class ToolService extends Service {
     let finalFileIdentifier: string | undefined;
 
     try {
-      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+      let patchCodeCommand = new PatchCodeTool(this.commandContext);
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileIdentifier: fileUrl,

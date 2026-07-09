@@ -6,8 +6,8 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
+import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -132,10 +132,10 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
   }
 
   private sendToAiAssistant = restartableTask(async () => {
-    await new OpenAiAssistantRoomCommand(this.commandContext).execute({
+    await new OpenAiAssistantRoomTool(this.commandContext).execute({
       roomId: this.matrixService.currentRoomId,
     });
-    await new SendAiAssistantMessageCommand(this.commandContext).execute({
+    await new SendAiAssistantMessageTool(this.commandContext).execute({
       roomId: this.matrixService.currentRoomId,
       prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       attachedFileIdentifiers: this.args.fileToAttach

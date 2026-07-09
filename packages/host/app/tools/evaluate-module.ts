@@ -12,9 +12,9 @@
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-export default class EvaluateModuleCommand extends HostBaseCommand<
+export default class EvaluateModuleTool extends HostBaseTool<
   typeof BaseCommandModule.EvaluateModuleInput,
   typeof BaseCommandModule.EvaluateModuleResult
 > {

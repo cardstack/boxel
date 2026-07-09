@@ -3,12 +3,12 @@ import { service } from '@ember/service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
 
-export default class SerializeCardCommand extends HostBaseCommand<
+export default class SerializeCardTool extends HostBaseTool<
   typeof BaseCommandModule.CardIdCard,
   typeof BaseCommandModule.JsonCard
 > {

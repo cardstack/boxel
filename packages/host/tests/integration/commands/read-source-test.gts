@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import ReadSourceCommand from '@cardstack/host/tools/read-source';
+import ReadSourceTool from '@cardstack/host/tools/read-source';
 
 import {
   setupIntegrationTestRealm,
@@ -37,7 +37,7 @@ module('Integration | commands | read-source', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  let readSourceCommand: ReadSourceCommand;
+  let readSourceCommand: ReadSourceTool;
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
@@ -50,7 +50,7 @@ module('Integration | commands | read-source', function (hooks) {
       }),
     );
     let toolService = getService('tool-service');
-    readSourceCommand = new ReadSourceCommand(toolService.commandContext);
+    readSourceCommand = new ReadSourceTool(toolService.commandContext);
   });
 
   test('reads a GTS file as card source', async function (assert) {

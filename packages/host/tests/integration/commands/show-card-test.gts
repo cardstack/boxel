@@ -17,7 +17,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
-import ShowCardCommand from '@cardstack/host/tools/show-card';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -143,7 +143,7 @@ module('Integration | Command | show-card', function (hooks) {
     autostart: true,
   });
 
-  let command: ShowCardCommand;
+  let command: ShowCardTool;
   let mockOperatorModeStateService: MockOperatorModeStateService;
   let mockPlaygroundPanelService: MockPlaygroundPanelService;
 
@@ -251,7 +251,7 @@ module('Integration | Command | show-card', function (hooks) {
       { instantiate: false },
     );
 
-    command = new ShowCardCommand(getService('tool-service').commandContext);
+    command = new ShowCardTool(getService('tool-service').commandContext);
   });
 
   hooks.afterEach(function () {
@@ -563,7 +563,7 @@ module('Integration | Command | show-card', function (hooks) {
         'Command has correct description',
       );
       assert.strictEqual(
-        ShowCardCommand.actionVerb,
+        ShowCardTool.actionVerb,
         'Show Card',
         'Command has correct action verb',
       );

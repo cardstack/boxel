@@ -24,8 +24,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import PublishRealmCommand from '@cardstack/host/tools/publish-realm';
-import UnpublishRealmCommand from '@cardstack/host/tools/unpublish-realm';
+import PublishRealmTool from '@cardstack/host/tools/publish-realm';
+import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
@@ -101,7 +101,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     // Publish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path. The modal already enforces the
     // publishability gate, so force past the command's redundant re-check.
-    let command = new PublishRealmCommand(this.toolService.commandContext);
+    let command = new PublishRealmTool(this.toolService.commandContext);
     let result = await command.execute({
       realmURL: this.realmURL,
       publishedRealmURLs,
@@ -146,7 +146,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     // Unpublish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path.
-    let command = new UnpublishRealmCommand(this.toolService.commandContext);
+    let command = new UnpublishRealmTool(this.toolService.commandContext);
     await command.execute({ realmURL: this.realmURL, publishedRealmURL });
   });
 

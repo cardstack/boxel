@@ -14,8 +14,8 @@ import {
 
 import RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
-import UseAiAssistantCommand from '@cardstack/host/tools/ai-assistant';
-import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
+import UseAiAssistantTool from '@cardstack/host/tools/ai-assistant';
+import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -137,9 +137,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
   test('creates a new room when no roomId is provided', async function (assert) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room!',
       roomName: 'My Test Room',
@@ -180,9 +178,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello, existing room!',
       roomId,
@@ -217,9 +213,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached cards!',
       roomId,
@@ -245,9 +239,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
   test('handles "new" as roomId to create new room', async function (assert) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room with "new"!',
       roomId: 'new',
@@ -285,9 +277,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
 
     let clientGeneratedId = 'unique-client-id-123';
     await aiAssistantCommand.execute({
@@ -328,9 +318,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-llm-model',
     });
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with custom LLM!',
       roomId,
@@ -359,9 +347,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
     const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill cards!',
       roomId,
@@ -399,9 +385,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       roomId,
       skillCards: [skillCard1, skillCard2],
@@ -437,9 +421,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-skill-ids',
     });
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill card IDs!',
       roomId,
@@ -466,9 +448,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-attached-card-ids',
     });
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached card IDs!',
       roomId,
@@ -497,18 +477,18 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-to-open',
     });
 
-    // Spy on OpenAiAssistantRoomCommand execution
+    // Spy on OpenAiAssistantRoomTool execution
     let openRoomExecuted = false;
-    let originalOpenFunction = OpenAiAssistantRoomCommand.prototype.execute;
+    let originalOpenFunction = OpenAiAssistantRoomTool.prototype.execute;
 
     try {
       // @ts-expect-error abusing JS to test this
-      OpenAiAssistantRoomCommand.prototype.execute = async function (input) {
+      OpenAiAssistantRoomTool.prototype.execute = async function (input) {
         openRoomExecuted = true;
         assert.strictEqual(input.roomId, roomId, 'Room ID should match');
       };
 
-      let aiAssistantCommand = new UseAiAssistantCommand(
+      let aiAssistantCommand = new UseAiAssistantTool(
         toolService.commandContext,
       );
       await aiAssistantCommand.execute({
@@ -519,10 +499,10 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
       assert.true(
         openRoomExecuted,
-        'OpenAiAssistantRoomCommand should be executed',
+        'OpenAiAssistantRoomTool should be executed',
       );
     } finally {
-      OpenAiAssistantRoomCommand.prototype.execute = originalOpenFunction;
+      OpenAiAssistantRoomTool.prototype.execute = originalOpenFunction;
     }
   });
 
@@ -534,9 +514,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
     const fileURLs = [`${testRealmURL}file1.gts`, `${testRealmURL}file2.gts`];
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached files!',
       roomId,
@@ -570,9 +548,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with open cards!',
       roomId,
@@ -599,9 +575,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-for-llm-mode-test',
     });
 
-    let aiAssistantCommand = new UseAiAssistantCommand(
-      toolService.commandContext,
-    );
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
 
     // Test setting LLM mode to 'act'
     await aiAssistantCommand.execute({

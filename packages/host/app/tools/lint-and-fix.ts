@@ -4,7 +4,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   formatLintIssues,
   formatLintIssuesBySeverity,
@@ -12,7 +12,7 @@ import {
 
 import type NetworkService from '../services/network';
 
-export default class LintAndFixCommand extends HostBaseCommand<
+export default class LintAndFixTool extends HostBaseTool<
   typeof BaseCommandModule.LintAndFixInput,
   typeof BaseCommandModule.LintAndFixResult
 > {

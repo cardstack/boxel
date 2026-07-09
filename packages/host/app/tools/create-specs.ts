@@ -23,7 +23,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -31,7 +31,7 @@ import {
   isReexportCardOrField,
 } from '../services/module-contents-service';
 
-import GenerateReadmeSpecCommand from './generate-readme-spec';
+import GenerateReadmeSpecTool from './generate-readme-spec';
 
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
@@ -119,7 +119,7 @@ class SpecTypeGuesser {
     const superName = declaration.super.name;
     return (
       superName === 'Command' ||
-      superName === 'HostBaseCommand' ||
+      superName === 'HostBaseTool' ||
       superName?.includes('Command')
     );
   }
@@ -129,7 +129,7 @@ interface CreateSpecResult {
   new: boolean;
 }
 
-export default class CreateSpecCommand extends HostBaseCommand<
+export default class CreateSpecTool extends HostBaseTool<
   typeof BaseCommandModule.CreateSpecsInput,
   typeof BaseCommandModule.CreateSpecsResult
 > {
@@ -226,7 +226,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
     if (autoGenerateReadme && !createdSpecRes.spec.readMe) {
       // we populate the readme when is not already set even when spec is already created
-      let generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+      let generateReadmeSpecCommand = new GenerateReadmeSpecTool(
         this.commandContext,
       );
       await generateReadmeSpecCommand.execute({

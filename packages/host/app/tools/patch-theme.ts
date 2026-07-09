@@ -1,11 +1,11 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import UseAiAssistantCommand from './ai-assistant';
+import UseAiAssistantTool from './ai-assistant';
 
-export default class PatchThemeCommand extends HostBaseCommand<
+export default class PatchThemeTool extends HostBaseTool<
   typeof BaseCommandModule.PatchThemeInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
@@ -39,7 +39,7 @@ export default class PatchThemeCommand extends HostBaseCommand<
         ? linkedSkill.id
         : undefined;
 
-    let useAssistant = new UseAiAssistantCommand(this.commandContext);
+    let useAssistant = new UseAiAssistantTool(this.commandContext);
     return await useAssistant.execute({
       roomId: 'new',
       openRoom: true,

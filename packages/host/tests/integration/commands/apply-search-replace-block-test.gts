@@ -7,7 +7,7 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/tools/apply-search-replace-block';
+import ApplySearchReplaceBlockTool from '@cardstack/host/tools/apply-search-replace-block';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -16,7 +16,7 @@ module('Integration | commands | apply-search-replace-block', function (hooks) {
 
   test('handles basic search and replace pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -72,7 +72,7 @@ export class Task extends CardDef {
 
   test('handles multiple occurrences of the search pattern, only replacing the first', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -136,7 +136,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 
   test('handles search pattern with whitespace differences', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -174,7 +174,7 @@ ${REPLACE_MARKER}`;
 
   test('handles no match found', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -217,7 +217,7 @@ ${REPLACE_MARKER}`;
   // Skipping this test for now as throwing errors causes issues
   skip('handles malformed search/replace block', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -254,7 +254,7 @@ ${REPLACE_MARKER}`;
 
   test('handles search with additional context for clarity', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -320,7 +320,7 @@ ${REPLACE_MARKER}`;
 
   test('handles different indentation in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -416,7 +416,7 @@ class CardTemplate extends Component<typeof ContactCard> {
 
   test('handles tabs vs spaces in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -471,7 +471,7 @@ ${REPLACE_MARKER}`;
 
   test('handles spurious blank lines in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -531,7 +531,7 @@ ${REPLACE_MARKER}`;
 
   test('handles spurious blank lines in the middle of the search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -590,7 +590,7 @@ ${REPLACE_MARKER}`;
 
   test('handles carriage return differences in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -634,7 +634,7 @@ ${REPLACE_MARKER}`;
 
   test('handles trailing whitespace differences', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -700,7 +700,7 @@ ${REPLACE_MARKER}`;
 
   test('it applies search/replace block when replace block is empty', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -730,7 +730,7 @@ ${REPLACE_MARKER}`;
 
   test('it allows empty search and replace blocks on empty content', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -749,7 +749,7 @@ ${REPLACE_MARKER}`;
 
   test('it rejects empty search blocks on non-empty content', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 
@@ -782,7 +782,7 @@ ${REPLACE_MARKER}`;
     // marker; applying the block must strip it rather than write it into the
     // file as a trailing line of box-drawing characters.
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
+    let applyCommand = new ApplySearchReplaceBlockTool(
       toolService.commandContext,
     );
 

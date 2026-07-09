@@ -2,9 +2,9 @@ import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import SetActiveLLMTool from '@cardstack/boxel-host/commands/set-active-llm';
+import CreateAiAssistantRoomTool from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomTool from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import { Button } from '@cardstack/boxel-ui/components';
 
 class IsolatedTemplate extends Component<typeof SetLlmExample> {
@@ -16,14 +16,14 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) return;
 
-    let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+    let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
       commandContext,
     );
     let { roomId } = await createAIAssistantRoomCommand.execute({
       name: `Chat with ${this.modelId}`,
     });
 
-    let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+    let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
       commandContext,
     );
     await openAiAssistantRoomCommand.execute({
@@ -40,7 +40,7 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) return;
 
-    let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
+    let setActiveLLMCommand = new SetActiveLLMTool(commandContext);
 
     await setActiveLLMCommand.execute({
       model: this.modelId,

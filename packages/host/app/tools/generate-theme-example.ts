@@ -9,16 +9,16 @@ import {
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
 } from '../lib/example-card-helpers';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import { createExampleInstanceFromPayload } from './generate-example-cards';
-import OneShotLlmRequestCommand from './one-shot-llm-request';
+import OneShotLlmRequestTool from './one-shot-llm-request';
 
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class GenerateThemeExampleCommand extends HostBaseCommand<
+export default class GenerateThemeExampleTool extends HostBaseTool<
   typeof BaseCommandModule.GenerateThemeExampleInput,
   typeof BaseCommandModule.CreateInstanceResult
 > {
@@ -70,7 +70,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       ),
     );
 
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.commandContext);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,

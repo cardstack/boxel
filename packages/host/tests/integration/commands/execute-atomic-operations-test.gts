@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
-import ExecuteAtomicOperationsCommand from '@cardstack/host/tools/execute-atomic-operations';
+import ExecuteAtomicOperationsTool from '@cardstack/host/tools/execute-atomic-operations';
 
 import {
   setupIntegrationTestRealm,
@@ -69,9 +69,7 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
       'atomic:results': [{ id: 'card-1' }, { id: 'card-2' }],
     };
     let toolService = getService('tool-service');
-    let command = new ExecuteAtomicOperationsCommand(
-      toolService.commandContext,
-    );
+    let command = new ExecuteAtomicOperationsTool(toolService.commandContext);
     let result = await command.execute({
       realmIdentifier: testRealmURL,
       operations: [{ op: 'add', path: 'card-1' }] as any,
@@ -84,9 +82,7 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
       errors: [{ detail: 'Something went wrong' }],
     };
     let toolService = getService('tool-service');
-    let command = new ExecuteAtomicOperationsCommand(
-      toolService.commandContext,
-    );
+    let command = new ExecuteAtomicOperationsTool(toolService.commandContext);
     try {
       await command.execute({
         realmIdentifier: testRealmURL,

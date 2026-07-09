@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import CreateSpecCommand from '@cardstack/host/tools/create-specs';
+import CreateSpecTool from '@cardstack/host/tools/create-specs';
 
 import type { Spec } from 'https://cardstack.com/base/spec';
 
@@ -29,7 +29,7 @@ module('Integration | Command | create-specs', function (hooks) {
   setupBaseRealm(hooks);
   const realmName = 'Create Spec Test Realm';
   let loader: Loader;
-  let createSpecCommand: CreateSpecCommand;
+  let createSpecCommand: CreateSpecTool;
 
   // Provide proxy endpoint for any AI-based README generation that create-specs may invoke
   setupRealmServerEndpoints(hooks, [
@@ -63,7 +63,7 @@ module('Integration | Command | create-specs', function (hooks) {
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
     let toolService = getService('tool-service');
-    createSpecCommand = new CreateSpecCommand(toolService.commandContext);
+    createSpecCommand = new CreateSpecTool(toolService.commandContext);
   });
 
   setupLocalIndexing(hooks);

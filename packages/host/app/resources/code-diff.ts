@@ -9,7 +9,7 @@ import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import ApplySearchReplaceBlockCommand from '../tools/apply-search-replace-block';
+import ApplySearchReplaceBlockTool from '../tools/apply-search-replace-block';
 
 interface CodeDiffResourceArgs {
   named: {
@@ -107,7 +107,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       return;
     }
 
-    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockTool(
       this.toolService.commandContext,
     );
 

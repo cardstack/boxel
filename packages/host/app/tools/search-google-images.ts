@@ -1,10 +1,10 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
-export default class SearchGoogleImagesCommand extends HostBaseCommand<
+export default class SearchGoogleImagesTool extends HostBaseTool<
   typeof BaseCommandModule.SearchGoogleImagesInput,
   typeof BaseCommandModule.SearchGoogleImagesResult
 > {
@@ -33,7 +33,7 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
       // The API key will be handled by the proxy endpoint
       const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}&start=${startIndex}&cx=064501294a5c9430a`;
 
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
         this.commandContext,
       );
 

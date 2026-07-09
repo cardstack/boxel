@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import CreateListingPRRequestCommand from '@cardstack/boxel-host/commands/create-listing-pr-request';
+import CreateListingPRRequestTool from '@cardstack/boxel-host/commands/create-listing-pr-request';
 import CreateShowCardRequestCommand from './commands/create-show-card-request';
 import CreatePatchCardInstanceRequestCommand from './commands/create-patch-card-instance-request';
 import { Button } from '@cardstack/boxel-ui/components';
@@ -269,7 +269,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
       return;
     }
 
-    await new CreateListingPRRequestCommand(commandContext).execute({
+    await new CreateListingPRRequestTool(commandContext).execute({
       realm: this.createListingPRTargetRealm,
       listingId: this.listingId,
     });

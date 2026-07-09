@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import PublishRealmCommand from '@cardstack/host/tools/publish-realm';
+import PublishRealmTool from '@cardstack/host/tools/publish-realm';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -135,7 +135,7 @@ module('Integration | commands | publish-realm', function (hooks) {
 
   function makeCommand() {
     let toolService = getService('tool-service');
-    return new PublishRealmCommand(toolService.commandContext);
+    return new PublishRealmTool(toolService.commandContext);
   }
 
   test('publishes a custom-domain target and reports it published', async function (assert) {

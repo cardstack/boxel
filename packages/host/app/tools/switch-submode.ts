@@ -6,14 +6,14 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { Submodes } from '../components/submode-switcher';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import WriteTextFileCommand from './write-text-file';
+import WriteTextFileTool from './write-text-file';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
-export default class SwitchSubmodeCommand extends HostBaseCommand<
+export default class SwitchSubmodeTool extends HostBaseTool<
   typeof BaseCommandModule.SwitchSubmodeInput,
   typeof BaseCommandModule.SwitchSubmodeResult | undefined
 > {
@@ -77,9 +77,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
           input.createFile &&
           currentSubmode === Submodes.Interact
         ) {
-          let writeTextFileCommand = new WriteTextFileCommand(
-            this.commandContext,
-          );
+          let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
           let writeResult = await writeTextFileCommand.execute({
             path: codeRRI,
             content: '',

@@ -11,16 +11,16 @@ import { isBaseInstance, realmURL } from '@cardstack/runtime-common/constants';
 import type { CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 
-export default class PopulateWithSampleDataCommand extends HostBaseCommand<
+export default class PopulateWithSampleDataTool extends HostBaseTool<
   typeof BaseCommandModule.CardIdCard,
   undefined
 > {
@@ -61,7 +61,7 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
       throw new Error(`Could not load card: ${card.message}`);
     }
 
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
+    let sendMessageCommand = new SendAiAssistantMessageTool(
       this.commandContext,
     );
 

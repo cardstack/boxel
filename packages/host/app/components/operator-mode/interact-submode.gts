@@ -55,7 +55,7 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
-import CopyCardToStackCommand from '@cardstack/host/tools/copy-card-to-stack';
+import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
@@ -503,7 +503,7 @@ export default class InteractSubmode extends Component {
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardToStackCommand(
+          ({ newCardId } = await new CopyCardToStackTool(
             this.toolService.commandContext,
           ).execute({
             sourceCard: card,

@@ -25,9 +25,9 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Submodes } from '../components/submode-switcher';
 import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
-import CreateAiAssistantRoomCommand from '../tools/create-ai-assistant-room';
-import SummarizeSessionCommand from '../tools/summarize-session';
-import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+import CreateAiAssistantRoomTool from '../tools/create-ai-assistant-room';
+import SummarizeSessionTool from '../tools/summarize-session';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
 
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
@@ -399,7 +399,7 @@ export default class AiAssistantPanelService extends Service {
           // that can hang on 404s). Skills are applied in the background.
           roomId = await this.createFallbackRoom(name);
         } else {
-          let createRoomCommand = new CreateAiAssistantRoomCommand(
+          let createRoomCommand = new CreateAiAssistantRoomTool(
             this.toolService.commandContext,
           );
 
@@ -521,10 +521,10 @@ export default class AiAssistantPanelService extends Service {
       if (!skillIds.length) {
         return;
       }
-      // Kind-agnostic: `UpdateRoomSkillsCommand` resolves each id to a `.md`
+      // Kind-agnostic: `UpdateRoomSkillsTool` resolves each id to a `.md`
       // skill file or a legacy `Skill` card, uploads it, and populates the
       // room's skills config + command definitions.
-      let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+      let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
         this.toolService.commandContext,
       );
       await updateRoomSkillsCommand.execute({
@@ -540,7 +540,7 @@ export default class AiAssistantPanelService extends Service {
   private summarizeSessionTask = restartableTask(
     async (oldRoomId: string, newRoomId: string) => {
       try {
-        const summarizeCommand = new SummarizeSessionCommand(
+        const summarizeCommand = new SummarizeSessionTool(
           this.toolService.commandContext,
         );
         const result = await summarizeCommand.execute({

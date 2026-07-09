@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import ReadTextFileCommand from '@cardstack/host/tools/read-text-file';
+import ReadTextFileTool from '@cardstack/host/tools/read-text-file';
 
 import {
   setupIntegrationTestRealm,
@@ -37,7 +37,7 @@ module('Integration | commands | read-text-file', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  let readTextFileCommand: ReadTextFileCommand;
+  let readTextFileCommand: ReadTextFileTool;
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
@@ -54,7 +54,7 @@ module('Integration | commands | read-text-file', function (hooks) {
       }),
     );
     let toolService = getService('tool-service');
-    readTextFileCommand = new ReadTextFileCommand(toolService.commandContext);
+    readTextFileCommand = new ReadTextFileTool(toolService.commandContext);
   });
 
   test('reads an existing text file', async function (assert) {

@@ -74,7 +74,7 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -1760,9 +1760,7 @@ export default class Room extends Component<Signature> {
 
   private updateSkillIsActiveTask = task(
     async (isActive: boolean, skillCardId?: string) => {
-      await new UpdateRoomSkillsCommand(
-        this.toolService.commandContext,
-      ).execute({
+      await new UpdateRoomSkillsTool(this.toolService.commandContext).execute({
         roomId: this.args.roomId,
         skillCardIdsToActivate: isActive ? [skillCardId!] : [],
         skillCardIdsToDeactivate: isActive ? [] : [skillCardId!],
@@ -1811,7 +1809,7 @@ export default class Room extends Component<Signature> {
   }
 
   private attachSkillTask = task(async (cardId: string) => {
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
       this.toolService.commandContext,
     );
 

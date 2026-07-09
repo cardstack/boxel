@@ -1,17 +1,17 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import GetCardCommand from './get-card';
-import PatchFieldsCommand from './patch-fields';
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import GetCardTool from './get-card';
+import PatchFieldsTool from './patch-fields';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
 const escapeForTag = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Command to apply markdown edits using relace/relace-apply-3 model
-export default class ApplyMarkdownEditCommand extends HostBaseCommand<
+export default class ApplyMarkdownEditTool extends HostBaseTool<
   typeof BaseCommandModule.ApplyMarkdownEditInput,
   undefined
 > {
@@ -43,7 +43,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     }
 
     // Get the card
-    const getCard = new GetCardCommand(this.commandContext);
+    const getCard = new GetCardTool(this.commandContext);
     const card = await getCard.execute({ cardId: input.cardId });
 
     if (!card) {
@@ -129,7 +129,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
       ],
     };
 
-    const response = await new SendRequestViaProxyCommand(
+    const response = await new SendRequestViaProxyTool(
       this.commandContext,
     ).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -191,7 +191,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     }
 
     // Patch only the specific markdown field
-    await new PatchFieldsCommand(this.commandContext).execute({
+    await new PatchFieldsTool(this.commandContext).execute({
       cardId: input.cardId,
       fieldUpdates: {
         [input.fieldPath]: finalContent,

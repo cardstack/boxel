@@ -112,7 +112,7 @@ module.exports = {
           node.declaration.declarations.forEach((declaration) => {
             if (
               declaration.id.type === 'Identifier' &&
-              declaration.id.name === 'HostCommandClasses' &&
+              declaration.id.name === 'HostToolClasses' &&
               declaration.init &&
               declaration.init.type === 'ArrayExpression'
             ) {
@@ -152,7 +152,7 @@ module.exports = {
           if (moduleInfo.requiresHostClass && !hostClassReferences.has(alias)) {
             context.report({
               node,
-              message: `Tool module "${moduleName}" is imported but not referenced in HostCommandClasses.`,
+              message: `Tool module "${moduleName}" is imported but not referenced in HostToolClasses.`,
             });
           }
         }
@@ -175,7 +175,7 @@ function listCommandModules(commandsDir) {
 
       try {
         const source = fs.readFileSync(fullPath, 'utf8');
-        requiresHostClass = /extends\s+HostBaseCommand/.test(source);
+        requiresHostClass = /extends\s+HostBaseTool/.test(source);
 
         if (requiresHostClass) {
           const constructorMatch = source.match(/constructor\s*\(([^)]*)\)/m);

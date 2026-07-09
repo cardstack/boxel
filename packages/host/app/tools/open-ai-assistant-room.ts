@@ -2,13 +2,13 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
+export default class OpenAiAssistantRoomTool extends HostBaseTool<
   typeof BaseCommandModule.OpenAiAssistantRoomInput
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;

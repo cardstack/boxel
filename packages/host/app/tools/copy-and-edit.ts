@@ -5,15 +5,15 @@ import { isCardInstance } from '@cardstack/runtime-common';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CopyCardToRealmCommand from './copy-card';
+import CopyCardToRealmTool from './copy-card';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class CopyAndEditCommand extends HostBaseCommand<
+export default class CopyAndEditTool extends HostBaseTool<
   typeof BaseCommandModule.CopyAndEditInput,
   undefined
 > {
@@ -58,7 +58,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let copyCardCommand = new CopyCardToRealmCommand(this.commandContext);
+    let copyCardCommand = new CopyCardToRealmTool(this.commandContext);
     let { newCardId } = await copyCardCommand.execute({
       sourceCard: input.card,
       targetRealm,

@@ -13,7 +13,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
@@ -21,7 +21,7 @@ import type ToolService from '../services/tool-service';
 interface Configuration {
   cardType: typeof CardDef;
 }
-export default class PatchCardInstanceCommand extends HostBaseCommand<
+export default class PatchCardInstanceTool extends HostBaseTool<
   typeof BaseCommandModule.PatchCardInput,
   undefined
 > {

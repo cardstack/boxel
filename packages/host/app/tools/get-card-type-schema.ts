@@ -11,9 +11,9 @@ import {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-export default class GetCardTypeSchemaCommand extends HostBaseCommand<
+export default class GetCardTypeSchemaTool extends HostBaseTool<
   typeof BaseCommandModule.CardTypeSchemaInput,
   typeof BaseCommandModule.JsonCard
 > {

@@ -4,11 +4,11 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
-export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
+export default class ExecuteAtomicOperationsTool extends HostBaseTool<
   typeof BaseCommandModule.ExecuteAtomicOperationsInput,
   typeof BaseCommandModule.ExecuteAtomicOperationsResult
 > {

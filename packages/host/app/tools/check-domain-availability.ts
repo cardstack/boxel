@@ -6,7 +6,7 @@ import config from '@cardstack/host/config/environment';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
@@ -15,7 +15,7 @@ import type RealmServerService from '../services/realm-server';
 // subdomains have a server-side availability check; subdirectory Boxel Spaces
 // are namespaced to the owner and have no contention, so they are not checked
 // here.
-export default class CheckDomainAvailabilityCommand extends HostBaseCommand<
+export default class CheckDomainAvailabilityTool extends HostBaseTool<
   typeof BaseCommandModule.CheckDomainAvailabilityInput,
   typeof BaseCommandModule.CheckDomainAvailabilityResult
 > {

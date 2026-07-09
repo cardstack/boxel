@@ -4,14 +4,14 @@ import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
 import { isReady } from '../resources/file';
 
 import { findNonConflictingFilename } from '../utils/file-name';
 
-import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
-import LintAndFixCommand from './lint-and-fix';
+import ApplySearchReplaceBlockTool from './apply-search-replace-block';
+import LintAndFixTool from './lint-and-fix';
 
 import type CardService from '../services/card-service';
 import type MonacoService from '../services/monaco-service';
@@ -25,7 +25,7 @@ interface FileInfo {
   content: string;
 }
 
-export default class PatchCodeCommand extends HostBaseCommand<
+export default class PatchCodeTool extends HostBaseTool<
   typeof BaseCommandModule.PatchCodeInput,
   typeof BaseCommandModule.PatchCodeCommandResult
 > {
@@ -91,7 +91,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
             clientRequestId,
           })
           .catch((error: unknown) => {
-            console.error('PatchCodeCommand: failed to save source', error);
+            console.error('PatchCodeTool: failed to save source', error);
           });
       }
     }
@@ -135,14 +135,14 @@ export default class PatchCodeCommand extends HostBaseCommand<
         })
         .catch((error: unknown) => {
           console.error(
-            'PatchCodeCommand: failed to write through FileResource',
+            'PatchCodeTool: failed to write through FileResource',
             error,
           );
         });
       return true;
     } catch (error) {
       console.error(
-        'PatchCodeCommand: unable to save through FileResource',
+        'PatchCodeTool: unable to save through FileResource',
         error,
       );
       return false;
@@ -175,7 +175,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     patchedCode: string;
     results: { status: 'applied' | 'failed'; failureReason?: string }[];
   }> {
-    let applyCommand = new ApplySearchReplaceBlockCommand(this.commandContext);
+    let applyCommand = new ApplySearchReplaceBlockTool(this.commandContext);
     let content = initialContent;
     let results: { status: 'applied' | 'failed'; failureReason?: string }[] =
       [];
@@ -203,7 +203,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     fileUrl: string,
     content: string,
   ): Promise<BaseCommandModule.LintAndFixResult> {
-    let lintCommand = new LintAndFixCommand(this.commandContext);
+    let lintCommand = new LintAndFixTool(this.commandContext);
     let realmURL = this.realm.url(fileUrl);
     let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
 

@@ -10,7 +10,7 @@ import {
   SearchCardsResult,
   SearchCardsByTypeAndTitleInput,
 } from 'https://cardstack.com/base/commands/search-card-result';
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
+import { SearchCardsByTypeAndTitleTool } from '@cardstack/boxel-host/commands/search-cards';
 
 export class SimpleSearchCard extends CardDef {
   static displayName = 'Simple Search';
@@ -20,7 +20,7 @@ export class SimpleSearchCard extends CardDef {
     searchResource = commandData<
       typeof SearchCardsByTypeAndTitleInput,
       typeof SearchCardsResult
-    >(this, SearchCardsByTypeAndTitleCommand, () => {
+    >(this, SearchCardsByTypeAndTitleTool, () => {
       return {
         cardTitle: this.args.model.titleSearch,
       };

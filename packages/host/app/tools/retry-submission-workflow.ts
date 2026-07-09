@@ -4,9 +4,9 @@ import { isCardInstance, rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
+import SendBotTriggerEventTool from './bot-requests/send-bot-trigger-event';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
@@ -22,7 +22,7 @@ interface WorkflowCardView {
 // SubmissionWorkflowCard that ended in a failed state. Reads roomId + listing
 // off the card so the same Matrix room is reused (preserving the prior
 // conversation and the bot-runner's view of the workflow).
-export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
+export default class RetrySubmissionWorkflowTool extends HostBaseTool<
   typeof BaseCommandModule.RetrySubmissionWorkflowInput
 > {
   @service declare private store: StoreService;
@@ -88,7 +88,7 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
     );
 
     try {
-      await new SendBotTriggerEventCommand(this.commandContext).execute({
+      await new SendBotTriggerEventTool(this.commandContext).execute({
         roomId,
         realm: listingRealm,
         type: 'pr-listing-retry',

@@ -4,13 +4,13 @@ import { rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
 
-export default class CopyFileToRealmCommand extends HostBaseCommand<
+export default class CopyFileToRealmTool extends HostBaseTool<
   typeof BaseCommandModule.CopyFileToRealmInput,
   typeof BaseCommandModule.CopyFileToRealmResult
 > {

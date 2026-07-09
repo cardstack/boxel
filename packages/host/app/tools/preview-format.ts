@@ -2,14 +2,14 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import ShowCardCommand from './show-card';
-import SwitchSubmodeCommand from './switch-submode';
+import ShowCardTool from './show-card';
+import SwitchSubmodeTool from './switch-submode';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class PreviewFormatCommand extends HostBaseCommand<
+export default class PreviewFormatTool extends HostBaseTool<
   typeof BaseCommandModule.PreviewFormatInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -31,7 +31,7 @@ export default class PreviewFormatCommand extends HostBaseCommand<
     input: BaseCommandModule.PreviewFormatInput,
   ): Promise<undefined> {
     // 1. Switch to code submode
-    await new SwitchSubmodeCommand(this.commandContext).execute({
+    await new SwitchSubmodeTool(this.commandContext).execute({
       submode: 'code',
       codePath: input.modulePath,
     });
@@ -42,8 +42,8 @@ export default class PreviewFormatCommand extends HostBaseCommand<
       'preview',
     );
 
-    // 3. Show the card in the specified format using ShowCardCommand
-    let showCardCommand = new ShowCardCommand(this.commandContext);
+    // 3. Show the card in the specified format using ShowCardTool
+    let showCardCommand = new ShowCardTool(this.commandContext);
     await showCardCommand.execute({
       cardId: input.cardId,
       format: input.format,

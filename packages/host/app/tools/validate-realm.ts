@@ -2,11 +2,11 @@ import { RealmPaths } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import GetAvailableRealmIdentifiersCommand from './get-available-realm-identifiers';
+import GetAvailableRealmIdentifiersTool from './get-available-realm-identifiers';
 
-export default class ValidateRealmCommand extends HostBaseCommand<
+export default class ValidateRealmTool extends HostBaseTool<
   typeof BaseCommandModule.ValidateRealmInput,
   typeof BaseCommandModule.ValidateRealmResult
 > {
@@ -25,7 +25,7 @@ export default class ValidateRealmCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ValidateRealmResult> {
     let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
-    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersCommand(
+    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
       this.commandContext,
     ).execute();
 

@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { ri } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import GetRealmOfResourceIdentifierCommand from '@cardstack/host/tools/get-realm-of-resource-identifier';
+import GetRealmOfResourceIdentifierTool from '@cardstack/host/tools/get-realm-of-resource-identifier';
 
 import {
   setupIntegrationTestRealm,
@@ -72,7 +72,7 @@ module(
     test('returns the realm identifier containing a given resource', async function (assert) {
       realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
       let toolService = getService('tool-service');
-      let command = new GetRealmOfResourceIdentifierCommand(
+      let command = new GetRealmOfResourceIdentifierTool(
         toolService.commandContext,
       );
       let result = await command.execute({
@@ -84,7 +84,7 @@ module(
     test('returns empty string when resource is not in any realm', async function (assert) {
       realmOfURLMap = new Map();
       let toolService = getService('tool-service');
-      let command = new GetRealmOfResourceIdentifierCommand(
+      let command = new GetRealmOfResourceIdentifierTool(
         toolService.commandContext,
       );
       let result = await command.execute({

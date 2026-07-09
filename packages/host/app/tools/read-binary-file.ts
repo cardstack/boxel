@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
@@ -22,7 +22,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export default class ReadBinaryFileCommand extends HostBaseCommand<
+export default class ReadBinaryFileTool extends HostBaseTool<
   typeof BaseCommandModule.ReadBinaryFileInput,
   typeof BaseCommandModule.ReadBinaryFileResult
 > {

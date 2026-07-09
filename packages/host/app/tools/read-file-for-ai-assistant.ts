@@ -3,11 +3,11 @@ import { service } from '@ember/service';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 
-export default class ReadFileForAssistantCommand extends HostBaseCommand<
+export default class ReadFileForAssistantTool extends HostBaseTool<
   typeof BaseCommandModule.FileIdentifierCard,
   typeof BaseCommandModule.FileForAttachmentCard
 > {

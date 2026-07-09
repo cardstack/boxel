@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import SummarizeSessionCommand from '@cardstack/host/tools/summarize-session';
+import SummarizeSessionTool from '@cardstack/host/tools/summarize-session';
 
 import {
   setupIntegrationTestRealm,
@@ -171,7 +171,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('successfully summarizes a conversation with project help content', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 
@@ -203,7 +203,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('successfully summarizes a conversation with cards and files', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 
@@ -235,7 +235,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('handles empty room gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 
@@ -255,7 +255,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('handles API errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 
@@ -283,7 +283,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('handles room not found gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 
@@ -306,7 +306,7 @@ module('Integration | commands | summarize-session', function (hooks) {
 
   test('includes conversation context in summary request', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionCommand(
+    const summarizeCommand = new SummarizeSessionTool(
       toolService.commandContext,
     );
 

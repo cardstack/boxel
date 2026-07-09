@@ -131,7 +131,7 @@ module('Acceptance | Code patches tests', function (hooks) {
                 commands: [
                   {
                     codeRef: {
-                      name: 'SearchCardsByTypeAndTitleCommand',
+                      name: 'SearchCardsByTypeAndTitleTool',
                       module: '@cardstack/boxel-host/commands/search-cards',
                     },
                     requiresApproval: true,

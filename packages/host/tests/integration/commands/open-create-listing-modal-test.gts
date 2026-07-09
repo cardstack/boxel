@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import { rri } from '@cardstack/runtime-common';
 
-import OpenCreateListingModalCommand from '@cardstack/host/tools/open-create-listing-modal';
+import OpenCreateListingModalTool from '@cardstack/host/tools/open-create-listing-modal';
 
 import {
   setupIntegrationTestRealm,
@@ -68,7 +68,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -94,7 +94,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -126,7 +126,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -147,7 +147,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.commandContext);
 
     await command.execute({
       codeRef: {

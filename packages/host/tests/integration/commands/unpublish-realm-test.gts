@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import UnpublishRealmCommand from '@cardstack/host/tools/unpublish-realm';
+import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -93,7 +93,7 @@ module('Integration | commands | unpublish-realm', function (hooks) {
 
   function makeCommand() {
     let toolService = getService('tool-service');
-    return new UnpublishRealmCommand(toolService.commandContext);
+    return new UnpublishRealmTool(toolService.commandContext);
   }
 
   test('unpublishes an explicit published-realm URL', async function (assert) {

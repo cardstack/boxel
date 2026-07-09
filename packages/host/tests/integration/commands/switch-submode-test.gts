@@ -8,7 +8,7 @@ import { localId } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-import SwitchSubmodeCommand from '@cardstack/host/tools/switch-submode';
+import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -70,7 +70,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       stacks: [[{ id: instance[localId], format: 'isolated' }]],
       submode: 'interact',
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
@@ -92,7 +92,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       stacks: [[{ id: instance.id!, format: 'isolated' }]],
       submode: 'interact',
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
@@ -115,7 +115,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       submode: 'interact',
       workspaceChooserOpened: true,
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
@@ -140,7 +140,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       stacks: [[]],
       submode: 'interact',
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}new-file.gts`;
@@ -170,7 +170,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       stacks: [[]],
       submode: 'interact',
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}existing-file.gts`;
@@ -212,7 +212,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       stacks: [[]],
       submode: 'interact',
     });
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
+    let switchSubmodeCommand = new SwitchSubmodeTool(
       toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}empty-file.gts`;

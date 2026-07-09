@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type RealmService from '@cardstack/host/services/realm';
-import GetPublishedRealmsCommand from '@cardstack/host/tools/get-published-realms';
+import GetPublishedRealmsTool from '@cardstack/host/tools/get-published-realms';
 
 import {
   setupIntegrationTestRealm,
@@ -64,7 +64,7 @@ module('Integration | commands | get-published-realms', function (hooks) {
 
   function makeCommand() {
     let toolService = getService('tool-service');
-    return new GetPublishedRealmsCommand(toolService.commandContext);
+    return new GetPublishedRealmsTool(toolService.commandContext);
   }
 
   test('returns each published destination from the lastPublishedAt map', async function (assert) {

@@ -6,14 +6,14 @@ import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import WriteTextFileCommand from './write-text-file';
+import WriteTextFileTool from './write-text-file';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 
-export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
+export default class AddFieldToCardDefinitionTool extends HostBaseTool<
   typeof BaseCommandModule.AddFieldToCardDefinitionInput
 > {
   @service declare private cardService: CardService;
@@ -66,7 +66,7 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
       computedFieldFunctionSourceCode: input.computedFieldFunctionSourceCode,
     });
 
-    let writeTextFileCommand = new WriteTextFileCommand(this.commandContext);
+    let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
     await writeTextFileCommand.execute({
       content: moduleSyntax.code(),
       realm: input.realm,

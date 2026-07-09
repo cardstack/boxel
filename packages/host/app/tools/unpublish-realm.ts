@@ -11,14 +11,14 @@ import config from '@cardstack/host/config/environment';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
 // Unpublishes a realm from a single published destination. Resolves once the
 // realm-server accepts the request; there is no reindex on unpublish (the
 // published realm is removed), so v1 has no completion-wait.
-export default class UnpublishRealmCommand extends HostBaseCommand<
+export default class UnpublishRealmTool extends HostBaseTool<
   typeof BaseCommandModule.UnpublishRealmInput,
   typeof BaseCommandModule.UnpublishRealmResult
 > {

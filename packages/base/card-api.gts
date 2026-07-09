@@ -138,8 +138,8 @@ import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
 import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
-import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
-import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
+import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
+import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
 import { md5 } from 'super-fast-md5';
 
 import {
@@ -3289,7 +3289,7 @@ export class Theme extends CardDef {
             if (!params.commandContext || !this.id) {
               return;
             }
-            let cmd = new CopyAndEditCommand(params.commandContext);
+            let cmd = new CopyAndEditTool(params.commandContext);
             await cmd.execute({
               card: this,
             });
@@ -3300,7 +3300,7 @@ export class Theme extends CardDef {
         {
           label: 'Modify Theme via AI',
           action: async () => {
-            let cmd = new PatchThemeCommand(params.commandContext);
+            let cmd = new PatchThemeTool(params.commandContext);
             await cmd.execute({
               cardId: this.id as unknown as string,
             });

@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import SearchGoogleImagesCommand from '@cardstack/host/tools/search-google-images';
+import SearchGoogleImagesTool from '@cardstack/host/tools/search-google-images';
 
 import {
   setupIntegrationTestRealm,
@@ -152,7 +152,7 @@ module('Integration | commands | search-google-images', function (hooks) {
 
   test('successfully searches Google Images and returns results', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesCommand(
+    const searchCommand = new SearchGoogleImagesTool(
       toolService.commandContext,
     );
 
@@ -256,7 +256,7 @@ module('Integration | commands | search-google-images', function (hooks) {
 
   test('uses default maxResults when not provided', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesCommand(
+    const searchCommand = new SearchGoogleImagesTool(
       toolService.commandContext,
     );
 
@@ -273,7 +273,7 @@ module('Integration | commands | search-google-images', function (hooks) {
 
   test('limits maxResults to 10', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesCommand(
+    const searchCommand = new SearchGoogleImagesTool(
       toolService.commandContext,
     );
 
@@ -295,7 +295,7 @@ module('Integration | commands | search-google-images', function (hooks) {
 
   test('supports pagination with startIndex parameter', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesCommand(
+    const searchCommand = new SearchGoogleImagesTool(
       toolService.commandContext,
     );
 

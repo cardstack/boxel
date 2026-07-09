@@ -1597,7 +1597,7 @@ export class TestCard extends Animal {
         },
       );
 
-      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // Mirror WriteTextFileTool exactly. `cardService.saveSource` with
       // saveType 'create-file' POSTs the new source to the realm and tags
       // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
       // which the realm echoes back in the `index/incremental` event.

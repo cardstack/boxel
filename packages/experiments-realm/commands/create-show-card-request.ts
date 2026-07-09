@@ -1,9 +1,14 @@
 import { Command } from '@cardstack/runtime-common';
 
-import { CardDef, StringField, contains, field } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  StringField,
+  contains,
+  field,
+} from 'https://cardstack.com/base/card-api';
 
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import SendBotTriggerEventCommand from '@cardstack/boxel-host/commands/send-bot-trigger-event';
+import UseAiAssistantTool from '@cardstack/boxel-host/commands/ai-assistant';
+import SendBotTriggerEventTool from '@cardstack/boxel-host/commands/send-bot-trigger-event';
 import { ensureSubmissionBotIsInRoom } from './bot-request-utils';
 
 export class CreateShowCardRequestInput extends CardDef {
@@ -32,7 +37,7 @@ export default class CreateShowCardRequestCommand extends Command<
       throw new Error('realm is required');
     }
 
-    let createRoomResult = await new UseAiAssistantCommand(
+    let createRoomResult = await new UseAiAssistantTool(
       this.commandContext,
     ).execute({
       roomId: 'new',
@@ -43,7 +48,7 @@ export default class CreateShowCardRequestCommand extends Command<
 
     await ensureSubmissionBotIsInRoom(this.commandContext, roomId);
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.commandContext).execute({
       roomId,
       realm,
       type: 'show-card',

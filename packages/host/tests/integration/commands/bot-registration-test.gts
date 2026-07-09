@@ -5,8 +5,8 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import RegisterBotCommand from '@cardstack/host/tools/register-bot';
-import UnregisterBotCommand from '@cardstack/host/tools/unregister-bot';
+import RegisterBotTool from '@cardstack/host/tools/register-bot';
+import UnregisterBotTool from '@cardstack/host/tools/unregister-bot';
 
 import {
   setupIntegrationTestRealm,
@@ -128,7 +128,7 @@ module('Integration | commands | bot-registration', function (hooks) {
 
   test('register-bot returns botRegistrationId', async function (assert) {
     let toolService = getService('tool-service');
-    let registerBotCommand = new RegisterBotCommand(toolService.commandContext);
+    let registerBotCommand = new RegisterBotTool(toolService.commandContext);
 
     let result = await registerBotCommand.execute({
       username: '@testuser:localhost',
@@ -140,8 +140,8 @@ module('Integration | commands | bot-registration', function (hooks) {
   test('unregister-bot removes the bot registration', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let registerBotCommand = new RegisterBotCommand(toolService.commandContext);
-    let unregisterBotCommand = new UnregisterBotCommand(
+    let registerBotCommand = new RegisterBotTool(toolService.commandContext);
+    let unregisterBotCommand = new UnregisterBotTool(
       toolService.commandContext,
     );
 

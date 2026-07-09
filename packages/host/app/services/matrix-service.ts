@@ -131,7 +131,7 @@ import {
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
@@ -2817,7 +2817,7 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
       this.toolService.commandContext,
     );
     let defaultSkillIds = await this.loadDefaultSkills('code');

@@ -4,15 +4,15 @@ import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import OneShotLlmRequestCommand from './one-shot-llm-request';
-import { SearchCardsByTypeAndTitleCommand } from './search-cards';
+import OneShotLlmRequestTool from './one-shot-llm-request';
+import { SearchCardsByTypeAndTitleTool } from './search-cards';
 
 // Command-level logger (general lifecycle + decisions)
 const log = logger('commands:search-and-choose');
 
-export default class SearchAndChooseCommand extends HostBaseCommand<
+export default class SearchAndChooseTool extends HostBaseTool<
   typeof BaseCommandModule.SearchAndChooseInput,
   typeof BaseCommandModule.SearchAndChooseResult
 > {
@@ -50,7 +50,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     const { SearchAndChooseResult } = await this.loadCommandModule();
 
     // 1. Gather candidates via existing search command
-    const search = new SearchCardsByTypeAndTitleCommand(this.commandContext);
+    const search = new SearchCardsByTypeAndTitleTool(this.commandContext);
     const searchResult = await search.execute({ type: candidateTypeCodeRef });
     const instances = searchResult.instances ?? [];
 
@@ -91,7 +91,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
       .join('\n\n');
 
     // 3. LLM selection
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.commandContext);
 
     const res = await oneShot.execute({
       systemPrompt,

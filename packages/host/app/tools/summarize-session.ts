@@ -2,15 +2,15 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type ToolService from '../services/tool-service';
 
-export default class SummarizeSessionCommand extends HostBaseCommand<
+export default class SummarizeSessionTool extends HostBaseTool<
   typeof BaseCommandModule.SummarizeSessionInput,
   typeof BaseCommandModule.SummarizeSessionResult
 > {
@@ -49,7 +49,7 @@ export default class SummarizeSessionCommand extends HostBaseCommand<
             'Please provide a concise summary of this conversation. Focus on the key points, decisions made, and any important outcomes.',
         },
       ];
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
         this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({

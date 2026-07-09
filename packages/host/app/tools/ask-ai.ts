@@ -2,16 +2,16 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import CreateAiAssistantRoomTool from './create-ai-assistant-room';
+import OpenAiAssistantRoomTool from './open-ai-assistant-room';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class AskAiCommand extends HostBaseCommand<
+export default class AskAiTool extends HostBaseTool<
   typeof BaseCommandModule.AskAiInput,
   typeof BaseCommandModule.AskAiOutput
 > {
@@ -29,11 +29,9 @@ export default class AskAiCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.AskAiInput,
   ): Promise<BaseCommandModule.AskAiOutput> {
-    let createRoomCommand = new CreateAiAssistantRoomCommand(
-      this.commandContext,
-    );
-    let openRoomCommand = new OpenAiAssistantRoomCommand(this.commandContext);
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
+    let createRoomCommand = new CreateAiAssistantRoomTool(this.commandContext);
+    let openRoomCommand = new OpenAiAssistantRoomTool(this.commandContext);
+    let sendMessageCommand = new SendAiAssistantMessageTool(
       this.commandContext,
     );
 

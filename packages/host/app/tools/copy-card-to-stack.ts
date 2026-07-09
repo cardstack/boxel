@@ -4,16 +4,16 @@ import { isCardInstance, realmURL } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CopyCardToRealmCommand from './copy-card';
+import CopyCardToRealmTool from './copy-card';
 
 import type CardService from '../services/card-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class CopyCardToStackCommand extends HostBaseCommand<
+export default class CopyCardToStackTool extends HostBaseTool<
   typeof BaseCommandModule.CopyCardToStackInput,
   typeof BaseCommandModule.CopyCardResult
 > {
@@ -40,9 +40,7 @@ export default class CopyCardToStackCommand extends HostBaseCommand<
     if (!realmToCopyTo) {
       throw new Error('Cannot determine target realm to copy card to');
     }
-    let copyCardToRealmCommand = new CopyCardToRealmCommand(
-      this.commandContext,
-    );
+    let copyCardToRealmCommand = new CopyCardToRealmTool(this.commandContext);
     return await copyCardToRealmCommand.execute({
       sourceCard: input.sourceCard,
       targetRealm: realmToCopyTo,

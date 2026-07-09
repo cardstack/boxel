@@ -6,15 +6,15 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { devSkillId } from '../lib/utils';
 
-import OneShotLlmRequestCommand from './one-shot-llm-request';
-import PatchCardInstanceCommand from './patch-card-instance';
+import OneShotLlmRequestTool from './one-shot-llm-request';
+import PatchCardInstanceTool from './patch-card-instance';
 
 import type ToolService from '../services/tool-service';
 
-export default class GenerateReadmeSpecCommand extends HostBaseCommand<
+export default class GenerateReadmeSpecTool extends HostBaseTool<
   typeof BaseCommandModule.GenerateReadmeSpecInput,
   typeof BaseCommandModule.GenerateReadmeSpecResult
 > {
@@ -61,15 +61,15 @@ Requirements:
     }
 
     // Generate the README using the existing command
-    const generateReadmeCommand = new OneShotLlmRequestCommand(
+    const generateReadmeCommand = new OneShotLlmRequestTool(
       this.toolService.commandContext,
     );
 
-    let userPrompt = GenerateReadmeSpecCommand.getUserPrompt(
+    let userPrompt = GenerateReadmeSpecTool.getUserPrompt(
       input.spec.ref,
       input.spec.specType as SpecType,
     );
-    let systemPrompt = GenerateReadmeSpecCommand.SYSTEM_PROMPT;
+    let systemPrompt = GenerateReadmeSpecTool.SYSTEM_PROMPT;
 
     const result = await generateReadmeCommand.execute({
       codeRef: {
@@ -85,7 +85,7 @@ Requirements:
     // Patch the spec's readMe field
     if (input.spec.id) {
       try {
-        const patchCardInstanceCommand = new PatchCardInstanceCommand(
+        const patchCardInstanceCommand = new PatchCardInstanceTool(
           this.toolService.commandContext,
           { cardType: input.spec.constructor as typeof CardDef }, //is this correct?
         );

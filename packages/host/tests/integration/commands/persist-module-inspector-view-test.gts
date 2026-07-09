@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import PersistModuleInspectorViewCommand from '@cardstack/host/tools/persist-module-inspector-view';
+import PersistModuleInspectorViewTool from '@cardstack/host/tools/persist-module-inspector-view';
 
 import {
   setupIntegrationTestRealm,
@@ -72,7 +72,7 @@ module(
 
     test('persists the module inspector view selection', async function (assert) {
       let toolService = getService('tool-service');
-      let command = new PersistModuleInspectorViewCommand(
+      let command = new PersistModuleInspectorViewTool(
         toolService.commandContext,
       );
       let result = await command.execute({

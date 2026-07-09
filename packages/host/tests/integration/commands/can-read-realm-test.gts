@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import CanReadRealmCommand from '@cardstack/host/tools/can-read-realm';
+import CanReadRealmTool from '@cardstack/host/tools/can-read-realm';
 
 import {
   setupIntegrationTestRealm,
@@ -67,7 +67,7 @@ module('Integration | commands | can-read-realm', function (hooks) {
   test('returns true for a readable realm', async function (assert) {
     readableUrls = ['https://example.com/readable/'];
     let toolService = getService('tool-service');
-    let command = new CanReadRealmCommand(toolService.commandContext);
+    let command = new CanReadRealmTool(toolService.commandContext);
     let result = await command.execute({
       realmIdentifier: 'https://example.com/readable/',
     });
@@ -77,7 +77,7 @@ module('Integration | commands | can-read-realm', function (hooks) {
   test('returns false for an unreadable realm', async function (assert) {
     readableUrls = [];
     let toolService = getService('tool-service');
-    let command = new CanReadRealmCommand(toolService.commandContext);
+    let command = new CanReadRealmTool(toolService.commandContext);
     let result = await command.execute({
       realmIdentifier: 'https://example.com/private/',
     });

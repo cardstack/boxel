@@ -1,10 +1,10 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CreateSubmissionWorkflowCommand from './create-submission-workflow';
+import CreateSubmissionWorkflowTool from './create-submission-workflow';
 
-export default class CreateAndOpenSubmissionWorkflowCardCommand extends HostBaseCommand<
+export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseTool<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
   description =
@@ -21,7 +21,7 @@ export default class CreateAndOpenSubmissionWorkflowCardCommand extends HostBase
   protected async run(
     input: BaseCommandModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
-    await new CreateSubmissionWorkflowCommand(this.commandContext).execute({
+    await new CreateSubmissionWorkflowTool(this.commandContext).execute({
       realm: input.realm,
       listingId: input.listingId,
       listingName: input.listingName,

@@ -4,13 +4,13 @@ import ENV from '@cardstack/host/config/environment';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 
 const { defaultSystemCardId } = ENV;
 
-export default class GetUserSystemCardCommand extends HostBaseCommand<
+export default class GetUserSystemCardTool extends HostBaseTool<
   undefined,
   typeof BaseCommandModule.GetUserSystemCardResult
 > {

@@ -7,18 +7,18 @@ import type { Listing } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import UseAiAssistantCommand from './ai-assistant';
-import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
-import OpenInInteractModeCommand from './open-in-interact-mode';
+import UseAiAssistantTool from './ai-assistant';
+import SendBotTriggerEventTool from './bot-requests/send-bot-trigger-event';
+import OpenInInteractModeTool from './open-in-interact-mode';
 
 import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
+export default class CreateSubmissionWorkflowTool extends HostBaseTool<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
@@ -72,7 +72,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
     // Create the Matrix room first so its id can be persisted on the workflow
     // card — the retry flow reads roomId off the card to re-emit the bot
     // trigger event without losing the original conversation.
-    let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
+    let useAiAssistantCommand = new UseAiAssistantTool(this.commandContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
       roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
@@ -143,11 +143,11 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
       throw err;
     }
 
-    await new OpenInInteractModeCommand(this.commandContext).execute({
+    await new OpenInInteractModeTool(this.commandContext).execute({
       cardId: workflowCardId,
     });
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.commandContext).execute({
       roomId,
       realm,
       type: 'pr-listing-create',

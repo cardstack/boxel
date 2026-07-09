@@ -3,11 +3,11 @@ import { service } from '@ember/service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 
-export default class GetCardCommand extends HostBaseCommand<
+export default class GetCardTool extends HostBaseTool<
   typeof BaseCommandModule.CardIdCard,
   typeof CardDef
 > {

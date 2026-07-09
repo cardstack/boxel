@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { rri } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import AddFieldToCardDefinitionCommand from '@cardstack/host/tools/add-field-to-card-definition';
+import AddFieldToCardDefinitionTool from '@cardstack/host/tools/add-field-to-card-definition';
 
 import {
   setupIntegrationTestRealm,
@@ -64,7 +64,7 @@ module(
     test('adds a field to a card definition', async function (assert) {
       let toolService = getService('tool-service');
       let cardService = getService('card-service');
-      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
+      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
         toolService.commandContext,
       );
 
@@ -102,7 +102,7 @@ module(
     test('can add a computed field', async function (assert) {
       let toolService = getService('tool-service');
       let cardService = getService('card-service');
-      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
+      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
         toolService.commandContext,
       );
 

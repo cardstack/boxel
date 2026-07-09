@@ -4,13 +4,13 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type { RoomResource } from '../resources/room';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class GetEventsFromRoomCommand extends HostBaseCommand<
+export default class GetEventsFromRoomTool extends HostBaseTool<
   typeof BaseCommandModule.GetEventsFromRoomInput,
   typeof BaseCommandModule.GetEventsFromRoomResult
 > {

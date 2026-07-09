@@ -5,11 +5,11 @@ import { isBotTriggerEvent } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
 
-import HostBaseCommand from '../../lib/host-base-command';
+import HostBaseTool from '../../lib/host-base-tool';
 
 import type MatrixService from '../../services/matrix-service';
 
-export default class SendBotTriggerEventCommand extends HostBaseCommand<
+export default class SendBotTriggerEventTool extends HostBaseTool<
   typeof BaseCommandModule.SendBotTriggerEventInput
 > {
   @service declare private matrixService: MatrixService;

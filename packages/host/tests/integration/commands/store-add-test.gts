@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import StoreAddCommand from '@cardstack/host/tools/store-add';
+import StoreAddTool from '@cardstack/host/tools/store-add';
 
 import {
   setupIntegrationTestRealm,
@@ -56,7 +56,7 @@ module('Integration | commands | store-add', function (hooks) {
 
   test('adds a card document to the store and returns a CardDef', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new StoreAddCommand(toolService.commandContext);
+    let command = new StoreAddTool(toolService.commandContext);
     let result = await command.execute({
       document: {
         data: {

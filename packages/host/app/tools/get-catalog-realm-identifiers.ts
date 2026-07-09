@@ -2,11 +2,11 @@ import { service } from '@ember/service';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
-export default class GetCatalogRealmIdentifiersCommand extends HostBaseCommand<
+export default class GetCatalogRealmIdentifiersTool extends HostBaseTool<
   undefined,
   typeof BaseCommandModule.GetCatalogRealmIdentifiersResult
 > {

@@ -10,7 +10,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type LoaderService from '../services/loader-service';
 
-export default abstract class HostBaseCommand<
+export default abstract class HostBaseTool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > extends Command<CardInputType, CardResultType> {

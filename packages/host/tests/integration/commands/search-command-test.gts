@@ -5,8 +5,8 @@ import { baseRealm, type Query, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  SearchCardsByQueryCommand,
-  SearchCardsByTypeAndTitleCommand,
+  SearchCardsByQueryTool,
+  SearchCardsByTypeAndTitleTool,
 } from '@cardstack/host/tools/search-cards';
 
 import {
@@ -51,7 +51,7 @@ module('Integration | commands | search', function (hooks) {
     cardTitle: string | undefined;
   }) {
     let toolService = getService('tool-service');
-    let searchCommand = new SearchCardsByTypeAndTitleCommand(
+    let searchCommand = new SearchCardsByTypeAndTitleTool(
       toolService.commandContext,
     );
     return searchCommand.execute(input);
@@ -59,9 +59,7 @@ module('Integration | commands | search', function (hooks) {
 
   function runQuerySearch(query: Query) {
     let toolService = getService('tool-service');
-    let searchCommand = new SearchCardsByQueryCommand(
-      toolService.commandContext,
-    );
+    let searchCommand = new SearchCardsByQueryTool(toolService.commandContext);
     return searchCommand.execute({ query });
   }
 

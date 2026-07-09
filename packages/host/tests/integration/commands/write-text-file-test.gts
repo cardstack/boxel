@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
-import WriteTextFileCommand from '@cardstack/host/tools/write-text-file';
+import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 
 import {
   setupIntegrationTestRealm,
@@ -63,7 +63,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('writes a text file', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await writeTextFileCommand.execute({
@@ -78,7 +78,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('fails if the file already exists', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await writeTextFileCommand.execute({
@@ -106,7 +106,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('is able to overwrite a file', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await writeTextFileCommand.execute({
@@ -127,7 +127,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('handles a leading slash in the path', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await writeTextFileCommand.execute({
@@ -143,7 +143,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   test('useNonConflictingFilename writes to a new file when content exists', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await cardService.saveSource(
@@ -173,7 +173,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   test('useNonConflictingFilename reuses an existing blank file', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await cardService.saveSource(
@@ -206,7 +206,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   test('useNonConflictingFilename writes into an existing blank file when content is provided', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     await cardService.saveSource(
@@ -233,7 +233,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('throws an error when an invalid realm is provided', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     try {
@@ -253,7 +253,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   test('throws when overwrite and useNonConflictingFilename are both true', async function (assert) {
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
+    let writeTextFileCommand = new WriteTextFileTool(
       toolService.commandContext,
     );
     try {

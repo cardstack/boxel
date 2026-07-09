@@ -80,7 +80,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
-import CreateSpecCommand from '@cardstack/host/tools/create-specs';
+import CreateSpecTool from '@cardstack/host/tools/create-specs';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
@@ -520,7 +520,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private createSpecTask = task(async (ref: ResolvedCodeRef) => {
     try {
-      const createSpecCommand = new CreateSpecCommand(
+      const createSpecCommand = new CreateSpecTool(
         this.toolService.commandContext,
       );
       let currentRealm = this.operatorModeStateService.realmURL;
