@@ -2462,9 +2462,21 @@ export class Realm {
           // Log the underlying exception before returning 500 —
           // otherwise callers only see "Write Error" and the original
           // stack trace is lost, making atomic-batch failures
-          // effectively undebuggable.
+          // effectively undebuggable. Include e.cause explicitly: errors
+          // like FilterRefersToNonexistentTypeError carry the actionable
+          // detail (which module/definition was missing, or that a
+          // concurrent invalidation discarded the lookup) in their cause,
+          // not their message, so without this the real reason is swallowed.
+          let cause =
+            e?.cause instanceof Error
+              ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
+              : e?.cause != null
+                ? String(e.cause)
+                : undefined;
           this.#log.error(
-            `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+            `Atomic write failed: ${e.message}${
+              cause ? `\ncause: ${cause}` : ''
+            }\n${e.stack ?? '(no stack)'}`,
           );
           return createResponse({
             body: JSON.stringify({
