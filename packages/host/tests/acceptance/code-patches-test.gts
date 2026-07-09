@@ -283,9 +283,11 @@ ${REPLACE_MARKER}\n\`\`\``;
       'updated file should be attached 2',
     );
 
-    let commandService = getService('command-service') as any;
-    let requestIdsByRoom =
-      commandService.aiAssistantClientRequestIdsByRoom as Map<string, any>;
+    let toolService = getService('tool-service') as any;
+    let requestIdsByRoom = toolService.aiAssistantClientRequestIdsByRoom as Map<
+      string,
+      any
+    >;
     let roomRequestIds = requestIdsByRoom?.get(roomId);
     assert.ok(
       roomRequestIds,
@@ -1726,7 +1728,7 @@ ${REPLACE_MARKER}
     });
 
     // Wait for the patches to be processed - the spinner should appear during automatic execution
-    // This test should FAIL until we implement the CommandService state tracking
+    // This test should FAIL until we implement the ToolService state tracking
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
       {

@@ -61,10 +61,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await sendAiAssistantMessageCommand.execute({
       roomId,

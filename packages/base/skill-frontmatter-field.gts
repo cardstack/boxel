@@ -24,7 +24,7 @@ export class SkillFrontmatterField extends FrontmatterField {
   // Legacy spelling of `tools`. Index rows extracted before the
   // command -> tool rename persist the value under a `commands` attribute;
   // this field lets those rows rehydrate without a reindex. Consumers read
-  // `tools` and fall back to this (see the host's `getSkillSourceCommands`).
+  // `tools` and fall back to this (see the host's `getSkillSourceTools`).
   // Remove once all realms have reindexed post-rename.
   @field commands = containsMany(ToolField);
 

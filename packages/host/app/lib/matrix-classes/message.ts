@@ -17,7 +17,7 @@ import type { RoomMember } from './member';
 
 import type MessageCodePatchResult from './message-code-patch-result';
 
-import type MessageCommand from './message-command';
+import type MessageTool from './message-tool';
 import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {
@@ -56,7 +56,7 @@ interface RoomMessageOptional {
 export class Message implements RoomMessageInterface {
   @tracked _body: string;
   @tracked _reasoningContent?: string | null;
-  @tracked _commands: TrackedArray<MessageCommand>;
+  @tracked _commands: TrackedArray<MessageTool>;
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
@@ -90,7 +90,7 @@ export class Message implements RoomMessageInterface {
   constructor(init: RoomMessageInterface) {
     this._body = init.body;
     this._reasoningContent = init.reasoningContent;
-    this._commands = new TrackedArray<MessageCommand>();
+    this._commands = new TrackedArray<MessageTool>();
     this.author = init.author;
     this.eventId = init.eventId;
     this.created = init.created;
@@ -102,7 +102,7 @@ export class Message implements RoomMessageInterface {
     this.hasContinuation = init.hasContinuation;
     this.continuationOf = init.continuationOf;
     this._reasoningContent = init.reasoningContent;
-    this._commands = new TrackedArray<MessageCommand>();
+    this._commands = new TrackedArray<MessageTool>();
     this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
@@ -145,14 +145,14 @@ export class Message implements RoomMessageInterface {
     return this.continuedInMessage?.body;
   }
 
-  get commands(): MessageCommand[] {
+  get commands(): MessageTool[] {
     return (this.continuedInMessage?.commands?.length ?? 0) > 0
       ? this.continuedInMessage!.commands
       : (this._commands ?? []);
   }
 
-  setCommands(commands: MessageCommand[]) {
-    this._commands = new TrackedArray<MessageCommand>(commands);
+  setCommands(commands: MessageTool[]) {
+    this._commands = new TrackedArray<MessageTool>(commands);
   }
 
   get continuedCommands() {

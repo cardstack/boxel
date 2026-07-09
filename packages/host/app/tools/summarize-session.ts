@@ -6,16 +6,16 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import SendRequestViaProxyCommand from './send-request-via-proxy';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
+import type ToolService from '../services/tool-service';
 
 export default class SummarizeSessionCommand extends HostBaseCommand<
   typeof BaseCommandModule.SummarizeSessionInput,
   typeof BaseCommandModule.SummarizeSessionResult
 > {
   @service declare private matrixService: MatrixService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Summarize Session';
@@ -50,7 +50,7 @@ export default class SummarizeSessionCommand extends HostBaseCommand<
         },
       ];
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
-        this.commandService.commandContext,
+        this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',

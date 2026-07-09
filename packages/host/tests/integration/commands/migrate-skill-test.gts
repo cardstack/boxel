@@ -141,7 +141,7 @@ export class DoThingQuietly extends Command {
   });
 
   test('migrates a Skill card with commands into a SKILL.md', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
     let command = new MigrateSkillCommand(commandContext);
 
@@ -185,7 +185,7 @@ export class DoThingQuietly extends Command {
   });
 
   test('omits boxel.tools when the skill has none', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
     let command = new MigrateSkillCommand(commandContext);
 
@@ -203,7 +203,7 @@ export class DoThingQuietly extends Command {
   });
 
   test('reports skills with no instructions instead of writing an empty file', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
     let command = new MigrateSkillCommand(commandContext);
 
@@ -224,7 +224,7 @@ export class DoThingQuietly extends Command {
   });
 
   test('skips existing targets unless overwrite is set', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
     let command = new MigrateSkillCommand(commandContext);
 

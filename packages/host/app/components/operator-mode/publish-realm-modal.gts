@@ -39,7 +39,6 @@ import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -55,6 +54,7 @@ import type {
   SubdomainAvailabilityResult,
 } from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 import CheckDomainAvailabilityCommand from '@cardstack/host/tools/check-domain-availability';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -85,7 +85,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   #cardAPI?: typeof CardAPI;
@@ -803,7 +803,7 @@ export default class PublishRealmModal extends Component<Signature> {
         // Check availability through the same command exposed to boxel-cli so
         // the UI and headless callers share one path.
         let command = new CheckDomainAvailabilityCommand(
-          this.commandService.commandContext,
+          this.toolService.commandContext,
         );
         let result = await command.execute({ type: 'custom', name: subdomain });
         this.customSubdomainAvailability = {

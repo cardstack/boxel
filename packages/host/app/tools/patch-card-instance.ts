@@ -15,9 +15,8 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type CommandService from '../services/command-service';
-
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 interface Configuration {
   cardType: typeof CardDef;
@@ -27,7 +26,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
   undefined
 > {
   @service declare private store: StoreService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   description = `Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
   static actionVerb = 'Update Card';
@@ -56,7 +55,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
       );
     }
 
-    let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+    let clientRequestId = this.toolService.trackAiAssistantCardRequest({
       action: 'patch-instance',
       roomId: input.roomId,
       fileUrl: input.cardId.endsWith('.json')

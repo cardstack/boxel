@@ -50,17 +50,17 @@ module('Integration | commands | search', function (hooks) {
     cardType: string | undefined;
     cardTitle: string | undefined;
   }) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let searchCommand = new SearchCardsByTypeAndTitleCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     return searchCommand.execute(input);
   }
 
   function runQuerySearch(query: Query) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     return searchCommand.execute({ query });
   }

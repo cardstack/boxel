@@ -92,8 +92,8 @@ module('Integration | commands | unpublish-realm', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new UnpublishRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new UnpublishRealmCommand(toolService.commandContext);
   }
 
   test('unpublishes an explicit published-realm URL', async function (assert) {

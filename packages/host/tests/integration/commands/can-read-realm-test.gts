@@ -66,8 +66,8 @@ module('Integration | commands | can-read-realm', function (hooks) {
 
   test('returns true for a readable realm', async function (assert) {
     readableUrls = ['https://example.com/readable/'];
-    let commandService = getService('command-service');
-    let command = new CanReadRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new CanReadRealmCommand(toolService.commandContext);
     let result = await command.execute({
       realmIdentifier: 'https://example.com/readable/',
     });
@@ -76,8 +76,8 @@ module('Integration | commands | can-read-realm', function (hooks) {
 
   test('returns false for an unreadable realm', async function (assert) {
     readableUrls = [];
-    let commandService = getService('command-service');
-    let command = new CanReadRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new CanReadRealmCommand(toolService.commandContext);
     let result = await command.execute({
       realmIdentifier: 'https://example.com/private/',
     });

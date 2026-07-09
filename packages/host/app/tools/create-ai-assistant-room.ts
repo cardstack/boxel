@@ -19,10 +19,10 @@ import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseCommand from '../lib/host-base-command';
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   loadSkillSource,
   type SkillSource,
-} from '../lib/skill-commands';
+} from '../lib/skill-tools';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
@@ -156,12 +156,12 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     ]);
 
     let commandDefinitions = [...enabled.sources, ...disabled.sources].flatMap(
-      (source) => getSkillSourceCommands(source),
+      (source) => getSkillSourceTools(source),
     );
     let commandFileDefs: FileDef[] = [];
     if (commandDefinitions.length) {
-      commandFileDefs = await matrixService.uploadCommandDefinitions(
-        matrixService.getUniqueCommandDefinitions(commandDefinitions),
+      commandFileDefs = await matrixService.uploadToolDefinitions(
+        matrixService.getUniqueToolDefinitions(commandDefinitions),
       );
     }
 

@@ -5,7 +5,7 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
-import type CommandService from '@cardstack/host/services/command-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
@@ -28,7 +28,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   codePatchStatus: CodePatchStatus | undefined | null = null;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
@@ -108,7 +108,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     }
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-      this.commandService.commandContext,
+      this.toolService.commandContext,
     );
 
     try {

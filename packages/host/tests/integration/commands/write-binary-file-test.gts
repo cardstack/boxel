@@ -66,8 +66,8 @@ module('Integration | commands | write-binary-file', function (hooks) {
   });
 
   test('writes a binary file', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new WriteBinaryFileCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new WriteBinaryFileCommand(toolService.commandContext);
     let result = await command.execute({
       path: 'test-image.png',
       realm: testRealmURL,
@@ -117,8 +117,8 @@ module('Integration | commands | write-binary-file', function (hooks) {
       { prepend: true },
     );
 
-    let commandService = getService('command-service');
-    let command = new WriteBinaryFileCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new WriteBinaryFileCommand(toolService.commandContext);
     try {
       await command.execute({
         path: 'waf-blocked.png',
@@ -147,8 +147,8 @@ module('Integration | commands | write-binary-file', function (hooks) {
   });
 
   test('handles a leading slash in the path', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new WriteBinaryFileCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new WriteBinaryFileCommand(toolService.commandContext);
     let result = await command.execute({
       path: '/test-image.png',
       realm: testRealmURL,
@@ -162,8 +162,8 @@ module('Integration | commands | write-binary-file', function (hooks) {
   });
 
   test('throws an error when an invalid realm is provided', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new WriteBinaryFileCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new WriteBinaryFileCommand(toolService.commandContext);
     try {
       await command.execute({
         path: 'bad.png',

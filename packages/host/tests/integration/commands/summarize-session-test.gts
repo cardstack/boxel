@@ -170,9 +170,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   }
 
   test('successfully summarizes a conversation with project help content', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Create a room with project-related conversation
@@ -202,9 +202,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   });
 
   test('successfully summarizes a conversation with cards and files', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Create a room with card and file discussion
@@ -234,9 +234,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   });
 
   test('handles empty room gracefully', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Create an empty room
@@ -254,9 +254,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   });
 
   test('handles API errors gracefully', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Create a room with error-triggering content
@@ -282,9 +282,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   });
 
   test('handles room not found gracefully', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     const input = createMockSummarizeSessionInput('non-existent-room-id');
@@ -305,9 +305,9 @@ module('Integration | commands | summarize-session', function (hooks) {
   });
 
   test('includes conversation context in summary request', async function (assert) {
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     const summarizeCommand = new SummarizeSessionCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Create a room with specific conversation

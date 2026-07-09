@@ -23,7 +23,7 @@ export function isValidCommandDefinition(
   return Boolean(module && name && functionName);
 }
 
-export function getUniqueValidCommandDefinitions(
+export function getUniqueValidToolDefinitions(
   commandDefinitions: SkillModule.CommandField[] = [],
 ): SkillModule.CommandField[] {
   let seen = new Set<string>();

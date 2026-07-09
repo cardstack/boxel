@@ -36,13 +36,13 @@ import { titleize } from '../utils/titleize';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
 import type CodeSemanticsService from './code-semantics-service';
-import type CommandService from './command-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
@@ -55,7 +55,7 @@ export interface SessionRoomData {
 
 export default class AiAssistantPanelService extends Service {
   @service declare private codeSemanticsService: CodeSemanticsService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -400,7 +400,7 @@ export default class AiAssistantPanelService extends Service {
           roomId = await this.createFallbackRoom(name);
         } else {
           let createRoomCommand = new CreateAiAssistantRoomCommand(
-            this.commandService.commandContext,
+            this.toolService.commandContext,
           );
 
           let input: any = { name };
@@ -525,7 +525,7 @@ export default class AiAssistantPanelService extends Service {
       // skill file or a legacy `Skill` card, uploads it, and populates the
       // room's skills config + command definitions.
       let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-        this.commandService.commandContext,
+        this.toolService.commandContext,
       );
       await updateRoomSkillsCommand.execute({
         roomId,
@@ -541,7 +541,7 @@ export default class AiAssistantPanelService extends Service {
     async (oldRoomId: string, newRoomId: string) => {
       try {
         const summarizeCommand = new SummarizeSessionCommand(
-          this.commandService.commandContext,
+          this.toolService.commandContext,
         );
         const result = await summarizeCommand.execute({
           roomId: oldRoomId,

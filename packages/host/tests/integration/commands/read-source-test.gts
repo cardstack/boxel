@@ -49,8 +49,8 @@ module('Integration | commands | read-source', function (hooks) {
         },
       }),
     );
-    let commandService = getService('command-service');
-    readSourceCommand = new ReadSourceCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    readSourceCommand = new ReadSourceCommand(toolService.commandContext);
   });
 
   test('reads a GTS file as card source', async function (assert) {

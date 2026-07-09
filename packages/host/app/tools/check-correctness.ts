@@ -14,10 +14,10 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
@@ -27,7 +27,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
 
@@ -119,7 +119,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     cardId: string,
     roomId: string,
   ): Promise<string[]> {
-    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       cardId,
       cardIndexingTimeout,
@@ -170,7 +170,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
     let { moduleURL, realmURL, fileURL } = moduleInfo;
 
-    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       fileURL.href,
       cardIndexingTimeout,

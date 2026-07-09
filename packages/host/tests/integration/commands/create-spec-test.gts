@@ -62,8 +62,8 @@ module('Integration | Command | create-specs', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
-    let commandService = getService('command-service');
-    createSpecCommand = new CreateSpecCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    createSpecCommand = new CreateSpecCommand(toolService.commandContext);
   });
 
   setupLocalIndexing(hooks);

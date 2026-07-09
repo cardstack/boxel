@@ -141,9 +141,9 @@ export class ContextCard extends CardDef {
       }),
     );
 
-    const commandService = getService('command-service');
+    const toolService = getService('tool-service');
     searchAndChooseCommand = new SearchAndChooseCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
   });
 

@@ -79,8 +79,8 @@ module('Integration | commands | check-domain-availability', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new CheckDomainAvailabilityCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new CheckDomainAvailabilityCommand(toolService.commandContext);
   }
 
   test('reports an available custom subdomain, deriving the URL from the server hostname', async function (assert) {

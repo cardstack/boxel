@@ -14,10 +14,10 @@ import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type ToolService from '../services/tool-service';
 
 interface FileInfo {
   exists: boolean;
@@ -33,7 +33,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   @service declare private realm: RealmService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   description = `Apply code changes to file and then apply lint fixes`;
   static actionVerb = 'Apply';
@@ -73,7 +73,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
-      let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+      let clientRequestId = this.toolService.trackAiAssistantCardRequest({
         action: 'patch-code',
         roomId,
         fileUrl: finalFileIdentifier,

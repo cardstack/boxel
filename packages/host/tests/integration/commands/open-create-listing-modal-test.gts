@@ -65,12 +65,10 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
   });
 
   test('stores modal payload in operator mode state', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreateListingModalCommand(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -93,12 +91,10 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
   });
 
   test('stores modal payload without openCardIds', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreateListingModalCommand(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -127,12 +123,10 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
   });
 
   test('stores modal payload with examples hidden for field defs', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreateListingModalCommand(toolService.commandContext);
 
     await command.execute({
       codeRef: {
@@ -150,12 +144,10 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
   });
 
   test('dismissCreateListingModal clears the payload', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreateListingModalCommand(toolService.commandContext);
 
     await command.execute({
       codeRef: {

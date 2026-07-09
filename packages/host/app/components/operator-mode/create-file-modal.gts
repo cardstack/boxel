@@ -72,9 +72,9 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 import CardErrorDetail from './card-error-detail';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -462,7 +462,7 @@ export default class CreateFileModal extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard<Spec>;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
@@ -930,7 +930,7 @@ export class ${className} extends ${exportName} {
       );
     }
     let { newCardId } = await new CopyCardToRealmCommand(
-      this.commandService.commandContext,
+      this.toolService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,

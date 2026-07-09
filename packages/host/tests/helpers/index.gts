@@ -2020,7 +2020,7 @@ export async function addSkillToAiAssistant(
   }
 
   let command = new UpdateRoomSkillsCommand(
-    getService('command-service').commandContext,
+    getService('tool-service').commandContext,
   );
   await command.execute({
     roomId: resolvedRoomId,

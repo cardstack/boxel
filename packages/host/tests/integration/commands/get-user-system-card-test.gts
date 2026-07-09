@@ -54,8 +54,8 @@ module('Integration | commands | get-user-system-card', function (hooks) {
   });
 
   test('returns undefined cardId when no system card is set', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new GetUserSystemCardCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new GetUserSystemCardCommand(toolService.commandContext);
 
     let result = await command.execute();
     assert.strictEqual(
@@ -76,8 +76,8 @@ module('Integration | commands | get-user-system-card', function (hooks) {
     let matrixService = getService('matrix-service') as any;
     matrixService._systemCard = new SystemCard({ id: systemCardId });
 
-    let commandService = getService('command-service');
-    let command = new GetUserSystemCardCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new GetUserSystemCardCommand(toolService.commandContext);
 
     let result = await command.execute();
     assert.strictEqual(result.cardId, systemCardId);

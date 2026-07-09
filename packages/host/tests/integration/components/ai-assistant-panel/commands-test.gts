@@ -1534,11 +1534,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  // The host's MessageCommand.eventId is captured from the bot message's
+  // The host's MessageTool.eventId is captured from the bot message's
   // effectiveEventId at construction time and never refreshes. When a tool_call
   // first appears on a later m.replace event, the bot message's "current"
   // event_id (in room.events) is the m.replace's event_id — but
-  // MessageCommand.eventId is the parent/original. Emitting a commandResult
+  // MessageTool.eventId is the parent/original. Emitting a commandResult
   // bound to the parent id can disagree with what ai-bot's `getRoomEvents`
   // reads via /messages, so the host sources the linkage event_id from
   // current room state at execute time.
@@ -1568,7 +1568,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // Streaming event #2: m.replace adding the tool_call. After this,
     // room.events has both events. The latest event with the matching
     // commandRequestId is the m.replace event (replacedEventId), while
-    // MessageCommand.eventId is streamingEventId because getEffectiveEventId
+    // MessageTool.eventId is streamingEventId because getEffectiveEventId
     // resolves replace events to their parent and updateMessage refreshes
     // content but not eventId. The host emits
     // commandResult.m.relates_to.event_id = replacedEventId — what room.events
@@ -1603,7 +1603,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-card-idle]');
 
-    // The host's MessageCommand must reach 'applied' state once the
+    // The host's MessageTool must reach 'applied' state once the
     // commandResult is dispatched. _messageCache is keyed by the bot
     // message's effective/parent id (streamingEventId), but the dispatched
     // commandResult.m.relates_to.event_id is the latest m.replace
@@ -1614,7 +1614,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists(
-        'MessageCommand status should flip to applied even though commandResult.m.relates_to.event_id is the m.replace id, not the streaming id the cache is keyed by',
+        'MessageTool status should flip to applied even though commandResult.m.relates_to.event_id is the m.replace id, not the streaming id the cache is keyed by',
       );
 
     let commandResultEvents = getRoomEvents(roomId).filter(
@@ -1819,7 +1819,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // checkCorrectness is on the always-auto-execute list (one of three
     // branches in isAutoExecutableCommand). Before the fix, the manual
     // approval bar painted for the ~100ms debounce window before
-    // command-service flipped `acceptingAllRoomIds`; the user saw
+    // tool-service flipped `acceptingAllRoomIds`; the user saw
     // Accept All / Cancel briefly appear then disappear. The bar must
     // never paint in its manual-approval branch for any auto-executed
     // command, regardless of which condition triggers auto-execute.
@@ -1883,7 +1883,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     // The boxel-environment skill declares read-file-for-ai-assistant with
     // requiresApproval=false (see the skill JSON earlier in this module),
-    // so MessageCommand.requiresApproval is false here — the second
+    // so MessageTool.requiresApproval is false here — the second
     // isAutoExecutableCommand branch. The fix must also suppress the
     // Accept All bar for this path.
     await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
@@ -1925,7 +1925,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     // The per-command Apply button (rendered next to each tool-call message)
     // has the same race as the Accept All bar: between "message lands"
-    // and "command-service starts the run", a ready Run button would
+    // and "tool-service starts the run", a ready Run button would
     // briefly render. The fix presents the applying-spinner immediately
     // for any auto-executable command.
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -1984,11 +1984,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // processingLastStartedAt silently no-op, and there's no public seam
     // to keep the processRoomTask "running" without rewriting the
     // resource itself. Instead, exercise the helper directly with a
-    // spied sendCommandResultEvent on matrixService — this proves the
+    // spied sendToolResultEvent on matrixService — this proves the
     // dispatch shape, the per-command iteration, and the failureReason
     // text without depending on the proxy internals.
     let matrixService = getService('matrix-service');
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'checking correctness',
@@ -2027,8 +2027,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.ok(message, 'two-command bot message lands in the room resource');
 
     let captured: Array<{ toolCallId: string; failureReason?: string }> = [];
-    let originalSend = matrixService.sendCommandResultEvent.bind(matrixService);
-    (matrixService as any).sendCommandResultEvent = async (params: any) => {
+    let originalSend = matrixService.sendToolResultEvent.bind(matrixService);
+    (matrixService as any).sendToolResultEvent = async (params: any) => {
       captured.push({
         toolCallId: params.toolCallId,
         failureReason: params.failureReason,
@@ -2036,14 +2036,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     };
     try {
       await (
-        commandService as any
+        toolService as any
       ).invalidateAutoExecutableCommandsForStuckProcessing(
         roomResource,
         roomId,
         message!.eventId,
       );
     } finally {
-      (matrixService as any).sendCommandResultEvent = originalSend;
+      (matrixService as any).sendToolResultEvent = originalSend;
     }
 
     assert.strictEqual(

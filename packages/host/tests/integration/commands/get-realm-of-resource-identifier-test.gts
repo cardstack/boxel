@@ -71,9 +71,9 @@ module(
 
     test('returns the realm identifier containing a given resource', async function (assert) {
       realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let command = new GetRealmOfResourceIdentifierCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let result = await command.execute({
         resourceIdentifier: `${testRealmURL}some-card`,
@@ -83,9 +83,9 @@ module(
 
     test('returns empty string when resource is not in any realm', async function (assert) {
       realmOfURLMap = new Map();
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let command = new GetRealmOfResourceIdentifierCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let result = await command.execute({
         resourceIdentifier: 'https://unknown.example.com/card',

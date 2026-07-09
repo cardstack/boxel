@@ -26,16 +26,16 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
+import { isAutoExecutableCommand } from '@cardstack/host/lib/tool-auto-execute';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -48,7 +48,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomResource: RoomResource;
-    messageCommand: MessageCommand;
+    messageCommand: MessageTool;
     roomId: string;
     runCommand: () => void;
     isError?: boolean;
@@ -60,7 +60,7 @@ interface Signature {
 }
 
 export default class RoomMessageCommand extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -84,8 +84,8 @@ export default class RoomMessageCommand extends Component<Signature> {
     // 'act'), present the applying spinner immediately on message-landed
     // instead of the clickable Run button. Without this, the per-command
     // Apply button flashes through 'ready' for the ~100ms debounce window
-    // before command-service starts the run. If validation later fails
-    // in the drain, command-service dispatches an `invalid` commandResult
+    // before tool-service starts the run. If validation later fails
+    // in the drain, tool-service dispatches an `invalid` commandResult
     // event and the button transitions to its invalid state — no risk of
     // the spinner sticking.
     if ((status === 'ready' || status === undefined) && this.willAutoExecute) {
@@ -196,7 +196,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           activeRealmURL: this.activeRealmURL,
           canEditActiveRealm: this.canEditActiveRealm,
         },
-        commandContext: this.commandService.commandContext,
+        commandContext: this.toolService.commandContext,
       }) ?? [];
     return toMenuItems(menuItems);
   }

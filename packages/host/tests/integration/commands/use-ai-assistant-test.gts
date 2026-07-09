@@ -12,8 +12,8 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
 import UseAiAssistantCommand from '@cardstack/host/tools/ai-assistant';
 import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
 
@@ -33,7 +33,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let commandService: CommandService;
+let toolService: ToolService;
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -131,14 +131,14 @@ module('Integration | commands | ai-assistant', function (hooks) {
         },
       }),
     );
-    commandService = getService('command-service');
+    toolService = getService('tool-service');
   });
 
   test('creates a new room when no roomId is provided', async function (assert) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room!',
@@ -181,7 +181,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     ).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello, existing room!',
@@ -218,7 +218,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached cards!',
@@ -246,7 +246,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room with "new"!',
@@ -286,7 +286,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     ).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     let clientGeneratedId = 'unique-client-id-123';
@@ -329,7 +329,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with custom LLM!',
@@ -360,7 +360,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill cards!',
@@ -400,7 +400,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     ).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       roomId,
@@ -438,7 +438,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill card IDs!',
@@ -467,7 +467,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached card IDs!',
@@ -509,7 +509,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       };
 
       let aiAssistantCommand = new UseAiAssistantCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       await aiAssistantCommand.execute({
         prompt: 'Hello, open this room!',
@@ -535,7 +535,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const fileURLs = [`${testRealmURL}file1.gts`, `${testRealmURL}file2.gts`];
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached files!',
@@ -571,7 +571,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await aiAssistantCommand.execute({
       prompt: 'Hello with open cards!',
@@ -600,7 +600,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     let aiAssistantCommand = new UseAiAssistantCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
 
     // Test setting LLM mode to 'act'

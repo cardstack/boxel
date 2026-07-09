@@ -68,9 +68,9 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
     mockAtomicResponse = {
       'atomic:results': [{ id: 'card-1' }, { id: 'card-2' }],
     };
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let command = new ExecuteAtomicOperationsCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let result = await command.execute({
       realmIdentifier: testRealmURL,
@@ -83,9 +83,9 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
     mockAtomicResponse = {
       errors: [{ detail: 'Something went wrong' }],
     };
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let command = new ExecuteAtomicOperationsCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     try {
       await command.execute({

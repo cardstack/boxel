@@ -56,8 +56,8 @@ module('Integration | commands | evaluate-module', function (hooks) {
   });
 
   test('valid module passes evaluation', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new EvaluateModuleCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new EvaluateModuleCommand(toolService.commandContext);
 
     let InputType = await command.getInputType();
     let input = new InputType({
@@ -72,8 +72,8 @@ module('Integration | commands | evaluate-module', function (hooks) {
   });
 
   test('module with broken import fails evaluation', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new EvaluateModuleCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new EvaluateModuleCommand(toolService.commandContext);
 
     let InputType = await command.getInputType();
     let input = new InputType({

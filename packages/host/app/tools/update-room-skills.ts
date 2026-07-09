@@ -18,10 +18,10 @@ import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseCommand from '../lib/host-base-command';
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   loadSkillSource,
   type SkillSource,
-} from '../lib/skill-commands';
+} from '../lib/skill-tools';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
@@ -184,16 +184,16 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
 
         if (validEnabledSkills.length > 0) {
           let allCommandDefinitions = validEnabledSkills.flatMap((skill) =>
-            getSkillSourceCommands(skill),
+            getSkillSourceTools(skill),
           );
 
           if (allCommandDefinitions.length > 0) {
             let uniqueCommandDefinitions =
-              this.matrixService.getUniqueCommandDefinitions(
+              this.matrixService.getUniqueToolDefinitions(
                 allCommandDefinitions,
               );
             let uploadedCommandDefs =
-              await this.matrixService.uploadCommandDefinitions(
+              await this.matrixService.uploadToolDefinitions(
                 uniqueCommandDefinitions,
               );
             serializedCommandDefinitions = uploadedCommandDefs.map((fileDef) =>

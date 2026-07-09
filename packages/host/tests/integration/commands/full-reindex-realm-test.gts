@@ -80,10 +80,10 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
   });
 
   test('calls realm endpoint with expected auth header', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new FullReindexRealmCommand(commandService.commandContext);
+    let command = new FullReindexRealmCommand(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     assert.false(
@@ -155,10 +155,10 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
   });
 
   test('throws when full reindex endpoint returns non-204', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new FullReindexRealmCommand(commandService.commandContext);
+    let command = new FullReindexRealmCommand(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -177,8 +177,8 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
   });
 
   test('description explains forced full reindex semantics', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new FullReindexRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new FullReindexRealmCommand(toolService.commandContext);
 
     assert.true(
       command.description.includes('every file in the realm is revisited'),

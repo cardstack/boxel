@@ -79,8 +79,8 @@ module('Integration | commands | fetch-card-json', function (hooks) {
   });
 
   test('fetches card JSON for an existing card', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new FetchCardJsonCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new FetchCardJsonCommand(toolService.commandContext);
     let result = await command.execute({
       cardIdentifier: `${testRealmURL}Person/alice`,
     });

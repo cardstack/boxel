@@ -80,10 +80,10 @@ module('Integration | commands | reindex-realm', function (hooks) {
   });
 
   test('calls realm endpoint with expected auth header', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let command = new ReindexRealmCommand(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     assert.false(
@@ -151,10 +151,10 @@ module('Integration | commands | reindex-realm', function (hooks) {
   });
 
   test('throws when reindex endpoint returns non-204', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let command = new ReindexRealmCommand(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -173,10 +173,10 @@ module('Integration | commands | reindex-realm', function (hooks) {
   });
 
   test('full realm event also stops the indexing animation for no-op reindex', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let command = new ReindexRealmCommand(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     await command.execute({
@@ -207,8 +207,8 @@ module('Integration | commands | reindex-realm', function (hooks) {
   });
 
   test('description explains lighter reindex semantics', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new ReindexRealmCommand(toolService.commandContext);
 
     assert.true(
       command.description.includes('lighter/default mode'),

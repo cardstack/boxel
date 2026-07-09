@@ -20,10 +20,10 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
-import type CommandService from '@cardstack/host/services/command-service';
+import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
 import ShowCardCommand from '@cardstack/host/tools/show-card';
 
 interface SkillToggleSignature {
@@ -40,7 +40,7 @@ interface SkillToggleSignature {
 export default class SkillToggle extends Component<SkillToggleSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
@@ -100,9 +100,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   }
 
   private async openSkillCard() {
-    let showCardCommand = new ShowCardCommand(
-      this.commandService.commandContext,
-    );
+    let showCardCommand = new ShowCardCommand(this.toolService.commandContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });

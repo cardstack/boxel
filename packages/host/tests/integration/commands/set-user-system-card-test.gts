@@ -53,8 +53,8 @@ module('Integration | commands | set-user-system-card', function (hooks) {
   });
 
   test('sets the system card account data', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new SetUserSystemCardCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardCommand(toolService.commandContext);
 
     let systemCardId = `${testRealmURL}SystemCard/default`;
 
@@ -68,8 +68,8 @@ module('Integration | commands | set-user-system-card', function (hooks) {
   });
 
   test('clears system card account data when cardId is empty', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new SetUserSystemCardCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardCommand(toolService.commandContext);
 
     // First set a system card
     let systemCardId = `${testRealmURL}SystemCard/default`;
@@ -94,8 +94,8 @@ module('Integration | commands | set-user-system-card', function (hooks) {
   });
 
   test('clears system card account data when cardId is omitted', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new SetUserSystemCardCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardCommand(toolService.commandContext);
 
     // First set a system card
     let systemCardId = `${testRealmURL}SystemCard/default`;

@@ -53,10 +53,8 @@ module('Integration | commands | read-text-file', function (hooks) {
         },
       }),
     );
-    let commandService = getService('command-service');
-    readTextFileCommand = new ReadTextFileCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    readTextFileCommand = new ReadTextFileCommand(toolService.commandContext);
   });
 
   test('reads an existing text file', async function (assert) {

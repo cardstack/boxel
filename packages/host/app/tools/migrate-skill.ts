@@ -19,7 +19,7 @@ import type StoreService from '../services/store';
 interface FrontmatterCommand {
   codeRef: { module: string; name: string };
   // Always emitted explicitly. The host auto-executes a command only when
-  // `requiresApproval === false` (`command-auto-execute.ts`) and otherwise
+  // `requiresApproval === false` (`tool-auto-execute.ts`) and otherwise
   // treats a missing value as `true` (`message-builder.ts`), so dropping an
   // explicit `false` would silently flip an auto-executing command back to
   // approval-required. Preserve the source value, defaulting a missing one to

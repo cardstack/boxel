@@ -63,8 +63,8 @@ module('Integration | commands | get-published-realms', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new GetPublishedRealmsCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new GetPublishedRealmsCommand(toolService.commandContext);
   }
 
   test('returns each published destination from the lastPublishedAt map', async function (assert) {

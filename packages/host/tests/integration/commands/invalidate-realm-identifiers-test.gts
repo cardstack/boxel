@@ -90,10 +90,10 @@ module(
     });
 
     test('calls realm endpoint with expected auth header and payload', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let realmServer = getService('realm-server');
       let command = new InvalidateRealmIdentifiersCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let realmURL = new URL('test/', realmServer.url).href;
 
@@ -157,10 +157,10 @@ module(
     });
 
     test('throws when realm invalidation endpoint returns non-204', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let realmServer = getService('realm-server');
       let command = new InvalidateRealmIdentifiersCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let realmURL = new URL('test/', realmServer.url).href;
       responseStatus = 500;

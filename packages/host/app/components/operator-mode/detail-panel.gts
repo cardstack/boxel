@@ -54,10 +54,10 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 import OpenCreateListingModalCommand from '@cardstack/host/tools/open-create-listing-modal';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -116,7 +116,7 @@ export default class DetailPanel extends Component<Signature> {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
@@ -456,7 +456,7 @@ export default class DetailPanel extends Component<Signature> {
 
   @action private async createListing() {
     const command = new OpenCreateListingModalCommand(
-      this.commandService.commandContext,
+      this.toolService.commandContext,
     );
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {

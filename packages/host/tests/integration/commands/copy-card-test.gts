@@ -104,9 +104,9 @@ module('Integration | commands | copy-card', function (hooks) {
 
   module('CopyCardToRealmCommand', function () {
     test('copies card to target realm', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let copyCardCommand = new CopyCardToRealmCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
@@ -149,9 +149,9 @@ module('Integration | commands | copy-card', function (hooks) {
     });
 
     test('errors when user does not have write permissions to target realm', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let copyCardCommand = new CopyCardToRealmCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
@@ -186,9 +186,9 @@ module('Integration | commands | copy-card', function (hooks) {
 
   module('CopyCardToStackCommand', function () {
     test('copies card to stack when valid targetStackIndex is provided', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let copyCardToStackCommand = new CopyCardToStackCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
@@ -241,9 +241,9 @@ module('Integration | commands | copy-card', function (hooks) {
       );
     });
     test('errors when targetStackIndex does not exist', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let copyCardToStackCommand = new CopyCardToStackCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;

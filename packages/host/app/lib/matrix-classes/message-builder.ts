@@ -32,15 +32,15 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   loadSkillSource,
-} from '@cardstack/host/lib/skill-commands';
+} from '@cardstack/host/lib/skill-tools';
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -57,7 +57,7 @@ import type {
 
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';
-import MessageCommand from './message-command';
+import MessageTool from './message-tool';
 
 import type { RoomMember } from './member';
 
@@ -91,7 +91,7 @@ export default class MessageBuilder {
     setOwner(this, owner);
   }
 
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -304,9 +304,9 @@ export default class MessageBuilder {
     let commandRequests =
       getToolRequests<Partial<EncodedCommandRequest>>(eventContent);
     if (!commandRequests) {
-      return new TrackedArray<MessageCommand>();
+      return new TrackedArray<MessageTool>();
     }
-    let commands = new TrackedArray<MessageCommand>();
+    let commands = new TrackedArray<MessageTool>();
     for (let commandRequest of commandRequests) {
       let command = await this.buildMessageCommand(
         message,
@@ -346,7 +346,7 @@ export default class MessageBuilder {
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
     if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
-      return new MessageCommand(
+      return new MessageTool(
         message,
         commandRequest,
         undefined, // no codeRef — never run on the host
@@ -372,7 +372,7 @@ export default class MessageBuilder {
       if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of getSkillSourceCommands(source)) {
+      for (let candidateSkillCommand of getSkillSourceTools(source)) {
         if (commandRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;
@@ -397,7 +397,7 @@ export default class MessageBuilder {
       'm.relates_to'
     ]?.key || 'ready') as CommandStatus;
 
-    let messageCommand = new MessageCommand(
+    let messageCommand = new MessageTool(
       message,
       commandRequest,
       skillCommand?.codeRef,

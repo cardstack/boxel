@@ -371,7 +371,7 @@ test.describe('Commands', () => {
     // local echo — synapse's /messages stream can still lag a beat behind.
     // Poll until the user message (and its data.context.agentId) is visible
     // via /messages; without this the bot putEvent below carries
-    // `agentId: undefined`, and command-service's auto-execute gate
+    // `agentId: undefined`, and tool-service's auto-execute gate
     // (`message.agentId !== matrixService.agentId`) skips the command.
     let roomEvents: any[] = [];
     let agentId: string | undefined;

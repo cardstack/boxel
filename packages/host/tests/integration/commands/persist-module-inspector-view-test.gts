@@ -71,9 +71,9 @@ module(
     });
 
     test('persists the module inspector view selection', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let command = new PersistModuleInspectorViewCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let result = await command.execute({
         codePath: `${testRealmURL}my-module.gts`,

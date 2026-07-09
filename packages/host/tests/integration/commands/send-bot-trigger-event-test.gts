@@ -60,9 +60,9 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
-    let command = new SendBotTriggerEventCommand(commandService.commandContext);
+    let command = new SendBotTriggerEventCommand(toolService.commandContext);
     await command.execute({
       roomId,
       type: 'pr-listing-create',

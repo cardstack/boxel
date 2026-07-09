@@ -7,9 +7,9 @@ import { tracked } from '@glimmer/tracking';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -18,7 +18,7 @@ import type { Message } from './message';
 
 type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
-export default class MessageCommand {
+export default class MessageTool {
   @tracked commandRequest: Partial<CommandRequest>;
   @tracked commandStatus?: CommandStatus;
   @tracked commandResultFileDef?: SerializedFile;
@@ -42,7 +42,7 @@ export default class MessageCommand {
     this.commandResultFileDef = commandResultFileDef;
   }
 
-  @service declare commandService: CommandService;
+  @service declare toolService: ToolService;
   @service declare matrixService: MatrixService;
   @service declare store: StoreService;
 
@@ -73,7 +73,7 @@ export default class MessageCommand {
   }
 
   get status() {
-    if (this.commandService.currentlyExecutingCommandRequestIds.has(this.id!)) {
+    if (this.toolService.currentlyExecutingCommandRequestIds.has(this.id!)) {
       return 'applying';
     }
 

@@ -12,13 +12,13 @@ import { devSkillId } from '../lib/utils';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import PatchCardInstanceCommand from './patch-card-instance';
 
-import type CommandService from '../services/command-service';
+import type ToolService from '../services/tool-service';
 
 export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateReadmeSpecInput,
   typeof BaseCommandModule.GenerateReadmeSpecResult
 > {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   private static getUserPrompt(
     ref: {
@@ -62,7 +62,7 @@ Requirements:
 
     // Generate the README using the existing command
     const generateReadmeCommand = new OneShotLlmRequestCommand(
-      this.commandService.commandContext,
+      this.toolService.commandContext,
     );
 
     let userPrompt = GenerateReadmeSpecCommand.getUserPrompt(
@@ -86,7 +86,7 @@ Requirements:
     if (input.spec.id) {
       try {
         const patchCardInstanceCommand = new PatchCardInstanceCommand(
-          this.commandService.commandContext,
+          this.toolService.commandContext,
           { cardType: input.spec.constructor as typeof CardDef }, //is this correct?
         );
 

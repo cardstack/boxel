@@ -16,17 +16,17 @@ import HostBaseCommand from '../lib/host-base-command';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type ToolService from '../services/tool-service';
 
 export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageInput,
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -88,7 +88,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     if (files?.length) {
       files = await matrixService.uploadFiles(files);
     }
-    await matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+    await matrixService.updateSkillsAndToolsIfNeeded(roomId);
     let cardFileDefs = await matrixService.uploadCards(
       input.attachedCards ?? [],
     );

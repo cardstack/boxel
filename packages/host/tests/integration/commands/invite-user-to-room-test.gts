@@ -60,10 +60,10 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
+    let command = new InviteUserToRoomCommand(toolService.commandContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',
@@ -87,9 +87,9 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
+    let command = new InviteUserToRoomCommand(toolService.commandContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',

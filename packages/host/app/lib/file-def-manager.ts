@@ -39,10 +39,10 @@ import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
 import type { ExtendedClient } from '../services/matrix-sdk-loader';
 import type NetworkService from '../services/network';
+import type ToolService from '../services/tool-service';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
@@ -67,7 +67,7 @@ export interface FileDefManager {
    * @param commandDefinitions Array of command definitions to upload
    * @returns Promise resolving to array of file definitions
    */
-  uploadCommandDefinitions(
+  uploadToolDefinitions(
     commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]>;
 
@@ -136,7 +136,7 @@ export default class FileDefManagerImpl
   private getFileAPI: () => typeof FileAPI;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -354,7 +354,7 @@ export default class FileDefManagerImpl
     );
   }
 
-  async uploadCommandDefinitions(
+  async uploadToolDefinitions(
     commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]> {
     if (!commandDefinitions.length) {
@@ -376,7 +376,7 @@ export default class FileDefManagerImpl
         absoluteCodeRef,
         this.loaderService.loader,
       );
-      const command = new Command(this.commandService.commandContext);
+      const command = new Command(this.toolService.commandContext);
       const name = commandDef.functionName;
       const schema: CommandDefinitionSchema = {
         codeRef: absoluteCodeRef,

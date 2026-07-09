@@ -23,7 +23,7 @@ import {
 
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -75,7 +75,7 @@ interface Signature {
     waitAction?: () => void;
     hideMeta?: boolean;
     isCodePatchCorrectness?: boolean;
-    commands?: MessageCommand[];
+    commands?: MessageTool[];
   };
   Blocks: { default: [] };
 }

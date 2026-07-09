@@ -84,8 +84,8 @@ module('Integration | components | realm field', function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    const commandService = getService('command-service');
-    commandContext = commandService.commandContext;
+    const toolService = getService('tool-service');
+    commandContext = toolService.commandContext;
 
     const store = getService('store');
 

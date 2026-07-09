@@ -69,7 +69,7 @@ module('Integration | Command | update-room-skills', function (hooks) {
   module('command metadata', function () {
     test('has correct description and action verb', function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       assert.strictEqual(
         command.description,
@@ -85,7 +85,7 @@ module('Integration | Command | update-room-skills', function (hooks) {
 
     test('getInputType returns UpdateRoomSkillsInput', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       const inputType = await command.getInputType();
       assert.ok(inputType, 'Input type is defined');
@@ -93,7 +93,7 @@ module('Integration | Command | update-room-skills', function (hooks) {
 
     test('getInputJsonSchema', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let loader = getService('loader-service').loader;
       let mappings = await basicMappings(loader);
@@ -204,7 +204,7 @@ Instructions live in the markdown body.
     });
     test('activates new skills and uploads command definitions', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
@@ -247,7 +247,7 @@ Instructions live in the markdown body.
 
     test('deactivates existing skills without reuploading cards', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       mockMatrixUtils.setRoomState(
@@ -295,7 +295,7 @@ Instructions live in the markdown body.
 
     test('reactivates skills already present in room', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
@@ -347,7 +347,7 @@ Instructions live in the markdown body.
 
     test('skips invalid command definitions when uploading skills', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
 
       await command.execute({
@@ -374,7 +374,7 @@ Instructions live in the markdown body.
 
     test('activates a skill markdown file and uploads its command definitions', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let skillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;
       await command.execute({
@@ -410,7 +410,7 @@ Instructions live in the markdown body.
 
     test('gathers commands from both a skill card and a skill markdown file', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
-        getService('command-service').commandContext,
+        getService('tool-service').commandContext,
       );
       let cardSkillId = `${testRealmURL}Skill/boxel-environment`;
       let markdownSkillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;

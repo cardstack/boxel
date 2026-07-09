@@ -16,17 +16,17 @@ import ReadSourceCommand from './read-source';
 import ReadTextFileCommand from './read-text-file';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 export default class OneShotLlmRequestCommand extends HostBaseCommand<
   typeof BaseCommandModule.OneShotLLMRequestInput,
   typeof BaseCommandModule.OneShotLLMRequestResult
 > {
   @service declare private matrixService: MatrixService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
@@ -65,7 +65,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       let fileContent = '';
       if (input.codeRef?.module) {
         const readSourceCommand = new ReadSourceCommand(
-          this.commandService.commandContext,
+          this.toolService.commandContext,
         );
         const fileContents = await readSourceCommand.execute({
           path: input.codeRef.module,
@@ -80,7 +80,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         input.attachedFileIdentifiers.length > 0
       ) {
         const readTextFileCommand = new ReadTextFileCommand(
-          this.commandService.commandContext,
+          this.toolService.commandContext,
         );
 
         const attachedFilePromises = input.attachedFileIdentifiers.map(
@@ -164,7 +164,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       });
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
-        this.commandService.commandContext,
+        this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',

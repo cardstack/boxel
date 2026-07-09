@@ -12,8 +12,8 @@ import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assista
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
-import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
+import type ToolService from '../../services/tool-service';
 
 interface Signature {
   Element: HTMLButtonElement;
@@ -63,7 +63,7 @@ function truncateForAi(s: string | undefined, max: number): string | undefined {
 export default class SendErrorToAIAssistant extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   private get errorMessage() {
     let { error, errorType } = this.args;
@@ -128,7 +128,7 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
   }
 
   get commandContext() {
-    return this.commandService.commandContext;
+    return this.toolService.commandContext;
   }
 
   private sendToAiAssistant = restartableTask(async () => {

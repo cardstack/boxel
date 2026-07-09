@@ -894,12 +894,10 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.uploadCards(cards);
   }
 
-  async uploadCommandDefinitions(
+  async uploadToolDefinitions(
     commandDefinitions: CommandField[],
   ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCommandDefinitions(
-      commandDefinitions,
-    );
+    return await this.fileDefManager.uploadToolDefinitions(commandDefinitions);
   }
 
   async uploadFiles(files: FileDef[]): Promise<FileDef[]> {

@@ -64,10 +64,8 @@ module('Integration | commands | copy-source', function (hooks) {
   });
 
   test('able to copy source or file', async function (assert) {
-    let commandService = getService('command-service');
-    let copySourceCommand = new CopySourceCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let copySourceCommand = new CopySourceCommand(toolService.commandContext);
     const originSourceIdentifier = testRealmURL + 'person.gts';
     const destinationSourceIdentifier = testRealmURL + 'person-copy.gts';
     await copySourceCommand.execute({

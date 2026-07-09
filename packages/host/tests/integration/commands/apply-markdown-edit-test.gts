@@ -172,7 +172,7 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     );
 
     command = new ApplyMarkdownEditCommand(
-      getService('command-service').commandContext,
+      getService('tool-service').commandContext,
     );
   });
 

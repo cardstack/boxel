@@ -39,7 +39,7 @@ export function isSkillSource(instance: unknown): instance is SkillSource {
 
 // Returns the `CommandField` instances a skill source contributes, regardless
 // of whether the source is a `Skill` card or a skill-bearing markdown file.
-export function getSkillSourceCommands(
+export function getSkillSourceTools(
   instance: SkillSource | null | undefined,
 ): SkillModule.CommandField[] {
   if (isSkillCardInstance(instance)) {

@@ -16,16 +16,16 @@ import HostBaseCommand from '../lib/host-base-command';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 export default class PopulateWithSampleDataCommand extends HostBaseCommand<
   typeof BaseCommandModule.CardIdCard,
   undefined
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
 

@@ -71,12 +71,10 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new CreateListingPRRequestCommand(
-      commandService.commandContext,
-    );
+    let command = new CreateListingPRRequestCommand(toolService.commandContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
@@ -128,13 +126,11 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       sender: '@testuser:localhost',
       name: 'current-room',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
     let previousCurrentRoomId = matrixService.currentRoomId;
 
-    let command = new CreateListingPRRequestCommand(
-      commandService.commandContext,
-    );
+    let command = new CreateListingPRRequestCommand(toolService.commandContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,

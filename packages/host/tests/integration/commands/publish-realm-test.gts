@@ -134,8 +134,8 @@ module('Integration | commands | publish-realm', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new PublishRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new PublishRealmCommand(toolService.commandContext);
   }
 
   test('publishes a custom-domain target and reports it published', async function (assert) {

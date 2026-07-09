@@ -1,9 +1,9 @@
 import { module, test } from 'qunit';
 
 import {
-  getUniqueValidCommandDefinitions,
+  getUniqueValidToolDefinitions,
   isValidCommandDefinition,
-} from '@cardstack/host/lib/command-definitions';
+} from '@cardstack/host/lib/tool-definitions';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
@@ -68,7 +68,7 @@ module('Unit | Lib | command-definitions', function () {
       requiresApproval: false,
     });
 
-    let results = getUniqueValidCommandDefinitions([
+    let results = getUniqueValidToolDefinitions([
       asCommand({ ...baseCommand, codeRef: undefined }),
       asCommand(baseCommand),
       asCommand({ ...baseCommand }),

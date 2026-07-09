@@ -62,9 +62,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('writes a text file', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await writeTextFileCommand.execute({
       path: 'test.txt',
@@ -77,9 +77,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('fails if the file already exists', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await writeTextFileCommand.execute({
       path: 'test.txt',
@@ -105,9 +105,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('is able to overwrite a file', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await writeTextFileCommand.execute({
       path: 'test.txt',
@@ -126,9 +126,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('handles a leading slash in the path', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await writeTextFileCommand.execute({
       path: '/test.txt',
@@ -141,10 +141,10 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('useNonConflictingFilename writes to a new file when content exists', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await cardService.saveSource(
       new URL('test.txt', testRealmURL),
@@ -171,10 +171,10 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('useNonConflictingFilename reuses an existing blank file', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await cardService.saveSource(
       new URL('empty.txt', testRealmURL),
@@ -204,10 +204,10 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('useNonConflictingFilename writes into an existing blank file when content is provided', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     await cardService.saveSource(
       new URL('empty.txt', testRealmURL),
@@ -232,9 +232,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('throws an error when an invalid realm is provided', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     try {
       await writeTextFileCommand.execute({
@@ -252,9 +252,9 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('throws when overwrite and useNonConflictingFilename are both true', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     try {
       await writeTextFileCommand.execute({

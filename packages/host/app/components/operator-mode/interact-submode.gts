@@ -86,7 +86,6 @@ import type { CardDefOrId } from './stack-item';
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -94,6 +93,7 @@ import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -142,7 +142,7 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
   @service declare private realm: Realm;
@@ -504,7 +504,7 @@ export default class InteractSubmode extends Component {
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
           ({ newCardId } = await new CopyCardToStackCommand(
-            this.commandService.commandContext,
+            this.toolService.commandContext,
           ).execute({
             sourceCard: card,
             targetStackIndex,
@@ -926,7 +926,7 @@ export default class InteractSubmode extends Component {
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
                 @deleteCard={{this.requestDeleteCard}}
-                @commandContext={{this.commandService.commandContext}}
+                @commandContext={{this.toolService.commandContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

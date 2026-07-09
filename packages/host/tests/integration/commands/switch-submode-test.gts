@@ -64,14 +64,14 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   test('switch to code submode by local id of a saved instance', async function (assert) {
     let instance = (await store.add(new CardDef())) as CardDefType;
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [[{ id: instance[localId], format: 'isolated' }]],
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await switchSubmodeCommand.execute({
@@ -86,14 +86,14 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   test('switch to code submode by remote id of a saved instance', async function (assert) {
     let instance = await store.add(new CardDef());
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [[{ id: instance.id!, format: 'isolated' }]],
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await switchSubmodeCommand.execute({
@@ -108,7 +108,7 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   test('when workspace chooser is open, close it when switching', async function (assert) {
     let instance = (await store.add(new CardDef())) as CardDefType;
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [[{ id: instance[localId], format: 'isolated' }]],
@@ -116,7 +116,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       workspaceChooserOpened: true,
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     assert.true(operatorModeStateService.workspaceChooserOpened);
@@ -133,7 +133,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   test('createFile creates a blank file when it does not exist', async function (assert) {
     assert.expect(5);
 
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
@@ -141,7 +141,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}new-file.gts`;
 
@@ -163,7 +163,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   test('createFile picks a non-conflicting filename when the target exists', async function (assert) {
     assert.expect(5);
 
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
@@ -171,7 +171,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}existing-file.gts`;
     let newFileIdentifier = `${testRealmURL}existing-file-1.gts`;
@@ -205,7 +205,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   test('createFile reuses an existing blank file', async function (assert) {
     assert.expect(5);
 
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
@@ -213,7 +213,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     let fileUrl = `${testRealmURL}empty-file.gts`;
 

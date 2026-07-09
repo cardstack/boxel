@@ -251,7 +251,7 @@ module('Integration | Command | show-card', function (hooks) {
       { instantiate: false },
     );
 
-    command = new ShowCardCommand(getService('command-service').commandContext);
+    command = new ShowCardCommand(getService('tool-service').commandContext);
   });
 
   hooks.afterEach(function () {

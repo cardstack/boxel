@@ -62,10 +62,10 @@ module(
     });
 
     test('adds a field to a card definition', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       await addFieldToCardDefinitionCommand.execute({
@@ -100,10 +100,10 @@ module(
     });
 
     test('can add a computed field', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
 
       await addFieldToCardDefinitionCommand.execute({

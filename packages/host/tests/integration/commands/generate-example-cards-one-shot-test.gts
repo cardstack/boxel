@@ -90,9 +90,9 @@ export class TestCard extends CardDef {
         }),
       );
 
-      const commandService = getService('command-service');
+      const toolService = getService('tool-service');
       generateExampleCommand = new GenerateExampleCardsOneShotCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
     });
 

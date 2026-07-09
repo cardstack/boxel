@@ -37,7 +37,7 @@ module('Integration | commands | open-workspace', function (hooks) {
   });
 
   test('opens specified workspace in interact submode', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [],
@@ -45,7 +45,7 @@ module('Integration | commands | open-workspace', function (hooks) {
       workspaceChooserOpened: true,
     });
     let openWorkspaceCommand = new OpenWorkspaceCommand(
-      commandService.commandContext,
+      toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await openWorkspaceCommand.execute({

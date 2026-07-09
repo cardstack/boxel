@@ -36,11 +36,11 @@ import PatchCodeCommand from '@cardstack/host/tools/patch-code';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableCommand,
-} from '../lib/command-auto-execute';
-import LimitedSet from '../lib/limited-set';
+} from '../lib/tool-auto-execute';
 
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
@@ -50,7 +50,7 @@ import type ResetService from './reset';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
-import type MessageCommand from '../lib/matrix-classes/message-command';
+import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
 import type { IEvent } from 'matrix-js-sdk';
 
@@ -66,11 +66,9 @@ type GenericCommand = Command<
   typeof CardDef | undefined
 >;
 
-const commandProcessingWaiter = buildWaiter(
-  'command-service:command-processing',
-);
+const commandProcessingWaiter = buildWaiter('tool-service:command-processing');
 
-export default class CommandService extends Service {
+export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private messageService: MessageService;
@@ -255,7 +253,7 @@ export default class CommandService extends Service {
     this.aiAssistantInvalidations.delete(key);
   }
 
-  public queueEventForCommandProcessing(event: Partial<IEvent>) {
+  public queueEventForToolProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
@@ -501,7 +499,7 @@ export default class CommandService extends Service {
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
         messageCommand.eventId;
-      await this.matrixService.sendCommandResultEvent({
+      await this.matrixService.sendToolResultEvent({
         roomId,
         invokedToolFromEventId,
         toolCallId: commandRequestId,
@@ -671,7 +669,7 @@ export default class CommandService extends Service {
   }
 
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: MessageCommand) => {
+  run = task(async (command: MessageTool) => {
     // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
     // run. Guards the manual "Try Anyway" path as well as any auto-execution.
     if (command.executedBy === AI_BOT_EXECUTOR) {
@@ -679,7 +677,7 @@ export default class CommandService extends Service {
     }
     let { arguments: payload, id: commandRequestId } = command;
     // CS-11045: Source the bot-message event_id from current room state at
-    // execute time rather than the snapshot taken when the MessageCommand was
+    // execute time rather than the snapshot taken when the MessageTool was
     // constructed. The snapshot is the streaming/original event_id; once a
     // later m.replace event in room.events owns the commandRequest, that
     // event's id is the canonical link the rest of the system (including
@@ -759,13 +757,13 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
-      await this.matrixService.updateSkillsAndCommandsIfNeeded(
+      await this.matrixService.updateSkillsAndToolsIfNeeded(
         command.message.roomId,
       );
       let userContextForAiBot =
         await this.operatorModeStateService.getSummaryForAIBot();
 
-      await this.matrixService.sendCommandResultEvent({
+      await this.matrixService.sendToolResultEvent({
         roomId: command.message.roomId,
         invokedToolFromEventId: eventId,
         toolCallId: commandRequestId!,
@@ -788,7 +786,7 @@ export default class CommandService extends Service {
     }
   });
 
-  async validate(command: MessageCommand): Promise<boolean> {
+  async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
     // class to resolve, and never runs it, so there is nothing to validate.
@@ -863,7 +861,7 @@ export default class CommandService extends Service {
           command.message.roomId,
           command.commandRequest.id,
         ) ?? command.eventId;
-      await this.matrixService.sendCommandResultEvent({
+      await this.matrixService.sendToolResultEvent({
         roomId: command.message.roomId,
         invokedToolFromEventId,
         toolCallId: command.commandRequest.id!,
@@ -968,7 +966,7 @@ export default class CommandService extends Service {
         }
       }
 
-      await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+      await this.matrixService.updateSkillsAndToolsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
         sourceUrl: finalFileIdentifier ?? fileUrl,
         name: fileUrl.split('/').pop(),
@@ -1111,6 +1109,6 @@ function hasPatchData(payload: any): payload is PatchPayload {
 
 declare module '@ember/service' {
   interface Registry {
-    'command-service': CommandService;
+    'tool-service': ToolService;
   }
 }

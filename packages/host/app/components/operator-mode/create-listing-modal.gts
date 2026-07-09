@@ -33,17 +33,17 @@ import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 interface Signature {
   Args: {};
 }
 
 export default class CreateListingModal extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -194,7 +194,7 @@ export default class CreateListingModal extends Component<Signature> {
     let ListingCreateCommand = module.default;
 
     let result = await new ListingCreateCommand(
-      this.commandService.commandContext,
+      this.toolService.commandContext,
     ).execute({
       codeRef,
       targetRealm,

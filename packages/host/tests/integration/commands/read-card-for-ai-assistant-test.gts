@@ -107,11 +107,9 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
   });
 
   test('read card', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
-    let command = new ReadCardForAiAssistantCommand(
-      commandService.commandContext,
-    );
+    let command = new ReadCardForAiAssistantCommand(toolService.commandContext);
     let result = await command.execute({
       cardId: `${testRealmURL}mango`,
     });

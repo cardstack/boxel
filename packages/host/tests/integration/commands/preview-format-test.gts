@@ -111,7 +111,7 @@ module('Integration | Command | preview-format', function (hooks) {
     );
 
     command = new PreviewFormatCommand(
-      getService('command-service').commandContext,
+      getService('tool-service').commandContext,
     );
   });
 

@@ -66,9 +66,9 @@ module(
     });
 
     test('returns the list of catalog realm identifiers', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let command = new GetCatalogRealmIdentifiersCommand(
-        commandService.commandContext,
+        toolService.commandContext,
       );
       let result = await command.execute();
       assert.deepEqual(result.realmIdentifiers, [
