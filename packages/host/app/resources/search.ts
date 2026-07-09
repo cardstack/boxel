@@ -24,7 +24,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
-  filterHasMatches,
   isFileDefInstance,
   isFileDefCodeRef,
   isClientEvaluable,
@@ -424,25 +423,18 @@ export class SearchResource<
             if (this.#previousQuery === undefined) {
               return;
             }
+            // Re-run on incremental index events (the search doc changed)
+            // and on prerender_html events. The latter matter even to
+            // structured queries: this search excludes rows with an
+            // effective error, and a render error lands on the
+            // prerendered_html channel at-or-above the row's index
+            // generation — so membership can flip on a prerender_html event
+            // with no index event announcing it. (Full-text `matches`
+            // membership rides that channel too, via `markdown`.)
             let isIncrementalIndex =
               event.eventName === 'index' &&
               (!('indexType' in event) || event.indexType === 'incremental');
-            let isPrerenderHtml = event.eventName === 'prerender_html';
-            if (!isIncrementalIndex && !isPrerenderHtml) {
-              return;
-            }
-            // An incremental index event (the search doc — and so membership —
-            // changed) always re-runs. A prerender_html event only matters to a
-            // full-text (matches) query: its membership is built from
-            // `markdown`, which lands on the prerender-html channel. These
-            // results are instances, which carry no prerendered HTML, so a
-            // structured query's members and their fields are already final
-            // after the index pass — re-running on its prerender_html event
-            // would fetch an identical result set.
-            if (
-              isPrerenderHtml &&
-              !filterHasMatches(this.#previousQuery.filter)
-            ) {
+            if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
               return;
             }
             this.trackStoreLoad(

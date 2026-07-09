@@ -739,25 +739,46 @@ export function fieldsetFromParam(
 }
 
 // The (format, renderType) a single-leaf htmlQuery selects — the pair the
-// card+html GET spells as `?format=` / `?renderType=`. Returns `undefined` for
-// a composite htmlQuery (`every`/`any`/`not`) or an `eq` leaf whose renderType
-// isn't a resolved `<module>/<name>` ref, since neither has a query-string
-// spelling — a caller wanting to refresh one member's rendering in isolation
-// must fall back when this is `undefined`. The inverse of `htmlQueryFromParams`
-// for the leaf case (`format` defaults to `fitted`, matching that helper and
-// `DEFAULT_HTML_QUERY`).
+// card+html GET spells as `?format=` / `?renderType=`. Returns `undefined`
+// whenever the htmlQuery has no query-string spelling, and the caller must
+// fall back to a full search instead of refreshing one member in isolation:
+// a composite htmlQuery (`every`/`any`/`not`), an `eq` leaf with no `format`
+// (that leaves format UNCONSTRAINED — the row carries a rendering per format,
+// which one GET's single `?format=` cannot reproduce), or an `eq` leaf whose
+// renderType isn't a resolved `<module>/<name>` ref.
 export function htmlQueryRenderingSelection(
   htmlQuery: HtmlQuery | undefined,
 ): { format: PrerenderedHtmlFormat; renderType?: ResolvedCodeRef } | undefined {
-  if (!htmlQuery || !('eq' in htmlQuery)) {
+  // Structural guards, not just types: the input can come straight off a wire
+  // document's `meta.htmlQuery`, whose shape the document guard does not
+  // validate. A malformed value must read as "no single-leaf selection" (the
+  // caller falls back to a full re-run) rather than throw.
+  if (
+    typeof htmlQuery !== 'object' ||
+    htmlQuery == null ||
+    !('eq' in htmlQuery) ||
+    typeof htmlQuery.eq !== 'object' ||
+    htmlQuery.eq == null
+  ) {
     return undefined;
   }
   let { format, renderType } = htmlQuery.eq;
-  if (renderType !== undefined && !isResolvedCodeRef(renderType)) {
+  if (!isValidPrerenderedHtmlFormat(format)) {
+    return undefined;
+  }
+  if (
+    renderType !== undefined &&
+    // `isResolvedCodeRef` assumes an object (it probes with `in`), so the
+    // structural check must come first for the same malformed-wire reason as
+    // above.
+    (typeof renderType !== 'object' ||
+      renderType == null ||
+      !isResolvedCodeRef(renderType))
+  ) {
     return undefined;
   }
   return {
-    format: format ?? DEFAULT_HTML_QUERY.eq.format,
+    format,
     ...(renderType !== undefined ? { renderType } : {}),
   };
 }

@@ -187,31 +187,6 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
 }
 
-// Whether a full-text `matches` predicate appears anywhere in the filter tree.
-// A `matches` predicate reads `markdown`, which is produced on the deferred
-// prerender-html channel, so a query carrying one has full-text-dependent
-// membership that a `prerender_html` event can change. A live search uses this
-// to decide whether a `prerender_html` event needs a full re-run (matches) or
-// only a targeted rendering refresh (structured).
-export function filterHasMatches(filter: Filter | undefined): boolean {
-  if (!filter) {
-    return false;
-  }
-  if (isMatchesFilter(filter)) {
-    return true;
-  }
-  if (isAnyFilter(filter)) {
-    return filter.any.some(filterHasMatches);
-  }
-  if (isEveryFilter(filter)) {
-    return filter.every.some(filterHasMatches);
-  }
-  if (isNotFilter(filter)) {
-    return filterHasMatches(filter.not);
-  }
-  return false;
-}
-
 // True when a filter path's leaf is a card/file reference (`id` / `url`). Such
 // leaves get canonical-RRI tolerance in `in` filters — a registered-prefix
 // value also matches its equivalent real-URL / virtual-alias spellings — while

@@ -116,15 +116,22 @@ export class SearchEntriesResource extends Resource<Args> {
   private realmsNeedingRefresh = new Set<string>();
 
   // The coalesced prerender_html invalidations queued for a selective
-  // per-member refresh: the union of invalidated URLs and the max generation
-  // seen across the events. Set only for structured, refreshable queries (a
-  // prerender_html event can't change their membership, so the visible members
-  // need only their HTML refreshed, not a whole-search re-query). An index
-  // event supersedes it — the search task consumes or folds it, never drops
-  // it silently. Untracked, like `realmsNeedingRefresh`.
-  private pendingSelectiveRefresh:
-    | { generation: number; urls: Set<string> }
-    | undefined;
+  // per-member refresh: invalidated URL → the highest generation an event
+  // carried for it (generations are per-realm counters, so they are never
+  // compared across URLs from different realms). Set only for structured,
+  // refreshable queries (a prerender_html event can't change their
+  // membership, so the visible members need only their HTML refreshed, not a
+  // whole-search re-query). An index event supersedes it — the search task
+  // consumes or folds it, never drops it silently. Untracked, like
+  // `realmsNeedingRefresh`.
+  private pendingSelectiveRefresh: Map<string, number> | undefined;
+
+  // Bumped by every search-task run (and on teardown) so an in-flight
+  // `#computeSelectiveRefresh` from a superseded run stops issuing GETs: the
+  // task body's awaits are cancellable, but a plain async method keeps
+  // executing after its caller was cancelled, and without this check it
+  // would keep fetching members the replacement run already owns.
+  #refreshEpoch = 0;
 
   // A partial refresh splices fetched-realm rows into the standing result
   // set, so it is only sound once a full run has populated that set. Until
@@ -150,6 +157,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.subscriptions = [];
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
+      this.#refreshEpoch++;
     });
   }
 
@@ -331,6 +339,7 @@ export class SearchEntriesResource extends Resource<Args> {
       return;
     }
     let token = waiter.beginAsync();
+    this.#refreshEpoch++;
     try {
       // A prerender_html event queued a selective per-member refresh. Perform
       // the targeted card+html GETs when no index event is also pending (an
@@ -340,18 +349,36 @@ export class SearchEntriesResource extends Resource<Args> {
       // applied or folded — never at task start — so a restart that cancels
       // this run mid-GET (any later realm event re-performs this restartable
       // task) leaves it queued for the replacement run instead of dropping
-      // it.
+      // it. The compute is pure and the mutations happen here in the task
+      // body, whose awaits are cancellation points — a cancelled run can
+      // never splice its (now superseded) result into the entries.
       let selective = this.pendingSelectiveRefresh;
       if (selective) {
         if (
           this.realmsNeedingRefresh.size === 0 &&
           this.#canSelectivelyRefresh()
         ) {
-          let handled = await this.#performSelectiveRefresh(selective, query);
-          if (handled) {
-            // Completed without a restart, so the queued set is exactly what
-            // was just applied — an event arriving mid-run would have
-            // restarted this task before this line.
+          let refresh = await this.#computeSelectiveRefresh(selective, query);
+          if (refresh !== 'fallback') {
+            if (refresh.size > 0) {
+              // Splice in place, preserving object identity for every member
+              // that didn't actually change (including an equal-content 200),
+              // so unchanged rows never re-render or lose hydration.
+              let next = this._entries.map((member) => {
+                let replacement = refresh.get(member.id);
+                return replacement !== undefined &&
+                  !isEqual(member, replacement)
+                  ? replacement
+                  : member;
+              });
+              this._entries.splice(0, this._entries.length, ...next);
+              this._errors = undefined;
+            }
+            // Membership is stable across a prerender_html event, so the
+            // standing set, order, and `meta` all remain correct. The queued
+            // invalidations are exactly what was just applied — an event
+            // arriving mid-run would have restarted this task before this
+            // line.
             this.pendingSelectiveRefresh = undefined;
             return;
           }
@@ -478,40 +505,29 @@ export class SearchEntriesResource extends Resource<Args> {
     return this.#fieldsetIsRefreshable(query.fields?.entry);
   }
 
+  // Refreshable = the html branch is in play (the default resolution or an
+  // explicit `html`) and any other selection is `item`. An item-only fieldset
+  // is NOT refreshable even though the GET could spell it: without the html
+  // branch the search runs the live-search projection, which excludes rows
+  // with an effective error — and a render error lands on the
+  // prerendered_html channel, so such a query's membership can flip on the
+  // very event being routed. It takes the coarse re-run instead.
   #fieldsetIsRefreshable(fields: string[] | undefined): boolean {
     return (
       fields === undefined ||
-      fields.every((field) => field === 'html' || field === 'item')
+      (fields.includes('html') &&
+        fields.every((field) => field === 'html' || field === 'item'))
     );
   }
 
-  // Whether the html branch is in play for the fieldset — the default
-  // resolution (rendering, falling back to item) or an explicit `html`. When
-  // it isn't (an item-only fieldset), a member with no rendering is not a
-  // refresh candidate: a prerender_html event brings it nothing.
-  #htmlBranchInPlay(fields: string[] | undefined): boolean {
-    return fields === undefined || fields.includes('html');
-  }
-
-  // Merge a prerender_html event into the queued selective refresh: the union
-  // of invalidated URLs and the max generation across events (a member is a
-  // candidate when any event carried HTML newer than the one it holds; the GET
-  // returns the newest rendering regardless).
+  // Merge a prerender_html event into the queued selective refresh, taking
+  // the max generation per URL (a member is a candidate when an event carried
+  // HTML newer than the one it holds; the GET returns the newest rendering
+  // regardless).
   #recordSelectiveRefresh(event: PrerenderHtmlEventContent): void {
-    let urls = event.invalidations ?? [];
-    if (this.pendingSelectiveRefresh === undefined) {
-      this.pendingSelectiveRefresh = {
-        generation: event.generation,
-        urls: new Set(urls),
-      };
-    } else {
-      this.pendingSelectiveRefresh.generation = Math.max(
-        this.pendingSelectiveRefresh.generation,
-        event.generation,
-      );
-      for (let url of urls) {
-        this.pendingSelectiveRefresh.urls.add(url);
-      }
+    let pending = (this.pendingSelectiveRefresh ??= new Map());
+    for (let url of event.invalidations ?? []) {
+      pending.set(url, Math.max(pending.get(url) ?? 0, event.generation));
     }
   }
 
@@ -519,52 +535,55 @@ export class SearchEntriesResource extends Resource<Args> {
   // member GET failed), fold the realms the queued invalidations spanned into
   // the coarse re-run so their prerender_html update still lands. A different
   // realm's index event must not swallow this realm's HTML update.
-  #foldSelectiveRealmsIntoRefresh(selective: { urls: Set<string> }): void {
+  #foldSelectiveRealmsIntoRefresh(invalidations: Map<string, number>): void {
     for (let member of this._entries) {
-      if (memberMatchesUrls(member, selective.urls)) {
+      if (invalidationGenerationFor(member, invalidations) !== undefined) {
         this.realmsNeedingRefresh.add(member.realmUrl);
       }
     }
   }
 
-  // Refresh only the members a prerender_html event carries newer HTML for,
-  // each through a conditional card+html GET keyed on the composite validator
-  // the member holds. A `304` keeps the current rendering (identity preserved,
-  // so a hydrated row stays live); a `200` swaps in the fresh entry. Membership
-  // is stable across a prerender_html event, so this never adds or drops a row
-  // and leaves `meta.page.total` untouched. Nothing is written to the store —
-  // a member a consumer has hydrated is owned by the store's reactive reload.
-  // Returns false to request a coarse fallback when a member can't be refreshed
-  // in isolation.
-  async #performSelectiveRefresh(
-    selective: { generation: number; urls: Set<string> },
+  // Compute the replacements for the members a prerender_html event carries
+  // newer HTML for, each through a conditional card+html GET keyed on the
+  // composite validator the member holds: a `304` keeps the current rendering
+  // (the member is skipped, so its identity — and any hydration — survives),
+  // a `200` yields the fresh entry. Pure with respect to the resource's
+  // result state: the task body applies the returned map, so a run cancelled
+  // mid-GET can never splice a superseded result (this method keeps executing
+  // after its caller is cancelled — a plain async method has no cancellation
+  // points — which is also why it re-checks `#refreshEpoch` between GETs).
+  // Nothing is written to the store — a member a consumer has hydrated is
+  // owned by the store's reactive reload. Returns 'fallback' to request a
+  // coarse re-run when a member can't be refreshed in isolation.
+  async #computeSelectiveRefresh(
+    invalidations: Map<string, number>,
     query: SearchEntryWireQuery,
-  ): Promise<boolean> {
+  ): Promise<Map<string, SearchEntry> | 'fallback'> {
+    let epoch = this.#refreshEpoch;
     let selection = htmlQueryRenderingSelection(this._meta.htmlQuery);
-    let htmlInPlay = this.#htmlBranchInPlay(query.fields?.entry);
     let fieldsParam = this.#fieldsParam(query.fields?.entry);
 
+    // A member with a rendering is a candidate only when an event names it at
+    // a newer generation than it holds; one with no rendering yet is always a
+    // candidate (the upgrade opportunity this event may be announcing).
     let candidates = this._entries.filter((member) => {
-      if (!memberMatchesUrls(member, selective.urls)) {
+      let eventGeneration = invalidationGenerationFor(member, invalidations);
+      if (eventGeneration === undefined) {
         return false;
       }
-      if (member.htmlGeneration !== undefined) {
-        // A member with a rendering refreshes only when the event carries a
-        // newer one than it holds.
-        return member.htmlGeneration < selective.generation;
-      }
-      // No rendering yet: refresh (an upgrade opportunity) only when the html
-      // branch is in play.
-      return htmlInPlay;
+      return (
+        member.htmlGeneration === undefined ||
+        member.htmlGeneration < eventGeneration
+      );
     });
-    if (candidates.length === 0) {
-      // The common case for an unrelated event: nothing in the visible set
-      // moved, so do no work at all.
-      return true;
-    }
 
     let replacements = new Map<string, SearchEntry>();
     for (let member of candidates) {
+      if (epoch !== this.#refreshEpoch || isDestroyed(this)) {
+        // A newer run (or teardown) superseded this one: stop fetching. The
+        // returned value is discarded — the cancelled caller never resumes.
+        return replacements;
+      }
       let result;
       try {
         result = await this.runtimeStore.fetchCardEntry(member.id, {
@@ -575,16 +594,11 @@ export class SearchEntriesResource extends Resource<Args> {
           ifNoneMatch: memberValidator(member),
         });
       } catch (err) {
-        // A restart (a newer event) cancels this task mid-GET — let it
-        // propagate rather than treating it as a failed refresh.
-        if (didCancel(err)) {
-          throw err;
-        }
         this.#log.warn(
           `selective refresh GET failed for ${member.id}; falling back to a full re-run`,
           err,
         );
-        return false;
+        return 'fallback';
       }
       if (result.notModified) {
         continue;
@@ -599,24 +613,11 @@ export class SearchEntriesResource extends Resource<Args> {
       await this.loadStylesheets(collectionDoc);
       let [refreshed] = this.buildEntries(collectionDoc);
       if (refreshed === undefined) {
-        return false;
+        return 'fallback';
       }
       replacements.set(member.id, refreshed);
     }
-
-    if (replacements.size > 0) {
-      // Splice in place: every unchanged member keeps its object identity, so
-      // only the members whose rendering actually advanced re-render.
-      let next = this._entries.map(
-        (member) => replacements.get(member.id) ?? member,
-      );
-      this._entries.splice(0, this._entries.length, ...next);
-    }
-    // `realmsNeedingRefresh` is deliberately left as-is: a selective refresh
-    // only runs when it was empty, and any index event arriving mid-refresh
-    // restarts this task (so its realm survives for the re-run).
-    this._errors = undefined;
-    return true;
+    return replacements;
   }
 
   // The ?fields= value mirroring the query's entry fieldset (validated
@@ -752,14 +753,20 @@ function stripJsonSuffix(url: string): string {
   return url.replace(/\.json$/, '');
 }
 
-function memberMatchesUrls(member: SearchEntry, urls: Set<string>): boolean {
+// The highest generation among the queued invalidation URLs that name this
+// member, or undefined when none do.
+function invalidationGenerationFor(
+  member: SearchEntry,
+  invalidations: Map<string, number>,
+): number | undefined {
   let normalized = stripJsonSuffix(member.id);
-  for (let url of urls) {
+  let result: number | undefined;
+  for (let [url, generation] of invalidations) {
     if (stripJsonSuffix(url) === normalized) {
-      return true;
+      result = result === undefined ? generation : Math.max(result, generation);
     }
   }
-  return false;
+  return result;
 }
 
 // `card` vs `file-meta` for the card+html GET's Accept header — the same

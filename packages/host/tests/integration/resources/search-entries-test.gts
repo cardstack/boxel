@@ -808,6 +808,141 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
+    test('an item-only fieldset takes the coarse re-run — render errors can flip its membership', async function (assert) {
+      // Without the html branch the search runs the live-search projection,
+      // which excludes rows with an effective error — and a render error
+      // lands on the prerendered_html channel. So a prerender_html event can
+      // change this query's membership and a per-member refresh would miss
+      // that. The doc content is irrelevant to the routing decision under
+      // test.
+      let itemOnlyDoc: SearchEntryResults = {
+        data: [
+          {
+            type: EntryResourceType,
+            id: `${testRealmURL}books/1`,
+            relationships: {},
+            meta: { generation: 1 },
+          },
+        ],
+        meta: { page: { total: 1 } },
+      };
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return itemOnlyDoc;
+      };
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return { notModified: true };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { 'item.on': bookRef },
+              fields: { entry: ['item'] },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await settled();
+
+        assert.ok(
+          searchCount > baseline,
+          'an item-only query re-runs the whole search on a prerender_html event',
+        );
+        assert.strictEqual(getCount, 0, 'no per-member GET is attempted');
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('coalesced events refresh the union of their members, each judged at its own generation', async function (assert) {
+      let book1 = `${testRealmURL}books/1`;
+      let book2 = `${testRealmURL}books/2`;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        entryCollectionDoc([
+          { id: book1, indexGen: 1, htmlGen: 1, html: '<div>Mango v1</div>' },
+          {
+            id: book2,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Van Gogh v1</div>',
+          },
+        ]);
+
+      // The first GET (event 1's member) never resolves, holding the run
+      // mid-GET so event 2 restarts it; the replacement run must cover both
+      // events' members.
+      let getUrls: string[] = [];
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async (url: string) => {
+        getUrls.push(url);
+        if (getUrls.length === 1) {
+          return new Promise(() => {});
+        }
+        return {
+          notModified: false,
+          doc: entrySingleDoc({
+            id: url,
+            indexGen: 1,
+            htmlGen: url === book2 ? 3 : 2,
+            html: `<div>${url === book2 ? 'Van Gogh' : 'Mango'} v2</div>`,
+          }),
+        };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => getUrls.length === 1, { timeout: 10_000 });
+        relayPrerenderHtml([`${testRealmURL}books/2.json`], 3);
+        await waitUntil(
+          () =>
+            search.entries.find((e) => e.id === book1)?.htmlGeneration === 2 &&
+            search.entries.find((e) => e.id === book2)?.htmlGeneration === 3,
+          { timeout: 10_000 },
+        );
+        await settled();
+
+        assert.deepEqual(
+          getUrls.slice(1).sort(),
+          [book1, book2],
+          "the replacement run refreshes both events' members",
+        );
+        assert.strictEqual(
+          search.entries.find((e) => e.id === book1)?.html[0]?.html,
+          '<div>Mango v2</div>',
+        );
+        assert.strictEqual(
+          search.entries.find((e) => e.id === book2)?.html[0]?.html,
+          '<div>Van Gogh v2</div>',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
     test('an index event on another realm mid-refresh does not drop the HTML update', async function (assert) {
       let bookAId = `${testRealmURL}books/1`;
       let bookBId = `${testRealm2URL}books/other`;
