@@ -142,12 +142,14 @@ module('Integration | search-entries resource', function (hooks) {
   }
 
   // A book result carrying the generations the selective refresh reads. `htmlGen`
-  // omitted → an empty-html (item-fallback) row.
+  // omitted → an empty-html (item-fallback) row. `cssHref` links a scoped
+  // stylesheet, so `loadStylesheets` has something to import.
   interface BookEntrySpec {
     id: string;
     indexGen: number;
     htmlGen?: number;
     html?: string;
+    cssHref?: string;
   }
 
   function fittedHtmlId(id: string) {
@@ -184,14 +186,32 @@ module('Integration | search-entries resource', function (hooks) {
         format: 'fitted',
         renderType: bookRef,
       },
-      // No scoped CSS, so `loadStylesheets` imports nothing.
-      relationships: { styles: { data: [] } },
+      relationships: {
+        styles: {
+          data: spec.cssHref
+            ? [{ type: CssResourceType, id: `css-${spec.id}` }]
+            : [],
+        },
+      },
       meta: { generation: spec.htmlGen! },
     };
   }
 
-  // A `_federated-search` collection document with the default htmlQuery echoed,
-  // as the server returns for `{ 'item.on': Book }`.
+  function cssResourcesFor(
+    specs: BookEntrySpec[],
+  ): NonNullable<SearchEntryResults['included']> {
+    return specs
+      .filter((spec) => spec.cssHref !== undefined)
+      .map((spec) => ({
+        type: CssResourceType,
+        id: `css-${spec.id}`,
+        attributes: { href: spec.cssHref! },
+      }));
+  }
+
+  // A `_federated-search` collection document echoing the default htmlQuery
+  // (`{ eq: { format: 'fitted' } }` — no renderType), as the server returns
+  // for `{ 'item.on': Book }` with no htmlQuery bound.
   function entryCollectionDoc(specs: BookEntrySpec[]): SearchEntryResults {
     return {
       data: specs.map(entryResourceFor),
@@ -200,7 +220,7 @@ module('Integration | search-entries resource', function (hooks) {
         .map(htmlResourceFor),
       meta: {
         page: { total: specs.length },
-        htmlQuery: { eq: { format: 'fitted', renderType: bookRef } },
+        htmlQuery: { eq: { format: 'fitted' } },
       },
     };
   }
@@ -209,7 +229,10 @@ module('Integration | search-entries resource', function (hooks) {
   function entrySingleDoc(spec: BookEntrySpec): EntrySingleDocument {
     return {
       data: entryResourceFor(spec),
-      included: spec.htmlGen !== undefined ? [htmlResourceFor(spec)] : [],
+      included:
+        spec.htmlGen !== undefined
+          ? [htmlResourceFor(spec), ...cssResourcesFor([spec])]
+          : [],
     };
   }
 
@@ -1011,6 +1034,217 @@ module('Integration | search-entries resource', function (hooks) {
           search.entries.find((e) => e.id === bookAId)?.html[0]?.html,
           '<div>Mango v2</div>',
           'the invalidated member picked up the fresh HTML through the fold',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a stylesheet-import failure during a member refresh falls back to a full re-run', async function (assert) {
+      let cssHref = `${testRealmURL}book.gts.deadbeef.glimmer-scoped.css`;
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango v1</div>',
+          },
+        ]);
+      };
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => ({
+        notModified: false,
+        doc: entrySingleDoc({
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 2,
+          html: '<div>Mango v2</div>',
+          cssHref,
+        }),
+      })) as typeof storeService.fetchCardEntry;
+      // Stubbed on the loader current at event time: `loaderService.loader`
+      // is a field the service REPLACES on reset/clone, so an instance
+      // captured earlier (e.g. in beforeEach) can be stale by now.
+      let importCalls: string[] = [];
+      let stubbedLoader: Loader | undefined;
+      let originalImport: Loader['import'] | undefined;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        stubbedLoader = loaderService.loader;
+        originalImport = stubbedLoader.import.bind(stubbedLoader);
+        stubbedLoader.import = (async (url: string) => {
+          importCalls.push(url);
+          if (url === cssHref) {
+            throw new Error('stylesheet fetch failed');
+          }
+          return originalImport!(url);
+        }) as Loader['import'];
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await settled();
+
+        assert.true(
+          importCalls.includes(cssHref),
+          'the member refresh actually attempted the stylesheet import',
+        );
+        assert.ok(
+          searchCount > baseline,
+          'the failed stylesheet import falls back to the coarse re-run',
+        );
+        assert.strictEqual(
+          search.entries[0]?.htmlGeneration,
+          1,
+          "the failed member's refresh was not applied",
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+        if (stubbedLoader && originalImport) {
+          stubbedLoader.import = originalImport;
+        }
+      }
+    });
+
+    test('a row whose only change is its generation stamps keeps identity and adopts the stamps', async function (assert) {
+      // The invalidation fan-out re-indexes dependents whose content is often
+      // byte-identical — only the stamps move. Those rows must not remount
+      // (identity preserved) but must carry the fresh stamps, or later events
+      // would judge staleness against outdated generations.
+      let docs = [
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]),
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 2,
+            htmlGen: 2,
+            html: '<div>Mango</div>',
+          },
+        ]),
+      ];
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => docs.shift() ?? docs[0];
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let before = search.entries[0];
+        assert.strictEqual(before.htmlGeneration, 1);
+
+        getService('message-service').relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/1.json`],
+          realmURL: testRealmURL,
+        });
+        await waitUntil(() => search.entries[0]?.htmlGeneration === 2, {
+          timeout: 10_000,
+        });
+        await settled();
+
+        assert.strictEqual(
+          search.entries[0],
+          before,
+          'the content-unchanged row keeps its object identity',
+        );
+        assert.strictEqual(before.indexGeneration, 2, 'the stamps are adopted');
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('clearing the query mid-refresh stops the remaining member GETs', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+          {
+            id: `${testRealmURL}books/2`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Van Gogh</div>',
+          },
+        ]);
+
+      // The first GET is held open; once the query is cleared and the GET
+      // resolves, the (uncancellable) helper must not proceed to the second
+      // member.
+      let getCount = 0;
+      let releaseFirstGet: (value: {
+        notModified: false;
+        doc: EntrySingleDocument;
+      }) => void;
+      let firstGet = new Promise<{
+        notModified: false;
+        doc: EntrySingleDocument;
+      }>((resolve) => (releaseFirstGet = resolve));
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return firstGet;
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+
+        relayPrerenderHtml(
+          [`${testRealmURL}books/1.json`, `${testRealmURL}books/2.json`],
+          2,
+        );
+        await waitUntil(() => getCount === 1, { timeout: 10_000 });
+
+        search.modify([], { query: undefined });
+        releaseFirstGet!({
+          notModified: false,
+          doc: entrySingleDoc({
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 2,
+            html: '<div>Mango v2</div>',
+          }),
+        });
+        await settled();
+
+        assert.strictEqual(
+          getCount,
+          1,
+          'no further member GET fires after the query is cleared',
         );
       } finally {
         storeService.searchEntries = originalSearchEntries;
