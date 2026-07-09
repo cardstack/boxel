@@ -438,6 +438,13 @@ export default class Workspace extends Component<Signature> {
                     data-test-duplicate-progress
                   >{{this.duplicateProgressLabel}}</span>
                   <LoadingIndicator class='duplicate-modal__spinner' />
+                  <Button
+                    {{on 'click' this.cancelDuplication}}
+                    class='duplicate-modal__cancel'
+                    data-test-cancel-duplicate-button
+                  >
+                    Cancel
+                  </Button>
                 {{else}}
                   <Button
                     {{on 'click' this.closeDuplicateModal}}
@@ -1353,6 +1360,7 @@ export default class Workspace extends Component<Signature> {
   @tracked private archiveError: string | undefined;
   @tracked private showDuplicateModal = false;
   @tracked private duplicateError: string | undefined;
+  private duplicateAbortController: AbortController | undefined;
   @tracked private duplicateProgress:
     | { copied: number; total: number }
     | undefined;
@@ -1628,10 +1636,20 @@ export default class Workspace extends Component<Signature> {
 
   @action closeDuplicateModal() {
     if (this.duplicateWorkspaceTask.isRunning) {
+      this.cancelDuplication();
       return;
     }
     this.showDuplicateModal = false;
     this.duplicateError = undefined;
+  }
+
+  // Frees the user immediately: the modal closes here while the service
+  // notices the abort at its next batch boundary and cleans up the partial
+  // realm in the background.
+  @action private cancelDuplication() {
+    this.duplicateAbortController?.abort();
+    this.showDuplicateModal = false;
+    this.duplicateProgress = undefined;
   }
 
   private get duplicateProgressLabel() {
@@ -1684,6 +1702,7 @@ export default class Workspace extends Component<Signature> {
   private duplicateWorkspaceTask = dropTask(async () => {
     this.duplicateError = undefined;
     this.duplicateProgress = undefined;
+    this.duplicateAbortController = new AbortController();
 
     try {
       await this.workspaceDuplication.duplicateWorkspace(
@@ -1692,13 +1711,18 @@ export default class Workspace extends Component<Signature> {
           onProgress: (copied, total) => {
             this.duplicateProgress = { copied, total };
           },
+          signal: this.duplicateAbortController.signal,
         },
       );
       this.showDuplicateModal = false;
     } catch (error: any) {
-      this.duplicateError = String(error?.message ?? error);
+      // A cancellation is the user's own doing; only real failures are shown.
+      if (error?.name !== 'AbortError') {
+        this.duplicateError = String(error?.message ?? error);
+      }
     } finally {
       this.duplicateProgress = undefined;
+      this.duplicateAbortController = undefined;
     }
   });
 

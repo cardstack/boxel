@@ -6,6 +6,7 @@ import {
   SupportedMimeType,
   type RealmIdentifier,
 } from '@cardstack/runtime-common';
+import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
 import type CardService from './card-service';
 import type MatrixService from './matrix-service';
@@ -13,13 +14,25 @@ import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 
-// How many files are copied concurrently while duplicating a workspace: high
-// enough to overlap request latency, low enough to stay clear of the
-// browser's per-origin connection limit.
-const COPY_BATCH_SIZE = 5;
+// How many source files are read concurrently: light GETs, capped to stay
+// clear of the browser's per-origin connection limit.
+const READ_BATCH_SIZE = 20;
+// How many files go into each `_atomic` write request. Every request is one
+// write batch and one index pass on the destination realm, so larger chunks
+// mean fewer index passes; the cap keeps individual request payloads modest.
+const WRITE_CHUNK_SIZE = 50;
 // Endpoint candidates tried before giving up (`skills-copy`, `skills-copy-2`,
 // …). Only ever exhausted by a user who already owns this many copies.
 const MAX_ENDPOINT_ATTEMPTS = 10;
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new DOMException(
+      'The workspace duplication was cancelled',
+      'AbortError',
+    );
+  }
+}
 
 export default class WorkspaceDuplicationService extends Service {
   @service declare private cardService: CardService;
@@ -31,32 +44,98 @@ export default class WorkspaceDuplicationService extends Service {
   // Copies every file in the source workspace into a newly created private
   // personal realm, surfacing it in the user's realm list only once all
   // files are in place so a half-copied workspace is never clickable.
-  // Returns the new realm's URL.
+  // Aborting the signal stops the copy at the next batch boundary and
+  // deletes the partially copied realm. Returns the new realm's URL.
   async duplicateWorkspace(
     sourceRealmIdentifier: RealmIdentifier,
-    opts?: { onProgress?: (copied: number, total: number) => void },
+    opts?: {
+      onProgress?: (copied: number, total: number) => void;
+      signal?: AbortSignal;
+    },
   ): Promise<URL> {
     let sourceRealmURL = new URL(ensureTrailingSlash(sourceRealmIdentifier));
     let filePaths = await this.fetchSourceFilePaths(sourceRealmURL);
     opts?.onProgress?.(0, filePaths.length);
 
-    let newRealmURL = await this.createDuplicateRealm(sourceRealmIdentifier);
-
-    for (let i = 0; i < filePaths.length; i += COPY_BATCH_SIZE) {
-      let batch = filePaths.slice(i, i + COPY_BATCH_SIZE);
+    let contentsByPath = new Map<string, string>();
+    for (let i = 0; i < filePaths.length; i += READ_BATCH_SIZE) {
+      throwIfAborted(opts?.signal);
       await Promise.all(
-        batch.map((path) =>
-          this.cardService.copySource(
-            new URL(path, sourceRealmURL),
-            new URL(path, newRealmURL),
-          ),
-        ),
+        filePaths.slice(i, i + READ_BATCH_SIZE).map(async (path) => {
+          contentsByPath.set(
+            path,
+            await this.readSourceFile(new URL(path, sourceRealmURL)),
+          );
+        }),
       );
-      opts?.onProgress?.(i + batch.length, filePaths.length);
     }
 
-    await this.matrixService.appendRealmToAccountData(newRealmURL.href);
+    throwIfAborted(opts?.signal);
+    let newRealmURL = await this.createDuplicateRealm(sourceRealmIdentifier);
+
+    try {
+      let copied = 0;
+      for (let i = 0; i < filePaths.length; i += WRITE_CHUNK_SIZE) {
+        throwIfAborted(opts?.signal);
+        let chunk = filePaths.slice(i, i + WRITE_CHUNK_SIZE);
+        let operations: AtomicOperation[] = chunk.map((path) => ({
+          // index.json is the one file realm creation seeds that the copy
+          // keeps, so it's updated rather than added.
+          op: path === 'index.json' ? 'update' : 'add',
+          href: path,
+          data: {
+            type: 'source',
+            attributes: { content: contentsByPath.get(path) ?? '' },
+            meta: {},
+          },
+        }));
+        let result = await this.cardService.executeAtomicOperations(
+          operations,
+          newRealmURL,
+        );
+        if (result?.errors?.length) {
+          throw new Error(
+            result.errors
+              .map(
+                (error: { detail?: string; title?: string }) =>
+                  error.detail ?? error.title,
+              )
+              .join('; '),
+          );
+        }
+        copied += chunk.length;
+        opts?.onProgress?.(copied, filePaths.length);
+      }
+
+      await this.matrixService.appendRealmToAccountData(newRealmURL.href);
+    } catch (error) {
+      // A cancelled or failed copy leaves a partial realm that never joined
+      // the user's realm list; remove it rather than stranding an invisible
+      // orphan. Best-effort — the original failure is what gets reported.
+      try {
+        await this.realmServer.deleteRealm(newRealmURL.href);
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
     return newRealmURL;
+  }
+
+  private async readSourceFile(url: URL): Promise<string> {
+    let response = await this.network.authedFetch(url, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Could not read ${url.href} for copying: ${
+          response.status
+        } - ${(await response.text()).slice(0, 500)}`,
+      );
+    }
+    return await response.text();
   }
 
   private async fetchSourceFilePaths(sourceRealmURL: URL) {

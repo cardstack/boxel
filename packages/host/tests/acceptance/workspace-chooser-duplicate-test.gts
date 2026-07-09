@@ -6,6 +6,7 @@ import { ri } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
 import {
   setupAcceptanceTestRealm,
@@ -284,6 +285,49 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     assert
       .dom('[data-test-catalog-list] [data-test-workspace="Boxel Skills"]')
       .exists('the skills realm catalog tile survives the duplication');
+  });
+
+  test('a cancelled duplication stops copying and deletes the partial realm', async function (assert) {
+    await setupCopyTargetRealm();
+
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    let controller = new AbortController();
+    realmServer.createRealm = async () => {
+      // Abort as soon as the realm exists: the copy must not start, and the
+      // partial realm must be cleaned up.
+      controller.abort();
+      return new URL(copyRealmURL);
+    };
+    let deletedRealms: string[] = [];
+    realmServer.deleteRealm = async (realmURL) => {
+      deletedRealms.push(realmURL);
+    };
+
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    let workspaceDuplication = this.owner.lookup(
+      'service:workspace-duplication',
+    ) as WorkspaceDuplicationService;
+    await assert.rejects(
+      workspaceDuplication.duplicateWorkspace(ri(skillsRealmURL), {
+        signal: controller.signal,
+      }),
+      /cancelled/,
+      'the duplication rejects once the abort lands',
+    );
+
+    assert.deepEqual(
+      deletedRealms,
+      [copyRealmURL],
+      'the partially created realm is deleted after cancellation',
+    );
+    assert
+      .dom(
+        '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
+      )
+      .doesNotExist('the cancelled copy never joins the workspace list');
   });
 
   test('an endpoint collision retries with a numbered suffix', async function (assert) {
