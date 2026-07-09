@@ -16,6 +16,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   isCardErrorJSONAPI,
+  RealmPaths,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -31,6 +32,7 @@ import type {
   MarkdownEmbedInitialTarget,
   MarkdownEmbedRefType,
 } from '@cardstack/host/services/markdown-embed-chooser';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
@@ -75,6 +77,8 @@ interface Signature {
 // Replace flips it back to the chooser so the user can swap in a new ref.
 export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   @service declare private store: StoreService;
+  @service
+  declare private operatorModeStateService: OperatorModeStateService;
 
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
@@ -124,11 +128,39 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   private get currentTargetLabel(): string {
     let t = this.selectedTarget;
-    if (!t) return this.selectedUrl ?? '';
+    if (!t) return this.toDisplayUrl(this.selectedUrl ?? '');
     if (this.args.refType === 'file') {
       return fileNameFromUrl(t.id ?? this.selectedUrl ?? '');
     }
-    return (t as CardDef).cardTitle ?? t.id ?? this.selectedUrl ?? '';
+    return (
+      (t as CardDef).cardTitle ??
+      this.toDisplayUrl(t.id ?? this.selectedUrl ?? '')
+    );
+  }
+
+  // When the label falls back to showing a raw URL (a broken ref, or a card
+  // with no title), collapse it to a realm-relative path if it lives in the
+  // realm the user currently has open — a shorter, less noisy label than the
+  // absolute URL. References outside the current realm keep their full URL.
+  private toDisplayUrl(url: string): string {
+    if (!url) return url;
+    let realmURL: string | undefined;
+    try {
+      realmURL = this.operatorModeStateService.realmURL;
+    } catch {
+      realmURL = undefined;
+    }
+    if (!realmURL) return url;
+    try {
+      let paths = new RealmPaths(new URL(realmURL));
+      let parsed = new URL(url);
+      if (paths.inRealm(parsed)) {
+        return paths.local(parsed);
+      }
+    } catch {
+      // Malformed URL or outside the realm — fall back to the absolute URL.
+    }
+    return url;
   }
 
   @action

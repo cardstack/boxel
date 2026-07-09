@@ -304,11 +304,14 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
       )
       .exists('the current-target tile renders for the broken preload');
+    // The label falls back to the ref (no title to show). It renders either the
+    // full URL or, when the ref is in the currently-open realm, its realm-
+    // relative path — both end in the ref's path, so match on that.
     assert
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
       )
-      .hasText(brokenUrl, 'the label falls back to the broken URL');
+      .includesText('books/ghost', 'the label falls back to the broken ref');
     assert
       .dom('[data-test-markdown-embed-chooser-remove]')
       .exists('Remove is available');
