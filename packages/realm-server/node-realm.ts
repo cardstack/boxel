@@ -47,12 +47,14 @@ const realmEventsLog = logger('realm:events');
 
 // A concurrent delete can remove a file between an existence check and the
 // stat call, so treat a vanished file as nonexistent rather than letting the
-// raw ENOENT escape.
+// raw ENOENT escape. ENOTDIR is the same story via a different route: probing
+// a path nested under a regular file (e.g. `some.txt/nested`) throws it, and
+// such a path likewise just doesn't exist.
 function statIfExists(absolutePath: string): Stats | undefined {
   try {
     return statSync(absolutePath);
   } catch (err: any) {
-    if (err?.code === 'ENOENT') {
+    if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
       return undefined;
     }
     throw err;
