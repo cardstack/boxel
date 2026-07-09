@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 
 export default class SetActiveLLMTool extends HostBaseTool<
-  typeof BaseCommandModule.SetActiveLLMInput,
+  typeof BaseToolModule.SetActiveLLMInput,
   undefined
 > {
   @service declare private matrixService: MatrixService;
@@ -15,7 +15,7 @@ export default class SetActiveLLMTool extends HostBaseTool<
   static actionVerb = 'Set';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SetActiveLLMInput } = commandModule;
     return SetActiveLLMInput;
   }
@@ -23,7 +23,7 @@ export default class SetActiveLLMTool extends HostBaseTool<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.SetActiveLLMInput,
+    input: BaseToolModule.SetActiveLLMInput,
   ): Promise<undefined> {
     if (input.model) {
       await this.matrixService.sendActiveLLMEvent(input.roomId, input.model);

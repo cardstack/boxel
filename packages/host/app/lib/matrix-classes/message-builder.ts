@@ -85,7 +85,7 @@ export default class MessageBuilder {
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
-      commandResultEvent?: ToolResultEvent;
+      toolResultEvent?: ToolResultEvent;
     },
   ) {
     setOwner(this, owner);
@@ -186,7 +186,7 @@ export default class MessageBuilder {
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
       if (getToolRequests(event.content)) {
-        message.setCommands(await this.buildMessageCommands(message));
+        message.setTools(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
@@ -250,13 +250,13 @@ export default class MessageBuilder {
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
-      let command = message.commands.find(
-        (c) => c.commandRequest.id === encodedCommandRequest.id,
+      let command = message.tools.find(
+        (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
+        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
-        message.commands.push(
+        message.tools.push(
           await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
@@ -267,24 +267,24 @@ export default class MessageBuilder {
   }
 
   async updateMessageCommandResult(message: Message) {
-    if (message.commands.length === 0) {
-      message.setCommands(await this.buildMessageCommands(message));
+    if (message.tools.length === 0) {
+      message.setTools(await this.buildMessageCommands(message));
     }
 
-    if (this.builderContext.commandResultEvent && message.commands.length > 0) {
-      let event = this.builderContext.commandResultEvent;
+    if (this.builderContext.toolResultEvent && message.tools.length > 0) {
+      let event = this.builderContext.toolResultEvent;
       if (
         isToolResultWithOutputMsgtype(event.content.msgtype) ||
         isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
-        let messageCommand = message.commands.find(
-          (c) => c.commandRequest.id === commandRequestId,
+        let messageCommand = message.tools.find(
+          (c) => c.toolRequest.id === commandRequestId,
         );
         if (messageCommand) {
-          messageCommand.commandStatus = event.content['m.relates_to']
+          messageCommand.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
-          messageCommand.commandResultFileDef = isToolResultWithOutputContent(
+          messageCommand.toolResultFileDef = isToolResultWithOutputContent(
             event.content,
           )
             ? event.content.data.card
@@ -301,16 +301,16 @@ export default class MessageBuilder {
 
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
-    let commandRequests =
+    let toolRequests =
       getToolRequests<Partial<EncodedToolRequest>>(eventContent);
-    if (!commandRequests) {
+    if (!toolRequests) {
       return new TrackedArray<MessageTool>();
     }
     let commands = new TrackedArray<MessageTool>();
-    for (let commandRequest of commandRequests) {
+    for (let toolRequest of toolRequests) {
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(commandRequest),
+        decodeCommandRequest(toolRequest),
       );
       commands.push(command);
     }
@@ -319,10 +319,10 @@ export default class MessageBuilder {
 
   private async buildMessageCommand(
     message: Message,
-    commandRequest: Partial<ToolRequest>,
+    toolRequest: Partial<ToolRequest>,
   ) {
-    let commandResultEvent =
-      this.builderContext.commandResultEvent ??
+    let toolResultEvent =
+      this.builderContext.toolResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
         // Correlate the result to its command by commandRequestId (the
@@ -335,7 +335,7 @@ export default class MessageBuilder {
         return (
           isToolResultEventType(e.type) &&
           isToolResultRelType(r?.rel_type) &&
-          e.content.commandRequestId === commandRequest.id
+          e.content.commandRequestId === toolRequest.id
         );
       }) as ToolResultEvent | undefined);
 
@@ -345,20 +345,20 @@ export default class MessageBuilder {
     // leave the indicator blank for a beat while it runs. Build the command
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
-    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
+    if (toolRequest.executedBy === AI_BOT_EXECUTOR) {
       return new MessageTool(
         message,
-        commandRequest,
+        toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
         false, // requiresApproval — never prompts or runs
         'Apply', // actionVerb — unused; the indicator shows status, not a Run button
-        (commandResultEvent
-          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
+        (toolResultEvent
+          ? toolResultEvent.content['m.relates_to']?.key || 'applied'
           : 'applying') as ToolCallStatus,
         undefined, // no result card (server-handled results carry no output)
         getOwner(this)!,
-        commandResultEvent?.content.failureReason,
+        toolResultEvent?.content.failureReason,
       );
     }
 
@@ -373,7 +373,7 @@ export default class MessageBuilder {
         continue;
       }
       for (let candidateSkillCommand of getSkillSourceTools(source)) {
-        if (commandRequest.name === candidateSkillCommand.functionName) {
+        if (toolRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;
         }
@@ -393,24 +393,23 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
-    let commandStatus: ToolCallStatus = (commandResultEvent?.content[
+    let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
       'm.relates_to'
     ]?.key || 'ready') as ToolCallStatus;
 
     let messageCommand = new MessageTool(
       message,
-      commandRequest,
+      toolRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      commandStatus,
-      commandResultEvent &&
-        isToolResultWithOutputContent(commandResultEvent.content)
-        ? commandResultEvent.content.data.card
+      toolCallStatus,
+      toolResultEvent && isToolResultWithOutputContent(toolResultEvent.content)
+        ? toolResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
-      commandResultEvent?.content.failureReason,
+      toolResultEvent?.content.failureReason,
     );
     return messageCommand;
   }

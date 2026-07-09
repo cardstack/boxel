@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -11,8 +11,8 @@ type RegisterBotResult = {
 };
 
 export default class RegisterBotTool extends HostBaseTool<
-  typeof BaseCommandModule.RegisterBotInput,
-  typeof BaseCommandModule.RegisterBotResult
+  typeof BaseToolModule.RegisterBotInput,
+  typeof BaseToolModule.RegisterBotResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -20,15 +20,15 @@ export default class RegisterBotTool extends HostBaseTool<
   description = 'Register bot';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RegisterBotInput } = commandModule;
     return RegisterBotInput;
   }
 
   protected async run(
-    input: BaseCommandModule.RegisterBotInput,
-  ): Promise<BaseCommandModule.RegisterBotResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.RegisterBotInput,
+  ): Promise<BaseToolModule.RegisterBotResult> {
+    const commandModule = await this.loadToolModule();
     const { RegisterBotResult } = commandModule;
 
     let registration = (await this.realmServer.registerBot(

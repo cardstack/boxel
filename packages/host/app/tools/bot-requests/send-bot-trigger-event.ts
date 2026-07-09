@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseTool from '../../lib/host-base-tool';
@@ -10,14 +10,14 @@ import HostBaseTool from '../../lib/host-base-tool';
 import type MatrixService from '../../services/matrix-service';
 
 export default class SendBotTriggerEventTool extends HostBaseTool<
-  typeof BaseCommandModule.SendBotTriggerEventInput
+  typeof BaseToolModule.SendBotTriggerEventInput
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendBotTriggerEventInput } = commandModule;
     return SendBotTriggerEventInput;
   }
@@ -25,7 +25,7 @@ export default class SendBotTriggerEventTool extends HostBaseTool<
   requireInputFields = ['roomId', 'type', 'input', 'realm'];
 
   protected async run(
-    input: BaseCommandModule.SendBotTriggerEventInput,
+    input: BaseToolModule.SendBotTriggerEventInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
     let userId = this.matrixService.userId;

@@ -1,4 +1,4 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
@@ -12,7 +12,7 @@ const escapeForTag = (value: string) =>
 
 // Command to apply markdown edits using relace/relace-apply-3 model
 export default class ApplyMarkdownEditTool extends HostBaseTool<
-  typeof BaseCommandModule.ApplyMarkdownEditInput,
+  typeof BaseToolModule.ApplyMarkdownEditInput,
   undefined
 > {
   static actionVerb = 'Apply Markdown Edit';
@@ -20,13 +20,13 @@ export default class ApplyMarkdownEditTool extends HostBaseTool<
     'Apply a targeted edit to markdown content only (for example .md/.markdown text). This command is not for source code edits such as .gts/.ts/.js/.json files.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ApplyMarkdownEditInput } = commandModule;
     return ApplyMarkdownEditInput;
   }
 
   protected async run(
-    input: BaseCommandModule.ApplyMarkdownEditInput,
+    input: BaseToolModule.ApplyMarkdownEditInput,
   ): Promise<undefined> {
     // Validate inputs
     if (!input.cardId?.trim()) {

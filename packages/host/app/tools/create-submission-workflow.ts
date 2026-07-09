@@ -5,7 +5,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { Listing } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -19,7 +19,7 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
 export default class CreateSubmissionWorkflowTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateListingPRRequestInput
+  typeof BaseToolModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -30,7 +30,7 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
     'Create a submission workflow card for a catalog listing, open it in interact mode, and trigger the PR creation process.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateListingPRRequestInput } = commandModule;
     return CreateListingPRRequestInput;
   }
@@ -44,7 +44,7 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.CreateListingPRRequestInput,
+    input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
 

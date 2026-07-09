@@ -4,7 +4,7 @@ import { resolvePublishedRealmUrl } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -16,8 +16,8 @@ import type RealmServerService from '../services/realm-server';
 // are namespaced to the owner and have no contention, so they are not checked
 // here.
 export default class CheckDomainAvailabilityTool extends HostBaseTool<
-  typeof BaseCommandModule.CheckDomainAvailabilityInput,
-  typeof BaseCommandModule.CheckDomainAvailabilityResult
+  typeof BaseToolModule.CheckDomainAvailabilityInput,
+  typeof BaseToolModule.CheckDomainAvailabilityResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -26,16 +26,16 @@ export default class CheckDomainAvailabilityTool extends HostBaseTool<
     'Check whether a custom published-realm domain is available to claim';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.CheckDomainAvailabilityInput;
   }
 
   requireInputFields = ['type', 'name'];
 
   protected async run(
-    input: BaseCommandModule.CheckDomainAvailabilityInput,
-  ): Promise<BaseCommandModule.CheckDomainAvailabilityResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.CheckDomainAvailabilityInput,
+  ): Promise<BaseToolModule.CheckDomainAvailabilityResult> {
+    let commandModule = await this.loadToolModule();
     let { CheckDomainAvailabilityResult } = commandModule;
 
     if (input.type !== 'custom') {

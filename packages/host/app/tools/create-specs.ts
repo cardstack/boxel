@@ -19,7 +19,7 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
@@ -130,8 +130,8 @@ interface CreateSpecResult {
 }
 
 export default class CreateSpecTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateSpecsInput,
-  typeof BaseCommandModule.CreateSpecsResult
+  typeof BaseToolModule.CreateSpecsInput,
+  typeof BaseToolModule.CreateSpecsResult
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -143,7 +143,7 @@ export default class CreateSpecTool extends HostBaseTool<
   requireInputFields = ['targetRealm'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateSpecsInput } = commandModule;
     return CreateSpecsInput;
   }
@@ -252,8 +252,8 @@ export default class CreateSpecTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.CreateSpecsInput,
-  ): Promise<BaseCommandModule.CreateSpecsResult> {
+    input: BaseToolModule.CreateSpecsInput,
+  ): Promise<BaseToolModule.CreateSpecsResult> {
     let { codeRef, targetRealm, module, autoGenerateReadme } = input;
 
     if (!targetRealm) {
@@ -355,7 +355,7 @@ export default class CreateSpecTool extends HostBaseTool<
     }
 
     try {
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { CreateSpecsResult } = commandModule;
       return new CreateSpecsResult({
         newSpecs,

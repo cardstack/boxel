@@ -1278,9 +1278,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}command-module.gts`,
     });
 
-    await waitFor('[data-test-command-panel-header]');
+    await waitFor('[data-test-tool-panel-header]');
     assert
-      .dom('[data-test-command-panel-header]')
+      .dom('[data-test-tool-panel-header]')
       .hasText('Command', 'renders command panel');
     assert
       .dom('[data-test-card-module-definition]')

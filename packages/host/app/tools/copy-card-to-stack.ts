@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { isCardInstance, realmURL } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -14,8 +14,8 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class CopyCardToStackTool extends HostBaseTool<
-  typeof BaseCommandModule.CopyCardToStackInput,
-  typeof BaseCommandModule.CopyCardResult
+  typeof BaseToolModule.CopyCardToStackInput,
+  typeof BaseToolModule.CopyCardResult
 > {
   @service declare private cardService: CardService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -26,7 +26,7 @@ export default class CopyCardToStackTool extends HostBaseTool<
   static actionVerb = 'Copy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyCardToStackInput } = commandModule;
     return CopyCardToStackInput;
   }
@@ -34,8 +34,8 @@ export default class CopyCardToStackTool extends HostBaseTool<
   requireInputFields = ['sourceCard', 'targetStackIndex'];
 
   protected async run(
-    input: BaseCommandModule.CopyCardToStackInput,
-  ): Promise<BaseCommandModule.CopyCardResult> {
+    input: BaseToolModule.CopyCardToStackInput,
+  ): Promise<BaseToolModule.CopyCardResult> {
     let realmToCopyTo = await this.determineTargetRealm(input.targetStackIndex);
     if (!realmToCopyTo) {
       throw new Error('Cannot determine target realm to copy card to');

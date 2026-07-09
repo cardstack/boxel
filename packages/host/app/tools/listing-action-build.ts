@@ -1,7 +1,7 @@
 import type { Listing } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { devSkillId, skillCardURL } from '../lib/utils';
@@ -14,12 +14,12 @@ import SwitchSubmodeTool from './switch-submode';
 import UpdateRoomSkillsTool from './update-room-skills';
 
 export default class ListingActionBuildTool extends HostBaseTool<
-  typeof BaseCommandModule.ListingBuildInput
+  typeof BaseToolModule.ListingBuildInput
 > {
   description = 'Catalog listing build command';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ListingBuildInput } = commandModule;
     return ListingBuildInput;
   }
@@ -27,7 +27,7 @@ export default class ListingActionBuildTool extends HostBaseTool<
   requireInputFields = ['realm', 'listing'];
 
   protected async run(
-    input: BaseCommandModule.ListingBuildInput,
+    input: BaseToolModule.ListingBuildInput,
   ): Promise<undefined> {
     let { realm: realmUrl, listing: listingInput } = input;
 

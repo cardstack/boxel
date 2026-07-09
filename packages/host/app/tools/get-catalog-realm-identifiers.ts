@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -8,7 +8,7 @@ import type RealmServerService from '../services/realm-server';
 
 export default class GetCatalogRealmIdentifiersTool extends HostBaseTool<
   undefined,
-  typeof BaseCommandModule.GetCatalogRealmIdentifiersResult
+  typeof BaseToolModule.GetCatalogRealmIdentifiersResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -19,8 +19,8 @@ export default class GetCatalogRealmIdentifiersTool extends HostBaseTool<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetCatalogRealmIdentifiersResult> {
-    let commandModule = await this.loadCommandModule();
+  protected async run(): Promise<BaseToolModule.GetCatalogRealmIdentifiersResult> {
+    let commandModule = await this.loadToolModule();
     const { GetCatalogRealmIdentifiersResult } = commandModule;
     return new GetCatalogRealmIdentifiersResult({
       realmIdentifiers: this.realmServer.catalogRealmIdentifiers,

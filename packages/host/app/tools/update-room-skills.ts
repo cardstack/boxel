@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type {
   FileDef,
   SerializedFile,
@@ -27,7 +27,7 @@ import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class UpdateRoomSkillsTool extends HostBaseTool<
-  typeof BaseCommandModule.UpdateRoomSkillsInput
+  typeof BaseToolModule.UpdateRoomSkillsInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -36,7 +36,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
   description = 'Updates the enabled and disabled skills for a room';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UpdateRoomSkillsInput } = commandModule;
     return UpdateRoomSkillsInput;
   }
@@ -44,7 +44,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.UpdateRoomSkillsInput,
+    input: BaseToolModule.UpdateRoomSkillsInput,
   ): Promise<undefined> {
     let {
       roomId,
@@ -207,10 +207,12 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
         }
 
         // Write only the tool-named key; a pre-rename room's state may carry
-        // `commandDefinitions`, which must not survive the rewrite or it would
+        // `toolDefinitionFileDefs`, which must not survive the rewrite or it would
         // shadow nothing but confuse readers of raw state.
-        let { commandDefinitions: _legacyDefinitions, ...restOfSkillsConfig } =
-          currentSkillsConfig;
+        let {
+          toolDefinitionFileDefs: _legacyDefinitions,
+          ...restOfSkillsConfig
+        } = currentSkillsConfig;
         return {
           ...restOfSkillsConfig,
           enabledSkillCards: Array.from(enabledSkillCardMap.values()),

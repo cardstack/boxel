@@ -29,7 +29,7 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
+import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -148,11 +148,11 @@ export class DoThing extends Command {
               cardDescription: 'test',
               instructions: 'test',
               commands: [
-                new CommandField({
+                new ToolField({
                   codeRef: { module: '', name: '' },
                   requiresApproval: false,
                 }),
-                new CommandField({
+                new ToolField({
                   codeRef: {
                     module: `${testRealmURL}test-command.gts`,
                     name: 'DoThing',
@@ -166,7 +166,7 @@ export class DoThing extends Command {
               description: 'Test environment skill',
               instructions: 'Test skill card for environment commands',
               commands: [
-                new CommandField({
+                new ToolField({
                   codeRef: {
                     module: `${testRealmURL}test-command.gts`,
                     name: 'DoThing',
@@ -256,7 +256,9 @@ Instructions live in the markdown body.
         {
           enabledSkillCards: [{ sourceUrl: skillCardId } as SerializedFile],
           disabledSkillCards: [],
-          commandDefinitions: [{ sourceUrl: 'command-def' } as SerializedFile],
+          toolDefinitionFileDefs: [
+            { sourceUrl: 'command-def' } as SerializedFile,
+          ],
         },
       );
 

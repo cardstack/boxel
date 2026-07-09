@@ -10,7 +10,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
@@ -28,8 +28,8 @@ import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class CreateAiAssistantRoomTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateAIAssistantRoomInput,
-  typeof BaseCommandModule.CreateAIAssistantRoomResult
+  typeof BaseToolModule.CreateAIAssistantRoomInput,
+  typeof BaseToolModule.CreateAIAssistantRoomResult
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -54,7 +54,7 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
   }
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateAIAssistantRoomInput } = commandModule;
     return CreateAIAssistantRoomInput;
   }
@@ -62,9 +62,10 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
   // Collect skill ids from both the id fields (preferred, kind-agnostic) and
   // the legacy loaded-`Skill`-card fields, de-duped. A skill listed as both
   // enabled and disabled is treated as enabled.
-  private collectSkillIds(
-    input: BaseCommandModule.CreateAIAssistantRoomInput,
-  ): { enabledIds: string[]; disabledIds: string[] } {
+  private collectSkillIds(input: BaseToolModule.CreateAIAssistantRoomInput): {
+    enabledIds: string[];
+    disabledIds: string[];
+  } {
     let idsOf = (
       ids: string[] | undefined,
       cards: SkillModule.Skill[] | undefined,
@@ -137,8 +138,8 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.CreateAIAssistantRoomInput,
-  ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
+    input: BaseToolModule.CreateAIAssistantRoomInput,
+  ): Promise<BaseToolModule.CreateAIAssistantRoomResult> {
     let { matrixService } = this;
     let userId = matrixService.userId;
     let aiBotFullId = matrixService.aiBotUserId;
@@ -153,13 +154,14 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
       this.resolveSkills(disabledIds),
     ]);
 
-    let commandDefinitions = [...enabled.sources, ...disabled.sources].flatMap(
-      (source) => getSkillSourceTools(source),
-    );
+    let toolDefinitionFileDefs = [
+      ...enabled.sources,
+      ...disabled.sources,
+    ].flatMap((source) => getSkillSourceTools(source));
     let commandFileDefs: FileDef[] = [];
-    if (commandDefinitions.length) {
+    if (toolDefinitionFileDefs.length) {
       commandFileDefs = await matrixService.uploadToolDefinitions(
-        matrixService.getUniqueToolDefinitions(commandDefinitions),
+        matrixService.getUniqueToolDefinitions(toolDefinitionFileDefs),
       );
     }
 
@@ -210,7 +212,7 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
           },
         ],
       }),
-      this.loadCommandModule(),
+      this.loadToolModule(),
     ]);
 
     const { room_id: roomId } = roomResult;

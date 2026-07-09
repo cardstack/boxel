@@ -4,7 +4,7 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { Listing } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../../lib/host-base-tool';
 
@@ -16,7 +16,7 @@ import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
 
 export default class CreateListingPRRequestTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateListingPRRequestInput
+  typeof BaseToolModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -25,7 +25,7 @@ export default class CreateListingPRRequestTool extends HostBaseTool<
     'Request a GitHub PR from a catalog listing and notify the bot runner.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateListingPRRequestInput } = commandModule;
     return CreateListingPRRequestInput;
   }
@@ -33,7 +33,7 @@ export default class CreateListingPRRequestTool extends HostBaseTool<
   requireInputFields = ['realm', 'listingId'];
 
   protected async run(
-    input: BaseCommandModule.CreateListingPRRequestInput,
+    input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
 

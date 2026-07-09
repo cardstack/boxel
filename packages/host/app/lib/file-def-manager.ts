@@ -64,11 +64,11 @@ export interface FileDefManager {
 
   /**
    * Uploads command definitions and returns their file definitions
-   * @param commandDefinitions Array of command definitions to upload
+   * @param toolDefinitionFileDefs Array of command definitions to upload
    * @returns Promise resolving to array of file definitions
    */
   uploadToolDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]>;
 
   /**
@@ -355,9 +355,9 @@ export default class FileDefManagerImpl
   }
 
   async uploadToolDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]> {
-    if (!commandDefinitions.length) {
+    if (!toolDefinitionFileDefs.length) {
       return [];
     }
 
@@ -365,7 +365,7 @@ export default class FileDefManagerImpl
     let commandDefinitionSchemas: ToolDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
 
-    for (let commandDef of commandDefinitions) {
+    for (let commandDef of toolDefinitionFileDefs) {
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
         commandDef.codeRef,
         commandDef[relativeTo],

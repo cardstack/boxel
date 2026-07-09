@@ -341,8 +341,8 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
-  get commands() {
-    // Usable commands are all commands on *active* skills, whether the skill is
+  get tools() {
+    // Usable tools are all tools on *active* skills, whether the skill is
     // a Skill card or a skill-bearing markdown file.
     let commands = [];
     for (let skill of this.skills) {
@@ -769,7 +769,7 @@ export class RoomResource extends Resource<Args> {
         index,
         events: this.events,
         skills: this.skills,
-        commandResultEvent: event,
+        toolResultEvent: event,
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
@@ -875,14 +875,14 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  public isDisplayingCode(commandRequest: ToolRequest) {
-    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
+  public isDisplayingCode(toolRequest: ToolRequest) {
+    return this._isDisplayingViewCodeMap.get(toolRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: ToolRequest) {
+  public toggleViewCode(toolRequest: ToolRequest) {
     this._isDisplayingViewCodeMap.set(
-      commandRequest.id,
-      !this.isDisplayingCode(commandRequest),
+      toolRequest.id,
+      !this.isDisplayingCode(toolRequest),
     );
   }
 }

@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -15,8 +15,8 @@ import PatchCardInstanceTool from './patch-card-instance';
 import type ToolService from '../services/tool-service';
 
 export default class GenerateReadmeSpecTool extends HostBaseTool<
-  typeof BaseCommandModule.GenerateReadmeSpecInput,
-  typeof BaseCommandModule.GenerateReadmeSpecResult
+  typeof BaseToolModule.GenerateReadmeSpecInput,
+  typeof BaseToolModule.GenerateReadmeSpecResult
 > {
   @service declare private toolService: ToolService;
 
@@ -48,14 +48,14 @@ Requirements:
     'Generate a README for a spec and patch it to the spec readMe field';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateReadmeSpecInput } = commandModule;
     return GenerateReadmeSpecInput;
   }
 
   protected async run(
-    input: BaseCommandModule.GenerateReadmeSpecInput,
-  ): Promise<BaseCommandModule.GenerateReadmeSpecResult> {
+    input: BaseToolModule.GenerateReadmeSpecInput,
+  ): Promise<BaseToolModule.GenerateReadmeSpecResult> {
     if (!input.spec) {
       throw new Error('Spec is required');
     }
@@ -106,7 +106,7 @@ Requirements:
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateReadmeSpecResult } = commandModule;
 
     return new GenerateReadmeSpecResult({

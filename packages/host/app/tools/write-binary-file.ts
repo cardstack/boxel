@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
@@ -35,8 +35,8 @@ function base64ToUint8Array(base64: string): Uint8Array {
 }
 
 export default class WriteBinaryFileTool extends HostBaseTool<
-  typeof BaseCommandModule.WriteBinaryFileInput,
-  typeof BaseCommandModule.WriteBinaryFileResult
+  typeof BaseToolModule.WriteBinaryFileInput,
+  typeof BaseToolModule.WriteBinaryFileResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -46,7 +46,7 @@ export default class WriteBinaryFileTool extends HostBaseTool<
   static actionVerb = 'Write';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteBinaryFileInput } = commandModule;
     return WriteBinaryFileInput;
   }
@@ -54,8 +54,8 @@ export default class WriteBinaryFileTool extends HostBaseTool<
   requireInputFields = ['path', 'base64Content'];
 
   protected async run(
-    input: BaseCommandModule.WriteBinaryFileInput,
-  ): Promise<BaseCommandModule.WriteBinaryFileResult> {
+    input: BaseToolModule.WriteBinaryFileInput,
+  ): Promise<BaseToolModule.WriteBinaryFileResult> {
     let realm;
     if (input.realm) {
       realm = this.realm.realmOf(rri(input.realm));
@@ -130,7 +130,7 @@ export default class WriteBinaryFileTool extends HostBaseTool<
       throw new Error(details);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteBinaryFileResult } = commandModule;
     return new WriteBinaryFileResult({ fileIdentifier: finalUrl.href });
   }

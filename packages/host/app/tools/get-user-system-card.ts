@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -12,7 +12,7 @@ const { defaultSystemCardId } = ENV;
 
 export default class GetUserSystemCardTool extends HostBaseTool<
   undefined,
-  typeof BaseCommandModule.GetUserSystemCardResult
+  typeof BaseToolModule.GetUserSystemCardResult
 > {
   @service declare private matrixService: MatrixService;
 
@@ -23,9 +23,9 @@ export default class GetUserSystemCardTool extends HostBaseTool<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetUserSystemCardResult> {
+  protected async run(): Promise<BaseToolModule.GetUserSystemCardResult> {
     await this.matrixService.ready;
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GetUserSystemCardResult } = commandModule;
 
     const systemCard = this.matrixService.systemCard;

@@ -4,7 +4,7 @@ import {
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -18,14 +18,14 @@ const GLOBAL_URL_STEMS = [
 ];
 
 export default class SanitizeModuleListTool extends HostBaseTool<
-  typeof BaseCommandModule.SanitizeModuleListInput,
-  typeof BaseCommandModule.SanitizeModuleListResult
+  typeof BaseToolModule.SanitizeModuleListInput,
+  typeof BaseToolModule.SanitizeModuleListResult
 > {
   description =
     'Filter and deduplicate a list of module URLs, removing globals and unreadable realms';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SanitizeModuleListInput } = commandModule;
     return SanitizeModuleListInput;
   }
@@ -33,8 +33,8 @@ export default class SanitizeModuleListTool extends HostBaseTool<
   requireInputFields = ['moduleIdentifiers'];
 
   protected async run(
-    input: BaseCommandModule.SanitizeModuleListInput,
-  ): Promise<BaseCommandModule.SanitizeModuleListResult> {
+    input: BaseToolModule.SanitizeModuleListInput,
+  ): Promise<BaseToolModule.SanitizeModuleListResult> {
     // Normalize to extensionless URLs before deduplication so that e.g.
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
@@ -75,7 +75,7 @@ export default class SanitizeModuleListTool extends HostBaseTool<
       (dep): dep is string => dep !== null,
     );
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SanitizeModuleListResult } = commandModule;
     return new SanitizeModuleListResult({ moduleIdentifiers });
   }

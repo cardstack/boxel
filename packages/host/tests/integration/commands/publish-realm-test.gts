@@ -9,7 +9,7 @@ import { baseRealm, type Loader } from '@cardstack/runtime-common';
 import RealmService from '@cardstack/host/services/realm';
 import PublishRealmTool from '@cardstack/host/tools/publish-realm';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -42,7 +42,7 @@ let publishShouldFail: boolean;
 let publishabilityRequested: boolean;
 let publishedURLs: string[];
 let loader: Loader;
-let PublishTarget: typeof BaseCommandModule.PublishTarget;
+let PublishTarget: typeof BaseToolModule.PublishTarget;
 
 module('Integration | commands | publish-realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -117,7 +117,7 @@ module('Integration | commands | publish-realm', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loader = getService('loader-service').loader;
     PublishTarget = (
-      await loader.import<typeof BaseCommandModule>(`${baseRealm.url}command`)
+      await loader.import<typeof BaseToolModule>(`${baseRealm.url}command`)
     ).PublishTarget;
     publishabilityResponse = { publishable: true, violations: [] };
     publishShouldFail = false;

@@ -133,15 +133,15 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     commandInput: Record<string, unknown> | undefined,
   ) {
     try {
-      let CommandConstructor = (await getClass(
+      let ToolConstructor = (await getClass(
         command,
         this.loaderService.loader,
       )) as GenericCommandConstructor | undefined;
-      if (!CommandConstructor) {
+      if (!ToolConstructor) {
         throw new Error('Command not found for provided CodeRef');
       }
 
-      let commandInstance = new CommandConstructor(this.commandContext);
+      let commandInstance = new ToolConstructor(this.commandContext);
       let resultCard: CardDef | undefined;
       if (commandInput) {
         resultCard = await commandInstance.execute(commandInput);

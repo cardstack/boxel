@@ -27,7 +27,7 @@ import type ToolService from '@cardstack/host/services/tool-service';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
-import RoomMessageCommand from './room-message-command';
+import RoomMessageTool from './room-message-tool';
 
 interface Signature {
   Element: HTMLElement;
@@ -210,13 +210,13 @@ export default class RoomMessage extends Component<Signature> {
         @isPending={{@isPending}}
         @hideMeta={{this.message.isCodePatchCorrectness}}
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
-        @commands={{this.message.commands}}
+        @commands={{this.message.tools}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#each this.message.commands as |command|}}
-          <RoomMessageCommand
+        {{#each this.message.tools as |command|}}
+          <RoomMessageTool
             @messageCommand={{command}}
             @roomResource={{@roomResource}}
             @runCommand={{fn (perform this.run) command}}

@@ -1,21 +1,21 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
 export default class AuthedFetchTool extends HostBaseTool<
-  typeof BaseCommandModule.AuthedFetchInput,
-  typeof BaseCommandModule.AuthedFetchResult
+  typeof BaseToolModule.AuthedFetchInput,
+  typeof BaseToolModule.AuthedFetchResult
 > {
   @service declare private network: NetworkService;
 
   description = 'Perform an authenticated HTTP fetch';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { AuthedFetchInput } = commandModule;
     return AuthedFetchInput;
   }
@@ -23,9 +23,9 @@ export default class AuthedFetchTool extends HostBaseTool<
   requireInputFields = ['url'];
 
   protected async run(
-    input: BaseCommandModule.AuthedFetchInput,
-  ): Promise<BaseCommandModule.AuthedFetchResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.AuthedFetchInput,
+  ): Promise<BaseToolModule.AuthedFetchResult> {
+    let commandModule = await this.loadToolModule();
     const { AuthedFetchResult } = commandModule;
     const headers: Record<string, string> = {};
     if (input.acceptHeader) {

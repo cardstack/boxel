@@ -508,7 +508,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .ai-assistant-message.code-patch-correctness
         .content
-        > :deep(.room-message-command.compact + .room-message-command.compact) {
+        > :deep(.room-message-tool.compact + .room-message-tool.compact) {
         margin-top: 0;
       }
       :deep(pre) {

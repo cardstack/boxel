@@ -2,14 +2,14 @@ import { service } from '@ember/service';
 
 import type { Format } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class OpenInInteractModeTool extends HostBaseTool<
-  typeof BaseCommandModule.ShowCardInput
+  typeof BaseToolModule.ShowCardInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -19,16 +19,14 @@ export default class OpenInInteractModeTool extends HostBaseTool<
   static actionVerb = 'Open Card';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ShowCardInput } = commandModule;
     return ShowCardInput;
   }
 
   requireInputFields = ['cardId'];
 
-  protected async run(
-    input: BaseCommandModule.ShowCardInput,
-  ): Promise<undefined> {
+  protected async run(input: BaseToolModule.ShowCardInput): Promise<undefined> {
     let { operatorModeStateService } = this;
     let format = (input.format ?? 'isolated') as Format;
     operatorModeStateService.openCardInInteractMode(input.cardId, format);

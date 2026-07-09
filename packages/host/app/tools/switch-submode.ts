@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { Submodes } from '../components/submode-switcher';
 
@@ -14,8 +14,8 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type StoreService from '../services/store';
 
 export default class SwitchSubmodeTool extends HostBaseTool<
-  typeof BaseCommandModule.SwitchSubmodeInput,
-  typeof BaseCommandModule.SwitchSubmodeResult | undefined
+  typeof BaseToolModule.SwitchSubmodeInput,
+  typeof BaseToolModule.SwitchSubmodeResult | undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
@@ -26,7 +26,7 @@ export default class SwitchSubmodeTool extends HostBaseTool<
     'Navigate the UI to another submode. Possible values for submode are "interact" and "code".';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SwitchSubmodeInput } = commandModule;
     return SwitchSubmodeInput;
   }
@@ -53,9 +53,9 @@ export default class SwitchSubmodeTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.SwitchSubmodeInput,
-  ): Promise<BaseCommandModule.SwitchSubmodeResult | undefined> {
-    let resultCard: BaseCommandModule.SwitchSubmodeResult | undefined;
+    input: BaseToolModule.SwitchSubmodeInput,
+  ): Promise<BaseToolModule.SwitchSubmodeResult | undefined> {
+    let resultCard: BaseToolModule.SwitchSubmodeResult | undefined;
     switch (input.submode) {
       case Submodes.Interact:
         await this.operatorModeStateService.updateCodePath(null);
@@ -86,7 +86,7 @@ export default class SwitchSubmodeTool extends HostBaseTool<
           if (writeResult.fileIdentifier !== codeRRI) {
             finalCodePath = rri(writeResult.fileIdentifier);
 
-            let commandModule = await this.loadCommandModule();
+            let commandModule = await this.loadToolModule();
             const { SwitchSubmodeResult } = commandModule;
             resultCard = new SwitchSubmodeResult({
               codePath: finalCodePath,

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -8,15 +8,15 @@ import HostBaseTool from '../lib/host-base-tool';
 import type MatrixService from '../services/matrix-service';
 
 export default class ReadFileForAssistantTool extends HostBaseTool<
-  typeof BaseCommandModule.FileIdentifierCard,
-  typeof BaseCommandModule.FileForAttachmentCard
+  typeof BaseToolModule.FileIdentifierCard,
+  typeof BaseToolModule.FileForAttachmentCard
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return FileIdentifierCard;
   }
@@ -24,8 +24,8 @@ export default class ReadFileForAssistantTool extends HostBaseTool<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FileIdentifierCard,
-  ): Promise<BaseCommandModule.FileForAttachmentCard> {
+    input: BaseToolModule.FileIdentifierCard,
+  ): Promise<BaseToolModule.FileForAttachmentCard> {
     let { matrixService } = this;
 
     let fileUrl = input.fileIdentifier;
@@ -39,7 +39,7 @@ export default class ReadFileForAssistantTool extends HostBaseTool<
     if (file) {
       file = (await matrixService.uploadFiles([file]))[0] as FileDef;
     }
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileForAttachmentCard } = commandModule;
     return new FileForAttachmentCard({ fileForAttachment: file });
   }

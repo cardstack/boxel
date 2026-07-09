@@ -1860,7 +1860,7 @@ export default class Room extends Component<Signature> {
   private get readyCommands() {
     let lastMessage = this.messages[this.messages.length - 1];
 
-    if (!lastMessage || !lastMessage.commands) {
+    if (!lastMessage || !lastMessage.tools) {
       return [];
     }
     let roomResource = this.matrixService.roomResources.get(this.args.roomId);
@@ -1869,13 +1869,11 @@ export default class Room extends Component<Signature> {
     );
     let isOwnedByCurrentAgent =
       lastMessage.agentId === this.matrixService.agentId;
-    return lastMessage.commands.filter(
+    return lastMessage.tools.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&
-        !this.toolService.currentlyExecutingCommandRequestIds.has(
-          command.id!,
-        ) &&
-        !this.toolService.executedCommandRequestIds.has(command.id!) &&
+        !this.toolService.currentlyExecutingToolRequestIds.has(command.id!) &&
+        !this.toolService.executedToolRequestIds.has(command.id!) &&
         // Commands destined for auto-execution must not surface the manual
         // Accept All / Cancel bar, even during the ~100ms debounce before
         // tool-service flips `acceptingAllRoomIds`. Without this filter,

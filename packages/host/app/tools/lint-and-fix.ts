@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import {
@@ -13,15 +13,15 @@ import {
 import type NetworkService from '../services/network';
 
 export default class LintAndFixTool extends HostBaseTool<
-  typeof BaseCommandModule.LintAndFixInput,
-  typeof BaseCommandModule.LintAndFixResult
+  typeof BaseToolModule.LintAndFixInput,
+  typeof BaseToolModule.LintAndFixResult
 > {
   @service declare private network: NetworkService;
   description = `Pass file content through linting endpoint`;
   static actionVerb = 'Autofix';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { LintAndFixInput } = commandModule;
     return LintAndFixInput;
   }
@@ -29,9 +29,9 @@ export default class LintAndFixTool extends HostBaseTool<
   requireInputFields = ['fileContent', 'realm'];
 
   protected async run(
-    input: BaseCommandModule.LintAndFixInput,
-  ): Promise<BaseCommandModule.LintAndFixResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.LintAndFixInput,
+  ): Promise<BaseToolModule.LintAndFixResult> {
+    let commandModule = await this.loadToolModule();
     const { LintAndFixResult } = commandModule;
     let response = await this.network.authedFetch(`${input.realm}_lint`, {
       method: 'POST',

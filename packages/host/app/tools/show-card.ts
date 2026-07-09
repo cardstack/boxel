@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -19,7 +19,7 @@ import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
 
 export default class ShowCardTool extends HostBaseTool<
-  typeof BaseCommandModule.ShowCardInput,
+  typeof BaseToolModule.ShowCardInput,
   typeof CardDef
 > {
   @service declare private network: NetworkService;
@@ -33,16 +33,14 @@ export default class ShowCardTool extends HostBaseTool<
   static actionVerb = 'Show Card';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ShowCardInput } = commandModule;
     return ShowCardInput;
   }
 
   requireInputFields = ['cardId'];
 
-  protected async run(
-    input: BaseCommandModule.ShowCardInput,
-  ): Promise<CardDef> {
+  protected async run(input: BaseToolModule.ShowCardInput): Promise<CardDef> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();

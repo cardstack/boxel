@@ -9,7 +9,7 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -19,8 +19,8 @@ import type RealmService from '../services/realm';
 // realm-server accepts the request; there is no reindex on unpublish (the
 // published realm is removed), so v1 has no completion-wait.
 export default class UnpublishRealmTool extends HostBaseTool<
-  typeof BaseCommandModule.UnpublishRealmInput,
-  typeof BaseCommandModule.UnpublishRealmResult
+  typeof BaseToolModule.UnpublishRealmInput,
+  typeof BaseToolModule.UnpublishRealmResult
 > {
   @service declare private realm: RealmService;
 
@@ -28,16 +28,16 @@ export default class UnpublishRealmTool extends HostBaseTool<
   description = 'Unpublish a realm from a published destination';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.UnpublishRealmInput;
   }
 
   requireInputFields = ['realmURL'];
 
   protected async run(
-    input: BaseCommandModule.UnpublishRealmInput,
-  ): Promise<BaseCommandModule.UnpublishRealmResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.UnpublishRealmInput,
+  ): Promise<BaseToolModule.UnpublishRealmResult> {
+    let commandModule = await this.loadToolModule();
     let { UnpublishRealmResult } = commandModule;
 
     // Normalize so the cached RealmResource (token/claims, _unPublishingRealms
@@ -64,7 +64,7 @@ export default class UnpublishRealmTool extends HostBaseTool<
   }
 
   private resolvePublishedRealmURL(
-    input: BaseCommandModule.UnpublishRealmInput,
+    input: BaseToolModule.UnpublishRealmInput,
     realmURL: string,
   ): string {
     if (input.publishedRealmURL) {

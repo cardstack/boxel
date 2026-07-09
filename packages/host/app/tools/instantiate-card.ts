@@ -16,15 +16,15 @@
 
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 
 export default class InstantiateCardTool extends HostBaseTool<
-  typeof BaseCommandModule.InstantiateCardInput,
-  typeof BaseCommandModule.InstantiateCardResult
+  typeof BaseToolModule.InstantiateCardInput,
+  typeof BaseToolModule.InstantiateCardResult
 > {
   description = 'Instantiate a card from JSON via the store in the prerenderer';
   static actionVerb = 'Instantiate';
@@ -32,15 +32,15 @@ export default class InstantiateCardTool extends HostBaseTool<
   @service declare private store: StoreService;
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.InstantiateCardInput;
   }
 
   requireInputFields = ['moduleIdentifier', 'cardName', 'realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.InstantiateCardInput,
-  ): Promise<BaseCommandModule.InstantiateCardResult> {
+    input: BaseToolModule.InstantiateCardInput,
+  ): Promise<BaseToolModule.InstantiateCardResult> {
     let moduleUrl = input.moduleIdentifier;
     let cardName = input.cardName;
     let realmUrl = input.realmIdentifier;
@@ -59,7 +59,7 @@ export default class InstantiateCardTool extends HostBaseTool<
 
     this.validateModuleUrl(moduleUrl, realmUrl);
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
 
     try {
       // Reset the loader to clear cached modules from prior runs.

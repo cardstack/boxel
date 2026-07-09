@@ -9,7 +9,7 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -24,8 +24,8 @@ import type { PublishabilityViolation } from '../services/realm';
 // (Readiness is polled over HTTP rather than awaited via realm `index` events,
 // which aren't delivered to the run-command/prerender context.)
 export default class PublishRealmTool extends HostBaseTool<
-  typeof BaseCommandModule.PublishRealmInput,
-  typeof BaseCommandModule.PublishRealmResult
+  typeof BaseToolModule.PublishRealmInput,
+  typeof BaseToolModule.PublishRealmResult
 > {
   @service declare private realm: RealmService;
 
@@ -33,16 +33,16 @@ export default class PublishRealmTool extends HostBaseTool<
   description = 'Publish a realm to one or more destinations';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.PublishRealmInput;
   }
 
   requireInputFields = ['realmURL'];
 
   protected async run(
-    input: BaseCommandModule.PublishRealmInput,
-  ): Promise<BaseCommandModule.PublishRealmResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.PublishRealmInput,
+  ): Promise<BaseToolModule.PublishRealmResult> {
+    let commandModule = await this.loadToolModule();
     let { PublishRealmResult, PublishTargetResult } = commandModule;
 
     // Normalize so endpoint URLs like `${realmURL}_publishability` are well

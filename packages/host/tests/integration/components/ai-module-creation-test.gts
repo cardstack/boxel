@@ -217,8 +217,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-command-apply="ready"]');
-    await click('[data-test-command-apply="ready"]');
+    await waitFor('[data-test-tool-call-apply="ready"]');
+    await click('[data-test-tool-call-apply="ready"]');
     assert.dom('[data-test-view-module]').exists();
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement

@@ -48,7 +48,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
-  isCommandDeclaration,
+  isToolDeclaration,
   isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
@@ -212,11 +212,11 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  private get showCommandPanel() {
+  private get showToolPanel() {
     return (
       this.isModule &&
       this.args.selectedDeclaration &&
-      isCommandDeclaration(this.args.selectedDeclaration)
+      isToolDeclaration(this.args.selectedDeclaration)
     );
   }
 
@@ -791,16 +791,16 @@ export default class DetailPanel extends Component<Signature> {
             {{/let}}
           {{/if}}
         </PanelSection>
-      {{else if this.showCommandPanel}}
+      {{else if this.showToolPanel}}
         <PanelSection as |PanelHeader|>
           <PanelHeader
-            aria-label='Command Panel Header'
-            data-test-command-panel-header
+            aria-label='Tool Panel Header'
+            data-test-tool-panel-header
           >
-            Command
+            Tool
           </PanelHeader>
           <ModuleDefinitionContainer
-            @title='Command'
+            @title='Tool'
             @fileURL={{@readyFile.url}}
             @name={{this.selectedDeclarationName}}
             @fileExtension={{this.fileExtension}}

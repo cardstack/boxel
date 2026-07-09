@@ -200,7 +200,7 @@ module('Acceptance | Commands tests', function (hooks) {
         await waitForCompletedCommandRequest(
           this.commandContext,
           roomId,
-          (commandRequest) => commandRequest.name === 'patchCardInstance',
+          (toolRequest) => toolRequest.name === 'patchCardInstance',
           { afterEventId: eventId },
         );
 
@@ -655,15 +655,16 @@ module('Acceptance | Commands tests', function (hooks) {
     // processRoomTask returned early on a memberIds-without-aiBot read, and
     // never re-ran because _events alone didn't change after _roomState was
     // populated.
-    let applySelector = '[data-test-message-idx="1"] [data-test-command-apply]';
+    let applySelector =
+      '[data-test-message-idx="1"] [data-test-tool-call-apply]';
     try {
       await waitFor(applySelector, { timeout: 10_000 });
     } catch (err) {
       let messageIdxs = findAll('[data-test-message-idx]').map((el) =>
         el.getAttribute('data-test-message-idx'),
       );
-      let applyButtons = findAll('[data-test-command-apply]').map((el) =>
-        el.getAttribute('data-test-command-apply'),
+      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) =>
+        el.getAttribute('data-test-tool-call-apply'),
       );
       let roomElements = findAll('[data-room-id]').map((el) => ({
         roomId: el.getAttribute('data-room-id'),
@@ -802,7 +803,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Switching to code submode');
 
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     // check we're in code mode
     await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
@@ -883,9 +884,9 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Finding and opening Hassan card');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .containsText('Search');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
       .dom(
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
@@ -999,7 +1000,9 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText(description);
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists();
   });
 
@@ -1069,11 +1072,11 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
       );
     } catch (err) {
-      let applyButtons = findAll('[data-test-command-apply]').map((el) => ({
+      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
         idx: el
           .closest('[data-test-message-idx]')
           ?.getAttribute('data-test-message-idx'),
-        state: el.getAttribute('data-test-command-apply'),
+        state: el.getAttribute('data-test-tool-call-apply'),
       }));
       let applyStates = findAll('[data-test-apply-state]').map((el) =>
         el.getAttribute('data-test-apply-state'),
@@ -1095,7 +1098,7 @@ module('Acceptance | Commands tests', function (hooks) {
               roomData?.skillsConfig?.enabledSkillCards?.map(
                 (f) => f.sourceUrl,
               ) ?? null,
-            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+            roomResourceCommandCount: roomResource?.tools?.length ?? null,
           },
           null,
           2,
@@ -1104,7 +1107,7 @@ module('Acceptance | Commands tests', function (hooks) {
       throw err;
     }
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // check we're in interact mode
     await waitFor('[data-test-submode-switcher=interact]');
@@ -1195,7 +1198,7 @@ module('Acceptance | Commands tests', function (hooks) {
       '[data-test-message-idx="0"] [data-test-apply-state="ready"]',
     );
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
     assert.dom('[data-test-submode-switcher=interact]').exists();
   });
 
@@ -1232,7 +1235,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .exists({ count: 2 });
   });
 
@@ -1287,7 +1290,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-idx="0"]');
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-command-apply]')
+      .dom('[data-test-tool-call-apply]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-apply-state="applied"]')
@@ -1363,7 +1366,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-idx="2"]');
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1378,7 +1381,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // The command from message idx 2 should still not be auto-applied because it was sent before act mode
     assert
-      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
       .exists('Apply button is still shown for command sent before act mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1474,7 +1477,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "no-such-command" was found');
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
     let message = getRoomEvents(roomId).pop()!;
@@ -1578,7 +1581,7 @@ module('Acceptance | Commands tests', function (hooks) {
               roomData?.skillsConfig?.enabledSkillCards?.map(
                 (f) => f.sourceUrl,
               ) ?? null,
-            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+            roomResourceCommandCount: roomResource?.tools?.length ?? null,
           },
           null,
           2,
@@ -1589,7 +1592,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-boxel-alert="warning"]')
       .containsText(expectedValidationText);
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
     let message = getRoomEvents(roomId).pop()!;

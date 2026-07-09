@@ -18,7 +18,7 @@ import * as CopyCardAsMarkdownToolModule from './copy-card-as-markdown';
 import * as CopyCardToStackToolModule from './copy-card-to-stack';
 import * as CopyFileToRealmToolModule from './copy-file-to-realm';
 import * as CopySourceToolModule from './copy-source';
-import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as CreateAIAssistantRoomToolModule from './create-ai-assistant-room';
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecToolModule from './create-specs';
 import * as CreateSubmissionWorkflowToolModule from './create-submission-workflow';
@@ -44,7 +44,7 @@ import * as InstantiateCardToolModule from './instantiate-card';
 import * as InvalidateRealmIdentifiersToolModule from './invalidate-realm-identifiers';
 import * as InviteUserToRoomToolModule from './invite-user-to-room';
 import * as LintAndFixToolModule from './lint-and-fix';
-import * as ListingBuildCommandModule from './listing-action-build';
+import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
 import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
@@ -60,8 +60,8 @@ import * as PopulateWithSampleDataToolModule from './populate-with-sample-data';
 import * as PreviewFormatToolModule from './preview-format';
 import * as PublishRealmToolModule from './publish-realm';
 import * as ReadBinaryFileToolModule from './read-binary-file';
-import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
-import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
+import * as ReadCardForAiAssistantToolModule from './read-card-for-ai-assistant';
+import * as ReadFileForAiAssistantToolModule from './read-file-for-ai-assistant';
 import * as ReadSourceToolModule from './read-source';
 import * as ReadTextFileToolModule from './read-text-file';
 import * as RegisterBotToolModule from './register-bot';
@@ -71,7 +71,7 @@ import * as SanitizeModuleListToolModule from './sanitize-module-list';
 import * as SaveCardToolModule from './save-card';
 import * as ScreenshotCardToolModule from './screenshot-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
-import * as SearchCardsCommandModule from './search-cards';
+import * as SearchCardsToolModule from './search-cards';
 import * as SearchGoogleImagesToolModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyToolModule from './send-request-via-proxy';
@@ -151,7 +151,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(
     virtualNetwork,
     'create-ai-assistant-room',
-    CreateAIAssistantRoomCommandModule,
+    CreateAIAssistantRoomToolModule,
   );
   shimHostToolModule(virtualNetwork, 'create-specs', CreateSpecToolModule);
   shimHostToolModule(
@@ -223,7 +223,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(
     virtualNetwork,
     'listing-action-build',
-    ListingBuildCommandModule,
+    ListingBuildToolModule,
   );
   shimHostToolModule(virtualNetwork, 'migrate-skill', MigrateSkillToolModule);
   shimHostToolModule(
@@ -259,12 +259,12 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(
     virtualNetwork,
     'read-card-for-ai-assistant',
-    ReadCardForAiAssistantCommandModule,
+    ReadCardForAiAssistantToolModule,
   );
   shimHostToolModule(
     virtualNetwork,
     'read-file-for-ai-assistant',
-    ReadFileForAiAssistantCommandModule,
+    ReadFileForAiAssistantToolModule,
   );
   shimHostToolModule(virtualNetwork, 'read-source', ReadSourceToolModule);
   shimHostToolModule(virtualNetwork, 'read-text-file', ReadTextFileToolModule);
@@ -272,7 +272,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'register-bot', RegisterBotToolModule);
   shimHostToolModule(virtualNetwork, 'save-card', SaveCardToolModule);
   shimHostToolModule(virtualNetwork, 'serialize-card', SerializeCardToolModule);
-  shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsCommandModule);
+  shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsToolModule);
   shimHostToolModule(
     virtualNetwork,
     'search-and-choose',
@@ -471,7 +471,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CopySourceToolModule.default,
   AuthedFetchToolModule.default,
   CanReadRealmToolModule.default,
-  CreateAIAssistantRoomCommandModule.default,
+  CreateAIAssistantRoomToolModule.default,
   CopyAndEditToolModule.default,
   CreateSpecToolModule.default,
   ExecuteAtomicOperationsToolModule.default,
@@ -494,7 +494,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   InviteUserToRoomToolModule.default,
   InvalidateRealmIdentifiersToolModule.default,
   LintAndFixToolModule.default,
-  ListingBuildCommandModule.default,
+  ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,
   OneShotLlmRequestToolModule.default,
   OpenAiAssistantRoomToolModule.default,
@@ -513,8 +513,8 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   PreviewFormatToolModule.default,
   PublishRealmToolModule.default,
   ReadBinaryFileToolModule.default,
-  ReadCardForAiAssistantCommandModule.default,
-  ReadFileForAiAssistantCommandModule.default,
+  ReadCardForAiAssistantToolModule.default,
+  ReadFileForAiAssistantToolModule.default,
   ReadSourceToolModule.default,
   ReadTextFileToolModule.default,
   RegisterBotToolModule.default,
@@ -524,8 +524,8 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   StoreAddToolModule.default,
   SerializeCardToolModule.default,
   SearchAndChooseToolModule.default,
-  SearchCardsCommandModule.SearchCardsByQueryTool,
-  SearchCardsCommandModule.SearchCardsByTypeAndTitleTool,
+  SearchCardsToolModule.SearchCardsByQueryTool,
+  SearchCardsToolModule.SearchCardsByTypeAndTitleTool,
   SearchGoogleImagesToolModule.default,
   SendAiAssistantMessageModule.default,
   SendBotTriggerEventToolModule.default,

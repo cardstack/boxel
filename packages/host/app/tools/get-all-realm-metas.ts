@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -8,7 +8,7 @@ import type Realm from '../services/realm';
 
 export default class GetAllRealmMetasTool extends HostBaseTool<
   undefined,
-  typeof BaseCommandModule.GetAllRealmMetasResult
+  typeof BaseToolModule.GetAllRealmMetasResult
 > {
   @service declare private realm: Realm;
 
@@ -19,9 +19,9 @@ export default class GetAllRealmMetasTool extends HostBaseTool<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetAllRealmMetasResult> {
+  protected async run(): Promise<BaseToolModule.GetAllRealmMetasResult> {
     let realmMetas = this.realm.allRealmsInfo;
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GetAllRealmMetasResult, RealmInfoField, RealmMetaField } =
       commandModule;
 

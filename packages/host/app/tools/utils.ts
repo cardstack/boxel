@@ -66,7 +66,7 @@ export async function waitForMatrixEvent(
 export async function waitForCompletedCommandRequest(
   commandContext: CommandContext,
   roomId: string,
-  commandRequestPredicate: (commandRequest: Partial<ToolRequest>) => boolean,
+  commandRequestPredicate: (toolRequest: Partial<ToolRequest>) => boolean,
   options: { timeoutMs?: number; afterEventId?: string } = {},
 ): Promise<ToolResultEvent | undefined> {
   let result: ToolResultEvent | undefined = undefined;
@@ -88,27 +88,27 @@ export async function waitForCompletedCommandRequest(
           ) &&
           (e as ToolResultEvent).content['m.relates_to']?.key === 'applied',
       ) as ToolResultEvent[];
-      return commandResultEvents.some((commandResultEvent) => {
+      return commandResultEvents.some((toolResultEvent) => {
         let eventWithRequest = events.find(
           (e) =>
-            e.event_id === commandResultEvent.content['m.relates_to']?.event_id,
+            e.event_id === toolResultEvent.content['m.relates_to']?.event_id,
         ) as CardMessageEvent | undefined;
         if (!eventWithRequest) {
           return false;
         }
-        let commandRequests =
+        let toolRequests =
           getToolRequests<Partial<EncodedToolRequest>>(
             eventWithRequest.content,
           ) ?? [];
-        let commandRequest = commandRequests.find(
-          (commandRequest) =>
-            commandRequest.id === commandResultEvent.content.commandRequestId,
+        let toolRequest = toolRequests.find(
+          (toolRequest) =>
+            toolRequest.id === toolResultEvent.content.commandRequestId,
         );
         if (
-          commandRequest &&
-          commandRequestPredicate(decodeCommandRequest(commandRequest))
+          toolRequest &&
+          commandRequestPredicate(decodeCommandRequest(toolRequest))
         ) {
-          result = commandResultEvent;
+          result = toolResultEvent;
           return true;
         }
         return false;

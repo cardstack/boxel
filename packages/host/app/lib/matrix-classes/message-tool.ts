@@ -19,27 +19,27 @@ import type { Message } from './message';
 type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
 export default class MessageTool {
-  @tracked commandRequest: Partial<ToolRequest>;
-  @tracked commandStatus?: ToolCallStatus;
-  @tracked commandResultFileDef?: SerializedFile;
+  @tracked toolRequest: Partial<ToolRequest>;
+  @tracked toolCallStatus?: ToolCallStatus;
+  @tracked toolResultFileDef?: SerializedFile;
 
   constructor(
     public message: Message,
-    commandRequest: Partial<ToolRequest>,
+    toolRequest: Partial<ToolRequest>,
     public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     public requiresApproval: boolean,
     public actionVerb: string,
-    commandStatus: ToolCallStatus,
-    commandResultFileDef: SerializedFile | undefined,
+    toolCallStatus: ToolCallStatus,
+    toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
   ) {
     setOwner(this, owner);
 
-    this.commandRequest = commandRequest;
-    this.commandStatus = commandStatus;
-    this.commandResultFileDef = commandResultFileDef;
+    this.toolRequest = toolRequest;
+    this.toolCallStatus = toolCallStatus;
+    this.toolResultFileDef = toolResultFileDef;
   }
 
   @service declare toolService: ToolService;
@@ -47,21 +47,21 @@ export default class MessageTool {
   @service declare store: StoreService;
 
   get id() {
-    return this.commandRequest.id;
+    return this.toolRequest.id;
   }
 
   get name() {
-    return this.commandRequest.name;
+    return this.toolRequest.name;
   }
 
   // The actor that already executed this tool call (e.g. 'ai-bot' for
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
-    return this.commandRequest.executedBy;
+    return this.toolRequest.executedBy;
   }
 
   get arguments() {
-    return this.commandRequest.arguments;
+    return this.toolRequest.arguments;
   }
 
   get description() {
@@ -73,15 +73,15 @@ export default class MessageTool {
   }
 
   get status() {
-    if (this.toolService.currentlyExecutingCommandRequestIds.has(this.id!)) {
+    if (this.toolService.currentlyExecutingToolRequestIds.has(this.id!)) {
       return 'applying';
     }
 
-    return this.commandStatus;
+    return this.toolCallStatus;
   }
 
   async commandResultCardDoc() {
-    if (!this.commandResultFileDef) {
+    if (!this.toolResultFileDef) {
       return undefined;
     }
     let roomResource = this.matrixService.roomResources.get(
@@ -91,11 +91,11 @@ export default class MessageTool {
       return undefined;
     }
     try {
-      if (!this.commandResultFileDef) {
+      if (!this.toolResultFileDef) {
         return undefined;
       }
       let cardDoc = await this.matrixService.downloadCardFileDef(
-        this.commandResultFileDef,
+        this.toolResultFileDef,
       );
       return cardDoc;
     } catch {

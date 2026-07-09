@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class PersistModuleInspectorViewTool extends HostBaseTool<
-  typeof BaseCommandModule.PersistModuleInspectorViewInput,
+  typeof BaseToolModule.PersistModuleInspectorViewInput,
   undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -15,7 +15,7 @@ export default class PersistModuleInspectorViewTool extends HostBaseTool<
   description = 'Persist the module inspector view selection to local storage';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PersistModuleInspectorViewInput } = commandModule;
     return PersistModuleInspectorViewInput;
   }
@@ -23,7 +23,7 @@ export default class PersistModuleInspectorViewTool extends HostBaseTool<
   requireInputFields = ['codePath', 'moduleInspectorView'];
 
   protected async run(
-    input: BaseCommandModule.PersistModuleInspectorViewInput,
+    input: BaseToolModule.PersistModuleInspectorViewInput,
   ): Promise<undefined> {
     let view = input.moduleInspectorView;
     let allowedViews: Set<string> = new Set(['schema', 'spec', 'preview']);

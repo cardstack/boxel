@@ -222,7 +222,7 @@ export default class MatrixService extends Service {
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
-  failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  failedToolState: TrackedMap<string, Error> = new TrackedMap();
   reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -1353,7 +1353,7 @@ export default class MatrixService extends Service {
         let enabledSkillCardFileDefs =
           (currentSkillsConfig?.enabledSkillCards ??
             []) as FileAPI.SerializedFile[];
-        let enabledCommandDefinitions: SkillModule.CommandField[] = [];
+        let enabledCommandDefinitions: SkillModule.ToolField[] = [];
         // Skill cards re-upload their serialized card content; skill markdown
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
@@ -1406,9 +1406,9 @@ export default class MatrixService extends Service {
   }
 
   public getUniqueToolDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ): SkillModule.CommandField[] {
-    return getUniqueValidToolDefinitions(commandDefinitions);
+    toolDefinitionFileDefs: SkillModule.ToolField[],
+  ): SkillModule.ToolField[] {
+    return getUniqueValidToolDefinitions(toolDefinitionFileDefs);
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -1416,9 +1416,10 @@ export default class MatrixService extends Service {
     return cardFileDefs;
   }
 
-  async uploadToolDefinitions(commandDefinitions: SkillModule.CommandField[]) {
-    let validCommandDefinitions =
-      getUniqueValidToolDefinitions(commandDefinitions);
+  async uploadToolDefinitions(toolDefinitionFileDefs: SkillModule.ToolField[]) {
+    let validCommandDefinitions = getUniqueValidToolDefinitions(
+      toolDefinitionFileDefs,
+    );
     if (validCommandDefinitions.length === 0) {
       return [];
     }
@@ -1978,7 +1979,7 @@ export default class MatrixService extends Service {
     }
     this.roomResourcesCache.clear();
     this.canceledActionMessageIdByRoom.clear();
-    this.failedCommandState.clear();
+    this.failedToolState.clear();
     this.reasoningExpandedState.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;

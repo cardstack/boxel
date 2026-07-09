@@ -11,7 +11,7 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import {
   buildAttachedFileURLs,
@@ -34,7 +34,7 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class GenerateExampleCardsTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateInstancesInput,
+  typeof BaseToolModule.CreateInstancesInput,
   undefined
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
@@ -45,7 +45,7 @@ export default class GenerateExampleCardsTool extends HostBaseTool<
   description = 'Create new cards populated with sample data';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateInstancesInput } = commandModule;
     return CreateInstancesInput;
   }
@@ -54,12 +54,12 @@ export default class GenerateExampleCardsTool extends HostBaseTool<
     return `Generate ${count} additional instances of the specified card definition, populated with sample data.`;
   }
 
-  protected getAttachedFileURLs(input: BaseCommandModule.CreateInstancesInput) {
+  protected getAttachedFileURLs(input: BaseToolModule.CreateInstancesInput) {
     return buildAttachedFileURLs(input.codeRef?.module);
   }
 
   protected async run(
-    input: BaseCommandModule.CreateInstancesInput,
+    input: BaseToolModule.CreateInstancesInput,
   ): Promise<undefined> {
     if (!input.codeRef) {
       throw new Error('Module is required');
@@ -92,8 +92,8 @@ export default class GenerateExampleCardsTool extends HostBaseTool<
 }
 
 export class GenerateExampleCardsOneShotTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateInstancesInput,
-  typeof BaseCommandModule.CreateInstanceResult
+  typeof BaseToolModule.CreateInstancesInput,
+  typeof BaseToolModule.CreateInstanceResult
 > {
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -106,14 +106,14 @@ export class GenerateExampleCardsOneShotTool extends HostBaseTool<
     'Create a new card instance populated with sample data via a direct LLM request';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateInstancesInput } = commandModule;
     return CreateInstancesInput;
   }
 
   protected async run(
-    input: BaseCommandModule.CreateInstancesInput,
-  ): Promise<BaseCommandModule.CreateInstanceResult> {
+    input: BaseToolModule.CreateInstancesInput,
+  ): Promise<BaseToolModule.CreateInstanceResult> {
     if (!input.codeRef) {
       throw new Error('Module is required');
     }
@@ -198,14 +198,14 @@ export class GenerateExampleCardsOneShotTool extends HostBaseTool<
       throw new Error('Failed to create generated example card');
     }
 
-    const commandModule = await this.loadCommandModule();
+    const commandModule = await this.loadToolModule();
     const { CreateInstanceResult } = commandModule;
     return new CreateInstanceResult({ createdCard });
   }
 }
 
 export async function createExampleInstanceFromPayload(opts: {
-  codeRef: BaseCommandModule.CreateInstancesInput['codeRef'];
+  codeRef: BaseToolModule.CreateInstancesInput['codeRef'];
   examplePayload: Record<string, unknown>;
   realm: string | undefined;
   store: StoreService;
@@ -287,7 +287,7 @@ function normalizeExampleAttributes(
 }
 
 function resolveExampleCodeRef(
-  codeRef: BaseCommandModule.CreateInstancesInput['codeRef'],
+  codeRef: BaseToolModule.CreateInstancesInput['codeRef'],
   realm: string | undefined,
   network: NetworkService,
 ): ResolvedCodeRef | undefined {

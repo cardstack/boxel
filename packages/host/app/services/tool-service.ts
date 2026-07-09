@@ -77,8 +77,8 @@ export default class ToolService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private reset: ResetService;
   @service declare private store: StoreService;
-  currentlyExecutingCommandRequestIds = new TrackedSet<string>();
-  executedCommandRequestIds = new TrackedSet<string>();
+  currentlyExecutingToolRequestIds = new TrackedSet<string>();
+  executedToolRequestIds = new TrackedSet<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
@@ -108,8 +108,8 @@ export default class ToolService extends Service {
   }
 
   resetState() {
-    this.currentlyExecutingCommandRequestIds.clear();
-    this.executedCommandRequestIds.clear();
+    this.currentlyExecutingToolRequestIds.clear();
+    this.executedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
@@ -345,7 +345,7 @@ export default class ToolService extends Service {
             roomResource.processingLastStartedAt
         ) {
           // Room processing is wedged. The synthetic 'applying' state in
-          // room-message-command.gts shows the spinner the moment an
+          // room-message-tool.gts shows the spinner the moment an
           // auto-executable command lands and only clears when we dispatch
           // a terminal commandResult ('applied' or 'invalid'). If we just
           // logged and continued, the spinner would hang indefinitely with
@@ -376,7 +376,7 @@ export default class ToolService extends Service {
 
         // Collect all ready commands for this message
         let readyCommands: any[] = [];
-        for (let messageCommand of message.commands) {
+        for (let messageCommand of message.tools) {
           // ai-bot ran this one itself (e.g. readRealmFile). The host neither
           // validates nor runs it — it has no command class to resolve, and the
           // bot posts its own result. Must come before validate(), which would
@@ -384,12 +384,10 @@ export default class ToolService extends Service {
           if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
             continue;
           }
-          if (
-            this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)
-          ) {
+          if (this.currentlyExecutingToolRequestIds.has(messageCommand.id!)) {
             continue;
           }
-          if (this.executedCommandRequestIds.has(messageCommand.id!)) {
+          if (this.executedToolRequestIds.has(messageCommand.id!)) {
             continue;
           }
           if (
@@ -460,22 +458,22 @@ export default class ToolService extends Service {
     let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
       message.eventId,
     );
-    for (let messageCommand of message.commands) {
+    for (let messageCommand of message.tools) {
       // ai-bot ran this one itself (e.g. readRealmFile): not the host's to run,
       // so not the host's to invalidate when processing wedges.
       if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
         continue;
       }
-      let commandRequestId = messageCommand.commandRequest.id;
+      let commandRequestId = messageCommand.toolRequest.id;
       // Without a tool call id we can't address a command result event, so
       // there's nothing to invalidate.
       if (!commandRequestId) {
         continue;
       }
-      if (this.currentlyExecutingCommandRequestIds.has(commandRequestId)) {
+      if (this.currentlyExecutingToolRequestIds.has(commandRequestId)) {
         continue;
       }
-      if (this.executedCommandRequestIds.has(commandRequestId)) {
+      if (this.executedToolRequestIds.has(commandRequestId)) {
         continue;
       }
       if (
@@ -638,7 +636,7 @@ export default class ToolService extends Service {
   // CS-11045: Find the bot message in current room state that currently owns
   // the given commandRequestId. Walks events newest-first so the latest event
   // wins (handles the streaming → m.replace shape: the original streaming
-  // event and later replace events both carry the commandRequests array; the
+  // event and later replace events both carry the toolRequests array; the
   // latest replace is the one ai-bot's /messages view agrees on).
   private getCurrentEventIdForCommandRequest(
     roomId: string | undefined,
@@ -679,7 +677,7 @@ export default class ToolService extends Service {
     // CS-11045: Source the bot-message event_id from current room state at
     // execute time rather than the snapshot taken when the MessageTool was
     // constructed. The snapshot is the streaming/original event_id; once a
-    // later m.replace event in room.events owns the commandRequest, that
+    // later m.replace event in room.events owns the toolRequest, that
     // event's id is the canonical link the rest of the system (including
     // ai-bot's view of /messages) will agree on. Fall back to the snapshot if
     // no matching event is found in current room state.
@@ -691,14 +689,14 @@ export default class ToolService extends Service {
     let resultCard: CardDef | undefined;
     // There may be some race conditions where the command is already being executed when this task starts
     if (
-      this.currentlyExecutingCommandRequestIds.has(commandRequestId!) ||
-      this.executedCommandRequestIds.has(commandRequestId!)
+      this.currentlyExecutingToolRequestIds.has(commandRequestId!) ||
+      this.executedToolRequestIds.has(commandRequestId!)
     ) {
       return; // already executing this command
     }
     try {
-      this.matrixService.failedCommandState.delete(commandRequestId!);
-      this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
+      this.matrixService.failedToolState.delete(commandRequestId!);
+      this.currentlyExecutingToolRequestIds.add(commandRequestId!);
 
       let commandToRun;
 
@@ -706,11 +704,11 @@ export default class ToolService extends Service {
       // one in the skills we can construct
       let commandCodeRef = command.codeRef;
       if (commandCodeRef) {
-        let CommandConstructor = (await getClass(
+        let ToolConstructor = (await getClass(
           commandCodeRef,
           this.loaderService.loader,
         )) as { new (context: CommandContext): Command<any, any> };
-        commandToRun = new CommandConstructor(this.commandContext);
+        commandToRun = new ToolConstructor(this.commandContext);
       }
 
       if (!commandToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
@@ -751,12 +749,13 @@ export default class ToolService extends Service {
           { doNotWaitForPersist: true, clientRequestId },
         );
       } else {
-        // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
+        // Unrecognized tool. This can happen if a programmatically-provided
+        // tool is no longer available due to a browser refresh.
         throw new Error(
-          `Unrecognized command: ${command.name}. This command may have been associated with a previous browser session.`,
+          `Unrecognized tool: ${command.name}. This tool may have been associated with a previous browser session.`,
         );
       }
-      this.executedCommandRequestIds.add(commandRequestId!);
+      this.executedToolRequestIds.add(commandRequestId!);
       await this.matrixService.updateSkillsAndToolsIfNeeded(
         command.message.roomId,
       );
@@ -777,12 +776,12 @@ export default class ToolService extends Service {
           ? new Error(e)
           : e instanceof Error
             ? e
-            : new Error('Command failed.');
+            : new Error('Tool call failed.');
       console.error(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
-      this.matrixService.failedCommandState.set(commandRequestId!, error);
+      this.matrixService.failedToolState.set(commandRequestId!, error);
     } finally {
-      this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
+      this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
     }
   });
 
@@ -813,14 +812,14 @@ export default class ToolService extends Service {
     } else if (!commandCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
-      let CommandConstructor = (await getClass(
+      let ToolConstructor = (await getClass(
         commandCodeRef,
         this.loaderService.loader,
       )) as { new (context: CommandContext): Command<any, any> };
-      if (!CommandConstructor) {
+      if (!ToolConstructor) {
         error = `No command for the name "${command.name}" was found`;
       } else {
-        commandInstance = new CommandConstructor(this.commandContext);
+        commandInstance = new ToolConstructor(this.commandContext);
       }
     }
 
@@ -854,17 +853,17 @@ export default class ToolService extends Service {
     if (error) {
       // CS-11045: Same canonical-event-id resolution as the run task — emit
       // the invalid commandResult linked to the bot-message event currently
-      // owning the commandRequest in room state, so ai-bot's /messages view
+      // owning the toolRequest in room state, so ai-bot's /messages view
       // and the host's own m.replace-aware bookkeeping agree on the linkage.
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(
           command.message.roomId,
-          command.commandRequest.id,
+          command.toolRequest.id,
         ) ?? command.eventId;
       await this.matrixService.sendToolResultEvent({
         roomId: command.message.roomId,
         invokedToolFromEventId,
-        toolCallId: command.commandRequest.id!,
+        toolCallId: command.toolRequest.id!,
         status: 'invalid',
         failureReason: error,
         context: await this.operatorModeStateService.getSummaryForAIBot(),
@@ -923,7 +922,7 @@ export default class ToolService extends Service {
       throw new Error('File URL is required to patch code');
     }
     for (const codeData of codeDataItems) {
-      this.currentlyExecutingCommandRequestIds.add(
+      this.currentlyExecutingToolRequestIds.add(
         `${codeData.eventId}:${codeData.codeBlockIndex}`,
       );
     }
@@ -948,7 +947,7 @@ export default class ToolService extends Service {
         const codeData = codeDataItems[i];
         const patchResult = patchCodeResult.results[i];
         if (patchResult.status === 'applied') {
-          this.executedCommandRequestIds.add(
+          this.executedToolRequestIds.add(
             `${codeData.eventId}:${codeData.codeBlockIndex}`,
           );
         } else if (isTesting() && this.acceptingAllRoomIds.has(roomId)) {
@@ -996,7 +995,7 @@ export default class ToolService extends Service {
     } finally {
       // remove the code blocks from the currently executing command request ids
       for (const codeData of codeDataItems) {
-        this.currentlyExecutingCommandRequestIds.delete(
+        this.currentlyExecutingToolRequestIds.delete(
           `${codeData.eventId}:${codeData.codeBlockIndex}`,
         );
       }
@@ -1047,7 +1046,7 @@ export default class ToolService extends Service {
     eventId: string;
     codeBlockIndex: number;
   }) {
-    return this.currentlyExecutingCommandRequestIds.has(
+    return this.currentlyExecutingToolRequestIds.has(
       `${codeData.eventId}:${codeData.codeBlockIndex}`,
     );
   }
@@ -1056,7 +1055,7 @@ export default class ToolService extends Service {
     eventId: string;
     codeBlockIndex: number;
   }) {
-    return this.executedCommandRequestIds.has(
+    return this.executedToolRequestIds.has(
       `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
     );
   }

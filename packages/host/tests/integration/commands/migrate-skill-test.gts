@@ -22,7 +22,7 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
+import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -114,12 +114,12 @@ export class DoThingQuietly extends Command {
             cardDescription: 'Manage data in a realm',
             instructions: '# Data\n\nDo data things.',
             commands: [
-              new CommandField({
+              new ToolField({
                 codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
                 requiresApproval: true,
               }),
               // requiresApproval: false must survive migration — see assertion.
-              new CommandField({
+              new ToolField({
                 codeRef: { module: COMMAND_MODULE, name: 'DoThingQuietly' },
                 requiresApproval: false,
               }),

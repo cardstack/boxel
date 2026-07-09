@@ -2,22 +2,22 @@ import { service } from '@ember/service';
 
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
 export default class ExecuteAtomicOperationsTool extends HostBaseTool<
-  typeof BaseCommandModule.ExecuteAtomicOperationsInput,
-  typeof BaseCommandModule.ExecuteAtomicOperationsResult
+  typeof BaseToolModule.ExecuteAtomicOperationsInput,
+  typeof BaseToolModule.ExecuteAtomicOperationsResult
 > {
   @service declare private cardService: CardService;
 
   description = 'Execute atomic operations against a realm';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ExecuteAtomicOperationsInput } = commandModule;
     return ExecuteAtomicOperationsInput;
   }
@@ -25,9 +25,9 @@ export default class ExecuteAtomicOperationsTool extends HostBaseTool<
   requireInputFields = ['realmIdentifier', 'operations'];
 
   protected async run(
-    input: BaseCommandModule.ExecuteAtomicOperationsInput,
-  ): Promise<BaseCommandModule.ExecuteAtomicOperationsResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.ExecuteAtomicOperationsInput,
+  ): Promise<BaseToolModule.ExecuteAtomicOperationsResult> {
+    let commandModule = await this.loadToolModule();
     const { ExecuteAtomicOperationsResult } = commandModule;
     const results = await this.cardService.executeAtomicOperations(
       input.operations as AtomicOperation[],

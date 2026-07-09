@@ -1,8 +1,8 @@
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 export function isValidCommandDefinition(
-  commandDefinition?: SkillModule.CommandField,
-): commandDefinition is SkillModule.CommandField {
+  commandDefinition?: SkillModule.ToolField,
+): commandDefinition is SkillModule.ToolField {
   if (!commandDefinition) {
     return false;
   }
@@ -24,11 +24,11 @@ export function isValidCommandDefinition(
 }
 
 export function getUniqueValidToolDefinitions(
-  commandDefinitions: SkillModule.CommandField[] = [],
-): SkillModule.CommandField[] {
+  toolDefinitionFileDefs: SkillModule.ToolField[] = [],
+): SkillModule.ToolField[] {
   let seen = new Set<string>();
 
-  return commandDefinitions.filter((command) => {
+  return toolDefinitionFileDefs.filter((command) => {
     if (!isValidCommandDefinition(command)) {
       return false;
     }

@@ -30,7 +30,7 @@ export type TempEvent = Partial<IEvent> & {
 export type SkillsConfig = {
   enabledSkillCards: SerializedFile[];
   disabledSkillCards: SerializedFile[];
-  commandDefinitions: SerializedFile[];
+  toolDefinitionFileDefs: SerializedFile[];
 };
 
 export default class Room {
@@ -86,7 +86,6 @@ export default class Room {
       ?.get('')?.event.content ?? {
       enabledSkillCards: [],
       disabledSkillCards: [],
-      commandDefinitions: [],
     };
 
     return {
@@ -96,11 +95,11 @@ export default class Room {
       disabledSkillCards: content.disabledSkillCards
         ? content.disabledSkillCards
         : [],
-      commandDefinitions: getToolDefinitions<SerializedFile>(content) ?? [],
+      toolDefinitionFileDefs: getToolDefinitions<SerializedFile>(content) ?? [],
     } as {
       enabledSkillCards: SerializedFile[];
       disabledSkillCards: SerializedFile[];
-      commandDefinitions: SerializedFile[];
+      toolDefinitionFileDefs: SerializedFile[];
     };
   }
 

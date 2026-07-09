@@ -1,21 +1,21 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
 export default class CopySourceTool extends HostBaseTool<
-  typeof BaseCommandModule.CopySourceInput,
-  typeof BaseCommandModule.CopySourceResult
+  typeof BaseToolModule.CopySourceInput,
+  typeof BaseToolModule.CopySourceResult
 > {
   @service declare private cardService: CardService;
 
   static actionVerb = 'Copy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopySourceInput } = commandModule;
     return CopySourceInput;
   }
@@ -26,8 +26,8 @@ export default class CopySourceTool extends HostBaseTool<
   ];
 
   protected async run(
-    input: BaseCommandModule.CopySourceInput,
-  ): Promise<BaseCommandModule.CopySourceResult> {
+    input: BaseToolModule.CopySourceInput,
+  ): Promise<BaseToolModule.CopySourceResult> {
     const originSourceIdentifier = new URL(input.originSourceIdentifier);
     const destinationSourceIdentifier = new URL(
       input.destinationSourceIdentifier,
@@ -36,7 +36,7 @@ export default class CopySourceTool extends HostBaseTool<
       originSourceIdentifier,
       destinationSourceIdentifier,
     );
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopySourceResult } = commandModule;
     if (r.ok && r.url) {
       return new CopySourceResult({ identifier: r.url });

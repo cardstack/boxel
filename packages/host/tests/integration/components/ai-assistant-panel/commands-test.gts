@@ -383,15 +383,15 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-command-apply]');
+    await waitFor('[data-test-tool-call-apply]');
     this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await click('[data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
     assert.dom('[data-test-person]').hasText('Dave');
   });
 
@@ -435,9 +435,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists();
   });
 
@@ -514,9 +516,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 1 });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -556,9 +560,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 2 });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -598,12 +604,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 0 });
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists({ count: 2 });
   });
 
@@ -655,9 +663,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
 
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -734,9 +742,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
 
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -797,7 +805,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]', { timeout: 10_000 });
+    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -842,7 +850,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]', { timeout: 10_000 });
+    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -886,7 +894,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]');
+    await waitFor('[data-test-tool-result-header]');
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -943,7 +951,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]');
+    await waitFor('[data-test-tool-result-header]');
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
@@ -958,7 +966,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.dom(rightStackItem).doesNotExist();
 
     await click(
-      '[data-test-command-result-container] [data-test-more-options-button]',
+      '[data-test-tool-result-container] [data-test-more-options-button]',
     );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
@@ -968,7 +976,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const savedCardId = document
       .querySelector(rightStackItem)
       ?.getAttribute('data-stack-card');
-    const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
+    const savedCard = `[data-test-card="${savedCardId}"] [data-test-tool-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
     assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
@@ -1015,10 +1023,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]');
+    await waitFor('[data-test-tool-result-header]');
 
     await click(
-      '[data-test-command-result-container] [data-test-more-options-button]',
+      '[data-test-tool-result-container] [data-test-more-options-button]',
     );
     assert.dom('[data-test-boxel-menu-item-text="Copy to Workspace"]').exists();
   });
@@ -1054,12 +1062,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]');
+    await waitFor('[data-test-tool-result-header]');
 
     assert
-      .dom(
-        '[data-test-command-result-container] [data-test-more-options-button]',
-      )
+      .dom('[data-test-tool-result-container] [data-test-more-options-button]')
       .doesNotExist();
     assert
       .dom('[data-test-boxel-menu-item-text="Copy to Workspace"]')
@@ -1097,7 +1103,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-command-result-header]');
+    await waitFor('[data-test-tool-result-header]');
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
@@ -1108,9 +1114,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .containsText('Search Results');
 
     assert
-      .dom(
-        '[data-test-command-result-container] [data-test-toggle-show-button]',
-      )
+      .dom('[data-test-tool-result-container] [data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
@@ -1121,7 +1125,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.dom(stackItem).doesNotExist();
 
     await click(
-      '[data-test-command-result-container] [data-test-more-options-button]',
+      '[data-test-tool-result-container] [data-test-more-options-button]',
     );
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
@@ -1131,7 +1135,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const savedCardId = document
       .querySelector(stackItem)
       ?.getAttribute('data-stack-card');
-    const savedCard = `[data-test-card="${savedCardId}"] [data-test-command-result-isolated]`;
+    const savedCard = `[data-test-card="${savedCardId}"] [data-test-tool-result-isolated]`;
     assert.dom(`${savedCard} header`).hasText('Search Results 8 Results');
     assert.dom(`${savedCard} [data-test-boxel-field]`).exists({ count: 2 });
     assert
@@ -1257,9 +1261,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 1 });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -1300,9 +1306,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 2 });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -1343,12 +1351,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists({ count: 0 });
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists({ count: 2 });
   });
 
@@ -1405,9 +1415,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     await settled();
 
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
 
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -1496,9 +1506,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     await settled();
 
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
 
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -1557,7 +1567,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     let commandRequestId = 'cmd-request-id';
 
-    // Streaming event #1: original bot message, no commandRequests yet.
+    // Streaming event #1: original bot message, no toolRequests yet.
     let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing',
@@ -1599,9 +1609,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-tool-call-card-idle]');
 
     // The host's MessageTool must reach 'applied' state once the
     // commandResult is dispatched. _messageCache is keyed by the bot
@@ -1632,12 +1642,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.strictEqual(
       commandResultEvents[0].content['m.relates_to']?.event_id,
       replacedEventId,
-      'commandResult.m.relates_to.event_id should be the bot message event_id currently in room.events that owns the commandRequest, not a stale snapshot of the streaming/original id',
+      'commandResult.m.relates_to.event_id should be the bot message event_id currently in room.events that owns the toolRequest, not a stale snapshot of the streaming/original id',
     );
     assert.notStrictEqual(
       commandResultEvents[0].content['m.relates_to']?.event_id,
       streamingEventId,
-      'commandResult should not reference the original/streaming event_id once a later event in room.events owns the commandRequest',
+      'commandResult should not reference the original/streaming event_id once a later event in room.events owns the toolRequest',
     );
   });
 
@@ -1947,25 +1957,25 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .doesNotExist(
         'per-command Apply button must not show the ready/Run state for an auto-executed command',
       );
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="applying"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applying"]')
       .exists('per-command Apply button shows the applying spinner instead');
-    // The data-test-command-card-idle attribute is computed from
+    // The data-test-tool-call-card-idle attribute is computed from
     // applyButtonState (not the raw status); while the synthetic 'applying'
     // is on it must NOT mark the card idle. Glimmer omits an attribute
     // bound to a falsy expression, so the coherence check is on attribute
     // presence — the apply button + the card must agree the spinner is
     // up, not just one of them.
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-card-idle]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-card-idle]')
       .doesNotExist(
-        'data-test-command-card-idle agrees with applyButtonState while the synthetic spinner is on',
+        'data-test-tool-call-card-idle agrees with applyButtonState while the synthetic spinner is on',
       );
   });
 
@@ -1975,7 +1985,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // Verifies the followup-fix for the synthetic-spinner hang flagged in
     // the self-review of this branch: drainCommandProcessingQueue must
     // dispatch an `invalid` commandResult when a room is wedged, so the
-    // synthetic 'applying' state in room-message-command.gts falls through
+    // synthetic 'applying' state in room-message-tool.gts falls through
     // to the invalidCommandState ("Try Anyway") branch instead of pinning
     // a spinner that no terminal event ever clears.
     //
@@ -2018,7 +2028,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     let roomResource = matrixService.roomResources.get(roomId)!;
     let message = roomResource.messages.find(

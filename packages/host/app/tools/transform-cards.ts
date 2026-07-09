@@ -17,7 +17,7 @@ export default class TransformCardsTool extends HostBaseTool<
   static actionVerb = 'Transform';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { VisitCardsInput } = commandModule;
     return VisitCardsInput;
   }

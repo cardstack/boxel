@@ -10,27 +10,27 @@
  * Used by the software-factory's EvalValidationStep via `_run-command`.
  */
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 export default class EvaluateModuleTool extends HostBaseTool<
-  typeof BaseCommandModule.EvaluateModuleInput,
-  typeof BaseCommandModule.EvaluateModuleResult
+  typeof BaseToolModule.EvaluateModuleInput,
+  typeof BaseToolModule.EvaluateModuleResult
 > {
   description = 'Evaluate a .gts module via the Loader in the prerenderer';
   static actionVerb = 'Evaluate';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.EvaluateModuleInput;
   }
 
   requireInputFields = ['moduleIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.EvaluateModuleInput,
-  ): Promise<BaseCommandModule.EvaluateModuleResult> {
+    input: BaseToolModule.EvaluateModuleInput,
+  ): Promise<BaseToolModule.EvaluateModuleResult> {
     let moduleUrl = input.moduleIdentifier;
     let realmUrl = input.realmIdentifier;
 
@@ -42,7 +42,7 @@ export default class EvaluateModuleTool extends HostBaseTool<
       this.validateModuleUrl(moduleUrl, realmUrl);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
 
     try {
       // Reset the loader to clear cached modules from prior eval runs.

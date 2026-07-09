@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -11,8 +11,8 @@ import type RealmServerService from '../services/realm-server';
 import type ToolService from '../services/tool-service';
 
 export default class SummarizeSessionTool extends HostBaseTool<
-  typeof BaseCommandModule.SummarizeSessionInput,
-  typeof BaseCommandModule.SummarizeSessionResult
+  typeof BaseToolModule.SummarizeSessionInput,
+  typeof BaseToolModule.SummarizeSessionResult
 > {
   @service declare private matrixService: MatrixService;
   @service declare private toolService: ToolService;
@@ -22,15 +22,15 @@ export default class SummarizeSessionTool extends HostBaseTool<
   description = 'Summarize the current session conversation';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SummarizeSessionInput } = commandModule;
     return SummarizeSessionInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SummarizeSessionInput,
-  ): Promise<BaseCommandModule.SummarizeSessionResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.SummarizeSessionInput,
+  ): Promise<BaseToolModule.SummarizeSessionResult> {
+    const commandModule = await this.loadToolModule();
     const { SummarizeSessionResult } = commandModule;
 
     try {

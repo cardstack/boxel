@@ -6,7 +6,7 @@ import { Command, type CommandContext } from '@cardstack/runtime-common';
 import { baseRealm } from '@cardstack/runtime-common';
 
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import type LoaderService from '../services/loader-service';
 
@@ -21,8 +21,8 @@ export default abstract class HostBaseTool<
 
   @service declare protected loaderService: LoaderService;
 
-  protected loadCommandModule(): Promise<typeof BaseCommandModule> {
-    return this.loaderService.loader.import<typeof BaseCommandModule>(
+  protected loadToolModule(): Promise<typeof BaseToolModule> {
+    return this.loaderService.loader.import<typeof BaseToolModule>(
       `${baseRealm.url}command`,
     );
   }

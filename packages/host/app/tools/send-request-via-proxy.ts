@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
 export default class SendRequestViaProxyTool extends HostBaseTool<
-  typeof BaseCommandModule.SendRequestViaProxyInput,
-  typeof BaseCommandModule.SendRequestViaProxyResult
+  typeof BaseToolModule.SendRequestViaProxyInput,
+  typeof BaseToolModule.SendRequestViaProxyResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -16,15 +16,15 @@ export default class SendRequestViaProxyTool extends HostBaseTool<
   description = 'Make a request to an external API through the Boxel proxy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendRequestViaProxyInput } = commandModule;
     return SendRequestViaProxyInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SendRequestViaProxyInput,
-  ): Promise<BaseCommandModule.SendRequestViaProxyResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.SendRequestViaProxyInput,
+  ): Promise<BaseToolModule.SendRequestViaProxyResult> {
+    const commandModule = await this.loadToolModule();
     const { SendRequestViaProxyResult } = commandModule;
 
     try {

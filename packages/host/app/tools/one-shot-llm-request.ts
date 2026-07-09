@@ -4,7 +4,7 @@ import { isCardInstance, logger } from '@cardstack/runtime-common';
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -22,8 +22,8 @@ import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 
 export default class OneShotLlmRequestTool extends HostBaseTool<
-  typeof BaseCommandModule.OneShotLLMRequestInput,
-  typeof BaseCommandModule.OneShotLLMRequestResult
+  typeof BaseToolModule.OneShotLLMRequestInput,
+  typeof BaseToolModule.OneShotLLMRequestResult
 > {
   @service declare private matrixService: MatrixService;
   @service declare private toolService: ToolService;
@@ -34,15 +34,15 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
   description = 'Execute a one-shot LLM request with custom prompts';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { OneShotLLMRequestInput } = commandModule;
     return OneShotLLMRequestInput;
   }
 
   protected async run(
-    input: BaseCommandModule.OneShotLLMRequestInput,
-  ): Promise<BaseCommandModule.OneShotLLMRequestResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.OneShotLLMRequestInput,
+  ): Promise<BaseToolModule.OneShotLLMRequestResult> {
+    const commandModule = await this.loadToolModule();
     const { OneShotLLMRequestResult } = commandModule;
 
     if (!input.systemPrompt) {

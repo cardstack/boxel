@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import {
   buildAttachedFileURLs,
@@ -19,8 +19,8 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class GenerateThemeExampleTool extends HostBaseTool<
-  typeof BaseCommandModule.GenerateThemeExampleInput,
-  typeof BaseCommandModule.CreateInstanceResult
+  typeof BaseToolModule.GenerateThemeExampleInput,
+  typeof BaseToolModule.CreateInstanceResult
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -29,14 +29,14 @@ export default class GenerateThemeExampleTool extends HostBaseTool<
   static actionVerb = 'Create Theme Example';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateThemeExampleInput } = commandModule;
     return GenerateThemeExampleInput;
   }
 
   protected async run(
-    input: BaseCommandModule.GenerateThemeExampleInput,
-  ): Promise<BaseCommandModule.CreateInstanceResult> {
+    input: BaseToolModule.GenerateThemeExampleInput,
+  ): Promise<BaseToolModule.CreateInstanceResult> {
     if (!input.codeRef) {
       throw new Error('codeRef is required to create a card');
     }
@@ -103,7 +103,7 @@ export default class GenerateThemeExampleTool extends HostBaseTool<
       throw new Error('Failed to create theme example card');
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateInstanceResult } = commandModule;
     return new CreateInstanceResult({
       createdCard: createdCard as CardDef,

@@ -4,7 +4,7 @@ import { rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import type { FieldType } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -14,7 +14,7 @@ import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 
 export default class AddFieldToCardDefinitionTool extends HostBaseTool<
-  typeof BaseCommandModule.AddFieldToCardDefinitionInput
+  typeof BaseToolModule.AddFieldToCardDefinitionInput
 > {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
@@ -22,7 +22,7 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
   static actionVerb = 'Add';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { AddFieldToCardDefinitionInput } = commandModule;
     return AddFieldToCardDefinitionInput;
   }
@@ -35,7 +35,7 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
   ];
 
   protected async run(
-    input: BaseCommandModule.AddFieldToCardDefinitionInput,
+    input: BaseToolModule.AddFieldToCardDefinitionInput,
   ): Promise<undefined> {
     let moduleSource = (
       await this.cardService.getSource(input.cardDefinitionToModify.module)

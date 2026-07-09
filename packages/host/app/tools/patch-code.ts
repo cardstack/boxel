@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
@@ -26,8 +26,8 @@ interface FileInfo {
 }
 
 export default class PatchCodeTool extends HostBaseTool<
-  typeof BaseCommandModule.PatchCodeInput,
-  typeof BaseCommandModule.PatchCodeCommandResult
+  typeof BaseToolModule.PatchCodeInput,
+  typeof BaseToolModule.PatchCodeCommandResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -39,7 +39,7 @@ export default class PatchCodeTool extends HostBaseTool<
   static actionVerb = 'Apply';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCodeInput } = commandModule;
     return PatchCodeInput;
   }
@@ -47,8 +47,8 @@ export default class PatchCodeTool extends HostBaseTool<
   requireInputFields = ['fileIdentifier', 'codeBlocks'];
 
   protected async run(
-    input: BaseCommandModule.PatchCodeInput,
-  ): Promise<BaseCommandModule.PatchCodeCommandResult> {
+    input: BaseToolModule.PatchCodeInput,
+  ): Promise<BaseToolModule.PatchCodeCommandResult> {
     let { fileIdentifier: fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
@@ -96,7 +96,7 @@ export default class PatchCodeTool extends HostBaseTool<
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCodeCommandResult, PatchCodeResultField } = commandModule;
 
     return new PatchCodeCommandResult({
@@ -202,7 +202,7 @@ export default class PatchCodeTool extends HostBaseTool<
   private async lintAndFix(
     fileUrl: string,
     content: string,
-  ): Promise<BaseCommandModule.LintAndFixResult> {
+  ): Promise<BaseToolModule.LintAndFixResult> {
     let lintCommand = new LintAndFixTool(this.commandContext);
     let realmURL = this.realm.url(fileUrl);
     let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';

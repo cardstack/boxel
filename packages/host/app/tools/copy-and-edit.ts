@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -14,7 +14,7 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class CopyAndEditTool extends HostBaseTool<
-  typeof BaseCommandModule.CopyAndEditInput,
+  typeof BaseToolModule.CopyAndEditInput,
   undefined
 > {
   @service operatorModeStateService!: OperatorModeStateService;
@@ -26,7 +26,7 @@ export default class CopyAndEditTool extends HostBaseTool<
   static actionVerb = 'Copy and Edit';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyAndEditInput } = commandModule;
     return CopyAndEditInput;
   }
@@ -41,7 +41,7 @@ export default class CopyAndEditTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.CopyAndEditInput,
+    input: BaseToolModule.CopyAndEditInput,
   ): Promise<undefined> {
     if (!input.card?.id) {
       throw new Error('copy-and-edit requires a card with an id');

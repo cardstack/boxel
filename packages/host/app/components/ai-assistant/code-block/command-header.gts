@@ -54,7 +54,7 @@ export default class CodeBlockCommandHeader extends Component<CodeBlockCommandHe
           @isCompact={{@isCompact}}
           @state={{@commandState}}
           {{on 'click' @action}}
-          data-test-command-apply={{@commandState}}
+          data-test-tool-call-apply={{@commandState}}
         />
       </div>
     </header>

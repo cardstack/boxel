@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
 export default class InvalidateRealmIdentifiersTool extends HostBaseTool<
-  typeof BaseCommandModule.InvalidateRealmIdentifiersInput,
+  typeof BaseToolModule.InvalidateRealmIdentifiersInput,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -17,13 +17,13 @@ export default class InvalidateRealmIdentifiersTool extends HostBaseTool<
     'Invalidate files in a realm to trigger re-indexing. A user may request that they want to reload or refresh a card in order to re-index it.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { InvalidateRealmIdentifiersInput } = commandModule;
     return InvalidateRealmIdentifiersInput;
   }
 
   protected async run(
-    input: BaseCommandModule.InvalidateRealmIdentifiersInput,
+    input: BaseToolModule.InvalidateRealmIdentifiersInput,
   ): Promise<undefined> {
     await this.realm.invalidateUrls(
       input.realmIdentifier,

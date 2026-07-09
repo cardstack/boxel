@@ -9,7 +9,7 @@ import {
 import { isBaseInstance, realmURL } from '@cardstack/runtime-common/constants';
 
 import type { CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -21,7 +21,7 @@ import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 
 export default class PopulateWithSampleDataTool extends HostBaseTool<
-  typeof BaseCommandModule.CardIdCard,
+  typeof BaseToolModule.CardIdCard,
   undefined
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
@@ -33,7 +33,7 @@ export default class PopulateWithSampleDataTool extends HostBaseTool<
   description = 'Fill in the card with sample data';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
@@ -50,7 +50,7 @@ export default class PopulateWithSampleDataTool extends HostBaseTool<
     return cardModuleURL ? [cardModuleURL] : [];
   }
 
-  protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
+  protected async run(input: BaseToolModule.CardIdCard): Promise<undefined> {
     if (!input.cardId) {
       throw new Error('Card is required');
     }

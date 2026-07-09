@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -12,8 +12,8 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class AskAiTool extends HostBaseTool<
-  typeof BaseCommandModule.AskAiInput,
-  typeof BaseCommandModule.AskAiOutput
+  typeof BaseToolModule.AskAiInput,
+  typeof BaseToolModule.AskAiOutput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -21,14 +21,14 @@ export default class AskAiTool extends HostBaseTool<
   static actionVerb = 'Ask';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { AskAiInput } = commandModule;
     return AskAiInput;
   }
 
   protected async run(
-    input: BaseCommandModule.AskAiInput,
-  ): Promise<BaseCommandModule.AskAiOutput> {
+    input: BaseToolModule.AskAiInput,
+  ): Promise<BaseToolModule.AskAiOutput> {
     let createRoomCommand = new CreateAiAssistantRoomTool(this.commandContext);
     let openRoomCommand = new OpenAiAssistantRoomTool(this.commandContext);
     let sendMessageCommand = new SendAiAssistantMessageTool(
@@ -55,7 +55,7 @@ export default class AskAiTool extends HostBaseTool<
 
     await openRoomCommand.execute({ roomId });
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return new commandModule.AskAiOutput({
       response:
         'AI assistant room created and opened successfully. You can now interact with the AI assistant.',

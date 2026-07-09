@@ -4,7 +4,7 @@ import { stringify as stringifyYaml } from 'yaml';
 
 import { rri, skillCardRef } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -14,7 +14,7 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 // A single command in the migrated frontmatter — the same shape
-// `SkillFrontmatterField.tools` (a `containsMany(CommandField)`) parses back
+// `SkillFrontmatterField.tools` (a `containsMany(ToolField)`) parses back
 // out of `boxel.tools`.
 interface FrontmatterCommand {
   codeRef: { module: string; name: string };
@@ -52,8 +52,8 @@ function basenameSlug(id: string): string {
 }
 
 export default class MigrateSkillTool extends HostBaseTool<
-  typeof BaseCommandModule.MigrateSkillInput,
-  typeof BaseCommandModule.MigrateSkillResult
+  typeof BaseToolModule.MigrateSkillInput,
+  typeof BaseToolModule.MigrateSkillResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -64,7 +64,7 @@ files with boxel.kind: skill frontmatter.`;
   static actionVerb = 'Migrate';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { MigrateSkillInput } = commandModule;
     return MigrateSkillInput;
   }
@@ -72,8 +72,8 @@ files with boxel.kind: skill frontmatter.`;
   requireInputFields = ['realm'];
 
   protected async run(
-    input: BaseCommandModule.MigrateSkillInput,
-  ): Promise<BaseCommandModule.MigrateSkillResult> {
+    input: BaseToolModule.MigrateSkillInput,
+  ): Promise<BaseToolModule.MigrateSkillResult> {
     let realmUrl = this.realm.realmOf(rri(input.realm));
     if (!realmUrl) {
       throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
@@ -131,7 +131,7 @@ files with boxel.kind: skill frontmatter.`;
       migratedFiles.push(url.href);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { MigrateSkillResult } = commandModule;
     return new MigrateSkillResult({
       migratedFiles,

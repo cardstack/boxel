@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
@@ -12,8 +12,8 @@ import type { SaveType } from '../services/card-service';
 import type RealmService from '../services/realm';
 
 export default class WriteTextFileTool extends HostBaseTool<
-  typeof BaseCommandModule.WriteTextFileInput,
-  typeof BaseCommandModule.FileIdentifierCard
+  typeof BaseToolModule.WriteTextFileInput,
+  typeof BaseToolModule.FileIdentifierCard
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -22,7 +22,7 @@ export default class WriteTextFileTool extends HostBaseTool<
   static actionVerb = 'Write';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteTextFileInput } = commandModule;
     return WriteTextFileInput;
   }
@@ -30,8 +30,8 @@ export default class WriteTextFileTool extends HostBaseTool<
   requireInputFields = ['path', 'content'];
 
   protected async run(
-    input: BaseCommandModule.WriteTextFileInput,
-  ): Promise<BaseCommandModule.FileIdentifierCard> {
+    input: BaseToolModule.WriteTextFileInput,
+  ): Promise<BaseToolModule.FileIdentifierCard> {
     if (input.overwrite && input.useNonConflictingFilename) {
       throw new Error(
         'Cannot use both overwrite and useNonConflictingFilename.',
@@ -92,7 +92,7 @@ export default class WriteTextFileTool extends HostBaseTool<
       await this.cardService.saveSource(finalUrl, input.content, saveType);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return new FileIdentifierCard({ fileIdentifier: finalUrl.href });
   }

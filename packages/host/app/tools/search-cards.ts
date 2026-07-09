@@ -4,7 +4,7 @@ import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -12,22 +12,22 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
 export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
-  typeof BaseCommandModule.SearchCardsByTypeAndTitleInput,
-  typeof BaseCommandModule.SearchCardsResult
+  typeof BaseToolModule.SearchCardsByTypeAndTitleInput,
+  typeof BaseToolModule.SearchCardsResult
 > {
   description = 'Search for card instances by type and/or title';
 
   static actionVerb = 'Search';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SearchCardsByTypeAndTitleInput } = commandModule;
     return SearchCardsByTypeAndTitleInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SearchCardsByTypeAndTitleInput,
-  ): Promise<BaseCommandModule.SearchCardsResult> {
+    input: BaseToolModule.SearchCardsByTypeAndTitleInput,
+  ): Promise<BaseToolModule.SearchCardsResult> {
     if (!input.cardTitle && !input.cardType && !input.type) {
       throw new Error(
         'At least one of cardTitle, cardType, or type must be provided',
@@ -52,8 +52,8 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
 }
 
 export class SearchCardsByQueryTool extends HostBaseTool<
-  typeof BaseCommandModule.SearchCardsByQueryInput,
-  typeof BaseCommandModule.SearchCardsResult
+  typeof BaseToolModule.SearchCardsByQueryInput,
+  typeof BaseToolModule.SearchCardsResult
 > {
   @service declare private store: StoreService;
   @service declare private realmServer: RealmServerService;
@@ -64,7 +64,7 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   If you do not have information on card module and name, do the search using the `_cardType` attribute.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SearchCardsByQueryInput } = commandModule;
     return SearchCardsByQueryInput;
   }
@@ -72,8 +72,8 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   requireInputFields = ['query'];
 
   protected async run(
-    input: BaseCommandModule.SearchCardsByQueryInput,
-  ): Promise<BaseCommandModule.SearchCardsResult> {
+    input: BaseToolModule.SearchCardsByQueryInput,
+  ): Promise<BaseToolModule.SearchCardsResult> {
     assertQuery(input.query);
     let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
@@ -83,7 +83,7 @@ export class SearchCardsByQueryTool extends HostBaseTool<
       console.error(`Error searching in realms:`, e, input.query);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SearchCardsResult, SearchCardSummaryField } = commandModule;
     let resultCard = new SearchCardsResult({
       cardIds: instances.map((c) => c.id),

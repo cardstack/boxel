@@ -1,19 +1,19 @@
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import GetAvailableRealmIdentifiersTool from './get-available-realm-identifiers';
 
 export default class ValidateRealmTool extends HostBaseTool<
-  typeof BaseCommandModule.ValidateRealmInput,
-  typeof BaseCommandModule.ValidateRealmResult
+  typeof BaseToolModule.ValidateRealmInput,
+  typeof BaseToolModule.ValidateRealmResult
 > {
   description = 'Validate that a realm URL is available and normalize it';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ValidateRealmInput } = commandModule;
     return ValidateRealmInput;
   }
@@ -21,8 +21,8 @@ export default class ValidateRealmTool extends HostBaseTool<
   requireInputFields = ['realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.ValidateRealmInput,
-  ): Promise<BaseCommandModule.ValidateRealmResult> {
+    input: BaseToolModule.ValidateRealmInput,
+  ): Promise<BaseToolModule.ValidateRealmResult> {
     let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
     let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
@@ -33,7 +33,7 @@ export default class ValidateRealmTool extends HostBaseTool<
       throw new Error(`Invalid realm: ${realmIdentifier}`);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ValidateRealmResult } = commandModule;
     return new ValidateRealmResult({ realmIdentifier });
   }

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -8,7 +8,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RecentFilesService from '../services/recent-files-service';
 
 export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
-  typeof BaseCommandModule.UpdateCodePathWithSelectionInput
+  typeof BaseToolModule.UpdateCodePathWithSelectionInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private recentFilesService: RecentFilesService;
@@ -17,7 +17,7 @@ export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
   static actionVerb = 'Open';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UpdateCodePathWithSelectionInput } = commandModule;
     return UpdateCodePathWithSelectionInput;
   }
@@ -27,7 +27,7 @@ export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.UpdateCodePathWithSelectionInput,
+    input: BaseToolModule.UpdateCodePathWithSelectionInput,
   ): Promise<undefined> {
     await this.operatorModeStateService.updateCodePathWithSelection({
       codeRef: input.codeRef,

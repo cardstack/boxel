@@ -959,8 +959,8 @@ Instructions live in the markdown body.
     });
     await settled();
     // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

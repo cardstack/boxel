@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
 
@@ -21,8 +21,8 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type StoreService from '../services/store';
 
 export default class UseAiAssistantTool extends HostBaseTool<
-  typeof BaseCommandModule.UseAiAssistantInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+  typeof BaseToolModule.UseAiAssistantInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
 > {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -33,7 +33,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UseAiAssistantInput } = commandModule;
     return UseAiAssistantInput;
   }
@@ -48,8 +48,8 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.UseAiAssistantInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let roomId = await this.createRoomIfNeeded(input);
 
     let openRoomPromise = this.maybeOpenRoom(input, roomId);
@@ -84,13 +84,13 @@ export default class UseAiAssistantTool extends HostBaseTool<
     }
 
     // Return a result indicating no message was sent
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendAiAssistantMessageResult } = commandModule;
     return new SendAiAssistantMessageResult({ roomId });
   }
 
   async createRoomIfNeeded(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
   ): Promise<string> {
     // If a specific roomId is provided and it's not 'new', use that room
     if (input.roomId && input.roomId !== 'new') {
@@ -114,7 +114,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   async maybeOpenRoom(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
     if (input.openRoom) {
@@ -128,7 +128,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   async maybeLoadSkillCards(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
     let skillCards = new Set<Skill>(input.skillCards ?? []);
@@ -151,7 +151,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   async ensureAttachedCardsLoaded(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
   ): Promise<Set<CardAPI.CardDef>> {
     let attachedCards = new Set<CardAPI.CardDef>(input.attachedCards ?? []);
     let attachedCardIds = input.attachedCardIds ?? [];
@@ -178,7 +178,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   async maybeSetActiveLLM(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
     if (input.llmModel) {
@@ -191,7 +191,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   }
 
   async maybeSetLLMMode(
-    input: BaseCommandModule.UseAiAssistantInput,
+    input: BaseToolModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
     if (input.llmMode) {

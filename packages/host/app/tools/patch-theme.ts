@@ -1,4 +1,4 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -6,8 +6,8 @@ import HostBaseTool from '../lib/host-base-tool';
 import UseAiAssistantTool from './ai-assistant';
 
 export default class PatchThemeTool extends HostBaseTool<
-  typeof BaseCommandModule.PatchThemeInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+  typeof BaseToolModule.PatchThemeInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
 > {
   description =
     'Open the AI assistant to suggest improvements to a theme card and generate a patch.';
@@ -17,14 +17,14 @@ export default class PatchThemeTool extends HostBaseTool<
   requireInputFields = ['cardId'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchThemeInput } = commandModule;
     return PatchThemeInput;
   }
 
   protected async run(
-    input: BaseCommandModule.PatchThemeInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseToolModule.PatchThemeInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     if (!input.cardId) {
       throw new Error('patch-theme command requires a cardId');
     }

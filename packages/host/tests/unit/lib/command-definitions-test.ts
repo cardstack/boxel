@@ -7,8 +7,8 @@ import {
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
-function asCommand(command: unknown): SkillModule.CommandField {
-  return command as unknown as SkillModule.CommandField;
+function asCommand(command: unknown): SkillModule.ToolField {
+  return command as unknown as SkillModule.ToolField;
 }
 
 module('Unit | Lib | command-definitions', function () {

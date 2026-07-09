@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -9,8 +9,8 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class CopyCardToRealmTool extends HostBaseTool<
-  typeof BaseCommandModule.CopyCardToRealmInput,
-  typeof BaseCommandModule.CopyCardResult
+  typeof BaseToolModule.CopyCardToRealmInput,
+  typeof BaseToolModule.CopyCardResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -20,7 +20,7 @@ export default class CopyCardToRealmTool extends HostBaseTool<
   static actionVerb = 'Copy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyCardToRealmInput } = commandModule;
     return CopyCardToRealmInput;
   }
@@ -32,8 +32,8 @@ export default class CopyCardToRealmTool extends HostBaseTool<
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
   // the consumer.
   protected async run(
-    input: BaseCommandModule.CopyCardToRealmInput,
-  ): Promise<BaseCommandModule.CopyCardResult> {
+    input: BaseToolModule.CopyCardToRealmInput,
+  ): Promise<BaseToolModule.CopyCardResult> {
     let targetRealm =
       input.targetRealm || this.realm.defaultWritableRealm?.path;
     if (!targetRealm) {
@@ -60,7 +60,7 @@ export default class CopyCardToRealmTool extends HostBaseTool<
         )}`,
       );
     }
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyCardResult } = commandModule;
     return new CopyCardResult({ newCardId });
   }

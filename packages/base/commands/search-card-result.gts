@@ -251,7 +251,7 @@ class SearchCardsResultEmbeddedView extends Component<
 
 class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
   <template>
-    <section class='command-result' data-test-command-result-isolated>
+    <section class='command-result' data-test-tool-result-isolated>
       <header>
         <h3>Search Results</h3>
         <p class='result-count'>

@@ -2,15 +2,15 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
 export default class ReadSourceTool extends HostBaseTool<
-  typeof BaseCommandModule.ReadSourceInput,
-  typeof BaseCommandModule.FileContents
+  typeof BaseToolModule.ReadSourceInput,
+  typeof BaseToolModule.FileContents
 > {
   @service declare private network: NetworkService;
 
@@ -18,7 +18,7 @@ export default class ReadSourceTool extends HostBaseTool<
   static actionVerb = 'Read';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ReadSourceInput } = commandModule;
     return ReadSourceInput;
   }
@@ -26,8 +26,8 @@ export default class ReadSourceTool extends HostBaseTool<
   requireInputFields = ['path'];
 
   protected async run(
-    input: BaseCommandModule.ReadSourceInput,
-  ): Promise<BaseCommandModule.FileContents> {
+    input: BaseToolModule.ReadSourceInput,
+  ): Promise<BaseToolModule.FileContents> {
     let url = input.realm
       ? new URL(input.path, input.realm)
       : new URL(input.path);
@@ -35,7 +35,7 @@ export default class ReadSourceTool extends HostBaseTool<
       headers: { Accept: SupportedMimeType.CardSource },
     });
 
-    let { FileContents } = await this.loadCommandModule();
+    let { FileContents } = await this.loadToolModule();
     if (response.ok) {
       return new FileContents({
         content: await response.text(),

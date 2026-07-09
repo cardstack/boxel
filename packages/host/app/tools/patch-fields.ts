@@ -8,7 +8,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
@@ -23,8 +23,8 @@ interface Configuration {
 }
 
 export default class PatchFieldsTool extends HostBaseTool<
-  typeof BaseCommandModule.PatchFieldsInput,
-  typeof BaseCommandModule.PatchFieldsOutput
+  typeof BaseToolModule.PatchFieldsInput,
+  typeof BaseToolModule.PatchFieldsOutput
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -42,7 +42,7 @@ export default class PatchFieldsTool extends HostBaseTool<
   }
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchFieldsInput } = commandModule;
     return PatchFieldsInput;
   }
@@ -87,8 +87,8 @@ export default class PatchFieldsTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.PatchFieldsInput,
-  ): Promise<BaseCommandModule.PatchFieldsOutput> {
+    input: BaseToolModule.PatchFieldsInput,
+  ): Promise<BaseToolModule.PatchFieldsOutput> {
     if (!input.cardId || !input.fieldUpdates) {
       throw new Error(
         "PatchFieldsTool can't run because it doesn't have all the required fields",
@@ -183,7 +183,7 @@ export default class PatchFieldsTool extends HostBaseTool<
       Object.assign(errors, fieldErrors);
 
       // Create and return the output
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { PatchFieldsOutput } = commandModule;
 
       return new PatchFieldsOutput({
@@ -198,7 +198,7 @@ export default class PatchFieldsTool extends HostBaseTool<
         errors[fieldPath] = error.message || 'Update failed';
       });
 
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { PatchFieldsOutput } = commandModule;
 
       return new PatchFieldsOutput({

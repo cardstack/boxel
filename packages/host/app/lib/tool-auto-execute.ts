@@ -7,7 +7,7 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 // Single source of truth for "this command runs without user approval".
 // Used by tool-service (to decide whether to auto-run) and by the
-// room / room-message-command components (to decide whether to render
+// room / room-message-tool components (to decide whether to render
 // the Accept All bar and the per-command Apply button). Keeping all
 // call sites on the same predicate prevents them from drifting and
 // reintroducing the action-bar flash that prompted CS-11647.

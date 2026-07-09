@@ -1,17 +1,17 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import CreateSubmissionWorkflowTool from './create-submission-workflow';
 
 export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseTool<
-  typeof BaseCommandModule.CreateListingPRRequestInput
+  typeof BaseToolModule.CreateListingPRRequestInput
 > {
   description =
     'Create a submission workflow card and open it in interact mode to track PR creation.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateListingPRRequestInput } = commandModule;
     return CreateListingPRRequestInput;
   }
@@ -19,7 +19,7 @@ export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseToo
   requireInputFields = ['realm', 'listingId'];
 
   protected async run(
-    input: BaseCommandModule.CreateListingPRRequestInput,
+    input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
     await new CreateSubmissionWorkflowTool(this.commandContext).execute({
       realm: input.realm,

@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class ShowFileTool extends HostBaseTool<
-  typeof BaseCommandModule.FileIdentifierCard
+  typeof BaseToolModule.FileIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -17,7 +17,7 @@ export default class ShowFileTool extends HostBaseTool<
   static actionVerb = 'Show File';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return FileIdentifierCard;
   }
@@ -25,7 +25,7 @@ export default class ShowFileTool extends HostBaseTool<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FileIdentifierCard,
+    input: BaseToolModule.FileIdentifierCard,
   ): Promise<undefined> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {

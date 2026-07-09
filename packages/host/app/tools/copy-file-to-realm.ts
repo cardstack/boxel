@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
@@ -11,8 +11,8 @@ import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
 
 export default class CopyFileToRealmTool extends HostBaseTool<
-  typeof BaseCommandModule.CopyFileToRealmInput,
-  typeof BaseCommandModule.CopyFileToRealmResult
+  typeof BaseToolModule.CopyFileToRealmInput,
+  typeof BaseToolModule.CopyFileToRealmResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -21,7 +21,7 @@ export default class CopyFileToRealmTool extends HostBaseTool<
   static actionVerb = 'Copy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyFileToRealmInput } = commandModule;
     return CopyFileToRealmInput;
   }
@@ -29,8 +29,8 @@ export default class CopyFileToRealmTool extends HostBaseTool<
   requireInputFields = ['sourceFileIdentifier', 'targetRealm'];
 
   protected async run(
-    input: BaseCommandModule.CopyFileToRealmInput,
-  ): Promise<BaseCommandModule.CopyFileToRealmResult> {
+    input: BaseToolModule.CopyFileToRealmInput,
+  ): Promise<BaseToolModule.CopyFileToRealmResult> {
     let targetRealm =
       input.targetRealm || this.realm.defaultWritableRealm?.path;
     if (!targetRealm) {
@@ -68,7 +68,7 @@ export default class CopyFileToRealmTool extends HostBaseTool<
       );
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyFileToRealmResult } = commandModule;
     return new CopyFileToRealmResult({
       newFileIdentifier: destinationUrl.href,

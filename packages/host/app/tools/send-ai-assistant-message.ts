@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
@@ -22,8 +22,8 @@ import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 
 export default class SendAiAssistantMessageTool extends HostBaseTool<
-  typeof BaseCommandModule.SendAiAssistantMessageInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+  typeof BaseToolModule.SendAiAssistantMessageInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
 > {
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
@@ -36,7 +36,7 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendAiAssistantMessageInput } = commandModule;
     return SendAiAssistantMessageInput;
   }
@@ -53,8 +53,8 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
   }
 
   protected async run(
-    input: BaseCommandModule.SendAiAssistantMessageInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseToolModule.SendAiAssistantMessageInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let { matrixService, operatorModeStateService } = this;
     let roomId = input.roomId;
     let requireToolCall = input.requireCommandCall ?? false;
@@ -115,7 +115,7 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
         context,
       },
     } as CardMessageContent);
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendAiAssistantMessageResult } = commandModule;
     return new SendAiAssistantMessageResult({ roomId, eventId: event_id });
   }

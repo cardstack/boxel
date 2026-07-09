@@ -2,7 +2,7 @@ import { logger } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -13,8 +13,8 @@ import { SearchCardsByTypeAndTitleTool } from './search-cards';
 const log = logger('commands:search-and-choose');
 
 export default class SearchAndChooseTool extends HostBaseTool<
-  typeof BaseCommandModule.SearchAndChooseInput,
-  typeof BaseCommandModule.SearchAndChooseResult
+  typeof BaseToolModule.SearchAndChooseInput,
+  typeof BaseToolModule.SearchAndChooseResult
 > {
   static actionVerb = 'Select';
   description =
@@ -22,14 +22,14 @@ export default class SearchAndChooseTool extends HostBaseTool<
   requireInputFields = ['candidateTypeCodeRef'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SearchAndChooseInput } = commandModule;
     return SearchAndChooseInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SearchAndChooseInput,
-  ): Promise<BaseCommandModule.SearchAndChooseResult> {
+    input: BaseToolModule.SearchAndChooseInput,
+  ): Promise<BaseToolModule.SearchAndChooseResult> {
     let {
       sourceContextCodeRef,
       max = 1,
@@ -47,7 +47,7 @@ export default class SearchAndChooseTool extends HostBaseTool<
       throw new Error('max must be at least 1');
     }
 
-    const { SearchAndChooseResult } = await this.loadCommandModule();
+    const { SearchAndChooseResult } = await this.loadToolModule();
 
     // 1. Gather candidates via existing search command
     const search = new SearchCardsByTypeAndTitleTool(this.commandContext);
@@ -122,7 +122,7 @@ export default class SearchAndChooseTool extends HostBaseTool<
   }
 
   private assertResolvedCodeRef(
-    codeRef: BaseCommandModule.SearchAndChooseInput['candidateTypeCodeRef'],
+    codeRef: BaseToolModule.SearchAndChooseInput['candidateTypeCodeRef'],
     fieldName: 'candidateTypeCodeRef' | 'sourceContextCodeRef',
   ): ResolvedCodeRef {
     if (!codeRef) {

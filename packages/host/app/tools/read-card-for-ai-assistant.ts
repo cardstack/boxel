@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -12,8 +12,8 @@ import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class ReadCardForAssistantTool extends HostBaseTool<
-  typeof BaseCommandModule.CardIdCard,
-  typeof BaseCommandModule.CardForAttachmentCard
+  typeof BaseToolModule.CardIdCard,
+  typeof BaseToolModule.CardForAttachmentCard
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -21,7 +21,7 @@ export default class ReadCardForAssistantTool extends HostBaseTool<
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
@@ -29,8 +29,8 @@ export default class ReadCardForAssistantTool extends HostBaseTool<
   requireInputFields = ['cardId'];
 
   protected async run(
-    input: BaseCommandModule.CardIdCard,
-  ): Promise<BaseCommandModule.CardForAttachmentCard> {
+    input: BaseToolModule.CardIdCard,
+  ): Promise<BaseToolModule.CardForAttachmentCard> {
     let { matrixService } = this;
 
     await matrixService.ready;
@@ -39,7 +39,7 @@ export default class ReadCardForAssistantTool extends HostBaseTool<
       let cardFileDef = (
         await matrixService.uploadCards([maybeCard])
       )[0] as FileDef;
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { CardForAttachmentCard } = commandModule;
       return new CardForAttachmentCard({ cardForAttachment: cardFileDef });
     } else {

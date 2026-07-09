@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { isCardInstance, rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -23,7 +23,7 @@ interface WorkflowCardView {
 // off the card so the same Matrix room is reused (preserving the prior
 // conversation and the bot-runner's view of the workflow).
 export default class RetrySubmissionWorkflowTool extends HostBaseTool<
-  typeof BaseCommandModule.RetrySubmissionWorkflowInput
+  typeof BaseToolModule.RetrySubmissionWorkflowInput
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -32,7 +32,7 @@ export default class RetrySubmissionWorkflowTool extends HostBaseTool<
     'Retry a failed submission workflow by re-emitting the bot trigger event into the original room.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RetrySubmissionWorkflowInput } = commandModule;
     return RetrySubmissionWorkflowInput;
   }
@@ -40,7 +40,7 @@ export default class RetrySubmissionWorkflowTool extends HostBaseTool<
   requireInputFields = ['workflowCardId'];
 
   protected async run(
-    input: BaseCommandModule.RetrySubmissionWorkflowInput,
+    input: BaseToolModule.RetrySubmissionWorkflowInput,
   ): Promise<undefined> {
     let { workflowCardId } = input;
 

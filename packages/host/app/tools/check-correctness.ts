@@ -9,7 +9,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -22,8 +22,8 @@ import type ToolService from '../services/tool-service';
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
 export default class CheckCorrectnessTool extends HostBaseTool<
-  typeof BaseCommandModule.CheckCorrectnessInput,
-  typeof BaseCommandModule.CorrectnessResultCard
+  typeof BaseToolModule.CheckCorrectnessInput,
+  typeof BaseToolModule.CorrectnessResultCard
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -36,15 +36,15 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   static actionVerb = 'Check';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.CheckCorrectnessInput;
   }
 
   requireInputFields = ['targetType', 'targetRef', 'roomId'];
 
   protected async run(
-    input: BaseCommandModule.CheckCorrectnessInput,
-  ): Promise<BaseCommandModule.CorrectnessResultCard> {
+    input: BaseToolModule.CheckCorrectnessInput,
+  ): Promise<BaseToolModule.CorrectnessResultCard> {
     if (!input.targetType || !input.targetRef) {
       throw new Error(
         'Target type and reference are required to run correctness checks.',
@@ -70,7 +70,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
     let lintIssues: string[] = input.lintIssues ?? [];

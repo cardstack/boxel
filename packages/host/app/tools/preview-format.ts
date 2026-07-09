@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -10,7 +10,7 @@ import SwitchSubmodeTool from './switch-submode';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class PreviewFormatTool extends HostBaseTool<
-  typeof BaseCommandModule.PreviewFormatInput
+  typeof BaseToolModule.PreviewFormatInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -20,7 +20,7 @@ export default class PreviewFormatTool extends HostBaseTool<
   static actionVerb = 'Preview Format';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PreviewFormatInput } = commandModule;
     return PreviewFormatInput;
   }
@@ -28,7 +28,7 @@ export default class PreviewFormatTool extends HostBaseTool<
   requireInputFields = ['cardId', 'format', 'modulePath'];
 
   protected async run(
-    input: BaseCommandModule.PreviewFormatInput,
+    input: BaseToolModule.PreviewFormatInput,
   ): Promise<undefined> {
     // 1. Switch to code submode
     await new SwitchSubmodeTool(this.commandContext).execute({

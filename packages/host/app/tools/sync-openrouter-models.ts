@@ -8,7 +8,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -146,8 +146,8 @@ function buildCardJson(model: OpenRouterApiModel) {
 }
 
 export default class SyncOpenRouterModelsTool extends HostBaseTool<
-  typeof BaseCommandModule.RealmIdentifierCard,
-  typeof BaseCommandModule.SyncOpenRouterModelsResult
+  typeof BaseToolModule.RealmIdentifierCard,
+  typeof BaseToolModule.SyncOpenRouterModelsResult
 > {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
@@ -156,14 +156,14 @@ export default class SyncOpenRouterModelsTool extends HostBaseTool<
   description = 'Sync OpenRouter model data from the OpenRouter API';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.RealmIdentifierCard;
   }
 
   protected async run(
-    input: BaseCommandModule.RealmIdentifierCard,
-  ): Promise<BaseCommandModule.SyncOpenRouterModelsResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.RealmIdentifierCard,
+  ): Promise<BaseToolModule.SyncOpenRouterModelsResult> {
+    let commandModule = await this.loadToolModule();
     let realmURL = input.realmIdentifier;
     if (!realmURL) {
       throw new Error('realmIdentifier is required');

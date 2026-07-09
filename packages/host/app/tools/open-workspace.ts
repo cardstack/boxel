@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class OpenWorkspaceTool extends HostBaseTool<
-  typeof BaseCommandModule.RealmIdentifierCard
+  typeof BaseToolModule.RealmIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -16,7 +16,7 @@ export default class OpenWorkspaceTool extends HostBaseTool<
   description = 'Open the main index card of a workspace.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RealmIdentifierCard } = commandModule;
     return RealmIdentifierCard;
   }
@@ -24,7 +24,7 @@ export default class OpenWorkspaceTool extends HostBaseTool<
   requireInputFields = ['realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.RealmIdentifierCard,
+    input: BaseToolModule.RealmIdentifierCard,
   ): Promise<undefined> {
     let { realmIdentifier } = input;
     if (!realmIdentifier) {

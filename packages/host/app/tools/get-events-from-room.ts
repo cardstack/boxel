@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -11,8 +11,8 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class GetEventsFromRoomTool extends HostBaseTool<
-  typeof BaseCommandModule.GetEventsFromRoomInput,
-  typeof BaseCommandModule.GetEventsFromRoomResult
+  typeof BaseToolModule.GetEventsFromRoomInput,
+  typeof BaseToolModule.GetEventsFromRoomResult
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
@@ -20,7 +20,7 @@ export default class GetEventsFromRoomTool extends HostBaseTool<
   static actionVerb = 'Listen';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GetEventsFromRoomInput } = commandModule;
     return GetEventsFromRoomInput;
   }
@@ -28,13 +28,13 @@ export default class GetEventsFromRoomTool extends HostBaseTool<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.GetEventsFromRoomInput,
-  ): Promise<BaseCommandModule.GetEventsFromRoomResult> {
+    input: BaseToolModule.GetEventsFromRoomInput,
+  ): Promise<BaseToolModule.GetEventsFromRoomResult> {
     let { matrixService } = this;
     let roomId = input.roomId;
     let sinceEventId = input.sinceEventId;
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GetEventsFromRoomResult } = commandModule;
 
     let roomResource = matrixService.roomResources.get(roomId);

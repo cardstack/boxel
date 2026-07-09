@@ -210,9 +210,11 @@ test.describe('Commands', () => {
       commandRequestId,
       content,
     );
-    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    let command = page.locator(
+      `[data-test-tool-call-id="${commandRequestId}"]`,
+    );
     await command.waitFor();
-    await command.locator('[data-test-command-apply]').click();
+    await command.locator('[data-test-tool-call-apply]').click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -264,9 +266,11 @@ test.describe('Commands', () => {
       commandRequestId,
       content,
     );
-    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    let command = page.locator(
+      `[data-test-tool-call-id="${commandRequestId}"]`,
+    );
     await command.waitFor();
-    await command.locator('[data-test-command-apply]').click();
+    await command.locator('[data-test-tool-call-apply]').click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -415,7 +419,7 @@ test.describe('Commands', () => {
     );
 
     await expect(
-      page.locator('[data-test-message-idx="1"] [data-test-command-id]'),
+      page.locator('[data-test-message-idx="1"] [data-test-tool-call-id]'),
     ).not.toHaveClass(/is-failed/);
 
     // check we're in code mode
@@ -488,7 +492,7 @@ test.describe('Commands', () => {
     );
 
     await expect(
-      page.locator('[data-test-message-idx="3"] [data-test-command-id]'),
+      page.locator('[data-test-message-idx="3"] [data-test-tool-call-id]'),
     ).not.toHaveClass(/is-failed/);
 
     // check we're in interact mode

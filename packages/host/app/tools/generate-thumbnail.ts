@@ -4,7 +4,7 @@ import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-c
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -69,15 +69,15 @@ function generateFilenameFromCardName(cardName: string | undefined): string {
 }
 
 export default class GenerateThumbnailTool extends HostBaseTool<
-  typeof BaseCommandModule.GenerateThumbnailInput,
-  typeof BaseCommandModule.GenerateThumbnailOutput
+  typeof BaseToolModule.GenerateThumbnailInput,
+  typeof BaseToolModule.GenerateThumbnailOutput
 > {
   static actionVerb = 'Generate';
   description =
     'Generate an AI thumbnail image and save it as an ImageDef in the realm';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateThumbnailInput } = commandModule;
     return GenerateThumbnailInput;
   }
@@ -85,8 +85,8 @@ export default class GenerateThumbnailTool extends HostBaseTool<
   requireInputFields = ['prompt', 'targetRealmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.GenerateThumbnailInput,
-  ): Promise<BaseCommandModule.GenerateThumbnailOutput> {
+    input: BaseToolModule.GenerateThumbnailInput,
+  ): Promise<BaseToolModule.GenerateThumbnailOutput> {
     const {
       prompt,
       sourceImageUrl,
@@ -240,7 +240,7 @@ export default class GenerateThumbnailTool extends HostBaseTool<
       });
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateThumbnailOutput } = commandModule;
     return new GenerateThumbnailOutput({ imageDefIdentifier });
   }

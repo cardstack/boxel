@@ -59,7 +59,7 @@ interface Signature {
   };
 }
 
-export default class RoomMessageCommand extends Component<Signature> {
+export default class RoomMessageTool extends Component<Signature> {
   @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
@@ -72,7 +72,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.failedCommandState) {
+    if (this.failedToolState) {
       return 'failed';
     }
     if (this.didFailCorrectnessCheck) {
@@ -107,10 +107,10 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
-  @use private commandResultCard = resource(() => {
+  @use private toolResultCard = resource(() => {
     let initialState = { card: undefined } as { card: CardDef | undefined };
     let state = new TrackedObject(initialState);
-    if (this.args.messageCommand.commandResultFileDef) {
+    if (this.args.messageCommand.toolResultFileDef) {
       this.args.messageCommand.getCommandResultCard().then((card) => {
         state.card = card;
       });
@@ -120,13 +120,13 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get isDisplayingCode() {
     return this.args.roomResource.isDisplayingCode(
-      this.args.messageCommand.commandRequest as ToolRequest,
+      this.args.messageCommand.toolRequest as ToolRequest,
     );
   }
 
   private toggleViewCode = () => {
     this.args.roomResource.toggleViewCode(
-      this.args.messageCommand.commandRequest as ToolRequest,
+      this.args.messageCommand.toolRequest as ToolRequest,
     );
   };
 
@@ -155,8 +155,8 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get headerTitle() {
-    if (this.commandResultCard.card) {
-      return cardTypeDisplayName(this.commandResultCard.card);
+    if (this.toolResultCard.card) {
+      return cardTypeDisplayName(this.toolResultCard.card);
     }
     return '';
   }
@@ -164,7 +164,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   private get shouldDisplayResultCard() {
     let commandName = this.args.messageCommand.name ?? '';
     return (
-      !!this.commandResultCard.card &&
+      !!this.toolResultCard.card &&
       commandName !== 'checkCorrectness' &&
       !commandName.startsWith('switch-submode')
     );
@@ -174,7 +174,7 @@ export default class RoomMessageCommand extends Component<Signature> {
     if (this.args.messageCommand.name !== 'checkCorrectness') {
       return false;
     }
-    let card = this.commandResultCard.card as
+    let card = this.toolResultCard.card as
       | { correct?: boolean; errors?: unknown[] }
       | undefined;
     if (!card) {
@@ -188,7 +188,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get moreOptionsMenuItems() {
     let menuItems =
-      this.commandResultCard.card?.[getMenuItems]?.({
+      this.toolResultCard.card?.[getMenuItems]?.({
         canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',
@@ -211,19 +211,19 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get commandResultCardForRendering(): CardDef {
-    if (!this.commandResultCard.card) {
+    if (!this.toolResultCard.card) {
       throw new Error('Command result card is not available');
     }
-    return this.commandResultCard.card;
+    return this.toolResultCard.card;
   }
 
   @cached
-  private get failedCommandState() {
-    let commandRequest = this.args.messageCommand.commandRequest as ToolRequest;
-    if (!commandRequest.id) {
+  private get failedToolState() {
+    let toolRequest = this.args.messageCommand.toolRequest as ToolRequest;
+    if (!toolRequest.id) {
       return undefined;
     }
-    return this.matrixService.failedCommandState.get(commandRequest.id);
+    return this.matrixService.failedToolState.get(toolRequest.id);
   }
 
   private get invalidCommandState() {
@@ -238,19 +238,19 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get hasFailedState() {
-    return !!(this.failedCommandState || this.didFailCorrectnessCheck);
+    return !!(this.failedToolState || this.didFailCorrectnessCheck);
   }
 
   <template>
     <div
       class={{cn
-        'room-message-command'
+        'room-message-tool'
         is-pending=@isPending
         is-error=@isError
         is-failed=(bool this.hasFailedState)
         compact=@isCompact
       }}
-      data-test-command-id={{@messageCommand.commandRequest.id}}
+      data-test-tool-call-id={{@messageCommand.toolRequest.id}}
       ...attributes
     >
       {{#if @isStreaming}}
@@ -258,7 +258,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           class={{cn 'command-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
-          data-test-command-card-idle={{not
+          data-test-tool-call-card-idle={{not
             (eq this.applyButtonState 'applying')
           }}
           as |codeBlock|
@@ -278,7 +278,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
-          data-test-command-card-idle={{not
+          data-test-tool-call-card-idle={{not
             (eq this.applyButtonState 'applying')
           }}
           as |codeBlock|
@@ -297,11 +297,9 @@ export default class RoomMessageCommand extends Component<Signature> {
             <codeBlock.editor />
           {{/if}}
         </CodeBlock>
-        {{#if this.failedCommandState}}
+        {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
-            <Alert.Messages
-              @messages={{array this.failedCommandState.message}}
-            />
+            <Alert.Messages @messages={{array this.failedToolState.message}} />
             <Alert.Action @action={{@runCommand}} @actionName='Retry' />
           </Alert>
         {{else if this.invalidCommandState}}
@@ -314,14 +312,14 @@ export default class RoomMessageCommand extends Component<Signature> {
           <CardContainer
             @displayBoundaries={{false}}
             class='command-result-card-preview'
-            data-test-command-result-container
+            data-test-tool-result-container
           >
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.commandResultCardForRendering}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               class='command-result-card-header'
-              data-test-command-result-header
+              data-test-tool-result-header
             />
             <CardRenderer
               @card={{this.commandResultCardForRendering}}
@@ -335,7 +333,7 @@ export default class RoomMessageCommand extends Component<Signature> {
     </div>
 
     <style scoped>
-      .room-message-command > * + * {
+      .room-message-tool > * + * {
         margin-top: var(--boxel-sp-xs);
       }
       .command-result-card-preview {

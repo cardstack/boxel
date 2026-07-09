@@ -11,7 +11,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -22,7 +22,7 @@ interface Configuration {
   cardType: typeof CardDef;
 }
 export default class PatchCardInstanceTool extends HostBaseTool<
-  typeof BaseCommandModule.PatchCardInput,
+  typeof BaseToolModule.PatchCardInput,
   undefined
 > {
   @service declare private store: StoreService;
@@ -39,7 +39,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
   }
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCardInput } = commandModule;
     return PatchCardInput;
   }
@@ -47,7 +47,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
   requireInputFields = ['cardId', 'patch'];
 
   protected async run(
-    input: BaseCommandModule.PatchCardInput,
+    input: BaseToolModule.PatchCardInput,
   ): Promise<undefined> {
     if (!input.cardId || !input.patch) {
       throw new Error(

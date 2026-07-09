@@ -17,9 +17,9 @@ import {
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
-  type CommandDeclaration,
+  type ToolDeclaration,
   isCardOrFieldDeclaration,
-  isCommandDeclaration,
+  isToolDeclaration,
   isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/services/module-contents-service';
@@ -27,13 +27,13 @@ import type NetworkService from '@cardstack/host/services/network';
 
 export {
   isCardOrFieldDeclaration,
-  isCommandDeclaration,
+  isToolDeclaration,
   isComponentDeclaration,
   isReexportCardOrField,
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
-  type CommandDeclaration,
+  type ToolDeclaration,
 };
 
 interface Args {

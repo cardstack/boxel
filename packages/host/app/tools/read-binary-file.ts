@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -23,8 +23,8 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 export default class ReadBinaryFileTool extends HostBaseTool<
-  typeof BaseCommandModule.ReadBinaryFileInput,
-  typeof BaseCommandModule.ReadBinaryFileResult
+  typeof BaseToolModule.ReadBinaryFileInput,
+  typeof BaseToolModule.ReadBinaryFileResult
 > {
   @service declare private network: NetworkService;
 
@@ -33,7 +33,7 @@ export default class ReadBinaryFileTool extends HostBaseTool<
   static actionVerb = 'Read';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ReadBinaryFileInput } = commandModule;
     return ReadBinaryFileInput;
   }
@@ -41,10 +41,10 @@ export default class ReadBinaryFileTool extends HostBaseTool<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.ReadBinaryFileInput,
-  ): Promise<BaseCommandModule.ReadBinaryFileResult> {
+    input: BaseToolModule.ReadBinaryFileInput,
+  ): Promise<BaseToolModule.ReadBinaryFileResult> {
     let response = await this.network.authedFetch(input.fileIdentifier);
-    let { ReadBinaryFileResult } = await this.loadCommandModule();
+    let { ReadBinaryFileResult } = await this.loadToolModule();
 
     if (!response.ok) {
       throw new Error(

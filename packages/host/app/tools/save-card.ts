@@ -3,14 +3,14 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 
 export default class SaveCardTool extends HostBaseTool<
-  typeof BaseCommandModule.SaveCardInput,
+  typeof BaseToolModule.SaveCardInput,
   typeof CardDef
 > {
   @service declare private store: StoreService;
@@ -18,7 +18,7 @@ export default class SaveCardTool extends HostBaseTool<
   static actionVerb = 'Save';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SaveCardInput } = commandModule;
     return SaveCardInput;
   }
@@ -29,9 +29,7 @@ export default class SaveCardTool extends HostBaseTool<
   // collection--meaning that it will be detached from the store. This means you
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
   // the consumer.
-  protected async run(
-    input: BaseCommandModule.SaveCardInput,
-  ): Promise<CardDef> {
+  protected async run(input: BaseToolModule.SaveCardInput): Promise<CardDef> {
     let result = await this.store.add(input.card, {
       realm: input.realm,
       localDir: input.localDir,

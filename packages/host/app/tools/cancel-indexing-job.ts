@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
 export default class CancelIndexingJobTool extends HostBaseTool<
-  typeof BaseCommandModule.RealmIdentifierCard,
+  typeof BaseToolModule.RealmIdentifierCard,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -16,13 +16,13 @@ export default class CancelIndexingJobTool extends HostBaseTool<
   description = 'Cancel any currently running indexing job for a realm';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RealmIdentifierCard } = commandModule;
     return RealmIdentifierCard;
   }
 
   protected async run(
-    input: BaseCommandModule.RealmIdentifierCard,
+    input: BaseToolModule.RealmIdentifierCard,
   ): Promise<undefined> {
     await this.realm.cancelIndexingJob(input.realmIdentifier);
   }

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -9,7 +9,7 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class OpenAiAssistantRoomTool extends HostBaseTool<
-  typeof BaseCommandModule.OpenAiAssistantRoomInput
+  typeof BaseToolModule.OpenAiAssistantRoomInput
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -18,7 +18,7 @@ export default class OpenAiAssistantRoomTool extends HostBaseTool<
   static actionVerb = 'Open';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { OpenAiAssistantRoomInput } = commandModule;
     return OpenAiAssistantRoomInput;
   }
@@ -26,7 +26,7 @@ export default class OpenAiAssistantRoomTool extends HostBaseTool<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.OpenAiAssistantRoomInput,
+    input: BaseToolModule.OpenAiAssistantRoomInput,
   ): Promise<undefined> {
     if (input.roomId) {
       this.operatorModeStateService.openAiAssistant();

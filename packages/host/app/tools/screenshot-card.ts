@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -32,8 +32,8 @@ function generateFilenameFromCard(cardId: string): string {
 }
 
 export default class ScreenshotCardTool extends HostBaseTool<
-  typeof BaseCommandModule.ScreenshotCardInput,
-  typeof BaseCommandModule.ScreenshotCardOutput
+  typeof BaseToolModule.ScreenshotCardInput,
+  typeof BaseToolModule.ScreenshotCardOutput
 > {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -43,7 +43,7 @@ export default class ScreenshotCardTool extends HostBaseTool<
     "Screenshot a rendered card and save it as an ImageDef in the card's own realm";
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ScreenshotCardInput } = commandModule;
     return ScreenshotCardInput;
   }
@@ -51,8 +51,8 @@ export default class ScreenshotCardTool extends HostBaseTool<
   requireInputFields = ['card', 'format'];
 
   protected async run(
-    input: BaseCommandModule.ScreenshotCardInput,
-  ): Promise<BaseCommandModule.ScreenshotCardOutput> {
+    input: BaseToolModule.ScreenshotCardInput,
+  ): Promise<BaseToolModule.ScreenshotCardOutput> {
     let { card, format } = input;
     let normalizedFormat = format?.trim();
     if (!card) {
@@ -144,7 +144,7 @@ export default class ScreenshotCardTool extends HostBaseTool<
       throw new Error('Failed to write screenshot PNG to realm.');
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ScreenshotCardOutput } = commandModule;
     return new ScreenshotCardOutput({
       imageDefUrl: writeResult.fileIdentifier,
