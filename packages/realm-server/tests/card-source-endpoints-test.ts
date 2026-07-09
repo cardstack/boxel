@@ -27,7 +27,10 @@ import {
 } from './helpers/index.ts';
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  expectIncrementalIndexEvent,
+  settlePrerenderHtmlJobs,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -192,6 +195,16 @@ module(basename(import.meta.filename), function () {
           let initialContent = '// initial cache test content';
 
           await testRealm.write(cacheTestPath, initialContent);
+          // Each write's index pass fires a fire-and-forget `prerender_html`
+          // job whose worker re-reads this module with the card+source Accept
+          // header — a read that repopulates #sourceCache. write() returns
+          // without awaiting that job, so its seed can land at any later
+          // moment, including between the noCache request below (which drops
+          // the entry) and the follow-up read that asserts a miss, turning the
+          // expected miss into a spurious hit. Drain the prerender-html channel
+          // after every write so no such job is in flight during the
+          // assertions.
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
 
           await request
             .get(`/${cacheTestPath}`)
@@ -199,6 +212,7 @@ module(basename(import.meta.filename), function () {
 
           let updatedContent = `${initialContent}\n// updated by test`;
           await testRealm.write(cacheTestPath, updatedContent);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
 
           let noCacheResponse = await request
             .get(`/${cacheTestPath}?noCache=true`)
@@ -227,7 +241,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             cachedResponse.headers['x-boxel-cache'],
             'miss',
-            'subsequent request fetches from disk because noCache call did not seed cache',
+            `subsequent request fetches from disk because noCache call did not seed cache (got x-boxel-cache=${cachedResponse.headers['x-boxel-cache']}, body=${JSON.stringify(cachedResponse.text)}) — a hit here means something re-seeded #sourceCache after the noCache drop, e.g. a prerender_html job that outlived the settle`,
           );
           assert.strictEqual(
             cachedResponse.text,
@@ -249,6 +263,12 @@ module(basename(import.meta.filename), function () {
             cacheTestPath,
             '// clear-local-caches initial content',
           );
+          // Settle the fire-and-forget prerender_html job the write spawned
+          // before we clear the cache: that job re-reads the module with the
+          // card+source Accept header and reseeds #sourceCache, so if it lands
+          // after clearLocalSourceCaches() the afterClear fetch would be a
+          // spurious hit rather than the miss this test asserts.
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
 
           await request
             .get(`/${cacheTestPath}`)
@@ -270,7 +290,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             afterClear.headers['x-boxel-cache'],
             'miss',
-            'fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped',
+            `fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped (got x-boxel-cache=${afterClear.headers['x-boxel-cache']})`,
           );
         });
 
