@@ -147,27 +147,29 @@ function renderRealmCard(
   // Both passes of the split indexing pipeline can be in flight for one
   // realm at once (the index job spawns the prerender job), so a realm's
   // card holds a section per active job — index first, prerender after,
-  // mirroring the pipeline order. When one pass is active and the other
-  // has already finished, the finished pass shows as a compact ✓ line
-  // (from the event sink's history) so the realm reads as one story:
-  // "index ✓, prerender 40/93".
+  // mirroring the pipeline order.
+  let indexJobs = jobs.filter((j) => !isPrerenderJob(j.jobType));
+  let prerenderJobs = jobs.filter((j) => isPrerenderJob(j.jobType));
+
   let sections: string[] = [];
-  for (let inCategory of [
-    (jobType: string) => !isPrerenderJob(jobType),
-    isPrerenderJob,
-  ]) {
-    let categoryJobs = jobs.filter((j) => inCategory(j.jobType));
-    if (categoryJobs.length > 0) {
-      sections.push(...categoryJobs.map(renderJobSection));
-    } else {
-      let finished = history.find(
-        (h) => h.realmURL === realmURL && inCategory(h.jobType),
-      );
-      if (finished) {
-        sections.push(renderFinishedLine(finished));
-      }
+  if (indexJobs.length > 0) {
+    sections.push(...indexJobs.map(renderJobSection));
+  } else {
+    // A prerender job is what's keeping this card alive, and the index
+    // pass that spawned it has already finished — show that pass as a
+    // compact ✓ line (from the event sink's history) so the realm reads
+    // as one story: "index ✓, prerender 40/93". There is no mirror-image
+    // line for a finished prerender while an index pass runs: that
+    // prerender belongs to the previous run, and a ✓ next to a running
+    // index would read as if this run's HTML were already done.
+    let finished = history.find(
+      (h) => h.realmURL === realmURL && !isPrerenderJob(h.jobType),
+    );
+    if (finished) {
+      sections.push(renderFinishedLine(finished));
     }
   }
+  sections.push(...prerenderJobs.map(renderJobSection));
 
   return `
     <div class="realm-card indexing">

@@ -165,15 +165,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a realm with only an index job and no prerender history renders one plain section', function (assert) {
+    test('a running index pass never shows a finished-prerender ✓ line', function (assert) {
       let html = snapshot({
         active: [jobState()],
         history: [
+          // Same realm — but this prerender belongs to the previous run,
+          // and a ✓ next to a running index would read as if this run's
+          // HTML were already done.
           jobState({
             jobId: 2,
             jobType: 'prerender_html',
             status: 'finished',
-            realmURL: realmB,
           }),
         ],
       });
@@ -181,7 +183,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         count(html, 'class="job-done"'),
         0,
-        'no ✓ line without a matching finished pass for this realm',
+        'the ✓ fallback is one-directional: finished index under a running prerender only',
       );
     });
 
