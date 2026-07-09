@@ -28,7 +28,7 @@ name: Realm Sync
 description: Sync workspace files
 boxel:
   kind: skill
-  commands:
+  tools:
     - codeRef:
         module: '@cardstack/boxel-host/commands/realm-sync'
         name: SyncCommand
@@ -137,14 +137,14 @@ module('Integration | markdown skill search', function (hooks) {
       'frontmatter rehydrated as SkillFrontmatterField, not the base FrontmatterField',
     );
     assert.strictEqual(
-      instance.frontmatter.commands.length,
+      instance.frontmatter.tools.length,
       1,
-      'typed commands survive the realm file-meta read',
+      'typed tools survive the realm file-meta read',
     );
     assert.strictEqual(
-      instance.frontmatter.commands[0].codeRef.name,
+      instance.frontmatter.tools[0].codeRef.name,
       'SyncCommand',
-      'command codeRef survives the realm file-meta read',
+      'tool codeRef survives the realm file-meta read',
     );
   });
 });

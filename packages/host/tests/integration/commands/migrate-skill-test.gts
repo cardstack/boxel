@@ -164,7 +164,7 @@ export class DoThingQuietly extends Command {
     );
     assert.strictEqual(data.boxel.kind, 'skill', 'boxel.kind is skill');
     assert.deepEqual(
-      data.boxel.commands,
+      data.boxel.tools,
       [
         {
           codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
@@ -175,7 +175,7 @@ export class DoThingQuietly extends Command {
           requiresApproval: false,
         },
       ],
-      'commands round-trip into boxel.commands, preserving an explicit requiresApproval: false',
+      'commands round-trip into boxel.tools, preserving an explicit requiresApproval: false',
     );
     assert.strictEqual(
       body.trim(),
@@ -184,7 +184,7 @@ export class DoThingQuietly extends Command {
     );
   });
 
-  test('omits boxel.commands when the skill has none', async function (assert) {
+  test('omits boxel.tools when the skill has none', async function (assert) {
     let commandContext = getService('command-service').commandContext;
     let cardService = getService('card-service');
     let command = new MigrateSkillCommand(commandContext);
@@ -199,10 +199,7 @@ export class DoThingQuietly extends Command {
       ).content,
     );
     assert.strictEqual(data.boxel.kind, 'skill', 'boxel.kind is skill');
-    assert.notOk(
-      'commands' in data.boxel,
-      'no commands key when the skill has none',
-    );
+    assert.notOk('tools' in data.boxel, 'no tools key when the skill has none');
   });
 
   test('reports skills with no instructions instead of writing an empty file', async function (assert) {

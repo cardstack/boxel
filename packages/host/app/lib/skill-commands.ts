@@ -9,8 +9,8 @@ import type StoreService from '../services/store';
 
 // A skill is either a `Skill` card (commands on `Skill.commands`) or a
 // markdown file whose `boxel.kind: skill` frontmatter rehydrates as a
-// `SkillFrontmatterField` (commands on `MarkdownDef.frontmatter.commands`).
-// Both `commands` fields are `containsMany(CommandField)`, so once gathered the
+// `SkillFrontmatterField` (tools on `MarkdownDef.frontmatter.tools`).
+// Both fields are `containsMany(CommandField)`, so once gathered the
 // `CommandField` instances feed the command-definition upload flow identically.
 export type SkillSource = SkillModule.Skill | MarkdownDef;
 
@@ -47,11 +47,18 @@ export function getSkillSourceCommands(
   }
   if (isSkillMarkdown(instance)) {
     // For `boxel.kind: skill`, `frontmatter` is a `SkillFrontmatterField` whose
-    // `commands` is the same `containsMany(CommandField)` as `Skill.commands`.
+    // `tools` is the same `containsMany(CommandField)` as `Skill.commands`.
+    // Index rows extracted before the command → tool rename carry the value
+    // under the legacy `commands` field instead; fall back until all realms
+    // have reindexed.
     let frontmatter = instance.frontmatter as {
+      tools?: SkillModule.CommandField[];
       commands?: SkillModule.CommandField[];
     } | null;
-    return frontmatter?.commands ?? [];
+    // `tools` is a containsMany, so a rehydrated pre-rename row yields [] (not
+    // undefined) — an empty-check, not `??`, is what routes to the fallback.
+    let tools = frontmatter?.tools;
+    return tools?.length ? tools : (frontmatter?.commands ?? []);
   }
   return [];
 }

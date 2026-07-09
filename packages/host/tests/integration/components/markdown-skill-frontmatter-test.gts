@@ -9,7 +9,7 @@
 //      (SkillFrontmatterField) via the file-field-meta symbol.
 //   3. The write→read round-trip (extractor lift → buildFileResource →
 //      createFromSerialized) rehydrates `frontmatter` as a SkillFrontmatterField
-//      with its commands intact.
+//      with its tools intact.
 //   4. Plain markdown (no frontmatter) is unaffected.
 
 import { getService } from '@universal-ember/test-support';
@@ -43,7 +43,7 @@ name: Realm Sync
 description: Sync workspace files
 boxel:
   kind: skill
-  commands:
+  tools:
     - codeRef:
         module: '@cardstack/boxel-host/commands/realm-sync'
         name: SyncCommand
@@ -53,6 +53,10 @@ boxel:
 
 Body paragraph.
 `;
+
+// The pre-rename spelling of the tools key. Files authored before the
+// command → tool rename keep working via the fromFrontmatter fallback.
+const LEGACY_SKILL_MD = SKILL_MD.replace('  tools:', '  commands:');
 
 module('Integration | markdown skill frontmatter', function (hooks) {
   setupRenderingTest(hooks);
@@ -91,9 +95,9 @@ module('Integration | markdown skill frontmatter', function (hooks) {
     assert.strictEqual(data.name, 'Realm Sync', 'top-level name parsed');
     assert.strictEqual((data.boxel as any).kind, 'skill', 'boxel.kind parsed');
     assert.strictEqual(
-      (data.boxel as any).commands[0].codeRef.name,
+      (data.boxel as any).tools[0].codeRef.name,
       'SyncCommand',
-      'nested boxel.commands codeRef parsed',
+      'nested boxel.tools codeRef parsed',
     );
     assert.true(
       body.startsWith('# Realm Sync'),
@@ -143,8 +147,8 @@ module('Integration | markdown skill frontmatter', function (hooks) {
       'typed name sourced from shared top-level name',
     );
     assert.true(
-      attrs.frontmatter.commands[0].requiresApproval,
-      'typed commands sourced from the boxel namespace',
+      attrs.frontmatter.tools[0].requiresApproval,
+      'typed tools sourced from the boxel namespace',
     );
 
     let routed = (attrs as Record<PropertyKey, any>)[FILE_FIELD_META];
@@ -155,7 +159,30 @@ module('Integration | markdown skill frontmatter', function (hooks) {
     );
   });
 
-  test('write -> read round-trip rehydrates frontmatter as SkillFrontmatterField with commands', async function (assert) {
+  test('the legacy boxel.commands key still parses into typed tools', async function (assert) {
+    let { MarkdownDef, SkillFrontmatterField } = await loadBase();
+    let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
+    let attrs = await MarkdownDef.extractAttributes(
+      url,
+      streamOf(LEGACY_SKILL_MD),
+      {},
+    );
+
+    assert.strictEqual(attrs.kind, 'skill', 'kind still extracted');
+    assert.strictEqual(
+      attrs.frontmatter.tools[0].codeRef.name,
+      'SyncCommand',
+      'legacy boxel.commands entries land on the tools field',
+    );
+    let routed = (attrs as Record<PropertyKey, any>)[FILE_FIELD_META];
+    assert.deepEqual(
+      routed?.frontmatter?.adoptsFrom,
+      identifyCard(SkillFrontmatterField),
+      'legacy key still routes the SkillFrontmatterField marker',
+    );
+  });
+
+  test('write -> read round-trip rehydrates frontmatter as SkillFrontmatterField with tools', async function (assert) {
     let { MarkdownDef, SkillFrontmatterField } = await loadBase();
     let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
     let attrs = await MarkdownDef.extractAttributes(
@@ -204,14 +231,61 @@ module('Integration | markdown skill frontmatter', function (hooks) {
       'rawContent survives round-trip',
     );
     assert.strictEqual(
-      instance.frontmatter.commands.length,
+      instance.frontmatter.tools.length,
       1,
-      'commands survive round-trip',
+      'tools survive round-trip',
+    );
+    assert.strictEqual(
+      instance.frontmatter.tools[0].codeRef.name,
+      'SyncCommand',
+      'tool codeRef survives round-trip',
+    );
+  });
+
+  test('a pre-rename index row (frontmatter.commands attribute) rehydrates via the legacy field', async function (assert) {
+    let { MarkdownDef, SkillFrontmatterField } = await loadBase();
+    let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
+    let attrs = await MarkdownDef.extractAttributes(
+      url,
+      streamOf(SKILL_MD),
+      {},
+    );
+
+    let cleaned: Record<string, any> = { ...attrs };
+    let cleanedBag = cleaned as Record<PropertyKey, any>;
+    let fieldsMeta = cleanedBag[FILE_FIELD_META];
+    delete cleanedBag[FILE_FIELD_META];
+    // Rows extracted before the command → tool rename persisted the value
+    // under a `commands` attribute; simulate one by moving the key.
+    cleaned.frontmatter = { ...cleaned.frontmatter };
+    cleaned.frontmatter.commands = cleaned.frontmatter.tools;
+    delete cleaned.frontmatter.tools;
+
+    let resource = buildFileResource(
+      url,
+      cleaned,
+      identifyCard(MarkdownDef)!,
+      undefined,
+      fieldsMeta,
+    );
+    let instance: any = await createFromSerialized(
+      resource as any,
+      { data: resource } as any,
+      undefined,
+    );
+    assert.true(
+      instance.frontmatter instanceof SkillFrontmatterField,
+      'frontmatter still rehydrates as SkillFrontmatterField',
+    );
+    assert.strictEqual(
+      instance.frontmatter.tools.length,
+      0,
+      'the tools field is empty on a pre-rename row',
     );
     assert.strictEqual(
       instance.frontmatter.commands[0].codeRef.name,
       'SyncCommand',
-      'command codeRef survives round-trip',
+      'the legacy commands field carries the value until the realm reindexes',
     );
   });
 
@@ -221,7 +295,7 @@ module('Integration | markdown skill frontmatter', function (hooks) {
     // Unterminated flow mapping — valid `---` fences, invalid YAML inside.
     let badMarkdown = `---
 name: Bad Skill
-boxel: { kind: skill, commands: [
+boxel: { kind: skill, tools: [
 ---
 # Bad Skill
 

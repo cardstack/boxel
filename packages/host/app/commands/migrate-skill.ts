@@ -14,8 +14,8 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 // A single command in the migrated frontmatter — the same shape
-// `SkillFrontmatterField.commands` (a `containsMany(CommandField)`) parses back
-// out of `boxel.commands`.
+// `SkillFrontmatterField.tools` (a `containsMany(CommandField)`) parses back
+// out of `boxel.tools`.
 interface FrontmatterCommand {
   codeRef: { module: string; name: string };
   // Always emitted explicitly. The host auto-executes a command only when
@@ -152,7 +152,7 @@ files with boxel.kind: skill frontmatter.`;
   }
 
   private buildSkillMarkdown(skill: Skill, body: string): string {
-    let commands = (skill.commands ?? []).reduce<FrontmatterCommand[]>(
+    let tools = (skill.commands ?? []).reduce<FrontmatterCommand[]>(
       (acc, command) => {
         let module = command.codeRef?.module;
         let name = command.codeRef?.name;
@@ -168,13 +168,13 @@ files with boxel.kind: skill frontmatter.`;
     );
 
     // Shared top-level keys (read byte-for-byte by Claude Code) first, then the
-    // Boxel-only `boxel:` namespace that carries `kind` and `commands`.
+    // Boxel-only `boxel:` namespace that carries `kind` and `tools`.
     let frontmatter: Record<string, unknown> = {
       name: skill.cardTitle ?? '',
       description: skill.cardDescription ?? '',
       boxel: {
         kind: 'skill',
-        ...(commands.length > 0 ? { commands } : {}),
+        ...(tools.length > 0 ? { tools } : {}),
       },
     };
 
