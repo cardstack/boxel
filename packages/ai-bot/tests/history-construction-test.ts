@@ -1,9 +1,9 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 import {
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common';
 import {
@@ -507,16 +507,16 @@ module('constructHistory', (hooks) => {
 
     const eventlist: IRoomEvent[] = [
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@tintinthong:localhost',
         content: {
           'm.relates_to': {
             event_id: 'command-event-id-1',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'tool-call-id-1',
           data: JSON.stringify({
             card: {
@@ -539,16 +539,16 @@ module('constructHistory', (hooks) => {
     const result = await constructHistory(eventlist, fakeMatrixClient);
     assert.deepEqual(result, [
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@tintinthong:localhost',
         content: {
           'm.relates_to': {
             event_id: 'command-event-id-1',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'tool-call-id-1',
           data: {
             card: {

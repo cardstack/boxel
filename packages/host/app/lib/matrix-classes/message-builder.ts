@@ -14,11 +14,12 @@ import {
   decodeCommandRequest,
 } from '@cardstack/runtime-common/commands';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  getToolRequests,
+  isToolResultEventType,
+  isToolResultRelType,
+  isToolResultWithNoOutputMsgtype,
+  isToolResultWithOutputContent,
+  isToolResultWithOutputMsgtype,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -49,6 +50,7 @@ import type {
   CodePatchResultEvent,
   DebugMessageEvent,
   CommandResultEvent,
+  EncodedCommandRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -183,7 +185,7 @@ export default class MessageBuilder {
       message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
-      if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
+      if (getToolRequests(event.content)) {
         message.setCommands(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
@@ -244,9 +246,9 @@ export default class MessageBuilder {
     }
 
     let encodedCommandRequests =
-      (this.event.content as CardMessageContent)[
-        APP_BOXEL_COMMAND_REQUESTS_KEY
-      ] ?? [];
+      getToolRequests<Partial<EncodedCommandRequest>>(
+        this.event.content as CardMessageContent,
+      ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
       let command = message.commands.find(
         (c) => c.commandRequest.id === encodedCommandRequest.id,
@@ -272,10 +274,8 @@ export default class MessageBuilder {
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
       let event = this.builderContext.commandResultEvent;
       if (
-        event.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-        event.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+        isToolResultWithOutputMsgtype(event.content.msgtype) ||
+        isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
         let messageCommand = message.commands.find(
@@ -284,11 +284,11 @@ export default class MessageBuilder {
         if (messageCommand) {
           messageCommand.commandStatus = event.content['m.relates_to']
             .key as CommandStatus;
-          messageCommand.commandResultFileDef =
-            event.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-              ? event.content.data.card
-              : undefined;
+          messageCommand.commandResultFileDef = isToolResultWithOutputContent(
+            event.content,
+          )
+            ? event.content.data.card
+            : undefined;
           messageCommand.failureReason = event.content.failureReason;
         }
       }
@@ -301,7 +301,8 @@ export default class MessageBuilder {
 
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
-    let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let commandRequests =
+      getToolRequests<Partial<EncodedCommandRequest>>(eventContent);
     if (!commandRequests) {
       return new TrackedArray<MessageCommand>();
     }
@@ -332,8 +333,8 @@ export default class MessageBuilder {
         // across edits and present on every one, so it resolves the command on
         // both the live and reload paths.
         return (
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          r?.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          isToolResultEventType(e.type) &&
+          isToolResultRelType(r?.rel_type) &&
           e.content.commandRequestId === commandRequest.id
         );
       }) as CommandResultEvent | undefined);
@@ -404,8 +405,8 @@ export default class MessageBuilder {
       requiresApproval,
       actionVerb,
       commandStatus,
-      commandResultEvent?.content.msgtype ===
-        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+      commandResultEvent &&
+        isToolResultWithOutputContent(commandResultEvent.content)
         ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,

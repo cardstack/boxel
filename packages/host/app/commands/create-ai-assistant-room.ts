@@ -205,7 +205,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
               disabledSkillCards: disabled.fileDefs.map((fileDef) =>
                 fileDef.serialize(),
               ),
-              commandDefinitions: commandFileDefs.map((commandFileDef) =>
+              toolDefinitions: commandFileDefs.map((commandFileDef) =>
                 commandFileDef.serialize(),
               ),
             },

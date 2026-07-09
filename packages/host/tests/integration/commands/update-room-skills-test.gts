@@ -228,7 +228,7 @@ Instructions live in the markdown body.
         'no skills are disabled',
       );
       assert.ok(
-        skillsRoomState.commandDefinitions.length > 0,
+        skillsRoomState.toolDefinitions.length > 0,
         'command definitions populated',
       );
       let uploadedContents = mockMatrixUtils.getUploadedContents();
@@ -281,7 +281,7 @@ Instructions live in the markdown body.
         'skill added to disabled list',
       );
       assert.strictEqual(
-        skillsRoomState.commandDefinitions.length,
+        skillsRoomState.toolDefinitions.length,
         0,
         'command definitions cleared when no skills enabled',
       );
@@ -334,7 +334,7 @@ Instructions live in the markdown body.
         'skill removed from disabled list',
       );
       assert.ok(
-        skillsRoomState.commandDefinitions.length > 0,
+        skillsRoomState.toolDefinitions.length > 0,
         'command definitions restored for reactivated skill',
       );
       let uploadedContents = mockMatrixUtils.getUploadedContents();
@@ -398,7 +398,7 @@ Instructions live in the markdown body.
         'no skills are disabled',
       );
 
-      let commandDefSourceUrls = skillsRoomState.commandDefinitions.map(
+      let commandDefSourceUrls = skillsRoomState.toolDefinitions.map(
         (def: any) => def.sourceUrl,
       );
       assert.deepEqual(
@@ -433,7 +433,7 @@ Instructions live in the markdown body.
       );
       // Both skills point at the same command; deduped by functionName to one.
       assert.deepEqual(
-        skillsRoomState.commandDefinitions.map((def: any) => def.sourceUrl),
+        skillsRoomState.toolDefinitions.map((def: any) => def.sourceUrl),
         [`${testRealmURL}test-command.gts/DoThing`],
         'the shared command is uploaded once across both skill sources',
       );

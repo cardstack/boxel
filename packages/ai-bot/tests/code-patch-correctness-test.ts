@@ -7,7 +7,7 @@ import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common
 import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import {
   decodeCommandRequest,
@@ -71,7 +71,7 @@ module('code patch correctness helpers', () => {
       'Should forward the context with the message',
     );
 
-    let encodedRequests = content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = content[APP_BOXEL_TOOL_REQUESTS_KEY];
     assert.true(
       Array.isArray(encodedRequests),
       'Command requests should be present',
@@ -150,7 +150,7 @@ module('code patch correctness helpers', () => {
     await publishCodePatchCorrectnessMessage(summary, client);
 
     let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
     let decodedRequests = encodedRequests.map((request: any) =>
       decodeCommandRequest(request),
     );
@@ -207,7 +207,7 @@ module('code patch correctness helpers', () => {
     await publishCodePatchCorrectnessMessage(summary, client);
 
     let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
     assert.notOk(
       encodedRequests,
       'Targets beyond the attempt limit should not emit correctness requests',

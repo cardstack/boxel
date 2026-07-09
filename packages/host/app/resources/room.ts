@@ -20,9 +20,10 @@ import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  getToolRequests,
+  isToolResultRelType,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
@@ -200,7 +201,8 @@ export class RoomResource extends Resource<Args> {
           case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
             await this.loadRoomMessage({ roomId, event, index });
             break;
-          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
+          case LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             await this.updateMessageCommandResult({ roomId, event, index });
             break;
           case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
@@ -734,7 +736,7 @@ export class RoomResource extends Resource<Args> {
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.some(
+        getToolRequests(e.content)?.some(
           (cr: any) => cr.id === event.content.commandRequestId,
         ),
     ) as CardMessageEvent | undefined;
@@ -820,8 +822,7 @@ export class RoomResource extends Resource<Args> {
     }
 
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
-      event.content['m.relates_to']?.rel_type ===
-        APP_BOXEL_COMMAND_RESULT_REL_TYPE
+      isToolResultRelType(event.content['m.relates_to']?.rel_type)
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }

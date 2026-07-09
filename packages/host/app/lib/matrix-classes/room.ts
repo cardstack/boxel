@@ -6,6 +6,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  getToolDefinitions,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -95,7 +96,7 @@ export default class Room {
       disabledSkillCards: content.disabledSkillCards
         ? content.disabledSkillCards
         : [],
-      commandDefinitions: content.commandDefinitions ?? [],
+      commandDefinitions: getToolDefinitions<SerializedFile>(content) ?? [],
     } as {
       enabledSkillCards: SerializedFile[];
       disabledSkillCards: SerializedFile[];

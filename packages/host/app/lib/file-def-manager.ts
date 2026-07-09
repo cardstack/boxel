@@ -11,6 +11,7 @@ import {
   baseRealm,
   codeRefWithAbsoluteIdentifier,
   getClass,
+  getToolDefinitions,
   inferContentType,
   SupportedMimeType,
   relativeTo,
@@ -696,7 +697,7 @@ export default class FileDefManagerImpl
       const skillsAndCommands = [
         ...(skillsContent.enabledSkillCards || []),
         ...(skillsContent.disabledSkillCards || []),
-        ...(skillsContent.commandDefinitions || []),
+        ...(getToolDefinitions<SerializedFile>(skillsContent) || []),
       ];
 
       for (const skillOrCommand of skillsAndCommands) {
