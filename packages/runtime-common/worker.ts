@@ -287,6 +287,7 @@ export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
 ): Reader {
+  let readerLog = logger('worker');
   let parseResponseMetadata = (
     response: Response,
     url: URL,
@@ -332,12 +333,29 @@ export function getReader(
         return undefined;
       }
       let content: string;
-      if ('nodeStream' in response && response.nodeStream) {
-        content = await fileContentToText({
-          content: response.nodeStream,
-        });
-      } else {
-        content = await response.text();
+      try {
+        if ('nodeStream' in response && response.nodeStream) {
+          content = await fileContentToText({
+            content: response.nodeStream,
+          });
+        } else {
+          content = await response.text();
+        }
+      } catch (err: any) {
+        // An in-process realm serves file bodies as lazy node streams: the
+        // realm checks existence when it builds the response, but the
+        // underlying open() happens only when we consume the body here. A
+        // file deleted in that window surfaces as an ENOENT on the body
+        // read even though the response itself was ok. That is a
+        // not-found, same as the !response.ok branch above — callers
+        // already treat undefined as "file no longer exists".
+        if (err?.code === 'ENOENT') {
+          readerLog.info(
+            `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
+          );
+          return undefined;
+        }
+        throw err;
       }
       let { lastModified, created, path } = parseResponseMetadata(
         response,

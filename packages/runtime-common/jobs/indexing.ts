@@ -67,7 +67,15 @@ export function mapIncrementalDoneResult(
   return (result: PgPrimitive) => {
     let parsedResult = parseIncrementalResult(result);
     if (!parsedResult) {
-      throw result;
+      // `result` is either a serialized worker error (rejected job) or a
+      // malformed success payload — a plain object either way. Wrap it in a
+      // real Error so downstream logs show the detail instead of
+      // "[object Object]" and instanceof-Error handling applies.
+      throw new Error(
+        `incremental-index job did not produce a usable result: ${JSON.stringify(
+          result,
+        )}`,
+      );
     }
     return {
       ...parsedResult,

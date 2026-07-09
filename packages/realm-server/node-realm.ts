@@ -18,7 +18,7 @@ import type { LocalPath } from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
-import type { ReadStream } from 'fs-extra';
+import type { ReadStream, Stats } from 'fs-extra';
 import fsExtra from 'fs-extra';
 const {
   readdirSync,
@@ -44,6 +44,20 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { createJWT, verifyJWT } from './jwt.ts';
 
 const realmEventsLog = logger('realm:events');
+
+// A concurrent delete can remove a file between an existence check and the
+// stat call, so treat a vanished file as nonexistent rather than letting the
+// raw ENOENT escape.
+function statIfExists(absolutePath: string): Stats | undefined {
+  try {
+    return statSync(absolutePath);
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      return undefined;
+    }
+    throw err;
+  }
+}
 
 function parseMatrixSendEventError(error: unknown): {
   status?: number;
@@ -184,12 +198,9 @@ export class NodeAdapter implements RealmAdapter {
 
   async lastModified(path: string): Promise<number | undefined> {
     let absolutePath = join(this.realmDir, path);
-    if (!existsSync(absolutePath)) {
-      return undefined;
-    }
-    let stat = statSync(absolutePath);
-    // Case-insensitive file systems need this check
-    if (stat.isDirectory()) {
+    let stat = statIfExists(absolutePath);
+    // The directory check covers case-insensitive file systems
+    if (!stat || stat.isDirectory()) {
       return undefined;
     }
 
@@ -198,12 +209,9 @@ export class NodeAdapter implements RealmAdapter {
 
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
-    if (!existsSync(absolutePath)) {
-      return undefined;
-    }
-    let stat = statSync(absolutePath);
-    // Case-insensitive file systems need this check
-    if (stat.isDirectory()) {
+    let stat = statIfExists(absolutePath);
+    // The directory check covers case-insensitive file systems
+    if (!stat || stat.isDirectory()) {
       return undefined;
     }
     let lazyStream: ReadStream;
