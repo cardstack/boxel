@@ -53,6 +53,18 @@ function isJwtNearExpiry(
 export const NO_ACTIVE_PROFILE_ERROR =
   'No active profile. Run `boxel profile add` to create one.';
 
+/**
+ * Bootstrap realms (the base realm) are registered — and tokened by
+ * `_realm-auth` — under a `https://cardstack.com/<name>/` alias, but are
+ * served over HTTP at `<realm-server>/<name>/`. Returns the `<name>` for
+ * an aliased realm URL so token lookup can mirror the realm server's own
+ * aliasing; undefined for every other realm URL.
+ */
+function aliasedRealmName(realmUrl: string): string | undefined {
+  let match = realmUrl.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+  return match?.[1];
+}
+
 export interface Profile {
   displayName: string;
   matrixUrl: string;
@@ -539,12 +551,19 @@ export class ProfileManager implements RealmAuthenticator {
 
   private findRealmTokenForUrl(url: string): string | undefined {
     let active = this.getActiveProfile();
-    let realmTokens = active?.profile.realmTokens;
-    if (!realmTokens) {
+    if (!active?.profile.realmTokens) {
       return undefined;
     }
-    for (let [realmUrl, token] of Object.entries(realmTokens)) {
-      if (url.startsWith(realmUrl) && token) {
+    let serverUrl = active.profile.realmServerUrl.replace(/\/+$/, '') + '/';
+    for (let [realmUrl, token] of Object.entries(active.profile.realmTokens)) {
+      if (!token) {
+        continue;
+      }
+      if (url.startsWith(realmUrl)) {
+        return token;
+      }
+      let aliasedName = aliasedRealmName(realmUrl);
+      if (aliasedName && url.startsWith(`${serverUrl}${aliasedName}/`)) {
         return token;
       }
     }
