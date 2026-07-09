@@ -344,7 +344,7 @@ module('Integration | markdown-embed-preview', function (hooks) {
       .hasText('Linked card failed to load');
   });
 
-  test('a broken file ref is labelled by its filename', async function (assert) {
+  test('a broken file ref is labelled by its filename and reads as a file, not a card', async function (assert) {
     let brokenUrl = `${testRealmURL}files/notes.md`;
     let errorDoc = {
       status: 404,
@@ -358,6 +358,7 @@ module('Integration | markdown-embed-preview', function (hooks) {
           <MarkdownEmbedPreview
             @brokenUrl={{brokenUrl}}
             @brokenTypeName='notes.md'
+            @brokenNoun='file'
             @errorDoc={{errorDoc}}
             @brokenState='not-found'
             @format='embedded'
@@ -366,6 +367,9 @@ module('Integration | markdown-embed-preview', function (hooks) {
       </template>,
     );
     assert.dom('[data-test-broken-link-type]').hasText('notes.md');
+    assert
+      .dom('[data-test-broken-link-headline]')
+      .hasText('Linked file not found', 'the overlay headline names a file');
   });
 
   test('a fitted broken ref takes the picked tile footprint and does not clip its overlay', async function (assert) {

@@ -236,6 +236,13 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
       : cardTypeName(this.selectedUrl);
   }
 
+  // Drives the broken-ref overlay headline ("Linked file not found" vs the
+  // card wording) so a broken `:file[...]` ref doesn't read as a card.
+  private get brokenNoun(): string | undefined {
+    if (!this.selectedError) return undefined;
+    return this.args.refType === 'file' ? 'file' : 'card';
+  }
+
   @action
   private handleInsert(bfm: string) {
     let url = this.currentUrl;
@@ -326,6 +333,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             @brokenUrl={{this.brokenUrl}}
             @brokenState={{this.brokenState}}
             @brokenTypeName={{this.brokenTypeName}}
+            @brokenNoun={{this.brokenNoun}}
             @errorDoc={{this.brokenErrorDoc}}
           />
         {{else}}

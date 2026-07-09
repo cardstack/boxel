@@ -42,6 +42,11 @@ export interface BrokenLinkTemplateArgs {
   brokenUrl: string;
   errorDoc: BrokenLinkErrorDoc;
   format: BrokenLinkFormat;
+  // The kind of reference, used only for the reveal-overlay headline
+  // ("Linked card not found" vs "Linked file not found"). `linksTo` field
+  // sites are always cards; the BFM chooser passes 'file' for `:file[...]`
+  // refs. Falls back to 'card' when omitted.
+  noun?: string;
   state: BrokenLinkState;
   // Human-readable label shown next to the link-off icon. Card sites pass the
   // card type name; the BFM file chooser passes the filename. Falls back to
@@ -137,10 +142,14 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return this.args.state === 'not-found';
   }
 
+  private get noun(): string {
+    return this.args.noun ?? 'card';
+  }
+
   private get headline() {
     return this.isNotFound
-      ? 'Linked card not found'
-      : 'Linked card failed to load';
+      ? `Linked ${this.noun} not found`
+      : `Linked ${this.noun} failed to load`;
   }
 
   private get statusLabel(): string {

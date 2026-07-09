@@ -118,4 +118,25 @@ module('Integration | Component | broken-link', function (hooks) {
       .includesText('500')
       .includesText('Internal Server Error');
   });
+
+  test('the headline noun defaults to "card" and honors an override', async function (assert) {
+    await render(
+      <template>
+        <BrokenLinkTemplate
+          @brokenUrl={{BROKEN_URL}}
+          @errorDoc={{notFoundDoc}}
+          @state='not-found'
+          @format='embedded'
+          @typeName='notes.md'
+          @noun='file'
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-broken-link-headline]')
+      .hasText(
+        'Linked file not found',
+        'the supplied noun drives the headline',
+      );
+  });
 });

@@ -12,6 +12,7 @@ import BrokenLinkTemplate, {
 export default class BrokenLinkUsage extends Component {
   @tracked brokenUrl = 'https://example.com/realm/Author/exploded-card-id';
   @tracked typeName = 'Author';
+  @tracked noun = 'card';
   @tracked state: BrokenLinkState = 'not-found';
   @tracked format: BrokenLinkFormat = 'embedded';
 
@@ -54,6 +55,7 @@ export default class BrokenLinkUsage extends Component {
           <BrokenLinkTemplate
             @brokenUrl={{this.brokenUrl}}
             @typeName={{this.typeName}}
+            @noun={{this.noun}}
             @errorDoc={{this.errorDoc}}
             @state={{this.state}}
             @format={{this.format}}
@@ -74,6 +76,14 @@ export default class BrokenLinkUsage extends Component {
           @description="Human-readable label next to the link-off icon — the card type name, or a filename for file refs. Falls back to 'Card'."
           @value={{this.typeName}}
           @onInput={{fn (mut this.typeName)}}
+        />
+        <Args.String
+          @name='noun'
+          @optional={{true}}
+          @description="The reference kind, used only for the overlay headline ('Linked card not found' vs 'Linked file not found'). Falls back to 'card'."
+          @options={{array 'card' 'file'}}
+          @value={{this.noun}}
+          @onInput={{fn (mut this.noun)}}
         />
         <Args.String
           @name='state'

@@ -304,20 +304,57 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
       )
       .exists('the current-target tile renders for the broken preload');
-    // The label falls back to the ref (no title to show). It renders either the
-    // full URL or, when the ref is in the currently-open realm, its realm-
-    // relative path — both end in the ref's path, so match on that.
+    // The label falls back to the ref (no title to show). The ref lives in the
+    // currently-open realm (testRealmURL), so it collapses to its realm-
+    // relative path rather than the absolute URL.
     assert
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
       )
-      .includesText('books/ghost', 'the label falls back to the broken ref');
+      .hasText(
+        'books/ghost',
+        'an in-realm broken ref labels as its realm-relative path',
+      );
     assert
       .dom('[data-test-markdown-embed-chooser-remove]')
       .exists('Remove is available');
     assert
       .dom('[data-test-markdown-embed-chooser-replace]')
       .exists('Replace is available');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('a broken ref outside the current realm keeps its full URL as the label', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // A broken ref in the base realm — not the currently-open realm
+    // (testRealmURL), so the realm-relative collapse must not apply.
+    let brokenUrl = `${baseRealm.url}ghost-card`;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: brokenUrl,
+      sizeSpec: 'embedded',
+    });
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+      )
+      .hasText(brokenUrl, 'an out-of-realm broken ref keeps its absolute URL');
 
     svc.resolve(undefined);
     await pending;

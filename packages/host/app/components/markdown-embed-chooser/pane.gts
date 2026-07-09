@@ -44,6 +44,7 @@ interface Signature {
     errorDoc?: BrokenLinkErrorDoc;
     brokenState?: BrokenLinkState;
     brokenTypeName?: string;
+    brokenNoun?: string;
     // The shared format/placement/size selection. Owned by the modal and shared
     // across both tabs so the choice survives a tab switch; this pane is a pure
     // view over it plus the resolved target.
@@ -145,6 +146,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
           @target={{@target}}
           @brokenUrl={{@brokenUrl}}
           @brokenTypeName={{@brokenTypeName}}
+          @brokenNoun={{@brokenNoun}}
           @errorDoc={{@errorDoc}}
           @brokenState={{@brokenState}}
           @format={{@selection.previewFormat}}

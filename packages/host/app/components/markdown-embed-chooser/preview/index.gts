@@ -128,6 +128,7 @@ interface Signature {
     errorDoc?: BrokenLinkErrorDoc;
     brokenState?: BrokenLinkState;
     brokenTypeName?: string;
+    brokenNoun?: string;
     // Render format. `fitted` consults `@sizeSpec` for its width/height;
     // atom/embedded/isolated ignore it.
     format: EmbedFormat;
@@ -255,6 +256,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
             <BrokenLinkTemplate
               @brokenUrl={{@brokenUrl}}
               @typeName={{@brokenTypeName}}
+              @noun={{@brokenNoun}}
               @errorDoc={{this.brokenErrorDoc}}
               @state={{this.brokenState}}
               @format={{@format}}
@@ -291,6 +293,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
       <BrokenLinkTemplate
         @brokenUrl={{@brokenUrl}}
         @typeName={{@brokenTypeName}}
+        @noun={{@brokenNoun}}
         @errorDoc={{this.brokenErrorDoc}}
         @state={{this.brokenState}}
         @format={{@format}}
