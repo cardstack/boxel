@@ -13,13 +13,13 @@ import type {
   QueryWithInterpolations,
   RuntimeDependencyTrackingContext,
   SerializedError,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   getField,
   getSingularRelationship,
   identifyCard,
   isCardInstance,
+  rri,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
@@ -147,13 +147,7 @@ export function ensureQueryFieldSearchResource(
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
   let args = () => {
-    let vn = store.virtualNetwork;
-    if (!vn) {
-      throw new Error(
-        `query-field-support requires the CardStore to have a VirtualNetwork`,
-      );
-    }
-    return resolveQueryAndRealm(instance, field, fieldDefinition, vn);
+    return resolveQueryAndRealm(instance, field, fieldDefinition);
   };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
@@ -574,7 +568,6 @@ function resolveQueryAndRealm(
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
-  virtualNetwork: VirtualNetwork,
 ): { realmHref: string; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
@@ -585,6 +578,10 @@ function resolveQueryAndRealm(
     ? field.name.slice(0, field.name.lastIndexOf('.'))
     : undefined;
 
+  // Resolve in RRI space (no VirtualNetwork): the instance's id is canonical
+  // (prefix form for mapped realms, URL otherwise) and is a valid base for
+  // relative code-ref resolution. The index and the client-side filter matcher
+  // both tolerate either spelling in the resulting query.
   let normalized = normalizeQueryDefinition({
     fieldDefinition,
     queryDefinition: field.queryDefinition ?? {},
@@ -593,9 +590,8 @@ function resolveQueryAndRealm(
     fieldPath,
     resolvePathValue: (path) => resolveInstancePathValue(instance, path),
     relativeTo: (instance as CardDef).id
-      ? virtualNetwork.toURL((instance as CardDef).id)
+      ? rri((instance as CardDef).id)
       : realmURL,
-    virtualNetwork,
   });
 
   if (!normalized) {

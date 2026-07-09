@@ -66,6 +66,65 @@ module('normalizeQueryDefinition', function () {
     assert.strictEqual(normalized?.realm, 'https://other.realm/');
   });
 
+  test('resolves in RRI space when no VirtualNetwork is supplied', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let resource: LooseCardResource = {
+      // A prefix-mapped realm's canonical instance id.
+      id: '@scope/realm/cards/1',
+      meta: {
+        adoptsFrom: {
+          module: rri('@scope/realm/base'),
+          name: 'BaseCard',
+        },
+      },
+      attributes: {},
+    };
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          // Relative module: must resolve against the prefix-form id.
+          module: rri('../test-defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+
+    assert.ok(normalized, 'normalization succeeded without a VirtualNetwork');
+    assert.deepEqual(
+      normalized?.query.filter,
+      {
+        type: { module: rri('@scope/realm/test-defs'), name: 'Test' },
+      },
+      'relative module resolved against the prefix-form id, staying in RRI space',
+    );
+
+    // An already-absolute prefix module passes through unchanged.
+    let absolute = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          module: rri('@other/realm/defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+    assert.deepEqual(absolute?.query.filter, {
+      type: { module: rri('@other/realm/defs'), name: 'Test' },
+    });
+  });
+
   test('injects on into leaf filter inside not', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');

@@ -30,8 +30,7 @@ import {
   matchInstanceAgainstFilter,
   makeInstanceComparator,
   logger as runtimeLogger,
-  normalizeQueryForSignature,
-  buildQueryParamValue,
+  canonicalQuerySignature,
   parseSearchURL,
   ri,
   RealmPaths,
@@ -49,6 +48,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import { searchErrorEntry } from '../lib/search-error-entry';
 
+import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
@@ -153,6 +153,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
 export class SearchResource<
   T extends CardDef | FileDef = CardDef,
 > extends Resource<Args<T>> {
+  @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
@@ -356,9 +357,7 @@ export class SearchResource<
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
       if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
-        this.#previousQueryString = buildQueryParamValue(
-          normalizeQueryForSignature(seedQuery),
-        );
+        this.#previousQueryString = this.querySignature(seedQuery);
       }
       this.#previousQuery = query;
       if (seed.realms) {
@@ -396,9 +395,7 @@ export class SearchResource<
         // the recomputed query doesn't sneak a fetch back in.
         this.#previousRealms = realms;
         this.#previousQuery = query;
-        this.#previousQueryString = buildQueryParamValue(
-          normalizeQueryForSignature(query),
-        );
+        this.#previousQueryString = this.querySignature(query);
         return;
       }
     }
@@ -442,7 +439,7 @@ export class SearchResource<
       });
     }
 
-    let queryString = buildQueryParamValue(normalizeQueryForSignature(query));
+    let queryString = this.querySignature(query);
     if (
       isEqual(queryString, this.#previousQueryString) &&
       isEqual(realms, this.#previousRealms)
@@ -462,6 +459,14 @@ export class SearchResource<
     this.#previousQueryString = queryString;
     this.trackStoreLoad(this.search.perform(query), 'search');
   }
+
+  // Spelling-tolerant query identity, so a server-produced seed query
+  // (URL-form refs) and the client's RRI-space rebuild of the same query
+  // compare equal and the seed can satisfy the initial search.
+  private querySignature(query: Query): string {
+    return canonicalQuerySignature(query, this.network.virtualNetwork);
+  }
+
   get isLoading() {
     return this.search.isRunning;
   }

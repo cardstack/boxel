@@ -1,4 +1,5 @@
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { FieldDefinition } from './definitions.ts';
 import type {
@@ -39,8 +40,13 @@ export interface NormalizeQueryDefinitionParams {
   fieldPath?: string;
   resolvePathValue: (path: string) => any;
   resource?: LooseCardResource | FileMetaResource;
-  relativeTo?: URL;
-  virtualNetwork: VirtualNetwork;
+  relativeTo?: RealmResourceIdentifier | URL;
+  // Optional: when supplied, the target code ref and the reference base are
+  // resolved through the VirtualNetwork to real URLs (legacy callers). When
+  // omitted, resolution happens in RRI space — identifiers pass through in
+  // their canonical form (prefix for mapped realms, URL otherwise), which the
+  // search index and the client-side filter matcher both tolerate.
+  virtualNetwork?: VirtualNetwork;
 }
 
 export interface NormalizedQueryDefinitionResult {
@@ -233,11 +239,16 @@ export function normalizeQueryDefinition({
 
   let resolvedRealm = resolveRealm(specifiedRealm);
 
-  let relativeToURL =
-    relativeTo ?? (resource?.id ? virtualNetwork.toURL(resource.id) : realmURL);
+  let relativeToBase: RealmResourceIdentifier | URL =
+    relativeTo ??
+    (resource?.id
+      ? virtualNetwork
+        ? virtualNetwork.toURL(resource.id)
+        : rri(resource.id)
+      : realmURL);
   let targetRef = codeRefWithAbsoluteIdentifier(
     fieldDefinition.fieldOrCard,
-    relativeToURL,
+    relativeToBase,
     undefined,
     virtualNetwork,
   );
