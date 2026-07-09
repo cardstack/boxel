@@ -30,9 +30,9 @@ export interface RealmGenerationInfo {
 // entirely, restricted to live, non-errored rows:
 //   - `is_deleted` rows are tombstones — a deletion's tombstone-render is not
 //     served, so a lagging one is harmless and left to the deletion's own job.
-//   - index-errored rows (`error_doc` set, or a `*-error` type) have no card to
-//     render; the index error is the recorded outcome and surfaces via the
-//     read-side error union regardless of the HTML generation.
+//   - index-errored rows (`has_error` / `error_doc`) have no card to render; the
+//     index error is the recorded outcome and surfaces via the read-side error
+//     union regardless of the HTML generation.
 // Staleness is measured per row against its own `boxel_index.generation`, not
 // against the realm's current generation: a row the latest pass did not revisit
 // keeps its own generation and its HTML at that generation is fresh for it.
@@ -45,8 +45,8 @@ export async function findStalePrerenderedHtmlRows(
      LEFT JOIN prerendered_html ph
        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
      WHERE i.is_deleted IS NOT TRUE
+       AND i.has_error IS NOT TRUE
        AND i.error_doc IS NULL
-       AND i.type NOT LIKE '%-error'
        AND (ph.url IS NULL OR ph.generation < i.generation)`,
   ] as Expression)) as {
     realm_url: string;
