@@ -745,10 +745,15 @@ function buildRendering(
   };
 }
 
-// Strip a trailing `.json` so an entry's id (the bare card URL) matches a
-// prerender_html invalidation (an instance's `.json` file URL); a file's id
-// and invalidation are both bare, so stripping is a no-op there. Comparing the
-// normalized forms matches either shape without knowing which a member is.
+// A prerender_html invalidation names the underlying file (`books/1.json`),
+// which can back TWO result rows: the card instance (id `books/1` — instance
+// ids never carry the extension) and the file-meta row (id `books/1.json` —
+// every file gets a file entry, card JSON included). Stripping a trailing
+// `.json` from both sides lets the one invalidation reach both rows without
+// knowing which kind a member is: the instance row needs the invalidation
+// normalized, and the file row then needs its own id normalized the same way
+// to keep matching. For every other file kind (`notes.md`, `book.gts`) the
+// strip is a no-op and the comparison is exact.
 function stripJsonSuffix(url: string): string {
   return url.replace(/\.json$/, '');
 }
