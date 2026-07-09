@@ -200,6 +200,27 @@ export async function prerenderedHtmlRowFor(
   return rows[0];
 }
 
+// The highest prerender_html job id currently on the realm's HTML channel
+// (0 when the channel is empty). Capture this BEFORE a write, then pass it to
+// settlePrerenderHtmlJobs as `afterJobId`. The index pass enqueues the
+// prerender_html job fire-and-forget, so a settle that runs before that row is
+// inserted would see only the already-resolved jobs left by earlier work (the
+// fixture build settles its own jobs to `resolved`), find them all settled,
+// and return before the new job exists — leaving it free to run and reseed
+// caches afterward. Gating the settle on a job newer than this baseline closes
+// that window.
+export async function maxPrerenderHtmlJobId(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+): Promise<number> {
+  let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
+  let rows = (await query(dbAdapter, [
+    `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs WHERE`,
+    ...every([['concurrency_group =', param(concurrencyGroup)]]),
+  ] as Expression)) as { max_id: number }[];
+  return rows[0]?.max_id ?? 0;
+}
+
 // HTML lands on its own channel: the index pass fires a `prerender_html`
 // job (fire-and-forget) and completes without waiting for it, so a test
 // that writes and then asserts prerendered HTML must settle that channel
@@ -207,12 +228,18 @@ export async function prerenderedHtmlRowFor(
 // group has no unfulfilled jobs and no active reservations, and fails
 // loudly if any of its jobs rejected — a broken render should fail the
 // test, not silently satisfy the wait.
+//
+// Pass `afterJobId` (a baseline from maxPrerenderHtmlJobId captured before the
+// triggering write) when the point of settling is to wait for a job a specific
+// write just spawned: the settle then also holds until a job newer than the
+// baseline is visible, so the fire-and-forget enqueue can't be missed.
 export async function settlePrerenderHtmlJobs(
   dbAdapter: DBAdapter,
   realmURL: string | URL,
-  opts?: { timeout?: number },
+  opts?: { timeout?: number; afterJobId?: number },
 ): Promise<void> {
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
+  let afterJobId = opts?.afterJobId;
   let lastState = '';
   await waitUntil(
     async () => {
@@ -236,6 +263,11 @@ export async function settlePrerenderHtmlJobs(
         );
       }
       lastState = JSON.stringify(rows);
+      if (afterJobId != null && !rows.some((row) => row.id > afterJobId!)) {
+        // The write's job hasn't landed on the channel yet — keep waiting so we
+        // don't settle on stale, already-resolved rows.
+        return false;
+      }
       return rows.every(
         (row) => row.status === 'resolved' && row.active_reservations === 0,
       );
