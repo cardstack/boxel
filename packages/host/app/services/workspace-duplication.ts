@@ -53,7 +53,7 @@ export default class WorkspaceDuplicationService extends Service {
       signal?: AbortSignal;
     },
   ): Promise<URL> {
-    let sourceRealmURL = new URL(ensureTrailingSlash(sourceRealmIdentifier));
+    let sourceRealmURL = this.sourceRealmURL(sourceRealmIdentifier);
     let filePaths = await this.fetchSourceFilePaths(sourceRealmURL);
     opts?.onProgress?.(0, filePaths.length);
 
@@ -78,17 +78,25 @@ export default class WorkspaceDuplicationService extends Service {
       for (let i = 0; i < filePaths.length; i += WRITE_CHUNK_SIZE) {
         throwIfAborted(opts?.signal);
         let chunk = filePaths.slice(i, i + WRITE_CHUNK_SIZE);
-        let operations: AtomicOperation[] = chunk.map((path) => ({
-          // index.json is the one file realm creation seeds that the copy
-          // keeps, so it's updated rather than added.
-          op: path === 'index.json' ? 'update' : 'add',
-          href: path,
-          data: {
-            type: 'source',
-            attributes: { content: contentsByPath.get(path) ?? '' },
-            meta: {},
-          },
-        }));
+        let operations: AtomicOperation[] = chunk.map((path) => {
+          let content = contentsByPath.get(path);
+          if (content === undefined) {
+            throw new Error(
+              `bug: no content was read for '${path}'; refusing to write a corrupted duplicate`,
+            );
+          }
+          return {
+            // index.json is the one file realm creation seeds that the copy
+            // keeps, so it's updated rather than added.
+            op: path === 'index.json' ? ('update' as const) : ('add' as const),
+            href: path,
+            data: {
+              type: 'source' as const,
+              attributes: { content },
+              meta: {},
+            },
+          };
+        });
         let result = await this.cardService.executeAtomicOperations(
           operations,
           newRealmURL,
@@ -168,12 +176,23 @@ export default class WorkspaceDuplicationService extends Service {
     );
   }
 
+  // A RealmIdentifier may be a scoped prefix (e.g. `@cardstack/skills/`)
+  // rather than a URL, so resolve through the virtual network before doing
+  // URL math.
+  private sourceRealmURL(sourceRealmIdentifier: RealmIdentifier): URL {
+    return new URL(
+      ensureTrailingSlash(
+        this.network.virtualNetwork.toURL(sourceRealmIdentifier).href,
+      ),
+    );
+  }
+
   private async createDuplicateRealm(
     sourceRealmIdentifier: RealmIdentifier,
   ): Promise<URL> {
     let sourceEndpoint =
-      new URL(ensureTrailingSlash(sourceRealmIdentifier)).pathname
-        .split('/')
+      this.sourceRealmURL(sourceRealmIdentifier)
+        .pathname.split('/')
         .filter(Boolean)
         .at(-1) ?? 'workspace';
     let {

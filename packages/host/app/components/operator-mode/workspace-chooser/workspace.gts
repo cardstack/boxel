@@ -1721,6 +1721,10 @@ export default class Workspace extends Component<Signature> {
         this.duplicateError = String(error?.message ?? error);
       }
     } finally {
+      // Also runs when the task is cancelled by component teardown; aborting
+      // here makes the service stop copying and clean up rather than carrying
+      // on with no UI attached. A no-op after normal completion.
+      this.duplicateAbortController?.abort();
       this.duplicateProgress = undefined;
       this.duplicateAbortController = undefined;
     }
