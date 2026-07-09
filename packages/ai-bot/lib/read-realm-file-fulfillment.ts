@@ -51,6 +51,9 @@ export interface ReadRealmFileFulfillmentDeps {
 
 export interface ReadRealmFileFulfillmentOutcome {
   commandRequestId: string;
+  // True only when every requested file was read and attached; a partial read
+  // reports ok: false with `error` naming the files that failed, even though
+  // the successful ones were still attached.
   ok: boolean;
   error?: string;
 }
@@ -87,12 +90,16 @@ async function uploadTextToMatrix(
 // Runs each readRealmFile tool call ai-bot owns and publishes its outcome as a
 // command-result event — the same shape a host command result takes, so the
 // existing prompt reconstruction pairs it with the request and feeds it back on
-// the next turn. On success the fetched file is uploaded to Matrix and attached
-// to the result event (data.attachedFiles); the model receives its content via
-// the same attachment-download path host-read files use. On failure the result
-// event carries the reason and resolves the request as invalid, so a failed
-// read reads as failed rather than as a clean read. Returns one outcome per
-// call; never throws (a publish failure is logged so the turn still settles).
+// the next turn. A call names any number of files; they are fetched
+// concurrently (as are the calls themselves) and every file that was read is
+// uploaded to Matrix and attached to the call's single result event
+// (data.attachedFiles); the model receives their content via the same
+// attachment-download path host-read files use. Files that could not be read
+// are named in the result's failureReason: the result stays `applied` while at
+// least one file came back (so the successful content isn't thrown away), and
+// resolves as invalid only when nothing did — either way a partial or failed
+// read never reads as a clean one. Returns one outcome per call; never throws
+// (a publish failure is logged so the turn still settles).
 export async function fulfillReadRealmFileCalls(
   botToolCalls: ChatCompletionMessageToolCall[],
   deps: ReadRealmFileFulfillmentDeps,
@@ -101,14 +108,52 @@ export async function fulfillReadRealmFileCalls(
     deps.uploadText ??
     ((content: string, contentType: string) =>
       uploadTextToMatrix(deps.client, content, contentType));
-  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
-  for (let call of botToolCalls) {
-    if (call.type !== 'function') {
-      continue;
-    }
-    outcomes.push(await fulfillOne(call, deps, upload));
+  return Promise.all(
+    botToolCalls
+      .filter(
+        (call): call is ChatCompletionMessageToolCall & { type: 'function' } =>
+          call.type === 'function',
+      )
+      .map((call) => fulfillOne(call, deps, upload)),
+  );
+}
+
+type FileRead =
+  | { url: string; attachment: Record<string, unknown> }
+  | { url: string; error: string };
+
+// Reads and uploads a single file of a call. An upload failure is folded into
+// the same shape as a read failure so the caller reports both alike.
+async function readAndUpload(
+  url: string,
+  deps: ReadRealmFileFulfillmentDeps,
+  upload: (content: string, contentType: string) => Promise<string>,
+): Promise<FileRead> {
+  let result = await executeReadRealmFile(url, {
+    onBehalfOf: deps.onBehalfOf,
+    delegatedUserRealmSessions: deps.delegatedUserRealmSessions,
+    fetch: deps.fetch,
+  });
+  if (!result.ok) {
+    return { url, error: result.error };
   }
-  return outcomes;
+  let fileUrl: string;
+  try {
+    fileUrl = await upload(result.content, READ_FILE_CONTENT_TYPE);
+  } catch (e: any) {
+    log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
+    return { url, error: `could not store ${url} for reading` };
+  }
+  return {
+    url,
+    attachment: {
+      sourceUrl: url,
+      url: fileUrl,
+      name: fileLabelFromUrl(url) ?? url,
+      contentType: READ_FILE_CONTENT_TYPE,
+      contentSize: Buffer.byteLength(result.content),
+    },
+  };
 }
 
 async function fulfillOne(
@@ -122,32 +167,48 @@ async function fulfillOne(
   } catch {
     args = undefined;
   }
-  if (!args || !args.url) {
-    return await publishFailure(call.id, 'readRealmFile needs a url.', deps);
-  }
-
-  let result = await executeReadRealmFile(args, {
-    onBehalfOf: deps.onBehalfOf,
-    delegatedUserRealmSessions: deps.delegatedUserRealmSessions,
-    fetch: deps.fetch,
-  });
-  if (!result.ok) {
-    return await publishFailure(call.id, result.error, deps);
-  }
-
-  let label = fileLabelFromUrl(args.url) ?? args.url;
-  let fileUrl: string;
-  try {
-    fileUrl = await upload(result.content, READ_FILE_CONTENT_TYPE);
-  } catch (e: any) {
-    log.error(
-      `readRealmFile: upload failed for ${args.url}: ${e?.message ?? e}`,
-    );
+  // Dedupe within the call so a repeated URL doesn't attach (and inline into
+  // every later prompt) twice.
+  let urls = [
+    ...new Set(
+      (Array.isArray(args?.urls) ? args.urls : []).filter(
+        (url): url is string => typeof url === 'string' && url.length > 0,
+      ),
+    ),
+  ];
+  if (urls.length === 0) {
     return await publishFailure(
       call.id,
-      `could not store ${args.url} for reading`,
+      'readRealmFile needs a non-empty list of urls.',
       deps,
     );
+  }
+
+  let reads = await Promise.all(
+    urls.map((url) => readAndUpload(url, deps, upload)),
+  );
+  let attachedFiles = reads
+    .filter(
+      (read): read is Extract<FileRead, { attachment: object }> =>
+        'attachment' in read,
+    )
+    .map((read) => read.attachment);
+  let failureReason =
+    reads
+      .filter(
+        (read): read is Extract<FileRead, { error: string }> => 'error' in read,
+      )
+      // Most read errors already name the file; prefix the ones (e.g. realm
+      // access errors) that don't, so the model knows which URL to retry.
+      .map((read) =>
+        read.error.includes(read.url)
+          ? read.error
+          : `${read.url}: ${read.error}`,
+      )
+      .join('\n') || undefined;
+
+  if (attachedFiles.length === 0) {
+    return await publishFailure(call.id, failureReason!, deps);
   }
 
   await publish(deps, {
@@ -158,20 +219,17 @@ async function fulfillOne(
       key: 'applied',
       event_id: deps.requestEventId,
     },
+    ...(failureReason ? { failureReason } : {}),
     data: {
       context: { agentId: deps.agentId },
-      attachedFiles: [
-        {
-          sourceUrl: args.url,
-          url: fileUrl,
-          name: label,
-          contentType: READ_FILE_CONTENT_TYPE,
-          contentSize: Buffer.byteLength(result.content),
-        },
-      ],
+      attachedFiles,
     },
   });
-  return { commandRequestId: call.id, ok: true };
+  return {
+    commandRequestId: call.id,
+    ok: !failureReason,
+    ...(failureReason ? { error: failureReason } : {}),
+  };
 }
 
 async function publishFailure(
