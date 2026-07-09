@@ -808,6 +808,81 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
+    test('an index event on another realm mid-refresh does not drop the HTML update', async function (assert) {
+      let bookAId = `${testRealmURL}books/1`;
+      let bookBId = `${testRealm2URL}books/other`;
+      let staleDoc = entryCollectionDoc([
+        { id: bookAId, indexGen: 1, htmlGen: 1, html: '<div>Mango v1</div>' },
+        { id: bookBId, indexGen: 1, htmlGen: 1, html: '<div>Paper</div>' },
+      ]);
+      let freshDoc = entryCollectionDoc([
+        { id: bookAId, indexGen: 1, htmlGen: 2, html: '<div>Mango v2</div>' },
+        { id: bookBId, indexGen: 1, htmlGen: 1, html: '<div>Paper</div>' },
+      ]);
+      let fetchedRealms: string[][] = [];
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async (_query, realms) => {
+        fetchedRealms.push([...(realms ?? [])].sort());
+        return fetchedRealms.length === 1 ? staleDoc : freshDoc;
+      };
+
+      // The member GET never resolves, holding the selective refresh mid-GET
+      // so the index event's restart lands while it is in flight.
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return new Promise(() => {});
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { 'item.on': bookRef },
+              realms: [testRealmURL, testRealm2URL],
+            },
+          },
+        }));
+        await search.loaded;
+        assert.strictEqual(search.entries.length, 2);
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => getCount > 0, { timeout: 10_000 });
+
+        // An incremental index event on the OTHER realm restarts the task
+        // while the member GET is in flight. The queued HTML invalidation
+        // must fold into the coarse re-run — not die with the cancelled run.
+        getService('message-service').relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL: testRealm2URL,
+        });
+        await waitUntil(
+          () =>
+            search.entries.find((e) => e.id === bookAId)?.htmlGeneration === 2,
+          { timeout: 10_000 },
+        );
+        await settled();
+
+        assert.deepEqual(
+          fetchedRealms[fetchedRealms.length - 1],
+          [testRealmURL, testRealm2URL].sort(),
+          "the coarse re-run covers the prerender event's realm too",
+        );
+        assert.strictEqual(
+          search.entries.find((e) => e.id === bookAId)?.html[0]?.html,
+          '<div>Mango v2</div>',
+          'the invalidated member picked up the fresh HTML through the fold',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
     test('a non-incremental index event does not re-run the search', async function (assert) {
       let searchCount = 0;
       let originalSearchEntries = storeService.searchEntries.bind(storeService);

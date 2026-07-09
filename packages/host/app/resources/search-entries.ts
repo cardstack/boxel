@@ -332,13 +332,16 @@ export class SearchEntriesResource extends Resource<Args> {
     }
     let token = waiter.beginAsync();
     try {
-      // A prerender_html event queued a selective per-member refresh. Consume
-      // it: perform the targeted card+html GETs when no index event is also
-      // pending (an index event changes membership and supersedes it) and the
-      // query still supports it; otherwise fold the queued realms into the
-      // coarse re-run so the update is never dropped.
+      // A prerender_html event queued a selective per-member refresh. Perform
+      // the targeted card+html GETs when no index event is also pending (an
+      // index event changes membership and supersedes it) and the query still
+      // supports it; otherwise fold the queued invalidations into the coarse
+      // re-run. The queue is consumed only at the point its content is
+      // applied or folded — never at task start — so a restart that cancels
+      // this run mid-GET (any later realm event re-performs this restartable
+      // task) leaves it queued for the replacement run instead of dropping
+      // it.
       let selective = this.pendingSelectiveRefresh;
-      this.pendingSelectiveRefresh = undefined;
       if (selective) {
         if (
           this.realmsNeedingRefresh.size === 0 &&
@@ -346,15 +349,18 @@ export class SearchEntriesResource extends Resource<Args> {
         ) {
           let handled = await this.#performSelectiveRefresh(selective, query);
           if (handled) {
+            // Completed without a restart, so the queued set is exactly what
+            // was just applied — an event arriving mid-run would have
+            // restarted this task before this line.
+            this.pendingSelectiveRefresh = undefined;
             return;
           }
           // A member couldn't be refreshed in isolation (a GET failed or the
           // response was malformed) — fall through to a coarse re-run over
           // the realms the queued invalidations spanned.
-          this.#foldSelectiveRealmsIntoRefresh(selective);
-        } else {
-          this.#foldSelectiveRealmsIntoRefresh(selective);
         }
+        this.pendingSelectiveRefresh = undefined;
+        this.#foldSelectiveRealmsIntoRefresh(selective);
       }
 
       // A paginated query never takes the realm-scoped path: with the held
