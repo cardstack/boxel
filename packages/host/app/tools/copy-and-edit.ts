@@ -349,3 +349,7 @@ export default class CopyAndEditTool extends HostBaseTool<
     return this.dotGetter(parentPath, base);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CopyAndEditTool as CopyAndEditCommand };

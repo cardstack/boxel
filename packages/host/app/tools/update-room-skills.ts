@@ -230,3 +230,7 @@ function errorSummary(err: unknown): string {
   }
   return typeof err === 'string' ? err : `<${typeof err}>`;
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UpdateRoomSkillsTool as UpdateRoomSkillsCommand };

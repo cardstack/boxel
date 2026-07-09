@@ -28,3 +28,7 @@ export default class ReindexRealmTool extends HostBaseTool<
     await this.realm.reindex(input.realmIdentifier);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReindexRealmTool as ReindexRealmCommand };

@@ -100,3 +100,7 @@ export default class ShowCardTool extends HostBaseTool<
     return maybeCard;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ShowCardTool as ShowCardCommand };

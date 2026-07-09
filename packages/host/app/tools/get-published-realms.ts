@@ -59,3 +59,7 @@ export default class GetPublishedRealmsTool extends HostBaseTool<
     return new GetPublishedRealmsResult({ results });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetPublishedRealmsTool as GetPublishedRealmsCommand };

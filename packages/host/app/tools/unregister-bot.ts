@@ -27,3 +27,7 @@ export default class UnregisterBotTool extends HostBaseTool<
     await this.realmServer.unregisterBot(input.botRegistrationId);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UnregisterBotTool as UnregisterBotCommand };

@@ -148,3 +148,7 @@ export default class GenerateThemeExampleTool extends HostBaseTool<
     ].join('\n');
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GenerateThemeExampleTool as GenerateThemeExampleCommand };

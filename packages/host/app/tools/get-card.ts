@@ -32,3 +32,7 @@ export default class GetCardTool extends HostBaseTool<
     return card as CardDef;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetCardTool as GetCardCommand };

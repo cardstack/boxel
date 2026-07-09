@@ -55,7 +55,7 @@ const indexCardSource = `
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
-import WriteTextFileTool from '../../../app/commands/write-text-file';
+import WriteTextFileTool from '../../../app/tools/write-text-file';
   import { Friend } from './friend';
 
   export class Person extends CardDef {

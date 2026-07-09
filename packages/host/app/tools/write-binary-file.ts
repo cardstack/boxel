@@ -140,3 +140,7 @@ export default class WriteBinaryFileTool extends HostBaseTool<
     return getSourceResult.status !== 404;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { WriteBinaryFileTool as WriteBinaryFileCommand };

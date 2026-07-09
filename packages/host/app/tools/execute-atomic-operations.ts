@@ -42,3 +42,7 @@ export default class ExecuteAtomicOperationsTool extends HostBaseTool<
     return new ExecuteAtomicOperationsResult({ results: atomicResults });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ExecuteAtomicOperationsTool as ExecuteAtomicOperationsCommand };

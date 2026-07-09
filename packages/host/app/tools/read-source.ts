@@ -44,3 +44,7 @@ export default class ReadSourceTool extends HostBaseTool<
     throw new Error(`Error reading file ${url}: ${response.statusText}`);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadSourceTool as ReadSourceCommand };

@@ -80,3 +80,7 @@ export default class SanitizeModuleListTool extends HostBaseTool<
     return new SanitizeModuleListResult({ moduleIdentifiers });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SanitizeModuleListTool as SanitizeModuleListCommand };

@@ -229,3 +229,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     return { matched: true, matchLength: contentLineIndex - startIndex };
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ApplySearchReplaceBlockTool as ApplySearchReplaceBlockCommand };

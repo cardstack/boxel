@@ -57,3 +57,7 @@ export default class TransformCardsTool extends HostBaseTool<
     // In the future, we might want to return some kind of summary card
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { TransformCardsTool as TransformCardsCommand };

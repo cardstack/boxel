@@ -38,3 +38,7 @@ export default class ValidateRealmTool extends HostBaseTool<
     return new ValidateRealmResult({ realmIdentifier });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ValidateRealmTool as ValidateRealmCommand };

@@ -31,3 +31,7 @@ export default class FetchCardJsonTool extends HostBaseTool<
     return new FetchCardJsonResult({ document: doc });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { FetchCardJsonTool as FetchCardJsonCommand };

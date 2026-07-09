@@ -80,3 +80,7 @@ export default class CopyFileToRealmTool extends HostBaseTool<
     return getSourceResult.status !== 404;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CopyFileToRealmTool as CopyFileToRealmCommand };

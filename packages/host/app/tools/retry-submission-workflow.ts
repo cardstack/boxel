@@ -115,3 +115,7 @@ export default class RetrySubmissionWorkflowTool extends HostBaseTool<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { RetrySubmissionWorkflowTool as RetrySubmissionWorkflowCommand };

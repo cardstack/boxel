@@ -39,3 +39,7 @@ export default class PersistModuleInspectorViewTool extends HostBaseTool<
     return undefined;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PersistModuleInspectorViewTool as PersistModuleInspectorViewCommand };

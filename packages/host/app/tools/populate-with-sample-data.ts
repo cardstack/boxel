@@ -82,3 +82,7 @@ function isCardOrField(card: any): card is CardDef | FieldDef {
 function isCard(card: any): card is CardDef {
   return isCardOrField(card) && !('isFieldDef' in card.constructor);
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PopulateWithSampleDataTool as PopulateWithSampleDataCommand };

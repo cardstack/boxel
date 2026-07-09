@@ -32,3 +32,7 @@ export default class InviteUserToRoomTool extends HostBaseTool<
     await this.matrixService.inviteUserToRoom(input.roomId, userId);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { InviteUserToRoomTool as InviteUserToRoomCommand };

@@ -60,3 +60,7 @@ export default class ReadBinaryFileTool extends HostBaseTool<
     return new ReadBinaryFileResult({ base64Content, contentType });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadBinaryFileTool as ReadBinaryFileCommand };

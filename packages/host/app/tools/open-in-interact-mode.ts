@@ -32,3 +32,7 @@ export default class OpenInInteractModeTool extends HostBaseTool<
     operatorModeStateService.openCardInInteractMode(input.cardId, format);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { OpenInInteractModeTool as OpenInInteractModeCommand };

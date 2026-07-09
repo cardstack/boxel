@@ -43,3 +43,7 @@ export default class SerializeCardTool extends HostBaseTool<
     return new JsonCard({ json: serialized });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SerializeCardTool as SerializeCardCommand };

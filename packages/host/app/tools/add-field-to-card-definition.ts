@@ -75,3 +75,7 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { AddFieldToCardDefinitionTool as AddFieldToCardDefinitionCommand };

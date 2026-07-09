@@ -105,3 +105,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
     return inputTypeCardSchema;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PatchCardInstanceTool as PatchCardInstanceCommand };

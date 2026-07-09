@@ -145,3 +145,7 @@ function describeViolations(violations: PublishabilityViolation[]): string {
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PublishRealmTool as PublishRealmCommand };

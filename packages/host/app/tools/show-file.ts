@@ -37,3 +37,7 @@ export default class ShowFileTool extends HostBaseTool<
     await operatorModeStateService.updateSubmode('code');
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ShowFileTool as ShowFileCommand };

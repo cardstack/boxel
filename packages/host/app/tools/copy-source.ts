@@ -44,3 +44,7 @@ export default class CopySourceTool extends HostBaseTool<
     return new CopySourceResult({});
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CopySourceTool as CopySourceCommand };
