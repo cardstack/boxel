@@ -25,12 +25,12 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -610,7 +610,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           id: '794c52f1-b444-47bd-8b2c-5d03ba7ef042',
@@ -714,7 +714,7 @@ module('Acceptance | Commands tests', function (hooks) {
         stateKey: (e as any).state_key,
         msgtype: (e.content as any)?.msgtype,
         hasCommandRequests: Array.isArray(
-          (e.content as any)?.[APP_BOXEL_COMMAND_REQUESTS_KEY],
+          (e.content as any)?.[APP_BOXEL_TOOL_REQUESTS_KEY],
         ),
       }));
       console.error(
@@ -779,7 +779,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'switch-submode_dd88',
@@ -814,8 +814,7 @@ module('Acceptance | Commands tests', function (hooks) {
         getRoomIds().length > 0 &&
         getRoomEvents(roomId).find(
           (m) =>
-            m.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+            m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         ),
       {
         timeout: 5000,
@@ -823,16 +822,15 @@ module('Acceptance | Commands tests', function (hooks) {
       },
     );
     let message = getRoomEvents(roomId).find(
-      (m) =>
-        m.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      (m) => m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     )!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
     assert.strictEqual(message.content.commandRequestId, 'abc123');
@@ -859,7 +857,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName(
@@ -899,11 +897,11 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
     assert.strictEqual(
@@ -933,7 +931,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
           name: buildCommandFunctionName(
@@ -982,7 +980,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'preparing-command-id',
           name: 'switch-submode_dd88',
@@ -1042,7 +1040,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
@@ -1124,11 +1122,11 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
     assert.strictEqual(
@@ -1171,7 +1169,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
@@ -1215,7 +1213,7 @@ module('Acceptance | Commands tests', function (hooks) {
       body: 'Checking the current UI state and searching for cards',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'a4237eca-b73e-4256-bf3a-45849fa07d02',
           name: 'switch-submode_dd88',
@@ -1269,7 +1267,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandId,
           name: 'switch-submode_dd88',
@@ -1308,7 +1306,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandId2,
           name: 'switch-submode_dd88',
@@ -1345,7 +1343,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandId3,
           name: 'switch-submode_dd88',
@@ -1393,7 +1391,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandId4,
           name: 'switch-submode_dd88',
@@ -1447,7 +1445,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'no-such-command',
@@ -1482,11 +1480,11 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
     assert.strictEqual(
@@ -1532,7 +1530,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
@@ -1597,11 +1595,11 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
     assert.strictEqual(
@@ -1640,7 +1638,7 @@ module('Acceptance | Commands tests', function (hooks) {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
           {
             id: '2dd27b90-b473-403c-a5ae-399a29af7d62',
             name: 'maybe-boom-command_4b30',
@@ -1659,7 +1657,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
       await settled();
       let commandResultEvents = await getRoomEvents(roomId).filter(
-        (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
       assert.strictEqual(
         commandResultEvents.length,
@@ -1669,7 +1667,7 @@ module('Acceptance | Commands tests', function (hooks) {
       maybeBoomShouldBoom = false;
       await click('[data-test-alert-action-button="Retry"]');
       commandResultEvents = await getRoomEvents(roomId).filter(
-        (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
       assert.strictEqual(
         commandResultEvents.length,

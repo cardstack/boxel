@@ -1,6 +1,9 @@
 import { service } from '@ember/service';
 
-import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  getToolDefinitions,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -172,8 +175,9 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           (skill): skill is SkillSource => Boolean(skill),
         );
 
-        let previousCommandDefinitions =
-          (currentSkillsConfig.commandDefinitions ?? []) as SerializedFile[];
+        let previousCommandDefinitions = (getToolDefinitions(
+          currentSkillsConfig,
+        ) ?? []) as SerializedFile[];
         let serializedCommandDefinitions: SerializedFile[] = [
           ...previousCommandDefinitions,
         ];
@@ -202,11 +206,16 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           serializedCommandDefinitions = [];
         }
 
+        // Write only the tool-named key; a pre-rename room's state may carry
+        // `commandDefinitions`, which must not survive the rewrite or it would
+        // shadow nothing but confuse readers of raw state.
+        let { commandDefinitions: _legacyDefinitions, ...restOfSkillsConfig } =
+          currentSkillsConfig;
         return {
-          ...currentSkillsConfig,
+          ...restOfSkillsConfig,
           enabledSkillCards: Array.from(enabledSkillCardMap.values()),
           disabledSkillCards: Array.from(disabledSkillCardMap.values()),
-          commandDefinitions: serializedCommandDefinitions,
+          toolDefinitions: serializedCommandDefinitions,
         };
       },
     );

@@ -1,7 +1,110 @@
 export const APP_BOXEL_STOP_GENERATING_EVENT_TYPE = 'app.boxel.stopGenerating';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
-export const APP_BOXEL_COMMAND_REQUESTS_KEY = 'app.boxel.commandRequests';
+
+// ─── Tool wire keys (command → tool rename) ───
+//
+// New events are written ONLY with the tool-named keys. The LEGACY_* spellings
+// exist because Matrix rooms replay their full history: events written before
+// the rename carry the old keys forever, so every reader must accept both
+// (the `is*` predicates and `get*` content readers below do). Never write a
+// LEGACY_* key.
+export const APP_BOXEL_TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
+export const LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY =
+  'app.boxel.commandRequests';
+export const APP_BOXEL_TOOL_RESULT_EVENT_TYPE = 'app.boxel.toolResult';
+export const LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE =
+  'app.boxel.commandResult';
+export const APP_BOXEL_TOOL_RESULT_REL_TYPE = 'app.boxel.toolAnnotation';
+export const LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE =
+  'app.boxel.commandAnnotation';
+export const APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE =
+  'app.boxel.toolResultWithOutput';
+export const LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
+  'app.boxel.commandResultWithOutput';
+export const APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE =
+  'app.boxel.toolResultWithNoOutput';
+export const LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
+  'app.boxel.commandResultWithNoOutput';
+
+export type ToolResultEventType =
+  | typeof APP_BOXEL_TOOL_RESULT_EVENT_TYPE
+  | typeof LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
+export type ToolResultRelType =
+  | typeof APP_BOXEL_TOOL_RESULT_REL_TYPE
+  | typeof LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE;
+export type ToolResultWithOutputMsgtype =
+  | typeof APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE
+  | typeof LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
+export type ToolResultWithNoOutputMsgtype =
+  | typeof APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
+  | typeof LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
+
+export function isToolResultEventType(
+  type: string | undefined,
+): type is ToolResultEventType {
+  return (
+    type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE ||
+    type === LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+  );
+}
+
+export function isToolResultRelType(
+  relType: string | undefined,
+): relType is ToolResultRelType {
+  return (
+    relType === APP_BOXEL_TOOL_RESULT_REL_TYPE ||
+    relType === LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE
+  );
+}
+
+export function isToolResultWithOutputMsgtype(
+  msgtype: string | undefined,
+): msgtype is ToolResultWithOutputMsgtype {
+  return (
+    msgtype === APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE ||
+    msgtype === LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+  );
+}
+
+export function isToolResultWithNoOutputMsgtype(
+  msgtype: string | undefined,
+): msgtype is ToolResultWithNoOutputMsgtype {
+  return (
+    msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE ||
+    msgtype === LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+  );
+}
+
+// Content-level counterpart of isToolResultWithOutputMsgtype: narrows a
+// result-content union to its with-output member (either spelling), so
+// callers can read `data.card` type-safely.
+export function isToolResultWithOutputContent<T extends { msgtype?: string }>(
+  content: T,
+): content is Extract<T, { msgtype: ToolResultWithOutputMsgtype }> {
+  return isToolResultWithOutputMsgtype(content.msgtype);
+}
+
+// Reads a message content's tool requests under either spelling; the new key
+// wins when both are present (possible transiently when a streaming message
+// that began before a deploy is replaced after it).
+export function getToolRequests<T = unknown>(
+  content: Record<string, any> | undefined | null,
+): T[] | undefined {
+  return (
+    content?.[APP_BOXEL_TOOL_REQUESTS_KEY] ??
+    content?.[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]
+  );
+}
+
+// Reads the room-skills state event's tool definitions under either key.
+// Pre-rename rooms carry `commandDefinitions` until the host next rewrites the
+// state event (which emits only `toolDefinitions`).
+export function getToolDefinitions<T = unknown>(
+  content: Record<string, any> | undefined | null,
+): T[] | undefined {
+  return content?.toolDefinitions ?? content?.commandDefinitions;
+}
 export const APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE =
   'app.boxel.codePatchResult';
 export const APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE = 'app.boxel.codePatchResult';
@@ -11,12 +114,6 @@ export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
   'app.boxel.codePatchCorrectnessAnnotation';
-export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';
-export const APP_BOXEL_COMMAND_RESULT_REL_TYPE = 'app.boxel.commandAnnotation';
-export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
-  'app.boxel.commandResultWithOutput';
-export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
-  'app.boxel.commandResultWithNoOutput';
 export const APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE = 'app.boxel.debug';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';

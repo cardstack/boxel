@@ -17,7 +17,7 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -380,10 +380,8 @@ Instructions live in the markdown body.
       'disabled skill cards have not changed',
     );
     assert.deepEqual(
-      finalRoomStateSkillsJson.commandDefinitions.map((c: any) => c.sourceUrl),
-      initialRoomStateSkillsJson.commandDefinitions.map(
-        (c: any) => c.sourceUrl,
-      ),
+      finalRoomStateSkillsJson.toolDefinitions.map((c: any) => c.sourceUrl),
+      initialRoomStateSkillsJson.toolDefinitions.map((c: any) => c.sourceUrl),
       'command definitions have not changed',
     );
   });
@@ -453,7 +451,7 @@ Instructions live in the markdown body.
 
     let skillsState = getRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE);
     assert.ok(
-      skillsState.commandDefinitions?.some((c: any) =>
+      skillsState.toolDefinitions?.some((c: any) =>
         c.sourceUrl?.includes('placeholder-command'),
       ),
       "the markdown skill's frontmatter command is uploaded as a command definition",
@@ -649,18 +647,18 @@ Instructions live in the markdown body.
 
     // Verify both rooms have command definitions
     assert.ok(
-      room1StateSkillsJson.commandDefinitions?.length > 0,
+      room1StateSkillsJson.toolDefinitions?.length > 0,
       'first room has command definitions',
     );
     assert.ok(
-      room2StateSkillsJson.commandDefinitions?.length > 0,
+      room2StateSkillsJson.toolDefinitions?.length > 0,
       'second room has command definitions',
     );
 
     // Verify the command definitions are the same between rooms when content hasn't changed
     assert.deepEqual(
-      room1StateSkillsJson.commandDefinitions,
-      room2StateSkillsJson.commandDefinitions,
+      room1StateSkillsJson.toolDefinitions,
+      room2StateSkillsJson.toolDefinitions,
       "command definitions are the same between rooms when content hasn't changed",
     );
 
@@ -706,28 +704,28 @@ Instructions live in the markdown body.
 
     // Verify the command definitions are different after content change
     assert.notDeepEqual(
-      room2StateSkillsJson.commandDefinitions,
-      room3StateSkillsJson.commandDefinitions,
+      room2StateSkillsJson.toolDefinitions,
+      room3StateSkillsJson.toolDefinitions,
       'command definitions are different after content change',
     );
 
     // Verify the command definitions have different URLs after content change
-    const room2CommandUrls = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandUrls = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room3CommandUrls = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandUrls = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room2CommandSourceUrls = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandSourceUrls = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.sourceUrl,
     );
-    const room3CommandSourceUrls = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandSourceUrls = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.sourceUrl,
     );
-    const room2CommandHashes = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandHashes = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.contentHash,
     );
-    const room3CommandHashes = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandHashes = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.contentHash,
     );
     assert.notDeepEqual(
@@ -805,30 +803,28 @@ Instructions live in the markdown body.
 
     // Verify the command definitions are different after content change
     assert.notDeepEqual(
-      room1State1SkillsJson.commandDefinitions,
-      room1State2SkillsJson.commandDefinitions,
+      room1State1SkillsJson.toolDefinitions,
+      room1State2SkillsJson.toolDefinitions,
       'command definitions are different after content change',
     );
 
     // Verify the command definitions have different URLs after content change
-    const room1State1CommandUrls = room1State1SkillsJson.commandDefinitions.map(
+    const room1State1CommandUrls = room1State1SkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room1State2CommandUrls = room1State2SkillsJson.commandDefinitions.map(
+    const room1State2CommandUrls = room1State2SkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
     const room1State1CommandSourceUrls =
-      room1State1SkillsJson.commandDefinitions.map((cmd: any) => cmd.sourceUrl);
+      room1State1SkillsJson.toolDefinitions.map((cmd: any) => cmd.sourceUrl);
     const room1State2CommandSourceUrls =
-      room1State2SkillsJson.commandDefinitions.map((cmd: any) => cmd.sourceUrl);
-    const room1State1CommandHashes =
-      room1State1SkillsJson.commandDefinitions.map(
-        (cmd: any) => cmd.contentHash,
-      );
-    const room1State2CommandHashes =
-      room1State2SkillsJson.commandDefinitions.map(
-        (cmd: any) => cmd.contentHash,
-      );
+      room1State2SkillsJson.toolDefinitions.map((cmd: any) => cmd.sourceUrl);
+    const room1State1CommandHashes = room1State1SkillsJson.toolDefinitions.map(
+      (cmd: any) => cmd.contentHash,
+    );
+    const room1State2CommandHashes = room1State2SkillsJson.toolDefinitions.map(
+      (cmd: any) => cmd.contentHash,
+    );
     assert.notDeepEqual(
       room1State1CommandUrls,
       room1State2CommandUrls,
@@ -945,7 +941,7 @@ Instructions live in the markdown body.
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -1148,7 +1144,7 @@ ${REPLACE_MARKER}
     await waitFor('[data-test-message-idx]');
 
     let expectedCommandDefinitionCount =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions?.length ?? 0;
+      afterCodeModeRoomStateSkillsJson.toolDefinitions?.length ?? 0;
 
     await waitUntil(
       () => {
@@ -1156,7 +1152,7 @@ ${REPLACE_MARKER}
           roomId,
           APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
         );
-        let currentLength = skillsState?.commandDefinitions?.length ?? 0;
+        let currentLength = skillsState?.toolDefinitions?.length ?? 0;
         return currentLength === expectedCommandDefinitionCount;
       },
       {
@@ -1171,7 +1167,7 @@ ${REPLACE_MARKER}
     );
 
     if (
-      (finalRoomStateSkillsJson.commandDefinitions?.length ?? 0) !==
+      (finalRoomStateSkillsJson.toolDefinitions?.length ?? 0) !==
       expectedCommandDefinitionCount
     ) {
       console.log(
@@ -1204,32 +1200,32 @@ ${REPLACE_MARKER}
       'disabled skill cards are the same',
     );
     assert.notDeepEqual(
-      finalRoomStateSkillsJson.commandDefinitions,
-      afterCodeModeRoomStateSkillsJson.commandDefinitions,
+      finalRoomStateSkillsJson.toolDefinitions,
+      afterCodeModeRoomStateSkillsJson.toolDefinitions,
       'command definitions are different',
     );
 
     let baselineUnchangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
+      afterCodeModeRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
     let baselineChangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
+      afterCodeModeRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
       );
 
     let finalUnchangedCommandDefinitions =
-      finalRoomStateSkillsJson.commandDefinitions.filter(
+      finalRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
     let finalChangedCommandDefinitions =
-      finalRoomStateSkillsJson.commandDefinitions.filter(
+      finalRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
@@ -1258,14 +1254,14 @@ ${REPLACE_MARKER}
     );
 
     assert.strictEqual(
-      initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      initialRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('search-and-open-card-command'),
       ).length,
       1,
       'search-and-open-card-command is present',
     );
     assert.strictEqual(
-      initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      initialRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('placeholder'),
       ).length,
       0,
@@ -1279,14 +1275,14 @@ ${REPLACE_MARKER}
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      finalRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('search-and-open-card-command'),
       ).length,
       1,
       'search-and-open-card-command is still present',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      finalRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('placeholder'),
       ).length,
       1,

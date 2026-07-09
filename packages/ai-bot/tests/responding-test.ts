@@ -8,7 +8,7 @@ import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -305,7 +305,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[1].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -391,7 +391,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           name: 'patchCardInstance',
@@ -401,7 +401,7 @@ module('Responding', (hooks) => {
       'Partial tool call event should be sent with correct content',
     );
     assert.deepEqual(
-      sentEvents[3].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[3].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -523,7 +523,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',
@@ -610,7 +610,7 @@ module('Responding', (hooks) => {
       'Thinking message, and event with content, and event with one tool call should be sent',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',

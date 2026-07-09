@@ -53,10 +53,10 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -76,7 +76,7 @@ import {
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  getToolRequests,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -1393,7 +1393,7 @@ export default class MatrixService extends Service {
             ...enabledMarkdownSkillFileDefs,
           ].map((fileDef) => fileDef.serialize()),
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
-          commandDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
+          toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
           ),
         };
@@ -1485,23 +1485,23 @@ export default class MatrixService extends Service {
       | CommandResultWithOutputContent;
     if (resultCardFileDef === undefined) {
       content = {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         },
         data: contentData,
       };
     } else {
       content = {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         },
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
@@ -1514,7 +1514,7 @@ export default class MatrixService extends Service {
     try {
       return await this.sendEvent(
         params.roomId,
-        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         content,
       );
     } catch (e) {
@@ -2745,7 +2745,7 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      getToolRequests(event.content)?.length &&
       event.content?.isStreamingFinished
     ) {
       this.commandService.queueEventForCommandProcessing(event);

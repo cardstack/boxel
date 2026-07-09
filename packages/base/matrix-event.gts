@@ -10,11 +10,12 @@ import type {
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
+  ToolResultEventType,
+  ToolResultRelType,
+  ToolResultWithNoOutputMsgtype,
+  ToolResultWithOutputMsgtype,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
@@ -249,7 +250,10 @@ export interface CardMessageContent {
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [APP_BOXEL_TOOL_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  // Replay-only: messages written before the command → tool rename carry
+  // their requests under this key. Read via `getToolRequests`; never write.
+  [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -267,6 +271,9 @@ export interface SkillsConfigEvent extends RoomStateEvent {
   content: {
     enabledSkillCards: SerializedFile[];
     disabledSkillCards: SerializedFile[];
+    toolDefinitions?: SerializedFile[];
+    // Replay-only: state written before the command → tool rename. Read via
+    // `getToolDefinitions`; never write.
     commandDefinitions?: SerializedFile[];
   };
 }
@@ -289,7 +296,7 @@ export interface LLMModeEvent extends RoomStateEvent {
 }
 
 export interface CommandResultEvent extends BaseMatrixEvent {
-  type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
+  type: ToolResultEventType;
   content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
   unsigned: {
     age: number;
@@ -336,7 +343,7 @@ export type CommandResultStatus = 'applied' | 'failed' | 'invalid';
 
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
-    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
+    rel_type: ToolResultRelType;
     key: CommandResultStatus;
     event_id: string;
   };
@@ -352,16 +359,16 @@ export interface CommandResultWithOutputContent {
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
   };
-  msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
+  msgtype: ToolResultWithOutputMsgtype;
 }
 
 export interface CommandResultWithNoOutputContent {
   'm.relates_to': {
-    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
+    rel_type: ToolResultRelType;
     key: CommandResultStatus;
     event_id: string;
   };
-  msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
+  msgtype: ToolResultWithNoOutputMsgtype;
   commandRequestId: string;
   failureReason?: string; // only present if status is 'failed' or 'invalid'
   data: {

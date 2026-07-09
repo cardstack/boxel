@@ -4,9 +4,9 @@ const { module, test, assert } = QUnit;
 import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
 import { READ_REALM_FILE_TOOL_NAME } from '../lib/read-realm-file.ts';
 import {
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 const ON_BEHALF_OF = '@user:localhost';
@@ -95,10 +95,10 @@ module('fulfillReadRealmFileCalls', () => {
     assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
     assert.strictEqual(sent.length, 1, 'one command-result event posted');
     let { eventType, content } = sent[0];
-    assert.strictEqual(eventType, APP_BOXEL_COMMAND_RESULT_EVENT_TYPE);
+    assert.strictEqual(eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
     assert.strictEqual(
       content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(content.commandRequestId, 'c1');
     assert.strictEqual(content['m.relates_to'].key, 'applied');
@@ -141,7 +141,7 @@ module('fulfillReadRealmFileCalls', () => {
     let { content } = sent[0];
     assert.strictEqual(
       content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(content['m.relates_to'].key, 'applied');
     assert.notOk(content.failureReason, 'a clean read carries no failure note');
@@ -180,7 +180,7 @@ module('fulfillReadRealmFileCalls', () => {
     let { content } = sent[0];
     assert.strictEqual(
       content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
       'the successful file still comes back with output',
     );
     assert.strictEqual(
@@ -218,7 +218,7 @@ module('fulfillReadRealmFileCalls', () => {
     let { content } = sent[0];
     assert.strictEqual(
       content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(content['m.relates_to'].key, 'invalid');
     assert.true(

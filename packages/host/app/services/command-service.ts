@@ -26,7 +26,7 @@ import {
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
-import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
+import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -660,7 +660,7 @@ export default class CommandService extends Service {
       if (e?.type !== 'm.room.message') {
         continue;
       }
-      let requests = e.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY];
+      let requests = getToolRequests(e.content);
       if (
         Array.isArray(requests) &&
         requests.some((r: any) => r?.id === commandRequestId)

@@ -38,15 +38,20 @@ import type {
   SkillsConfigEvent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type {
+  SerializedFile,
+  SerializedFileDef,
+} from 'https://cardstack.com/base/file-api';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  getToolDefinitions,
+  getToolRequests,
+  isToolResultEventType,
+  isToolResultRelType,
+  isToolResultWithNoOutputMsgtype,
+  isToolResultWithOutputContent,
+  isToolResultWithOutputMsgtype,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
@@ -282,9 +287,9 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   }
 
   let commandRequests =
-    (lastEventExcludingResults.content as CardMessageContent)[
-      APP_BOXEL_COMMAND_REQUESTS_KEY
-    ] ?? [];
+    getToolRequests<Partial<EncodedCommandRequest>>(
+      lastEventExcludingResults.content as CardMessageContent,
+    ) ?? [];
   let codePatchBlocks = extractCodePatchBlocks(
     (lastEventExcludingResults.content as CardMessageContent).body,
   );
@@ -296,11 +301,9 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     commandRequests.every((commandRequest: Partial<EncodedCommandRequest>) => {
       return recentEventsToCheck.some((event) => {
         return (
-          event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          (event.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-            event.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+          isCommandResultEvent(event) &&
+          (isToolResultWithOutputMsgtype(event.content.msgtype) ||
+            isToolResultWithNoOutputMsgtype(event.content.msgtype)) &&
           event.content.commandRequestId === commandRequest.id
         );
       });
@@ -380,7 +383,9 @@ function getCheckCorrectnessCommandRequests(
     return [];
   }
   let encodedRequests =
-    (event.content as CardMessageContent)[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [];
+    getToolRequests<Partial<EncodedCommandRequest>>(
+      event.content as CardMessageContent,
+    ) ?? [];
   if (!Array.isArray(encodedRequests)) {
     return [];
   }
@@ -415,7 +420,7 @@ function isTerminalCommandResultEventFor(
   commandRequestId: string,
 ): boolean {
   if (
-    event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    !isCommandResultEvent(event) ||
     event.content.commandRequestId !== commandRequestId
   ) {
     return false;
@@ -807,7 +812,7 @@ export async function loadCurrentlySerializedFileDefs(
       ((event.type === 'm.room.message' &&
         event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) ||
         event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE ||
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
+        isToolResultEventType(event.type)),
   );
 
   if (!lastMessageEventByUser) {
@@ -904,7 +909,8 @@ export async function getTools(
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
 
-  let commandDefinitions = skillsConfigEvent?.content?.commandDefinitions ?? [];
+  let commandDefinitions =
+    getToolDefinitions<SerializedFile>(skillsConfigEvent?.content) ?? [];
   for (let commandDefinition of commandDefinitions) {
     if (enabledCommandNames.has(commandDefinition.name)) {
       let commandDefinitionContent = await downloadFile(
@@ -989,7 +995,11 @@ function getCommandResults(
   // event_id. Without the commandRequestId fallback the result gets dropped,
   // leaving an orphan tool_use that Anthropic rejects.
   let requestIds = new Set(
-    (cardMessageEvent.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [])
+    (
+      getToolRequests<Partial<EncodedCommandRequest>>(
+        cardMessageEvent.content,
+      ) ?? []
+    )
       .map((r) => r.id)
       .filter(Boolean) as string[],
   );
@@ -1047,7 +1057,7 @@ function getCodePatchResults(
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
-  return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+  return (getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []).map(
     (commandRequest: Partial<EncodedCommandRequest>) => {
       return {
         id: commandRequest.id!,
@@ -1069,15 +1079,13 @@ async function toResultMessages(
 ): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
   let commandResultEntries = await Promise.all(
-    (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (getToolRequests<Partial<EncodedCommandRequest>>(messageContent) ?? []).map(
       async (commandRequest: Partial<EncodedCommandRequest>) => {
         let decodedCommandRequest = decodeCommandRequestSafe(commandRequest);
         let commandResult = commandResults.find(
           (commandResult) =>
-            (commandResult.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-              commandResult.content.msgtype ===
-                APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+            (isToolResultWithOutputMsgtype(commandResult.content.msgtype) ||
+              isToolResultWithNoOutputMsgtype(commandResult.content.msgtype)) &&
             commandResult.content.commandRequestId === commandRequest.id,
         );
         if (!commandResult) {
@@ -1103,8 +1111,7 @@ async function toResultMessages(
             content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
           }
         } else if (
-          commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+          isToolResultWithOutputContent(commandResult.content) &&
           commandResult.content.data.card
         ) {
           let cardContent =
@@ -1241,11 +1248,7 @@ const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have 
 function extractCorrectnessResultCard(
   commandResult?: CommandResultEvent,
 ): CorrectnessResultSummary | undefined {
-  if (
-    !commandResult ||
-    commandResult.content.msgtype !==
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-  ) {
+  if (!commandResult || !isToolResultWithOutputContent(commandResult.content)) {
     return undefined;
   }
   let cardPayload = commandResult.content.data.card;
@@ -1405,7 +1408,7 @@ function getLatestCorrectnessCheckAttemptInfo(
 ): CorrectnessCheckAttemptInfo | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
-    if (event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
+    if (!isToolResultEventType(event.type)) {
       continue;
     }
     let commandResult = event as CommandResultEvent;
@@ -1683,9 +1686,9 @@ function collectPendingCodePatchCorrectnessCheck(
     // Only consider messages that contain code patches or card patch commands.
     let content = event.content as CardMessageContent;
     let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-      (request) => decodeCommandRequest(request),
-    );
+    let commandRequests = (
+      getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
+    ).map((request) => decodeCommandRequest(request));
     let relevantCommands = commandRequests.filter((request) =>
       isCardPatchCommand(request.name),
     );
@@ -1763,9 +1766,9 @@ function hasUnresolvedCodePatches(
     }
     let content = event.content as CardMessageContent;
     let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-      (request) => decodeCommandRequest(request),
-    );
+    let commandRequests = (
+      getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
+    ).map((request) => decodeCommandRequest(request));
     let relevantCommands = commandRequests.filter((request) =>
       isCardPatchCommand(request.name),
     );
@@ -1818,9 +1821,9 @@ function buildCodePatchCorrectnessMessage(
 ): PendingCodePatchCorrectnessCheck | undefined {
   let content = messageEvent.content as CardMessageContent;
   let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-  let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (request) => decodeCommandRequest(request),
-  );
+  let commandRequests = (
+    getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
+  ).map((request) => decodeCommandRequest(request));
   let relevantCommands = commandRequests.filter((request) =>
     isCardPatchCommand(request.name),
   );
@@ -2239,7 +2242,7 @@ export const buildContextMessage = async (
     return (
       (ev.type === 'm.room.message' &&
         ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
-      ev.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+      isToolResultEventType(ev.type) ||
       ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
     );
   }) as
@@ -2546,9 +2549,10 @@ export function isCommandResultEvent(
     return false;
   }
   return (
-    event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type ===
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE
+    isToolResultEventType(event.type) &&
+    isToolResultRelType(
+      (event as CommandResultEvent).content['m.relates_to']?.rel_type,
+    )
   );
 }
 

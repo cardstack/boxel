@@ -4,10 +4,10 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
@@ -16,8 +16,12 @@ import {
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -2608,7 +2612,7 @@ Attached Files (files with newer versions don't show their content):
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'tool-call-id-1',
               name: 'searchCardsByTypeAndTitle',
@@ -2633,16 +2637,16 @@ Attached Files (files with newer versions don't show their content):
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@tintinthong:localhost',
         content: {
           'm.relates_to': {
             event_id: 'command-event-id-1',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'tool-call-id-1',
           data: {
             card: {
@@ -2721,6 +2725,93 @@ Attached Files (files with newer versions don't show their content):
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal((result[5].content as string).trim(), expected.trim());
+  });
+
+  test('pairs a pre-rename request/result (legacy wire keys) with the same tool_call_id', async () => {
+    // A room whose history predates the command → tool rename replays events
+    // with the legacy spellings forever; prompt assembly must pair them
+    // exactly as it pairs new-keyed events.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          body: 'set the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242847000,
+        unsigned: { age: 1000, transaction_id: 't0' },
+        event_id: 'user-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Setting the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { functions: [] } },
+          [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'legacy-tool-call-id-1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                attributes: { description: 'Set the title' },
+              }),
+            },
+          ],
+        },
+        origin_server_ts: 1722242849000,
+        unsigned: { age: 900, transaction_id: 't1' },
+        event_id: 'legacy-command-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'legacy-command-event-id-1',
+            rel_type: LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'legacy-tool-call-id-1',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242853000,
+        unsigned: { age: 800, transaction_id: 't2' },
+        event_id: 'legacy-command-result-id-1',
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    let assistantMessage = result.find((m) => m.role === 'assistant');
+    assert.ok(
+      assistantMessage?.tool_calls?.some(
+        (tc) => tc.id === 'legacy-tool-call-id-1',
+      ),
+      'the legacy-keyed request surfaces as a tool call',
+    );
+    let toolMessage = result.find((m) => m.role === 'tool');
+    assert.equal(
+      (toolMessage as { tool_call_id?: string })?.tool_call_id,
+      'legacy-tool-call-id-1',
+      'the legacy-typed result pairs with the same tool_call_id',
+    );
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
@@ -4107,7 +4198,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4163,17 +4254,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4261,7 +4352,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'cancelled-patch',
               name: 'patchFields',
@@ -4330,7 +4421,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4386,17 +4477,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4486,7 +4577,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'stale-command',
               name: 'patchFields',
@@ -4624,7 +4715,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: `check-${requestId}`,
               name: 'checkCorrectness',
@@ -4655,18 +4746,18 @@ new content
       errorText: string,
     ): DiscreteMatrixEvent {
       return {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: `command-result-${index}`,
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: index * 10 + 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: requestId,
           'm.relates_to': {
             event_id: relatesToId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4790,7 +4881,7 @@ new content
           body: 'First patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-first',
               name: 'checkCorrectness',
@@ -4817,18 +4908,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-1',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 2,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-first',
           'm.relates_to': {
             event_id: firstEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4862,7 +4953,7 @@ new content
           body: 'Second patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-second',
               name: 'checkCorrectness',
@@ -4889,18 +4980,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-2',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-second',
           'm.relates_to': {
             event_id: secondEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4998,7 +5089,7 @@ new
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-1',
               name: 'checkCorrectness',
@@ -5049,18 +5140,18 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '$command-result',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             context: {
@@ -5336,7 +5427,7 @@ new
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'patchCardInstance',
@@ -5357,14 +5448,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -6479,7 +6570,7 @@ new
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: {},
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'read-file-for-ai-assistant_a831',
@@ -6500,14 +6591,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -6650,7 +6741,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6667,15 +6758,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: OLD_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6752,7 +6843,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6769,15 +6860,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: BOT_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6857,7 +6948,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_SWITCH_SUBMODE,
               name: 'switch-submode_dd88',
@@ -6874,15 +6965,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_SWITCH_SUBMODE,
           'm.relates_to': {
             event_id: BOT1_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6905,7 +6996,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_WRITE_TEXT_FILE,
               name: 'write-text-file_e5a1',
@@ -6926,15 +7017,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_WRITE_TEXT_FILE,
           'm.relates_to': {
             event_id: BOT2_DRIFTED_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6960,7 +7051,7 @@ module('set model in prompt', (hooks) => {
             event_id: BOT2_EVENT_ID,
           },
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_CHECK_CORRECTNESS,
               name: 'checkCorrectness',
@@ -6984,15 +7075,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_CHECK_CORRECTNESS,
           'm.relates_to': {
             event_id: BOT3_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -7379,7 +7470,11 @@ module('markdown skill commands', (hooks) => {
     );
   });
 
-  test('getTools offers a command definition matched by a markdown skill', async () => {
+  // Builds the room-skills state event + enabled skill for the getTools
+  // tests; `definitionsKey` selects which spelling the state event uses for
+  // its uploaded definitions ('toolDefinitions', or the pre-rename
+  // 'commandDefinitions' that old rooms replay).
+  function skillsRoomFixture(definitionsKey: string) {
     mockResponses.set('mxc://mock-server/switch-submode-def', {
       ok: true,
       text: JSON.stringify({
@@ -7414,7 +7509,7 @@ module('markdown skill commands', (hooks) => {
             },
           ],
           disabledSkillCards: [],
-          commandDefinitions: [
+          [definitionsKey]: [
             {
               sourceUrl: 'https://realm/commands/switch-submode',
               url: 'mxc://mock-server/switch-submode-def',
@@ -7441,7 +7536,24 @@ module('markdown skill commands', (hooks) => {
         attributes: { title, instructions: body, commands },
       } as unknown as LooseCardResource,
     ];
+    return { eventList, enabledSkills };
+  }
 
+  test('getTools offers a command definition matched by a markdown skill', async () => {
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+
+  test('getTools reads definitions from the pre-rename commandDefinitions state key', async () => {
+    const { eventList, enabledSkills } =
+      skillsRoomFixture('commandDefinitions');
     const tools = await getTools(
       eventList,
       enabledSkills,

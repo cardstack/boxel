@@ -498,7 +498,7 @@ export default class AiAssistantPanelService extends Service {
           content: {
             enabledSkillCards: [],
             disabledSkillCards: [],
-            commandDefinitions: [],
+            toolDefinitions: [],
           },
         },
       ],

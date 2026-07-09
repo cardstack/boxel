@@ -17,7 +17,7 @@ import {
   attachedCardsToMessage,
   getRelevantCards,
 } from '@cardstack/runtime-common/ai';
-import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
+import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
@@ -127,9 +127,9 @@ export const getLatestResultMessage = (
       | CommandResultWithNoOutputContent
   ).commandRequestId;
   if (commandRequestId) {
-    let commandRequests = (resultSourceEvent.content as CardMessageContent)[
-      APP_BOXEL_COMMAND_REQUESTS_KEY
-    ];
+    let commandRequests = getToolRequests<Partial<EncodedCommandRequest>>(
+      resultSourceEvent.content as CardMessageContent,
+    );
     if (commandRequests) {
       let commandRequest = commandRequests.find(
         (cr: Partial<EncodedCommandRequest>) => {

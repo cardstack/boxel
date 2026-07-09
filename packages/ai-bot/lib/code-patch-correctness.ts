@@ -4,7 +4,7 @@ import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js
 import { uuidv4 } from '@cardstack/runtime-common';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -47,7 +47,7 @@ export async function publishCodePatchCorrectnessMessage(
     content.data = data;
   }
   if (commandRequests.length) {
-    content[APP_BOXEL_COMMAND_REQUESTS_KEY] =
+    content[APP_BOXEL_TOOL_REQUESTS_KEY] =
       encodeCommandRequests(commandRequests);
   }
   await client.sendEvent(summary.roomId, 'm.room.message', content);

@@ -10,10 +10,10 @@ import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -364,7 +364,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           arguments: JSON.stringify({
@@ -418,7 +418,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCardInstance',
@@ -449,7 +449,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
           name: 'patchCardInstance',
@@ -496,7 +496,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
       format: 'org.matrix.custom.html',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCardInstance',
@@ -523,7 +523,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
       format: 'org.matrix.custom.html',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCardInstance',
@@ -565,7 +565,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
       format: 'org.matrix.custom.html',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCardInstance',
@@ -624,7 +624,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           arguments: JSON.stringify({
@@ -640,9 +640,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -665,9 +665,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -709,7 +709,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           arguments: JSON.stringify({
@@ -724,7 +724,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       ],
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
-      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
     );
     assert.strictEqual(
       commandResultEvents.length,
@@ -743,7 +743,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .exists();
 
     commandResultEvents = getRoomEvents(roomId).filter(
-      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
     );
     assert.strictEqual(
       commandResultEvents.length,
@@ -776,7 +776,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -824,7 +824,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -865,7 +865,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -930,7 +930,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -1002,7 +1002,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '9a5b7422-87de-4a93-9f07-9b7c40b75b1e',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -1041,7 +1041,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6c6e2d73-8e09-4b44-a0d9-688f36b73be8',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -1084,7 +1084,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -1165,7 +1165,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           arguments: JSON.stringify({
@@ -1242,7 +1242,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         body: 'Changing first names',
         format: 'org.matrix.custom.html',
         [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
           {
             id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
             name: 'patchCard',
@@ -1267,7 +1267,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first names',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCard',
@@ -1310,7 +1310,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first names',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCard',
@@ -1378,7 +1378,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Reading hello file',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '0ce51dc1-c819-4d6d-9f4f-77fbf60e9a0a',
           name: 'read-file-for-ai-assistant_a831',
@@ -1392,9 +1392,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -1415,9 +1415,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -1469,7 +1469,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Reading card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1ef9a66a-2201-4874-a156-9705acb1ac13',
           name: 'read-card-for-ai-assistant_dd38',
@@ -1483,9 +1483,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -1506,9 +1506,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_TOOL_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.strictEqual(
@@ -1578,7 +1578,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandRequestId,
           name: 'patchCardInstance',
@@ -1619,9 +1619,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
 
     assert.strictEqual(
@@ -1673,7 +1673,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandRequestId,
           name: 'patchCardInstance',
@@ -1693,16 +1693,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       roomId,
       '@aibot:localhost',
       {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId,
         'm.relates_to': {
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
           event_id: strippedEditEventId,
         },
         data: {},
       },
-      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
     );
 
     await settled();
@@ -1744,7 +1744,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: firstCommandRequestId,
           name: 'patchCardInstance',
@@ -1764,7 +1764,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Changing first name to Mango',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: secondCommandRequestId,
           name: 'patchCardInstance',
@@ -1784,16 +1784,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       roomId,
       '@aibot:localhost',
       {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: secondCommandRequestId,
         'm.relates_to': {
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
           event_id: strippedEditEventId,
         },
         data: {},
       },
-      { type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
     );
 
     await settled();
@@ -1834,7 +1834,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'cs-11647-check-correctness',
           name: 'checkCorrectness',
@@ -1896,7 +1896,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       body: 'Reading hello file',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'cs-11647-no-approval',
           name: 'read-file-for-ai-assistant_a831',
@@ -1933,7 +1933,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'cs-11647-apply-button',
           name: 'checkCorrectness',
@@ -1995,7 +1995,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'cs-11647-stuck-auto',
           name: 'checkCorrectness',
@@ -2072,7 +2072,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'cs-11647-patch',
           name: 'patchCardInstance',

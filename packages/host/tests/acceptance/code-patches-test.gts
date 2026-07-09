@@ -24,7 +24,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -399,7 +399,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',
@@ -653,7 +653,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',

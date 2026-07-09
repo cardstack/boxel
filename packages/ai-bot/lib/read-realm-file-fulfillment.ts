@@ -2,10 +2,10 @@ import { createHash } from 'crypto';
 import { logger } from '@cardstack/runtime-common';
 import { sendMatrixEvent } from '@cardstack/runtime-common/ai';
 import {
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { ChatCompletionMessageToolCall } from 'openai/resources';
@@ -212,10 +212,10 @@ async function fulfillOne(
   }
 
   await publish(deps, {
-    msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+    msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     commandRequestId: call.id,
     'm.relates_to': {
-      rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
       key: 'applied',
       event_id: deps.requestEventId,
     },
@@ -238,11 +238,11 @@ async function publishFailure(
   deps: ReadRealmFileFulfillmentDeps,
 ): Promise<ReadRealmFileFulfillmentOutcome> {
   await publish(deps, {
-    msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     commandRequestId,
     failureReason: error,
     'm.relates_to': {
-      rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
       key: 'invalid',
       event_id: deps.requestEventId,
     },
@@ -262,7 +262,7 @@ async function publish(
     await sendMatrixEvent(
       deps.client,
       deps.roomId,
-      APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       content,
       undefined,
     );

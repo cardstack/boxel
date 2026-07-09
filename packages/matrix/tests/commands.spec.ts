@@ -11,12 +11,12 @@ import {
   postNewCard,
 } from '../helpers/index.ts';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
 } from '../support/matrix-constants.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
@@ -181,7 +181,7 @@ test.describe('Commands', () => {
       format: 'org.matrix.custom.html',
       body: 'some command',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1',
           name: 'patchCardInstance',
@@ -217,7 +217,7 @@ test.describe('Commands', () => {
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
       await expect(commandResultEvent).toBeDefined();
     }).toPass();
@@ -236,7 +236,7 @@ test.describe('Commands', () => {
       format: 'org.matrix.custom.html',
       body: 'some command',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: commandRequestId,
           name: 'SearchCardsByTypeAndTitleCommand_a959',
@@ -272,11 +272,11 @@ test.describe('Commands', () => {
       let events = await getRoomEvents(username, password, room1);
       let commandResultEvent = (events as any).find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          e.content?.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          e.content?.msgtype === APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE &&
           e.content?.commandRequestId === commandRequestId &&
           e.content?.['m.relates_to']?.rel_type ===
-            APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
           e.content?.['m.relates_to']?.key === 'applied' &&
           e.content?.['m.relates_to']?.event_id === messageEvent?.event_id,
       );
@@ -393,7 +393,7 @@ test.describe('Commands', () => {
         },
       }),
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '5e226a0f-4014-4e21-b051-ebbb92cabdcc',
           name: 'switch-submode_dd88',
@@ -436,12 +436,12 @@ test.describe('Commands', () => {
       .find((message) => {
         return (
           message.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+          APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
         );
       });
     expect(message).toBeDefined();
     expect(message!.content['m.relates_to']?.rel_type).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     expect((message!.content['m.relates_to'] as any)?.key).toStrictEqual(
       'applied',
@@ -467,7 +467,7 @@ test.describe('Commands', () => {
           agentId,
         },
       }),
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',
           name: 'switch-submode_dd88',

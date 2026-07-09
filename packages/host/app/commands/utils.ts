@@ -1,9 +1,9 @@
 import { getOwner } from '@ember/owner';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  getToolRequests,
+  isToolResultEventType,
+  isToolResultRelType,
   decodeCommandRequest,
   type CommandContext,
   type CommandRequest,
@@ -20,6 +20,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   CardMessageEvent,
   CommandResultEvent,
+  EncodedCommandRequest,
   MatrixEvent,
   RealmEventContent,
   Tool,
@@ -81,10 +82,11 @@ export async function waitForCompletedCommandRequest(
         : matrixEvents;
       let commandResultEvents = events.filter(
         (e) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          e.content['m.relates_to']?.rel_type ===
-            APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
-          e.content['m.relates_to']?.key === 'applied',
+          isToolResultEventType(e.type) &&
+          isToolResultRelType(
+            (e as CommandResultEvent).content['m.relates_to']?.rel_type,
+          ) &&
+          (e as CommandResultEvent).content['m.relates_to']?.key === 'applied',
       ) as CommandResultEvent[];
       return commandResultEvents.some((commandResultEvent) => {
         let eventWithRequest = events.find(
@@ -95,7 +97,9 @@ export async function waitForCompletedCommandRequest(
           return false;
         }
         let commandRequests =
-          eventWithRequest.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [];
+          getToolRequests<Partial<EncodedCommandRequest>>(
+            eventWithRequest.content,
+          ) ?? [];
         let commandRequest = commandRequests.find(
           (commandRequest) =>
             commandRequest.id === commandResultEvent.content.commandRequestId,

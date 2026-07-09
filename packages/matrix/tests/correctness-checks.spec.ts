@@ -13,10 +13,10 @@ import { getMatrixTestContext } from '../helpers/index.ts';
 import { registerUser, loginUser } from '../support/synapse/index.ts';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
 } from '../support/matrix-constants.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
@@ -130,7 +130,7 @@ test.describe('Correctness Checks', () => {
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: commandRequests,
       },
     );
 
@@ -158,17 +158,17 @@ test.describe('Correctness Checks', () => {
     await expect(async () => {
       let events = await getRoomEvents(username, password, roomId);
       commandResultEvent = events.find(
-        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
       expect(commandResultEvent).toBeDefined();
     }).toPass();
 
     // Verify the command result has the correct structure
     expect(commandResultEvent!.content.msgtype).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     expect(commandResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     expect(commandResultEvent!.content['m.relates_to']?.key).toStrictEqual(
       'applied',
@@ -308,7 +308,7 @@ ${brokenContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: failingCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: failingCommandRequests,
       },
     );
 
@@ -326,7 +326,7 @@ ${brokenContent}
       let events = await getRoomEvents(username, password, roomId);
       failingCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === failingCommandRequestId,
       );
       expect(failingCommandResultEvent).toBeDefined();
@@ -450,7 +450,7 @@ ${originalContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: finalCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: finalCommandRequests,
       },
     );
 
@@ -467,7 +467,7 @@ ${originalContent}
       let events = await getRoomEvents(username, password, roomId);
       finalCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === finalCommandRequestId,
       );
       expect(finalCommandResultEvent).toBeDefined();
@@ -663,7 +663,7 @@ ${brokenModuleContent}
               agentId,
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: commandRequests,
         },
       );
 
@@ -680,7 +680,7 @@ ${brokenModuleContent}
         let events = await getRoomEvents(username, password, roomId);
         commandResultEvent = events.find(
           (e: any) =>
-            e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
             e.content.commandRequestId === commandRequestId,
         );
         expect(commandResultEvent).toBeDefined();
