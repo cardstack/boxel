@@ -18,7 +18,7 @@ export class ToolField extends FieldDef {
     computeVia: function (this: ToolField) {
       let moduleRef = this.codeRef?.module;
       if (!moduleRef) {
-        return 'Untitled Command';
+        return 'Untitled Tool';
       }
       let nameSegment = moduleRef.split('/').pop();
       let formattedName = nameSegment
