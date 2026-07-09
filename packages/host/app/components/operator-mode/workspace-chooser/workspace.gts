@@ -45,13 +45,13 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { skillsRealmURL } from '@cardstack/host/lib/utils';
-import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
 import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
@@ -66,14 +66,6 @@ interface Signature {
     navIndex?: number;
   };
 }
-
-// How many files are copied concurrently while duplicating a workspace: high
-// enough to overlap request latency, low enough to stay clear of the
-// browser's per-origin connection limit.
-const DUPLICATE_COPY_BATCH_SIZE = 5;
-// Endpoint candidates tried before giving up (`skills-copy`, `skills-copy-2`,
-// …). Only ever exhausted by a user who already owns this many copies.
-const DUPLICATE_MAX_ENDPOINT_ATTEMPTS = 10;
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -1346,7 +1338,7 @@ export default class Workspace extends Component<Signature> {
     );
   }
 
-  @service declare private cardService: CardService;
+  @service declare private workspaceDuplication: WorkspaceDuplicationService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -1694,34 +1686,14 @@ export default class Workspace extends Component<Signature> {
     this.duplicateProgress = undefined;
 
     try {
-      let sourceRealmURL = new URL(
-        ensureTrailingSlash(this.args.realmIdentifier),
+      await this.workspaceDuplication.duplicateWorkspace(
+        this.args.realmIdentifier,
+        {
+          onProgress: (copied, total) => {
+            this.duplicateProgress = { copied, total };
+          },
+        },
       );
-      let filePaths = await this.fetchSourceFilePaths(sourceRealmURL);
-      this.duplicateProgress = { copied: 0, total: filePaths.length };
-
-      let newRealmURL = await this.createDuplicateRealm();
-
-      for (let i = 0; i < filePaths.length; i += DUPLICATE_COPY_BATCH_SIZE) {
-        let batch = filePaths.slice(i, i + DUPLICATE_COPY_BATCH_SIZE);
-        await Promise.all(
-          batch.map((path) =>
-            this.cardService.copySource(
-              new URL(path, sourceRealmURL),
-              new URL(path, newRealmURL),
-            ),
-          ),
-        );
-        this.duplicateProgress = {
-          copied: i + batch.length,
-          total: filePaths.length,
-        };
-      }
-
-      // Surface the new workspace only once its contents are in place, so the
-      // tile the user clicks is never a half-copied realm.
-      await this.matrixService.appendRealmToAccountData(newRealmURL.href);
-
       this.showDuplicateModal = false;
     } catch (error: any) {
       this.duplicateError = String(error?.message ?? error);
@@ -1729,79 +1701,6 @@ export default class Workspace extends Component<Signature> {
       this.duplicateProgress = undefined;
     }
   });
-
-  private async fetchSourceFilePaths(sourceRealmURL: URL) {
-    let response = await this.network.authedFetch(
-      `${sourceRealmURL.href}_mtimes`,
-      {
-        headers: {
-          Accept: SupportedMimeType.Mtimes,
-        },
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Failed to fetch workspace contents: ${response.status}`);
-    }
-    let json = (await response.json()) as {
-      data: {
-        attributes: {
-          mtimes: Record<string, number>;
-        };
-      };
-    };
-    let realmPaths = new RealmPaths(sourceRealmURL);
-    return (
-      Object.keys(json.data.attributes.mtimes)
-        .map((fileURL) => realmPaths.local(new URL(fileURL)))
-        // The duplicate keeps its own realm.json: the source's config carries
-        // the source's name and catalog visibility, while the new realm's
-        // config (written at creation) is what makes the copy private.
-        .filter((path) => path !== 'realm.json')
-    );
-  }
-
-  private async createDuplicateRealm(): Promise<URL> {
-    let sourceEndpoint =
-      new URL(ensureTrailingSlash(this.args.realmIdentifier)).pathname
-        .split('/')
-        .filter(Boolean)
-        .at(-1) ?? 'workspace';
-    let { iconURL, backgroundURL } = this.realmInfo;
-
-    for (
-      let attempt = 1;
-      attempt <= DUPLICATE_MAX_ENDPOINT_ATTEMPTS;
-      attempt++
-    ) {
-      // The name numbering follows the endpoint numbering, so the nth copy is
-      // "<source> (Copy n)" at "<endpoint>-copy-n" and existing copies keep
-      // their names distinct from the new one.
-      let endpoint =
-        attempt === 1
-          ? `${sourceEndpoint}-copy`
-          : `${sourceEndpoint}-copy-${attempt}`;
-      let name =
-        attempt === 1
-          ? `${this.name} (Copy)`
-          : `${this.name} (Copy ${attempt})`;
-      try {
-        return await this.realmServer.createRealm({
-          endpoint,
-          name,
-          iconURL: iconURL ?? undefined,
-          backgroundURL: backgroundURL ?? undefined,
-        });
-      } catch (error: any) {
-        let message = String(error?.message ?? error);
-        if (!message.includes('already exists on this server')) {
-          throw error;
-        }
-      }
-    }
-    throw new Error(
-      `Could not find an available workspace endpoint to duplicate '${sourceEndpoint}' into`,
-    );
-  }
 
   private reindexWorkspaceTask = dropTask(async () => {
     this.clearReindexError();
