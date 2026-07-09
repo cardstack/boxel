@@ -45,11 +45,11 @@ Read a file from a realm
 
 **Arguments:**
 
-- `<path>` — Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts)
+- `<path>` — Realm-relative file path (e.g., hello-world.json, Cards/my-card.gts), or a full @cardstack/ identifier (e.g., @cardstack/catalog/hello.gts) in which case --realm is omitted
 
 **Options:**
 
-- `--realm <realm-url>` — The realm URL to read from
+- `--realm <realm-url>` — The realm URL or @cardstack/<realm>/ identifier to read from (required unless <path> is a full @cardstack/ identifier)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--json` — Output raw JSON response
 
