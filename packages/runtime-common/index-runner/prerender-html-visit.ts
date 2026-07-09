@@ -96,20 +96,6 @@ export async function runPrerenderHtmlPass({
     `${jobTag} starting prerender-html pass for ${changes.length} changes`,
   );
 
-  let batch = await indexWriter.createBatch(realmURL, virtualNetwork, jobInfo, {
-    prerenderHtmlOnly: true,
-    generation,
-  });
-
-  onProgress?.({
-    type: 'indexing-started',
-    realmURL: realmURL.href,
-    jobId: jobInfo.jobId,
-    jobType: 'prerender-html',
-    totalFiles: 0,
-    files: [],
-  });
-
   // Delete-sticky dedupe, mirroring the incremental index loop: coalesced
   // publishes are already merged this way, but a single publish may still
   // carry duplicates.
@@ -121,12 +107,30 @@ export async function runPrerenderHtmlPass({
       operations.set(url, 'update');
     }
   }
+  let totalFiles = operations.size;
+
+  let batch = await indexWriter.createBatch(realmURL, virtualNetwork, jobInfo, {
+    prerenderHtmlOnly: true,
+    generation,
+  });
+
+  // Unlike the index runner — which announces a zero total and lets the
+  // first `file-visited` fill it in once invalidation discovery runs — this
+  // job's URL set arrives fully computed in its args, so the progress row
+  // carries the real denominator from the start. The jobType matches the
+  // queue's `jobs.job_type` value so both spell the job the same way.
+  onProgress?.({
+    type: 'indexing-started',
+    realmURL: realmURL.href,
+    jobId: jobInfo.jobId,
+    jobType: 'prerender_html',
+    totalFiles,
+    files: [],
+  });
 
   await batch.seedPrerenderedHtmlInvalidations(
     [...operations].map(([url, operation]) => ({ url, operation })),
   );
-
-  let totalFiles = operations.size;
   let filesCompleted = 0;
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;

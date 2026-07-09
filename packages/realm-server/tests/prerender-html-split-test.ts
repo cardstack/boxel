@@ -6,10 +6,14 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  type IndexingProgressEvent,
+  type Prerenderer,
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueJobSpec,
+  type Reader,
 } from '@cardstack/runtime-common';
+import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
 // Registers the `prerender_html` coalesce handler at load time.
 import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerender-html';
@@ -764,6 +768,155 @@ module(basename(import.meta.filename), function () {
         }),
         /requires an explicit generation/,
       );
+    });
+
+    module('progress reporting', function () {
+      function stubReader(contents: Map<string, string>): Reader {
+        return {
+          async readFile(url: URL) {
+            let content = contents.get(url.href);
+            if (content === undefined) {
+              return undefined;
+            }
+            return { content, lastModified: 0, path: url.href };
+          },
+          async readStream() {
+            return undefined;
+          },
+          async mtimes() {
+            return {};
+          },
+        };
+      }
+
+      function stubPrerenderer(
+        visit: (url: string) => void = () => {},
+      ): Prerenderer {
+        return {
+          async prerenderVisit(args) {
+            visit(args.url);
+            return {
+              fileRender: {
+                isolatedHTML: '<pre>rendered</pre>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+            };
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        };
+      }
+
+      test('the pass reports started / file-visited / finished with the real totals', async function (assert) {
+        let events: IndexingProgressEvent[] = [];
+        let visited: string[] = [];
+        let info = jobInfo();
+        await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [
+            { url: `${testRealm}a.txt`, operation: 'update' },
+            // Duplicate of the first URL — deduped out of the total.
+            { url: `${testRealm}a.txt`, operation: 'update' },
+            { url: `${testRealm}b.txt`, operation: 'update' },
+            // File missing on disk — never reaches the prerenderer, but
+            // still advances the counter.
+            { url: `${testRealm}missing.txt`, operation: 'update' },
+            // Deletion — never visited, still advances the counter.
+            { url: `${testRealm}gone.txt`, operation: 'delete' },
+          ],
+          generation: 1,
+          loaderEpoch: 'epoch-a',
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(
+            new Map([
+              [`${testRealm}a.txt`, 'alpha'],
+              [`${testRealm}b.txt`, 'beta'],
+            ]),
+          ),
+          prerenderer: stubPrerenderer((url) => visited.push(url)),
+          auth: 'test-auth',
+          jobInfo: info,
+          onProgress: (event) => events.push(event),
+        });
+
+        assert.deepEqual(
+          visited,
+          [`${testRealm}a.txt`, `${testRealm}b.txt`],
+          'only readable update URLs reach the prerenderer',
+        );
+
+        let [started, ...rest] = events;
+        let finished = rest.pop();
+        assert.deepEqual(
+          started,
+          {
+            type: 'indexing-started',
+            realmURL: testRealm,
+            jobId: info.jobId,
+            jobType: 'prerender_html',
+            totalFiles: 4,
+            files: [],
+          },
+          'started carries the deduped total and the queue job-type label',
+        );
+        assert.deepEqual(
+          rest.map((e) => [e.type, e.url, e.filesCompleted, e.totalFiles]),
+          [
+            ['file-visited', `${testRealm}a.txt`, 1, 4],
+            ['file-visited', `${testRealm}b.txt`, 2, 4],
+            ['file-visited', `${testRealm}missing.txt`, 3, 4],
+            ['file-visited', `${testRealm}gone.txt`, 4, 4],
+          ],
+          'every URL in the set advances the counter — rendered, missing, and deleted alike',
+        );
+        assert.strictEqual(finished?.type, 'indexing-finished');
+        assert.strictEqual(
+          finished?.stats?.filesIndexed,
+          2,
+          'finished carries the pass stats',
+        );
+      });
+
+      test('a visit failure still emits indexing-finished so consumers clear the job', async function (assert) {
+        let events: IndexingProgressEvent[] = [];
+        let prerenderer: Prerenderer = {
+          ...stubPrerenderer(),
+          async prerenderVisit() {
+            throw new Error('renderer died');
+          },
+        };
+        await assert.rejects(
+          runPrerenderHtmlPass({
+            realmURL: new URL(testRealm),
+            changes: [{ url: `${testRealm}a.txt`, operation: 'update' }],
+            generation: 1,
+            loaderEpoch: 'epoch-a',
+            indexWriter,
+            virtualNetwork,
+            reader: stubReader(new Map([[`${testRealm}a.txt`, 'alpha']])),
+            prerenderer,
+            auth: 'test-auth',
+            jobInfo: jobInfo(),
+            onProgress: (event) => events.push(event),
+          }),
+          /renderer died/,
+        );
+        assert.deepEqual(
+          events.map((e) => e.type),
+          ['indexing-started', 'indexing-finished'],
+          'the stream terminates even when the pass dies mid-visit',
+        );
+      });
     });
   });
 });
