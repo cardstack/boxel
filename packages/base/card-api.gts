@@ -497,11 +497,13 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
-  // The VirtualNetwork that owns this store's realm mappings, used for
-  // prefix/RRI resolution during (de)serialization. Required — every store
-  // implementation must supply one (production stores, test stubs, the
-  // FallbackCardStore).
-  virtualNetwork: VirtualNetwork;
+  // Resolve a (possibly relative or RRI) reference to a real, fetchable URL.
+  // Stores expose URL-resolution capability — never the VirtualNetwork object
+  // itself — so card code can satisfy boundaries that require a real URL (an
+  // `<img src>`, `new URL(...)`) without holding the network. Returns
+  // undefined when the reference can't be resolved (no network available, or
+  // an unresolvable reference) so callers can degrade to URL math.
+  resolveURL(reference: string, base?: string): URL | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -4810,25 +4812,16 @@ function getStore(instance: BaseDef): CardStore {
 // real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
 // AI source-file reader's `new URL(...)`) use this rather than reaching for the
 // VirtualNetwork object directly — they get back a URL, not the network itself.
-// Resolves through the instance's own store's VirtualNetwork, which may carry
-// realm mappings the module loader's does not (e.g. a card deserialized with an
+// Resolves through the instance's own store, which may carry realm mappings
+// the module loader's network does not (e.g. a card deserialized with an
 // explicit store). Returns undefined when none is available, or when the
 // reference can't be resolved, so callers can degrade to URL math.
 export function resolveInstanceURL(
   instance: CardDef,
   reference: string,
 ): URL | undefined {
-  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    virtualNetwork = getStore(instance).virtualNetwork;
-  } catch {
-    return undefined;
-  }
-  if (!virtualNetwork) {
-    return undefined;
-  }
-  try {
-    return virtualNetwork.resolveURL(
+    return getStore(instance).resolveURL(
       reference,
       instance.id ?? instance[relativeTo],
     );
@@ -4867,14 +4860,31 @@ class FallbackCardStore implements CardStore {
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  get virtualNetwork(): VirtualNetwork {
+  #requireVirtualNetwork(): VirtualNetwork {
     let vn = myLoader().getVirtualNetwork();
     if (!vn) {
       throw new Error(
-        `FallbackCardStore.virtualNetwork requires the active Loader to have a VirtualNetwork`,
+        `FallbackCardStore requires the active Loader to have a VirtualNetwork`,
       );
     }
     return vn;
+  }
+
+  resolveURL(reference: string, base?: string): URL | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    if (!vn) {
+      return undefined;
+    }
+    try {
+      return vn.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
   }
 
   getCard(id: string) {
@@ -4935,7 +4945,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
+    let promise = loadCardDocument(fetch, url, this.#requireVirtualNetwork());
     this.trackLoad(promise);
     return await promise;
   }
@@ -4945,7 +4955,11 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
+    let promise = loadFileMetaDocument(
+      fetch,
+      url,
+      this.#requireVirtualNetwork(),
+    );
     this.trackLoad(promise);
     return await promise;
   }

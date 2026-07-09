@@ -36,10 +36,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type {
-  BaseDef,
-  CardDef as CardDefType,
-} from '@cardstack/base/card-api';
+import type { BaseDef, CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
