@@ -16,7 +16,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -42,7 +42,7 @@ import type {
   CardMessageEvent,
   DebugMessageEvent,
   MessageEvent,
-  CommandResultEvent,
+  ToolResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
   ActiveLLMEvent,
@@ -723,7 +723,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: CommandResultEvent;
+    event: ToolResultEvent;
     index: number;
   }) {
     // Locate the owning bot message by commandRequestId. The commandResult's
@@ -813,7 +813,7 @@ export class RoomResource extends Resource<Args> {
     event:
       | MessageEvent
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | DebugMessageEvent,
   ) {
@@ -875,11 +875,11 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  public isDisplayingCode(commandRequest: CommandRequest) {
+  public isDisplayingCode(commandRequest: ToolRequest) {
     return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: CommandRequest) {
+  public toggleViewCode(commandRequest: ToolRequest) {
     this._isDisplayingViewCodeMap.set(
       commandRequest.id,
       !this.isDisplayingCode(commandRequest),

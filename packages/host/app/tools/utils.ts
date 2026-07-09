@@ -6,7 +6,7 @@ import {
   isToolResultRelType,
   decodeCommandRequest,
   type CommandContext,
-  type CommandRequest,
+  type ToolRequest,
 } from '@cardstack/runtime-common';
 
 import {
@@ -19,8 +19,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   CardMessageEvent,
-  CommandResultEvent,
-  EncodedCommandRequest,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent,
   RealmEventContent,
   Tool,
@@ -66,10 +66,10 @@ export async function waitForMatrixEvent(
 export async function waitForCompletedCommandRequest(
   commandContext: CommandContext,
   roomId: string,
-  commandRequestPredicate: (commandRequest: Partial<CommandRequest>) => boolean,
+  commandRequestPredicate: (commandRequest: Partial<ToolRequest>) => boolean,
   options: { timeoutMs?: number; afterEventId?: string } = {},
-): Promise<CommandResultEvent | undefined> {
-  let result: CommandResultEvent | undefined = undefined;
+): Promise<ToolResultEvent | undefined> {
+  let result: ToolResultEvent | undefined = undefined;
   await waitForMatrixEvent(
     commandContext,
     roomId,
@@ -84,10 +84,10 @@ export async function waitForCompletedCommandRequest(
         (e) =>
           isToolResultEventType(e.type) &&
           isToolResultRelType(
-            (e as CommandResultEvent).content['m.relates_to']?.rel_type,
+            (e as ToolResultEvent).content['m.relates_to']?.rel_type,
           ) &&
-          (e as CommandResultEvent).content['m.relates_to']?.key === 'applied',
-      ) as CommandResultEvent[];
+          (e as ToolResultEvent).content['m.relates_to']?.key === 'applied',
+      ) as ToolResultEvent[];
       return commandResultEvents.some((commandResultEvent) => {
         let eventWithRequest = events.find(
           (e) =>
@@ -97,7 +97,7 @@ export async function waitForCompletedCommandRequest(
           return false;
         }
         let commandRequests =
-          getToolRequests<Partial<EncodedCommandRequest>>(
+          getToolRequests<Partial<EncodedToolRequest>>(
             eventWithRequest.content,
           ) ?? [];
         let commandRequest = commandRequests.find(

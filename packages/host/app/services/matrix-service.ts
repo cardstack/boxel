@@ -110,11 +110,11 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
   CodePatchStatus,
-  CommandResultWithNoOutputContent,
-  CommandResultWithOutputContent,
+  ToolResultWithNoOutputContent,
+  ToolResultWithOutputContent,
   RealmEventContent,
   Tool,
-  CommandResultStatus,
+  ToolResultStatus,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
@@ -1321,8 +1321,8 @@ export default class MatrixService extends Service {
       | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | ToolResultWithNoOutputContent
+      | ToolResultWithOutputContent,
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -1444,7 +1444,7 @@ export default class MatrixService extends Service {
     roomId: string;
     invokedToolFromEventId: string;
     toolCallId: string;
-    status: CommandResultStatus;
+    status: ToolResultStatus;
     resultCard?: CardDef;
     failureReason?: string;
     attachedCards?: CardDef[];
@@ -1478,9 +1478,7 @@ export default class MatrixService extends Service {
       );
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
-    let content:
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent;
+    let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,

@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -16,21 +16,21 @@ import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import type { Message } from './message';
 
-type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
+type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
 export default class MessageTool {
-  @tracked commandRequest: Partial<CommandRequest>;
-  @tracked commandStatus?: CommandStatus;
+  @tracked commandRequest: Partial<ToolRequest>;
+  @tracked commandStatus?: ToolCallStatus;
   @tracked commandResultFileDef?: SerializedFile;
 
   constructor(
     public message: Message,
-    commandRequest: Partial<CommandRequest>,
+    commandRequest: Partial<ToolRequest>,
     public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     public requiresApproval: boolean,
     public actionVerb: string,
-    commandStatus: CommandStatus,
+    commandStatus: ToolCallStatus,
     commandResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,

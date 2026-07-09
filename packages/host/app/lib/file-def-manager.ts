@@ -31,7 +31,7 @@ import type {
   SerializedFile,
 } from 'https://cardstack.com/base/file-api';
 import type {
-  CommandDefinitionSchema,
+  ToolDefinitionSchema,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -362,7 +362,7 @@ export default class FileDefManagerImpl
     }
 
     // Create the command defs to get the json schema
-    let commandDefinitionSchemas: CommandDefinitionSchema[] = [];
+    let commandDefinitionSchemas: ToolDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
 
     for (let commandDef of commandDefinitions) {
@@ -378,7 +378,7 @@ export default class FileDefManagerImpl
       );
       const command = new Command(this.toolService.commandContext);
       const name = commandDef.functionName;
-      const schema: CommandDefinitionSchema = {
+      const schema: ToolDefinitionSchema = {
         codeRef: absoluteCodeRef,
         tool: {
           type: 'function' as Tool['type'],

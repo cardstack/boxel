@@ -24,7 +24,7 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import { isAutoExecutableCommand } from '@cardstack/host/lib/tool-auto-execute';
@@ -120,13 +120,13 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get isDisplayingCode() {
     return this.args.roomResource.isDisplayingCode(
-      this.args.messageCommand.commandRequest as CommandRequest,
+      this.args.messageCommand.commandRequest as ToolRequest,
     );
   }
 
   private toggleViewCode = () => {
     this.args.roomResource.toggleViewCode(
-      this.args.messageCommand.commandRequest as CommandRequest,
+      this.args.messageCommand.commandRequest as ToolRequest,
     );
   };
 
@@ -219,8 +219,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get failedCommandState() {
-    let commandRequest = this.args.messageCommand
-      .commandRequest as CommandRequest;
+    let commandRequest = this.args.messageCommand.commandRequest as ToolRequest;
     if (!commandRequest.id) {
       return undefined;
     }

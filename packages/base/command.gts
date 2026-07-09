@@ -27,7 +27,9 @@ import {
 } from './commands/search-card-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
-export type CommandStatus = 'applied' | 'ready' | 'applying';
+export type ToolCallStatus = 'applied' | 'ready' | 'applying';
+// Pre-rename spelling; new code imports `ToolCallStatus`.
+export type CommandStatus = ToolCallStatus;
 
 export class ApplyMarkdownEditInput extends CardDef {
   @field cardId = contains(StringField);

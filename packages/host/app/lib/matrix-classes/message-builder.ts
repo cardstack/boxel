@@ -8,7 +8,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
   decodeCommandRequest,
@@ -42,15 +42,15 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
-import type { CommandStatus } from 'https://cardstack.com/base/command';
+import type { ToolCallStatus } from 'https://cardstack.com/base/command';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
   DebugMessageEvent,
-  CommandResultEvent,
-  EncodedCommandRequest,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -85,7 +85,7 @@ export default class MessageBuilder {
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
-      commandResultEvent?: CommandResultEvent;
+      commandResultEvent?: ToolResultEvent;
     },
   ) {
     setOwner(this, owner);
@@ -246,7 +246,7 @@ export default class MessageBuilder {
     }
 
     let encodedCommandRequests =
-      getToolRequests<Partial<EncodedCommandRequest>>(
+      getToolRequests<Partial<EncodedToolRequest>>(
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
@@ -283,7 +283,7 @@ export default class MessageBuilder {
         );
         if (messageCommand) {
           messageCommand.commandStatus = event.content['m.relates_to']
-            .key as CommandStatus;
+            .key as ToolCallStatus;
           messageCommand.commandResultFileDef = isToolResultWithOutputContent(
             event.content,
           )
@@ -302,7 +302,7 @@ export default class MessageBuilder {
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests =
-      getToolRequests<Partial<EncodedCommandRequest>>(eventContent);
+      getToolRequests<Partial<EncodedToolRequest>>(eventContent);
     if (!commandRequests) {
       return new TrackedArray<MessageTool>();
     }
@@ -319,7 +319,7 @@ export default class MessageBuilder {
 
   private async buildMessageCommand(
     message: Message,
-    commandRequest: Partial<CommandRequest>,
+    commandRequest: Partial<ToolRequest>,
   ) {
     let commandResultEvent =
       this.builderContext.commandResultEvent ??
@@ -337,7 +337,7 @@ export default class MessageBuilder {
           isToolResultRelType(r?.rel_type) &&
           e.content.commandRequestId === commandRequest.id
         );
-      }) as CommandResultEvent | undefined);
+      }) as ToolResultEvent | undefined);
 
     // ai-bot ran this one itself (e.g. readRealmFile), so the host never
     // resolves a command class or runs it. Skip the skill lookup below — it's
@@ -355,7 +355,7 @@ export default class MessageBuilder {
         'Apply', // actionVerb — unused; the indicator shows status, not a Run button
         (commandResultEvent
           ? commandResultEvent.content['m.relates_to']?.key || 'applied'
-          : 'applying') as CommandStatus,
+          : 'applying') as ToolCallStatus,
         undefined, // no result card (server-handled results carry no output)
         getOwner(this)!,
         commandResultEvent?.content.failureReason,
@@ -393,9 +393,9 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
-    let commandStatus: CommandStatus = (commandResultEvent?.content[
+    let commandStatus: ToolCallStatus = (commandResultEvent?.content[
       'm.relates_to'
-    ]?.key || 'ready') as CommandStatus;
+    ]?.key || 'ready') as ToolCallStatus;
 
     let messageCommand = new MessageTool(
       message,
