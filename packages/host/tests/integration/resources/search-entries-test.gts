@@ -13,6 +13,7 @@ import {
   CssResourceType,
   HtmlResourceType,
   EntryResourceType,
+  type EntrySingleDocument,
   type Loader,
   type Realm,
   type SearchEntryResults,
@@ -138,6 +139,78 @@ module('Integration | search-entries resource', function (hooks) {
         },
       },
     });
+  }
+
+  // A book result carrying the generations the selective refresh reads. `htmlGen`
+  // omitted → an empty-html (item-fallback) row.
+  interface BookEntrySpec {
+    id: string;
+    indexGen: number;
+    htmlGen?: number;
+    html?: string;
+  }
+
+  function fittedHtmlId(id: string) {
+    return htmlResourceId({ url: id, format: 'fitted', renderType: bookRef });
+  }
+
+  function entryResourceFor(
+    spec: BookEntrySpec,
+  ): SearchEntryResults['data'][number] {
+    return {
+      type: EntryResourceType,
+      id: spec.id,
+      relationships: {
+        html: {
+          data:
+            spec.htmlGen !== undefined
+              ? [{ type: HtmlResourceType, id: fittedHtmlId(spec.id) }]
+              : [],
+        },
+      },
+      meta: { generation: spec.indexGen },
+    };
+  }
+
+  function htmlResourceFor(
+    spec: BookEntrySpec,
+  ): NonNullable<SearchEntryResults['included']>[number] {
+    return {
+      type: HtmlResourceType,
+      id: fittedHtmlId(spec.id),
+      attributes: {
+        html: spec.html ?? '<div>book</div>',
+        cardType: 'Book',
+        format: 'fitted',
+        renderType: bookRef,
+      },
+      // No scoped CSS, so `loadStylesheets` imports nothing.
+      relationships: { styles: { data: [] } },
+      meta: { generation: spec.htmlGen! },
+    };
+  }
+
+  // A `_federated-search` collection document with the default htmlQuery echoed,
+  // as the server returns for `{ 'item.on': Book }`.
+  function entryCollectionDoc(specs: BookEntrySpec[]): SearchEntryResults {
+    return {
+      data: specs.map(entryResourceFor),
+      included: specs
+        .filter((spec) => spec.htmlGen !== undefined)
+        .map(htmlResourceFor),
+      meta: {
+        page: { total: specs.length },
+        htmlQuery: { eq: { format: 'fitted', renderType: bookRef } },
+      },
+    };
+  }
+
+  // The single-instance card+html GET's response for one book.
+  function entrySingleDoc(spec: BookEntrySpec): EntrySingleDocument {
+    return {
+      data: entryResourceFor(spec),
+      included: spec.htmlGen !== undefined ? [htmlResourceFor(spec)] : [],
+    };
   }
 
   test('exposes entries joined from the wire document (default fieldset: html renderings)', async function (assert) {
@@ -356,56 +429,469 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
-  test('re-runs the search on a prerender_html event; other realm events leave it alone', async function (assert) {
-    let fetchCount = 0;
-    let originalSearchEntries = storeService.searchEntries.bind(storeService);
-    storeService.searchEntries = async (...args) => {
-      fetchCount++;
-      return originalSearchEntries(...args);
-    };
-    try {
-      let search = getResourceForTest(storeService, () => ({
-        named: {
-          query: {
-            filter: { 'item.on': bookRef },
-            realms: [testRealmURL],
-          },
-        },
-      }));
-      await search.loaded;
-      let baseline = fetchCount;
-
-      // The realm-server broadcasts prerender_html when fresh HTML lands on
-      // its own channel after the index pass; the in-browser test realm
-      // renders fused and never emits one, so inject it synthetically.
+  // A prerender_html event can't change a structured query's membership, so a
+  // live search refreshes only the invalidated members' HTML through a
+  // conditional card+html GET — it never re-queries the whole search.
+  module('prerender_html selective per-member refresh', function () {
+    function relayPrerenderHtml(invalidations: string[], generation: number) {
       getService('message-service').relayRealmEvent({
         eventName: 'prerender_html',
         realmURL: testRealmURL,
-        generation: 2,
-        invalidations: [`${testRealmURL}books/1.json`],
+        generation,
+        invalidations,
       });
-      await waitUntil(() => fetchCount > baseline, { timeout: 10_000 });
-      await settled();
-      assert.ok(
-        fetchCount > baseline,
-        'a prerender_html event re-runs the search',
-      );
-
-      let afterPrerender = fetchCount;
-      getService('message-service').relayRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-        realmURL: testRealmURL,
-      });
-      await settled();
-      assert.strictEqual(
-        fetchCount,
-        afterPrerender,
-        'a non-incremental index event does not re-run the search',
-      );
-    } finally {
-      storeService.searchEntries = originalSearchEntries;
     }
+
+    test('refreshes only the invalidated member via a card+html GET; no full re-query', async function (assert) {
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango v1</div>',
+          },
+          {
+            id: `${testRealmURL}books/2`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Van Gogh v1</div>',
+          },
+        ]);
+      };
+
+      let getCalls: { url: string; ifNoneMatch?: string; format?: string }[] =
+        [];
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async (url: string, opts: any) => {
+        getCalls.push({
+          url,
+          ifNoneMatch: opts.ifNoneMatch,
+          format: opts.format,
+        });
+        return {
+          notModified: false,
+          doc: entrySingleDoc({
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 2,
+            html: '<div>Mango v2</div>',
+          }),
+        };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        assert.strictEqual(search.entries.length, 2);
+        let book2Before = search.entries.find(
+          (entry) => entry.id === `${testRealmURL}books/2`,
+        );
+        let baseline = searchCount;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => getCalls.length > 0, { timeout: 10_000 });
+        await settled();
+
+        assert.strictEqual(
+          searchCount,
+          baseline,
+          'no whole-search re-query is issued',
+        );
+        assert.strictEqual(getCalls.length, 1, 'exactly one card+html GET');
+        assert.strictEqual(getCalls[0].url, `${testRealmURL}books/1`);
+        assert.strictEqual(
+          getCalls[0].ifNoneMatch,
+          '"1:1"',
+          'the held composite validator (index:html) is sent as If-None-Match',
+        );
+        assert.strictEqual(getCalls[0].format, 'fitted');
+
+        assert.strictEqual(
+          search.entries[0].html[0].html,
+          '<div>Mango v2</div>',
+          'the invalidated member swaps in the fresh HTML',
+        );
+        assert.strictEqual(
+          search.entries.find((entry) => entry.id === `${testRealmURL}books/2`),
+          book2Before,
+          'the uninvalidated member keeps its identity',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a 304 keeps the current rendering and the member identity', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango v1</div>',
+          },
+        ]);
+
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return { notModified: true };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let before = search.entries[0];
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => getCount > 0, { timeout: 10_000 });
+        await settled();
+
+        assert.strictEqual(getCount, 1, 'the conditional GET was issued');
+        assert.strictEqual(
+          search.entries[0],
+          before,
+          'a 304 leaves the member object untouched (a hydrated row stays live)',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a member already at or above the event generation is not fetched', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 5,
+            htmlGen: 5,
+            html: '<div>Mango</div>',
+          },
+        ]);
+
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return { notModified: true };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let before = search.entries[0];
+
+        // The event's generation (5) is not newer than the member's held HTML
+        // generation (5), so there is nothing to refresh.
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 5);
+        await settled();
+
+        assert.strictEqual(getCount, 0, 'no GET is issued for a fresh member');
+        assert.strictEqual(
+          search.entries[0],
+          before,
+          'the member is untouched',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('an event whose URLs are not in the visible set does no work', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return { notModified: true };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let before = search.entries[0];
+
+        relayPrerenderHtml([`${testRealmURL}books/999.json`], 9);
+        await settled();
+
+        assert.strictEqual(getCount, 0, 'no GET for an unrelated invalidation');
+        assert.strictEqual(search.entries[0], before);
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('an empty-html member upgrades when its rendering lands', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () =>
+        // No rendering yet (empty html array), so no held html generation.
+        entryCollectionDoc([{ id: `${testRealmURL}books/1`, indexGen: 2 }]);
+
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      let capturedIfNoneMatch: string | undefined;
+      storeService.fetchCardEntry = (async (_url: string, opts: any) => {
+        capturedIfNoneMatch = opts.ifNoneMatch;
+        return {
+          notModified: false,
+          doc: entrySingleDoc({
+            id: `${testRealmURL}books/1`,
+            indexGen: 2,
+            htmlGen: 2,
+            html: '<div>Mango</div>',
+          }),
+        };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        assert.deepEqual(search.entries[0].html, [], 'no rendering initially');
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => search.entries[0]?.html.length === 1, {
+          timeout: 10_000,
+        });
+
+        assert.strictEqual(search.entries[0].html[0].html, '<div>Mango</div>');
+        assert.strictEqual(
+          capturedIfNoneMatch,
+          '"2:none"',
+          'a member with no rendering sends the none-html validator',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a full-text (matches) query re-runs in full instead of refreshing members', async function (assert) {
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      };
+
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return { notModified: true };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { 'item.on': bookRef, matches: 'mango' },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await settled();
+
+        assert.ok(
+          searchCount > baseline,
+          'a matches query re-runs the whole search (membership can change)',
+        );
+        assert.strictEqual(
+          getCount,
+          0,
+          'no per-member GET for a matches query',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a failed member GET falls back to a full re-run', async function (assert) {
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      };
+
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        throw new Error('boom');
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await settled();
+
+        assert.ok(
+          searchCount > baseline,
+          'a member the GET could not refresh triggers a coarse re-run',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
+    test('a non-incremental index event does not re-run the search', async function (assert) {
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      };
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        getService('message-service').relayRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+          realmURL: testRealmURL,
+        });
+        await settled();
+
+        assert.strictEqual(
+          searchCount,
+          baseline,
+          'a full (non-incremental) index event leaves the search alone',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    // Exercises the real card+html GET (not stubbed) against the in-browser
+    // realm: the validator the client reconstructs from a member's held
+    // generations must match the server's composite ETag, or the 304 that keeps
+    // a rendering live would never fire.
+    test('the real card+html GET round-trips and its ETag matches the reconstructed validator', async function (assert) {
+      let url = `${testRealmURL}books/1`;
+      let first = await storeService.fetchCardEntry(url, {
+        kind: 'card',
+        format: 'fitted',
+      });
+      assert.false(first.notModified, 'the first GET returns the entry');
+      if (!first.notModified) {
+        let entry = first.doc.data;
+        assert.strictEqual(entry.id, url);
+        let htmlRef = entry.relationships.html?.data?.[0];
+        assert.ok(htmlRef, 'the entry carries a rendering');
+        let htmlResource = first.doc.included?.find(
+          (resource) => resource.id === htmlRef!.id,
+        );
+        assert.ok(htmlResource, 'the rendering rides in included');
+
+        // Reconstruct the composite validator the selective refresh sends,
+        // from the generations the response carries — the same shape
+        // `memberValidator` builds.
+        let indexGeneration = (
+          entry.meta as { generation?: number } | undefined
+        )?.generation;
+        let htmlGeneration = (
+          htmlResource as { meta?: { generation?: number } } | undefined
+        )?.meta?.generation;
+        let validator = `"${indexGeneration ?? 0}:${htmlGeneration ?? 'none'}"`;
+
+        let second = await storeService.fetchCardEntry(url, {
+          kind: 'card',
+          format: 'fitted',
+          ifNoneMatch: validator,
+        });
+        assert.true(
+          second.notModified,
+          'the reconstructed validator matches the server ETag, so the GET 304s',
+        );
+      }
+    });
   });
 
   test('an entry with an empty html array upgrades when its rendering lands on a later event', async function (assert) {

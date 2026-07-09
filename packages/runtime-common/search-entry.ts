@@ -40,7 +40,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
-import { isCodeRef } from './card-document-shape.ts';
+import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
 import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
@@ -736,6 +736,56 @@ export function fieldsetFromParam(
     item: item ? { kind: 'full' } : { kind: 'none' },
     itemAsFallback: false,
   };
+}
+
+// The (format, renderType) a single-leaf htmlQuery selects — the pair the
+// card+html GET spells as `?format=` / `?renderType=`. Returns `undefined` for
+// a composite htmlQuery (`every`/`any`/`not`) or an `eq` leaf whose renderType
+// isn't a resolved `<module>/<name>` ref, since neither has a query-string
+// spelling — a caller wanting to refresh one member's rendering in isolation
+// must fall back when this is `undefined`. The inverse of `htmlQueryFromParams`
+// for the leaf case (`format` defaults to `fitted`, matching that helper and
+// `DEFAULT_HTML_QUERY`).
+export function htmlQueryRenderingSelection(
+  htmlQuery: HtmlQuery | undefined,
+): { format: PrerenderedHtmlFormat; renderType?: ResolvedCodeRef } | undefined {
+  if (!htmlQuery || !('eq' in htmlQuery)) {
+    return undefined;
+  }
+  let { format, renderType } = htmlQuery.eq;
+  if (renderType !== undefined && !isResolvedCodeRef(renderType)) {
+    return undefined;
+  }
+  return {
+    format: format ?? DEFAULT_HTML_QUERY.eq.format,
+    ...(renderType !== undefined ? { renderType } : {}),
+  };
+}
+
+// Whether a full-text `matches` predicate appears anywhere in the entry wire
+// filter tree — the wire-grammar counterpart of `filterHasMatches`. A live
+// search reads this to route a `prerender_html` event: a query whose membership
+// depends on `markdown` (matches) needs a full re-run, a structured one only a
+// targeted rendering refresh.
+export function wireFilterHasMatches(
+  filter: SearchEntryWireFilter | undefined,
+): boolean {
+  if (!filter) {
+    return false;
+  }
+  if (filter.matches !== undefined) {
+    return true;
+  }
+  if (filter.any) {
+    return filter.any.some(wireFilterHasMatches);
+  }
+  if (filter.every) {
+    return filter.every.some(wireFilterHasMatches);
+  }
+  if (filter.not) {
+    return wireFilterHasMatches(filter.not);
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

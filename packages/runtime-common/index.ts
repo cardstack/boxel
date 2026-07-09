@@ -942,6 +942,7 @@ export {
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
   isEntryCollectionDocument,
+  isEntrySingleDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {

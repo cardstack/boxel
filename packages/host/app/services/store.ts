@@ -77,6 +77,10 @@ import {
   type CardResource,
   type SearchEntryResults,
   type SearchEntryWireQuery,
+  type EntrySingleDocument,
+  isEntrySingleDocument,
+  type PrerenderedHtmlFormat,
+  type ResolvedCodeRef,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -1337,6 +1341,84 @@ export default class StoreService extends Service implements StoreInterface {
       );
     }
     return json;
+  }
+
+  // Conditional single-instance card+html GET: fetch one `entry` sourced by
+  // URL (the single-instance counterpart of `_search`), with the rendering
+  // selection spelled as query params and the client's held composite
+  // validator as `If-None-Match`. A `304` means the client's rendering is
+  // current; a `200` returns the fresh entry (with an `item` fallback when no
+  // rendering exists). The live-search selective refresh uses this to bring one
+  // member's HTML up to date without re-querying the whole search. Nothing is
+  // hydrated into the store.
+  async fetchCardEntry(
+    url: string,
+    opts: {
+      kind: StoreReadType;
+      format?: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+      // `html` | `item` | `html,item`; omit for the default resolution (the
+      // selected rendering, falling back to `item` where none matched).
+      fields?: string;
+      ifNoneMatch?: string;
+    },
+  ): Promise<
+    { notModified: true } | { notModified: false; doc: EntrySingleDocument }
+  > {
+    let requestURL = new URL(url);
+    if (opts.format) {
+      requestURL.searchParams.set('format', opts.format);
+    }
+    if (opts.renderType) {
+      requestURL.searchParams.set(
+        'renderType',
+        `${opts.renderType.module}/${opts.renderType.name}`,
+      );
+    }
+    if (opts.fields) {
+      requestURL.searchParams.set('fields', opts.fields);
+    }
+    let headers: Record<string, string> = {
+      Accept:
+        opts.kind === 'file-meta'
+          ? SupportedMimeType.FileMetaHtml
+          : SupportedMimeType.CardHtml,
+      ...duringPrerenderHeaders(),
+      ...consumingRealmHeader(),
+      ...jobIdHeader(),
+      ...jobPriorityHeader(),
+      ...loggingCorrelationIdHeader(),
+    };
+    if (opts.ifNoneMatch) {
+      headers['If-None-Match'] = opts.ifNoneMatch;
+    }
+    let response = await this.network.authedFetch(requestURL.href, {
+      method: 'GET',
+      headers,
+    });
+    if (response.status === 304) {
+      return { notModified: true };
+    }
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} - ${response.statusText}. ${responseText}`,
+      ) as any;
+      err.status = response.status;
+      err.responseText = responseText;
+      err.responseHeaders = response.headers;
+      throw err;
+    }
+    // The response content-type is the negotiated `application/vnd.card+html`
+    // (not `+json`), but the body is a JSON:API document — parse the text.
+    let json = JSON.parse(await response.text());
+    if (!isEntrySingleDocument(json)) {
+      throw new Error(
+        `The card+html response was not a valid entry single document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    return { notModified: false, doc: json };
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(
