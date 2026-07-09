@@ -2032,7 +2032,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
     let roomResource = matrixService.roomResources.get(roomId)!;
     let message = roomResource.messages.find(
-      (m: any) => m.commands?.length === 2,
+      (m: any) => m.tools?.length === 2,
     );
     assert.ok(message, 'two-command bot message lands in the room resource');
 
