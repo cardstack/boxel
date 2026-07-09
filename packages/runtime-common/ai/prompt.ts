@@ -1106,6 +1106,14 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
+        // Surface the failure reason to the model — without it a failed (or
+        // partially fulfilled, e.g. a multi-file read where one file 404ed)
+        // tool call reads as a bare status with nothing to act on.
+        // Check-correctness results fold their reason in above.
+        let failureReason = commandResult.content.failureReason;
+        if (!isCheckCorrectnessRequest && failureReason) {
+          content = `${content}${failureReason}\n`;
+        }
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
           commandResult,
@@ -2353,6 +2361,68 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
+// Skill bodies (a SKILL.md, the skills index) are authored with links relative
+// to the file's own location, so the same source resolves on the coding
+// harness's filesystem. The ai-bot has no filesystem: it reads referenced
+// files over HTTP via `readRealmFile`, which needs a full URL — a relative
+// path gives the model nothing reliable to resolve it against. Resolving
+// every relative markdown link against the skill's own URL up front hands the
+// model a copy-ready absolute URL, so one relative-authored document works
+// for both agents.
+export function absolutizeSkillLinks(
+  markdown: string,
+  baseUrl: string | undefined,
+): string {
+  if (!baseUrl) {
+    return markdown;
+  }
+  let base: URL;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    // A non-absolute id (e.g. an unresolved `@cardstack/skills/…` ref) can't
+    // anchor resolution; leave the body untouched.
+    return markdown;
+  }
+  return markdown.replace(
+    /\[([^\]]*)\]\(([^)]+)\)/g,
+    (whole, text, destination) => {
+      let trimmed = destination.trim();
+      let spaceIndex = trimmed.search(/\s/);
+      let target = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
+      let title = spaceIndex === -1 ? '' : trimmed.slice(spaceIndex);
+      let bare = target.replace(/^<|>$/g, '');
+      if (!isRelativeLink(bare)) {
+        return whole;
+      }
+      let resolved: string;
+      try {
+        resolved = new URL(bare, base).href;
+      } catch {
+        return whole;
+      }
+      return `[${text}](${resolved}${title})`;
+    },
+  );
+}
+
+// A markdown link destination we resolve — document-relative paths only.
+// Absolute URLs, protocol- and root-relative refs, bare fragments, and
+// non-navigational schemes (mailto:, etc.) are left as authored.
+function isRelativeLink(target: string): boolean {
+  if (!target) {
+    return false;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    return false; // has a scheme
+  }
+  return !(
+    target.startsWith('//') ||
+    target.startsWith('/') ||
+    target.startsWith('#')
+  );
+}
+
 export const skillCardsToMessages = (cards: EnabledSkill[]) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
@@ -2364,7 +2434,7 @@ export const skillCardsToMessages = (cards: EnabledSkill[]) => {
     let instructions =
       card.attributes?.instructions?.trim() ?? 'No instructions provided.';
 
-    return `${header}\n${instructions}`;
+    return `${header}\n${absolutizeSkillLinks(instructions, card.id)}`;
   });
 };
 

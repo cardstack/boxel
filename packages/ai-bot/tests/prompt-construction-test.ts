@@ -38,12 +38,14 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import {
+  absolutizeSkillLinks,
   buildPromptForModel,
   getPromptParts,
   getRelevantCards,
   getTools,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -7437,5 +7439,69 @@ module('markdown skill commands', (hooks) => {
     );
     assert.strictEqual(tools.length, 1);
     assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+});
+
+module('absolutizeSkillLinks', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+
+  test('resolves a document-relative link against the skill url', () => {
+    // The skills realm is itself named `skills`, so a link relative to the
+    // index (which lives at the realm root) doubles the segment — the exact
+    // shape the ai-bot used to flatten to a 404.
+    assert.strictEqual(
+      absolutizeSkillLinks('See [boxel](skills/boxel/SKILL.md).', INDEX),
+      'See [boxel](https://localhost:4201/skills/skills/boxel/SKILL.md).',
+    );
+  });
+
+  test('resolves against the skill url, not a shorter prefix', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks('[g](skills/glossary.md)', INDEX),
+      '[g](https://localhost:4201/skills/skills/glossary.md)',
+    );
+  });
+
+  test('leaves absolute urls, anchors, and non-navigational schemes alone', () => {
+    let body =
+      '[abs](https://example.com/x) [anchor](#section) [mail](mailto:a@b.c) [root](/top)';
+    assert.strictEqual(absolutizeSkillLinks(body, INDEX), body);
+  });
+
+  test('preserves a link title', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks(
+        '[c](commands/boxel-create-card.md "Create")',
+        INDEX,
+      ),
+      '[c](https://localhost:4201/skills/commands/boxel-create-card.md "Create")',
+    );
+  });
+
+  test('leaves the body untouched when the id is not an absolute url', () => {
+    let body = '[boxel](skills/boxel/SKILL.md)';
+    assert.strictEqual(
+      absolutizeSkillLinks(body, '@cardstack/skills/index.md'),
+      body,
+    );
+    assert.strictEqual(absolutizeSkillLinks(body, undefined), body);
+  });
+
+  test('skillCardsToMessages absolutizes links in the emitted instructions', () => {
+    let [message] = skillCardsToMessages([
+      {
+        id: INDEX,
+        attributes: {
+          title: 'Index',
+          instructions: 'Read [boxel](skills/boxel/SKILL.md).',
+        },
+      },
+    ]);
+    assert.true(
+      message.includes(
+        '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
+      ),
+      'the prompt carries a copy-ready absolute url',
+    );
   });
 });

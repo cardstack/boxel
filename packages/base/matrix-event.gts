@@ -4,7 +4,7 @@ import type {
   ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import {
+import type {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
@@ -26,10 +26,12 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   CodeRef,
   APP_BOXEL_LLM_MODE,
-  type LLMMode,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { type SerializedFile } from './file-api';
+import type {
+  LLMMode,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
+import type { SerializedFile } from './file-api';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -339,7 +341,10 @@ export interface CommandResultWithOutputContent {
     event_id: string;
   };
   commandRequestId: string;
-  failureReason?: string; // only present if status is 'failed' or 'invalid'
+  // Present if status is 'failed' or 'invalid', or on an 'applied' result
+  // where part of the work failed (e.g. a multi-file read that fetched only
+  // some of its files).
+  failureReason?: string;
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
