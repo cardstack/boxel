@@ -123,21 +123,38 @@ module('Unit | theme-scope', function () {
     assert.strictEqual(themeScope(THEME_ID, CSS), themeScope(THEME_ID, CSS));
   });
 
-  test('starts with the theme id', function (assert) {
-    assert.true(themeScope(THEME_ID, CSS)!.startsWith(`${THEME_ID}-`));
-  });
-
-  test('changes when the css changes', function (assert) {
-    assert.notStrictEqual(
-      themeScope(THEME_ID, CSS),
-      themeScope(THEME_ID, ':root { --primary: #445566; }'),
+  // Scope values persist in prerendered HTML, so the format is a
+  // serialization contract: the theme id, a separator, and a fixed-width
+  // 64-bit hex fingerprint of the css.
+  test('is the theme id plus a fixed-width 64-bit hex fingerprint', function (assert) {
+    let suffix = (css: string) =>
+      themeScope(THEME_ID, css)!.slice(`${THEME_ID}-`.length);
+    assert.true(
+      themeScope(THEME_ID, CSS)!.startsWith(`${THEME_ID}-`),
+      'scope starts with the theme id',
+    );
+    assert.true(
+      /^[0-9a-f]{16}$/.test(suffix(CSS)),
+      'fingerprint is 16 hex chars',
+    );
+    assert.true(
+      // this css hashes with a leading zero in the first pass, which must be
+      // padded rather than truncated
+      /^[0-9a-f]{16}$/.test(suffix(':root { --primary: #000011; }')),
+      'fingerprint width is stable when a pass hashes below 2^28',
     );
   });
 
-  test('differs across themes with identical css', function (assert) {
+  test('changes when the css or the theme id changes', function (assert) {
+    assert.notStrictEqual(
+      themeScope(THEME_ID, CSS),
+      themeScope(THEME_ID, ':root { --primary: #445566; }'),
+      'differs across css versions of one theme',
+    );
     assert.notStrictEqual(
       themeScope(THEME_ID, CSS),
       themeScope('https://example.test/other-theme', CSS),
+      'differs across themes with identical css',
     );
   });
 

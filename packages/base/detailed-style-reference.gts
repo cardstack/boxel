@@ -143,6 +143,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
   <template>
     <ThemeDashboard
       @themeCss={{@model.cssVariables}}
+      @themeId={{@model.id}}
       @title={{@model.cardTitle}}
       @description={{@model.cardDescription}}
       @sections={{this.sectionsWithContent}}

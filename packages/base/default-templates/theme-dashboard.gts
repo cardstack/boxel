@@ -1077,19 +1077,19 @@ export class ThemeDashboard extends GlimmerComponent<{
     version?: string;
     isDarkMode?: boolean;
     themeCss?: string | null;
+    themeId?: string | null;
   };
   Blocks: { default: []; header: []; navBar: [] };
   Element: HTMLElement;
 }> {
   // Content-derived rather than guidFor: this markup can be persisted as
   // prerendered HTML, where the scoped rules are page-global. Equal scopes
-  // are only safe when their declarations are equal too, which the content
-  // hash guarantees; a per-process guid can repeat across prerender jobs
-  // with different themes. The guid fallback is never stamped (the scope
-  // renders only when @themeCss is present) — it just keeps the value
-  // defined.
+  // are only safe when their declarations are equal too, which the theme id
+  // plus content hash guarantees; a per-process guid can repeat across
+  // prerender jobs with different themes. The guid fallback only covers
+  // unsaved theme cards previewing their own CSS, which are never persisted.
   private get themeScopeId() {
-    return themeScope('theme-dashboard', this.args.themeCss) ?? guidFor(this);
+    return themeScope(this.args.themeId, this.args.themeCss) ?? guidFor(this);
   }
 
   // The data-theme wrapper drives the preview's light/dark toggle through the

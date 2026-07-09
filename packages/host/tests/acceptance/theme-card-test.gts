@@ -535,6 +535,25 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert.dom(cardSelector).hasClass('boxel-card-container--themed');
       assert.dom(cardSelector).hasAttribute('data-boxel-theme-scope');
 
+      // the card container and the theme dashboard inside it derive their
+      // scopes from the same identity (the theme card's id plus its css), so
+      // the two render paths agree and their stylesheets are dedupable
+      let containerScope = document
+        .querySelector(cardSelector)!
+        .getAttribute('data-boxel-theme-scope');
+      let dashboardScope = document
+        .querySelector(`${cardSelector} article[data-boxel-theme-scope]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.true(
+        containerScope!.startsWith(`${themeCardId}-`),
+        'scope derives from the theme card id',
+      );
+      assert.strictEqual(
+        dashboardScope,
+        containerScope,
+        'dashboard scope matches the container scope',
+      );
+
       assert.strictEqual(
         computedProperty(cardSelector, '--background'),
         '#0a0f23',
