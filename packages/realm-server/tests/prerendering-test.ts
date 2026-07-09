@@ -7636,6 +7636,36 @@ module(basename(import.meta.filename), function () {
         [...new Set(fused.card?.deps ?? [])].sort(),
         'union of the two visits card deps matches the fused deps as a set',
       );
+
+      // Per-format render timings ride the prerender-html visit's meta —
+      // one number per html-route step for the card and the file rendering
+      // — while the index visit, which never runs the html route, reports
+      // none.
+      let renderFormatsMs = html.meta?.diagnostics?.renderFormatsMs;
+      const formats = [
+        'isolated',
+        'head',
+        'atom',
+        'markdown',
+        'fitted',
+        'embedded',
+      ] as const;
+      for (let format of formats) {
+        assert.strictEqual(
+          typeof renderFormatsMs?.card?.[format],
+          'number',
+          `prerender-html visit records the card ${format} render timing`,
+        );
+        assert.strictEqual(
+          typeof renderFormatsMs?.file?.[format],
+          'number',
+          `prerender-html visit records the file ${format} render timing`,
+        );
+      }
+      assert.notOk(
+        index.meta?.diagnostics?.renderFormatsMs,
+        'index visit records no per-format render timings',
+      );
     });
 
     test('reuses a single pooled page for all three passes', async function (assert) {

@@ -311,6 +311,7 @@ async function projectPrerenderedHtml(
     'generation',
     'is_deleted',
     'error_doc',
+    'diagnostics',
     'rendered_at',
     ...(table === 'working' ? ['job_id'] : []),
   ];
@@ -321,13 +322,13 @@ async function projectPrerenderedHtml(
          url, file_alias, realm_url, type,
          fitted_html, embedded_html, atom_html, head_html, isolated_html,
          markdown, deps, last_known_good_deps,
-         generation, is_deleted, error_doc, rendered_at${jobIdColumn}
+         generation, is_deleted, error_doc, diagnostics, rendered_at${jobIdColumn}
        )
        SELECT
          url, file_alias, realm_url, type,
          fitted_html, embedded_html, atom_html, head_html, isolated_html,
          markdown, deps, last_known_good_deps,
-         generation, is_deleted, error_doc, indexed_at${jobIdColumn}
+         generation, is_deleted, error_doc, diagnostics, indexed_at${jobIdColumn}
        FROM ${source}
        WHERE 1=1
        ON CONFLICT ON CONSTRAINT ${target}_pkey DO UPDATE SET ` +

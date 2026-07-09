@@ -6,6 +6,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  type Diagnostics,
   type IndexingProgressEvent,
   type Prerenderer,
   type QueueCoalesceCandidate,
@@ -377,7 +378,11 @@ module(basename(import.meta.filename), function () {
       generation: number,
       url: string,
       html: string,
-      opts: { deps?: string[]; info?: ReturnType<typeof jobInfo> } = {},
+      opts: {
+        deps?: string[];
+        info?: ReturnType<typeof jobInfo>;
+        diagnostics?: Diagnostics;
+      } = {},
     ) {
       let batch = await makeBatch(generation, opts.info);
       await batch.seedPrerenderedHtmlInvalidations([
@@ -387,6 +392,7 @@ module(basename(import.meta.filename), function () {
         type: 'instance',
         isolatedHtml: html,
         deps: opts.deps ?? [],
+        ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
       });
       await batch.done();
     }
@@ -399,11 +405,33 @@ module(basename(import.meta.filename), function () {
         isolated_html: string | null;
         generation: number;
         is_deleted: boolean | null;
-        error_doc: { message?: string } | null;
+        error_doc: {
+          message?: string;
+          diagnostics?: Record<string, unknown>;
+        } | null;
         deps: string[] | null;
         last_known_good_deps: string[] | null;
+        diagnostics: Record<string, unknown> | null;
       }[];
       return rows[0];
+    }
+
+    function stubReader(contents: Map<string, string>): Reader {
+      return {
+        async readFile(url: URL) {
+          let content = contents.get(url.href);
+          if (content === undefined) {
+            return undefined;
+          }
+          return { content, lastModified: 0, path: url.href };
+        },
+        async readStream() {
+          return undefined;
+        },
+        async mtimes() {
+          return {};
+        },
+      };
     }
 
     test('writes rendered rows and swaps them under the carried generation', async function (assert) {
@@ -579,6 +607,172 @@ module(basename(import.meta.filename), function () {
       let row = await productionRow(url);
       assert.strictEqual(row.isolated_html, null);
       assert.strictEqual(row.error_doc?.message, 'boom');
+    });
+
+    test('persists the render diagnostics with a rendered row', async function (assert) {
+      let url = `${testRealm}1.json`;
+      let diagnostics: Diagnostics = {
+        prerenderHtmlRequestId: 'render-req-1',
+        launchMs: 5,
+        renderElapsedMs: 100,
+        totalElapsedMs: 105,
+        renderFormatsMs: { card: { isolated: 80, fitted: 12 } },
+      };
+      await writeInstance(1, url, '<h1>v1</h1>', { diagnostics });
+
+      let row = await productionRow(url);
+      assert.deepEqual(
+        row.diagnostics,
+        diagnostics as Record<string, unknown>,
+        'the render diagnostics ride the row through the swap',
+      );
+      assert.strictEqual(row.error_doc, null);
+    });
+
+    test('a render error persists the failing render diagnostics and mirrors them onto the error doc', async function (assert) {
+      let url = `${testRealm}1.json`;
+      await writeInstance(1, url, '<h1>good</h1>', {
+        diagnostics: {
+          prerenderHtmlRequestId: 'good-render',
+          renderElapsedMs: 50,
+        },
+      });
+
+      let failing: Diagnostics = {
+        prerenderHtmlRequestId: 'failing-render',
+        renderElapsedMs: 30_000,
+        renderStage: 'waiting-stability',
+      };
+      let batch = await makeBatch(2);
+      await batch.seedPrerenderedHtmlInvalidations([
+        { url, operation: 'update' },
+      ]);
+      await batch.updatePrerenderedHtmlEntry(new URL(url), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: null },
+        diagnostics: failing,
+      });
+      await batch.done();
+
+      let row = await productionRow(url);
+      assert.strictEqual(
+        row.isolated_html,
+        '<h1>good</h1>',
+        'the last-known-good HTML is preserved through the error cycle',
+      );
+      assert.deepEqual(
+        row.diagnostics,
+        failing as Record<string, unknown>,
+        "the failing render's diagnostics land on the row — not the last-known-good render's",
+      );
+      assert.deepEqual(
+        row.error_doc?.diagnostics,
+        failing as Record<string, unknown>,
+        'the same payload is mirrored onto the error doc',
+      );
+    });
+
+    test('a tombstone clears the prior render diagnostics', async function (assert) {
+      let url = `${testRealm}1.json`;
+      await writeInstance(1, url, '<h1>v1</h1>', {
+        diagnostics: { prerenderHtmlRequestId: 'render-req-1' },
+      });
+
+      let deleteBatch = await makeBatch(2);
+      await deleteBatch.seedPrerenderedHtmlInvalidations([
+        { url, operation: 'delete' },
+      ]);
+      await deleteBatch.done();
+
+      let row = await productionRow(url);
+      assert.true(Boolean(row.is_deleted), 'the delete tombstones the row');
+      assert.strictEqual(
+        row.diagnostics,
+        null,
+        'the tombstone clears the diagnostics of the render it hides',
+      );
+    });
+
+    test('the pass persists the visit meta as render diagnostics, keyed by prerenderHtmlRequestId', async function (assert) {
+      let cardURL = `${testRealm}pine.json`;
+      let cardJSON = JSON.stringify({
+        data: {
+          type: 'card',
+          meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+        },
+      });
+      let prerenderer: Prerenderer = {
+        async prerenderVisit() {
+          return {
+            card: {
+              serialized: null,
+              searchDoc: null,
+              displayNames: null,
+              deps: [`${testRealm}pine`],
+              types: null,
+              isolatedHTML: '<h1>pine</h1>',
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: null,
+              fittedHTML: null,
+              iconHTML: null,
+              markdown: null,
+            },
+            fileRender: {
+              isolatedHTML: '<pre>pine</pre>',
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: null,
+              fittedHTML: null,
+              iconHTML: null,
+              markdown: null,
+            },
+            meta: {
+              requestId: 'render-req-9',
+              diagnostics: {
+                launchMs: 5,
+                renderElapsedMs: 100,
+                renderFormatsMs: {
+                  card: { isolated: 80 },
+                  file: { isolated: 6 },
+                },
+              },
+            },
+          };
+        },
+        async prerenderModule() {
+          throw new Error('not used by the prerender-html pass');
+        },
+        async runCommand() {
+          throw new Error('not used by the prerender-html pass');
+        },
+      };
+      await runPrerenderHtmlPass({
+        realmURL: new URL(testRealm),
+        changes: [{ url: cardURL, operation: 'update' }],
+        generation: 1,
+        loaderEpoch: 'epoch-a',
+        indexWriter,
+        virtualNetwork,
+        reader: stubReader(new Map([[cardURL, cardJSON]])),
+        prerenderer,
+        auth: 'test-auth',
+        jobInfo: jobInfo(),
+      });
+
+      // The visit's HTTP correlation id lands under `prerenderHtmlRequestId`
+      // — never `requestId`, which always names an index visit — and one
+      // visit produces both of a URL's rows, so the same blob lands on both.
+      let expected = {
+        launchMs: 5,
+        renderElapsedMs: 100,
+        renderFormatsMs: { card: { isolated: 80 }, file: { isolated: 6 } },
+        prerenderHtmlRequestId: 'render-req-9',
+      };
+      let instanceRow = await productionRow(cardURL, 'instance');
+      assert.deepEqual(instanceRow.diagnostics, expected);
+      let fileRow = await productionRow(cardURL, 'file');
+      assert.deepEqual(fileRow.diagnostics, expected);
     });
 
     test('a retry resumes rows the prior attempt rendered instead of tombstoning them', async function (assert) {
@@ -771,24 +965,6 @@ module(basename(import.meta.filename), function () {
     });
 
     module('progress reporting', function () {
-      function stubReader(contents: Map<string, string>): Reader {
-        return {
-          async readFile(url: URL) {
-            let content = contents.get(url.href);
-            if (content === undefined) {
-              return undefined;
-            }
-            return { content, lastModified: 0, path: url.href };
-          },
-          async readStream() {
-            return undefined;
-          },
-          async mtimes() {
-            return {};
-          },
-        };
-      }
-
       function stubPrerenderer(
         visit: (url: string) => void = () => {},
       ): Prerenderer {

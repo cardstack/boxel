@@ -1,12 +1,12 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
 # Indexing diagnostics
 
-Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on the row it wrote — the `diagnostics` JSONB column. Most of the blob is about what the prerender pipeline spent its time on and what category of stall (if any) the render was stuck in, but it also records non-timing render findings, notably `brokenLinks`. It's the primary tool for investigating:
+Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on the row it wrote — the `diagnostics` JSONB column. Most of the blob is about what the prerender pipeline spent its time on and what category of stall (if any) the render was stuck in, but it also records non-timing render findings, notably `brokenLinks`. A row is produced by two visits on two channels, and each visit's diagnostics follow its writes: the index visit's breakdown lands on `boxel_index.diagnostics`, the prerender-html visit's render breakdown lands on `prerendered_html.diagnostics` (see [Two visits, two tables](#two-visits-two-tables--which-timings-live-where)). It's the primary tool for investigating:
 
 - **A render that timed out during indexing** — classify the stall, fix the right layer. (Also applies to user-facing 504s since the UI path goes through the same prerender.)
 - **A reindex that was slow but succeeded** — attribute wall-clock across the cards that got re-rendered, find the real culprit in the fan-out.
@@ -18,13 +18,14 @@ The first three read from the same `diagnostics` column; the difference is the q
 
 ## Where the diagnostics live
 
-Four places, all correlated:
+Six places, all correlated:
 
-1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference.
-2. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
-3. **`error_doc.diagnostics`** — derived copy of `diagnostics`, written only for error rows on `boxel_index`. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
-4. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same `requestId` lands on both `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'`, so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
-5. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
+1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `computedCalls`/`computedCacheHits`) and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference. Rows written by a fused pass (the SQLite in-browser path, or anything indexed before the prerender split) carry one **combined** blob covering both visits here instead.
+2. **`prerendered_html.diagnostics` (and `prerendered_html_working.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
+3. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
+4. **`error_doc.diagnostics`** — derived copy of the same table's `diagnostics`, written only for error rows: an index error's copy rides `boxel_index.error_doc`, a render error's rides `prerendered_html.error_doc` (an instance's effective error is the union of the two). Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
+5. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same id lands on `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'` — and, for the render channel, on `prerendered_html.diagnostics->>'prerenderHtmlRequestId'` — so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
+6. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -36,6 +37,41 @@ The SQL examples below are environment-agnostic — they work the same against l
 - **Staging / prod**: the RDS instances are private to the cardstack VPC. Use the `aws-access` skill — it covers (a) provisioning a Claude-usable AWS session via `mise run claude-aws <env> <token>`, (b) the SSM port-forward tunnel through the realm-server ECS task to RDS, and (c) connecting via psql as the read-only `claude_readonly_user` (member of `readonly_role`). This skill assumes you've already got that connection working; it doesn't re-document the AWS plumbing.
 
 When wrapping a query below into the staging/prod form, run it through the `psql -h localhost -p <local-port> -A -t` invocation that the `aws-access` skill sets up — same SQL, different transport.
+
+## Two visits, two tables — which timings live where
+
+A URL is produced by two prerender visits on two channels, and each visit's diagnostics follow its writes:
+
+| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the search-doc build (`serializeMs`, `searchDocMs`, `computedCalls`/`computedCacheHits`), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`.                                                                                                                         |
+| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain). HTTP id: `prerenderHtmlRequestId`. |
+
+So "why was indexing this card slow?" and "why was rendering this card slow?" are separately answerable per row: the index cost is `boxel_index.diagnostics`, the render cost is `prerendered_html.diagnostics`, and inside the render cost `renderFormatsMs` names the format that dominated (a slow `isolated` template vs a `fitted` render fanning out across many ancestors).
+
+The field-name → visit mapping is constant across both tables: `requestId` always names an index visit's HTTP request, `prerenderHtmlRequestId` always names a prerender-html visit's. Join a row's two halves on url (each table keys on `(url, realm_url, type)`), then carry each side's id into the log search:
+
+```sql
+SELECT b.url,
+       b.diagnostics->>'requestId'                 AS index_visit_request,
+       (b.diagnostics->>'totalElapsedMs')::int     AS index_visit_ms,
+       (b.diagnostics->>'searchDocMs')::int        AS search_doc_ms,
+       p.diagnostics->>'prerenderHtmlRequestId'    AS render_visit_request,
+       (p.diagnostics->>'totalElapsedMs')::int     AS render_visit_ms,
+       p.diagnostics->'renderFormatsMs'            AS render_formats_ms
+FROM boxel_index b
+LEFT JOIN prerendered_html p
+  ON p.url = b.url AND p.realm_url = b.realm_url AND p.type = b.type
+WHERE b.url = '<card-url>'
+  AND b.type = 'instance';
+```
+
+Caveats:
+
+- Rows written by a fused pass (the SQLite in-browser path, or anything indexed before the prerender split) carry one **combined** blob on `boxel_index.diagnostics` — summed timings across both visits, with the render visit's id under `prerenderHtmlRequestId` alongside `requestId` — and the dual-write projection copies that same combined blob onto the `prerendered_html` row.
+- One prerender-html visit produces both of a URL's rows (`type='instance'` and `type='file'`), so both carry the same blob; the `card` block of `renderFormatsMs` describes the instance rendering and the `file` block the FileDef rendering.
+- The two tables' generations advance independently: `p.rendered_at` / `p.generation` tell you _which_ index generation the persisted render diagnostics belong to (fresh when it equals `b.generation`).
+- A `prerender_html` job that never ran (queued, crashed pre-write) leaves no diagnostics — check `jobs` / `job_reservations` for the realm's `prerender_html` lane instead.
 
 ## The four stall categories
 
@@ -71,18 +107,21 @@ The priority value lives on the `diagnostics.priority` field and on every `sameA
 
 ## Mode A — a render timed out
 
-Pull the diagnostic JSON for the erroring row:
+Pull the diagnostic JSON for the erroring row — from the channel the failure happened on. An index-visit failure (search-doc build, serialization) errors the `boxel_index` row; an html-render failure in the `prerender_html` job errors the `prerendered_html` row. When you don't know which, check both — an instance's effective error is the union:
 
 ```sql
-SELECT diagnostics
+SELECT 'index'  AS channel, diagnostics, error_doc IS NOT NULL AS errored
 FROM boxel_index
-WHERE url = '<errored-card-url>'
-  AND type = 'instance';
+WHERE url = '<errored-card-url>' AND type = 'instance'
+UNION ALL
+SELECT 'render' AS channel, diagnostics, error_doc IS NOT NULL AS errored
+FROM prerendered_html
+WHERE url = '<errored-card-url>' AND type = 'instance';
 ```
 
 (Or read `error_doc.diagnostics` from the JSON:API error response — same shape.)
 
-Walk the fields per [Classify in one pass](#classify-in-one-pass). The _first_ positive signal wins; stop there.
+Walk the fields per [Classify in one pass](#classify-in-one-pass). The _first_ positive signal wins; stop there. On the render channel, `renderFormatsMs` additionally names which format's render ate the time.
 
 ## Mode B — an incremental reindex was slow
 

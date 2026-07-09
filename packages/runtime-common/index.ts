@@ -228,6 +228,17 @@ export interface RenderTimeoutDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
+  // Per-format wall-clock of the html-route renders in this visit, split by
+  // the card rendering and the FileDef file rendering. Keys are the format
+  // steps the visit ran (`isolated`, `head`, `atom`, `markdown`, and the
+  // ancestor-driven `fitted` / `embedded`, each one number covering the
+  // whole ancestor chain). Only populated by visits that run html steps, so
+  // it tells you which format dominated `renderElapsedMs` — e.g. a slow
+  // isolated template vs. a fitted render fanning out across many ancestors.
+  renderFormatsMs?: {
+    card?: Record<string, number>;
+    file?: Record<string, number>;
+  };
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
@@ -461,12 +472,14 @@ export interface PrerenderResponseMeta {
   requestId?: string;
 }
 
-// The shape persisted to `boxel_index.diagnostics`. Named `Diagnostics`
-// (not `TimingDiagnostics`) because the block is no longer purely about
-// timing: it also carries `brokenLinks`, the broken-link findings the
-// render surfaced. Extends `RenderTimeoutDiagnostics` (which already
-// carries `requestId`) with two write-side stamps applied at
-// `IndexWriter.updateEntry` time:
+// The shape persisted to the `diagnostics` columns — `boxel_index` for the
+// index visit's breakdown, `prerendered_html` for the prerender-html visit's
+// (the two visits' costs are independently queryable per row; join them on
+// url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
+// no longer purely about timing: it also carries `brokenLinks`, the
+// broken-link findings the render surfaced. Extends
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
+// write-side stamps applied at `IndexWriter.updateEntry` time:
 //
 //   - `invalidationId` — one UUID per `Batch`; every row touched by
 //     the same indexing pass (incremental fan-out or fromScratch)
@@ -490,9 +503,11 @@ export interface Diagnostics
   invalidationId?: string;
   indexedAt?: number;
   // A row is produced by two prerender visits (index + prerender-html),
-  // each its own HTTP request. `requestId` carries the index visit's id;
-  // this carries the prerender-html visit's so operators can join logs
-  // for both. Absent for in-process callers and fused single-visit rows.
+  // each its own HTTP request. `requestId` always carries the index visit's
+  // id and this always carries the prerender-html visit's, whichever table
+  // the blob lands in: `boxel_index.diagnostics` carries `requestId` (plus
+  // this field on rows a fused pass wrote), `prerendered_html.diagnostics`
+  // carries only this field. Absent for in-process callers.
   prerenderHtmlRequestId?: string;
   // Frontmatter YAML that wouldn't parse during file extraction. The row
   // still indexes (body-only); this is the only indexed signal that the
@@ -519,6 +534,24 @@ export function flattenPrerenderMeta(
   return {
     ...diagnostics,
     ...(hasRequestId ? { requestId: meta.requestId } : {}),
+  };
+}
+
+// The prerender-html-visit flavor of `flattenPrerenderMeta`, for blobs bound
+// for `prerendered_html.diagnostics`: the visit's HTTP correlation id lands
+// under `prerenderHtmlRequestId` rather than `requestId`, keeping the
+// field-name → visit mapping constant across both diagnostics columns
+// (`requestId` always names an index visit, `prerenderHtmlRequestId` always
+// names a prerender-html visit).
+export function flattenPrerenderHtmlVisitMeta(
+  meta: PrerenderResponseMeta | undefined,
+): Diagnostics | undefined {
+  let flattened = flattenPrerenderMeta(meta);
+  if (!flattened) return undefined;
+  let { requestId, ...rest } = flattened;
+  return {
+    ...rest,
+    ...(requestId != null ? { prerenderHtmlRequestId: requestId } : {}),
   };
 }
 
