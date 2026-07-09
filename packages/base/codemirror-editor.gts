@@ -681,7 +681,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     try {
       result = await editMarkdownEmbed({
         refType: ref.refType as 'card' | 'file',
-        url: ref.url,
+        // Resolve the directive's raw ref (which may be relative to the field's
+        // base URL) to an absolute URL. The chooser loads the preview via
+        // `store.get`, which can't resolve a relative specifier on its own.
+        url: resolveUrl(
+          ref.url,
+          this.args.cardReferenceBaseUrl,
+        ),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
       });
