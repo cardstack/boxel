@@ -7284,7 +7284,7 @@ module('markdown skill commands', (hooks) => {
     'description: "env"',
     'boxel:',
     '  kind: skill',
-    '  commands:',
+    '  tools:',
     '    - codeRef:',
     '        module: "@cardstack/boxel-host/commands/switch-submode"',
     '        name: "default"',
@@ -7305,13 +7305,24 @@ module('markdown skill commands', (hooks) => {
     assert.false(commands[0].requiresApproval);
   });
 
+  test('parseMarkdownSkill reads the pre-rename boxel.commands key', (assert) => {
+    let { commands } = parseMarkdownSkill(
+      SKILL_MD.replace('  tools:', '  commands:'),
+      {
+        sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+      } as any,
+    );
+    assert.strictEqual(commands.length, 1);
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+  });
+
   test('a command without requiresApproval defaults to approval required', (assert) => {
     let md = [
       '---',
       'name: "My Skill"',
       'boxel:',
       '  kind: skill',
-      '  commands:',
+      '  tools:',
       '    - codeRef:',
       '        module: "@cardstack/boxel-host/commands/switch-submode"',
       '        name: "default"',
@@ -7330,7 +7341,7 @@ module('markdown skill commands', (hooks) => {
       'name: "My Skill"',
       'boxel:',
       '  kind: skill',
-      '  commands:',
+      '  tools:',
       '    - codeRef:',
       '        module: "../../commands/my-command"',
       '        name: "default"',
@@ -7352,7 +7363,7 @@ module('markdown skill commands', (hooks) => {
       'name: "My Skill"',
       'boxel:',
       '  kind: skill',
-      '  commands:',
+      '  tools:',
       '    - codeRef:',
       '        module: "/commands/my-command"',
       '        name: "default"',

@@ -362,7 +362,7 @@ export default class MessageBuilder {
     }
 
     // Find command in skills. loadSkillSource handles both legacy Skill
-    // cards and markdown skills (commands in boxel.commands frontmatter).
+    // cards and markdown skills (tools in boxel.tools frontmatter).
     let skillCommand:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;

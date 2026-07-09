@@ -491,9 +491,10 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
   return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
 }
 
-// A command a markdown skill contributes via its `boxel.commands`
-// frontmatter, with the functionName the host derives for the same code ref —
-// so getTools can match it against the room's uploaded command definitions.
+// A command a markdown skill contributes via its `boxel.tools` frontmatter
+// (or the pre-rename `boxel.commands` key), with the functionName the host
+// derives for the same code ref — so getTools can match it against the room's
+// uploaded command definitions.
 export interface MarkdownSkillCommand {
   codeRef: { module: string; name: string };
   functionName: string;
@@ -543,11 +544,13 @@ export function parseMarkdownSkill(
   return { title, body: body.trim(), kind, commands };
 }
 
-// Extracts `boxel.commands` from parsed frontmatter and computes each
-// command's functionName the way the host does when it uploads the room's
-// command definitions. Package specifiers (e.g. @cardstack/boxel-host/...)
-// resolve verbatim on the host, so hashing the literal module gives the same
-// name; relative modules resolve against the skill's own URL.
+// Extracts `boxel.tools` (falling back to the pre-rename `boxel.commands`
+// key; `tools` wins when both are present) from parsed frontmatter and
+// computes each command's functionName the way the host does when it uploads
+// the room's command definitions. Package specifiers (e.g.
+// @cardstack/boxel-host/...) resolve verbatim on the host, so hashing the
+// literal module gives the same name; relative modules resolve against the
+// skill's own URL.
 function markdownSkillCommands(
   frontmatter: Record<string, unknown>,
   skillUrl: string | undefined,
@@ -558,11 +561,16 @@ function markdownSkillCommands(
     !Array.isArray(frontmatter.boxel)
       ? (frontmatter.boxel as Record<string, unknown>)
       : undefined;
-  if (!Array.isArray(boxel?.commands)) {
+  let entries = Array.isArray(boxel?.tools)
+    ? boxel.tools
+    : Array.isArray(boxel?.commands)
+      ? boxel.commands
+      : undefined;
+  if (!entries) {
     return [];
   }
   let commands: MarkdownSkillCommand[] = [];
-  for (let entry of boxel.commands) {
+  for (let entry of entries) {
     let codeRef = (entry as { codeRef?: { module?: string; name?: string } })
       ?.codeRef;
     if (
