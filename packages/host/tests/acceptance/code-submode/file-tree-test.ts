@@ -15,7 +15,7 @@ import { module, test } from 'qunit';
 
 import { baseRealmRRI } from '@cardstack/runtime-common';
 
-import WriteTextFileCommand from '@cardstack/host/tools/write-text-file';
+import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {
@@ -55,7 +55,7 @@ const indexCardSource = `
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
-import WriteTextFileCommand from '../../../app/commands/write-text-file';
+import WriteTextFileTool from '../../../app/tools/write-text-file';
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -1084,9 +1084,9 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let newDirName = 'new-dir';
     let newFileName = 'new-file.gts';
 
-    let commandService = getService('command-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
+    let toolService = getService('tool-service');
+    let writeTextFileCommand = new WriteTextFileTool(
+      toolService.commandContext,
     );
     await writeTextFileCommand.execute({
       path: `${newDirName}/${newFileName}`,

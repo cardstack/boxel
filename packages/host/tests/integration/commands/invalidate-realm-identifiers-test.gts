@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import InvalidateRealmIdentifiersCommand from '@cardstack/host/tools/invalidate-realm-identifiers';
+import InvalidateRealmIdentifiersTool from '@cardstack/host/tools/invalidate-realm-identifiers';
 
 import {
   setupIntegrationTestRealm,
@@ -90,10 +90,10 @@ module(
     });
 
     test('calls realm endpoint with expected auth header and payload', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let realmServer = getService('realm-server');
-      let command = new InvalidateRealmIdentifiersCommand(
-        commandService.commandContext,
+      let command = new InvalidateRealmIdentifiersTool(
+        toolService.commandContext,
       );
       let realmURL = new URL('test/', realmServer.url).href;
 
@@ -157,10 +157,10 @@ module(
     });
 
     test('throws when realm invalidation endpoint returns non-204', async function (assert) {
-      let commandService = getService('command-service');
+      let toolService = getService('tool-service');
       let realmServer = getService('realm-server');
-      let command = new InvalidateRealmIdentifiersCommand(
-        commandService.commandContext,
+      let command = new InvalidateRealmIdentifiersTool(
+        toolService.commandContext,
       );
       let realmURL = new URL('test/', realmServer.url).href;
       responseStatus = 500;

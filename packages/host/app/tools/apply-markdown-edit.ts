@@ -1,18 +1,18 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import GetCardCommand from './get-card';
-import PatchFieldsCommand from './patch-fields';
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import GetCardTool from './get-card';
+import PatchFieldsTool from './patch-fields';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
 const escapeForTag = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Command to apply markdown edits using relace/relace-apply-3 model
-export default class ApplyMarkdownEditCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ApplyMarkdownEditInput,
+export default class ApplyMarkdownEditTool extends HostBaseTool<
+  typeof BaseToolModule.ApplyMarkdownEditInput,
   undefined
 > {
   static actionVerb = 'Apply Markdown Edit';
@@ -20,13 +20,13 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     'Apply a targeted edit to markdown content only (for example .md/.markdown text). This command is not for source code edits such as .gts/.ts/.js/.json files.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ApplyMarkdownEditInput } = commandModule;
     return ApplyMarkdownEditInput;
   }
 
   protected async run(
-    input: BaseCommandModule.ApplyMarkdownEditInput,
+    input: BaseToolModule.ApplyMarkdownEditInput,
   ): Promise<undefined> {
     // Validate inputs
     if (!input.cardId?.trim()) {
@@ -43,7 +43,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     }
 
     // Get the card
-    const getCard = new GetCardCommand(this.commandContext);
+    const getCard = new GetCardTool(this.commandContext);
     const card = await getCard.execute({ cardId: input.cardId });
 
     if (!card) {
@@ -129,7 +129,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
       ],
     };
 
-    const response = await new SendRequestViaProxyCommand(
+    const response = await new SendRequestViaProxyTool(
       this.commandContext,
     ).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -191,7 +191,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     }
 
     // Patch only the specific markdown field
-    await new PatchFieldsCommand(this.commandContext).execute({
+    await new PatchFieldsTool(this.commandContext).execute({
       cardId: input.cardId,
       fieldUpdates: {
         [input.fieldPath]: finalContent,
@@ -201,3 +201,7 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
     return undefined;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ApplyMarkdownEditTool as ApplyMarkdownEditCommand };

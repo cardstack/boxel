@@ -10,27 +10,27 @@
  * Used by the software-factory's EvalValidationStep via `_run-command`.
  */
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-export default class EvaluateModuleCommand extends HostBaseCommand<
-  typeof BaseCommandModule.EvaluateModuleInput,
-  typeof BaseCommandModule.EvaluateModuleResult
+export default class EvaluateModuleTool extends HostBaseTool<
+  typeof BaseToolModule.EvaluateModuleInput,
+  typeof BaseToolModule.EvaluateModuleResult
 > {
   description = 'Evaluate a .gts module via the Loader in the prerenderer';
   static actionVerb = 'Evaluate';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.EvaluateModuleInput;
   }
 
   requireInputFields = ['moduleIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.EvaluateModuleInput,
-  ): Promise<BaseCommandModule.EvaluateModuleResult> {
+    input: BaseToolModule.EvaluateModuleInput,
+  ): Promise<BaseToolModule.EvaluateModuleResult> {
     let moduleUrl = input.moduleIdentifier;
     let realmUrl = input.realmIdentifier;
 
@@ -42,7 +42,7 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
       this.validateModuleUrl(moduleUrl, realmUrl);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
 
     try {
       // Reset the loader to clear cached modules from prior eval runs.
@@ -117,3 +117,7 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
     return pathname.endsWith('/') ? pathname : `${pathname}/`;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { EvaluateModuleTool as EvaluateModuleCommand };

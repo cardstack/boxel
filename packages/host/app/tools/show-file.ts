@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class ShowFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.FileIdentifierCard
+export default class ShowFileTool extends HostBaseTool<
+  typeof BaseToolModule.FileIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -17,7 +17,7 @@ export default class ShowFileCommand extends HostBaseCommand<
   static actionVerb = 'Show File';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return FileIdentifierCard;
   }
@@ -25,7 +25,7 @@ export default class ShowFileCommand extends HostBaseCommand<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FileIdentifierCard,
+    input: BaseToolModule.FileIdentifierCard,
   ): Promise<undefined> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
@@ -37,3 +37,7 @@ export default class ShowFileCommand extends HostBaseCommand<
     await operatorModeStateService.updateSubmode('code');
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ShowFileTool as ShowFileCommand };

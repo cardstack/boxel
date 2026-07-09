@@ -2,22 +2,22 @@ import { service } from '@ember/service';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
 
-import HostBaseCommand from '../../lib/host-base-command';
+import HostBaseTool from '../../lib/host-base-tool';
 
 import type MatrixService from '../../services/matrix-service';
 
-export default class SendBotTriggerEventCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SendBotTriggerEventInput
+export default class SendBotTriggerEventTool extends HostBaseTool<
+  typeof BaseToolModule.SendBotTriggerEventInput
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendBotTriggerEventInput } = commandModule;
     return SendBotTriggerEventInput;
   }
@@ -25,7 +25,7 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
   requireInputFields = ['roomId', 'type', 'input', 'realm'];
 
   protected async run(
-    input: BaseCommandModule.SendBotTriggerEventInput,
+    input: BaseToolModule.SendBotTriggerEventInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
     let userId = this.matrixService.userId;
@@ -51,3 +51,7 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
     await this.matrixService.sendEvent(input.roomId, event.type, event.content);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SendBotTriggerEventTool as SendBotTriggerEventCommand };

@@ -18,15 +18,15 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import CodeBlockActionsComponent, {
   type CodeBlockActionsSignature,
 } from './actions';
-import CodeBlockCommandHeader, {
-  type CodeBlockCommandHeaderSignature,
-} from './command-header';
 import CodeBlockDiffEditorHeader, {
   type CodeBlockDiffEditorHeaderSignature,
 } from './diff-editor-header';
 import CodeBlockPatchFooterComponent, {
   type CodeBlockPatchFooterSignature,
 } from './patch-footer';
+import CodeBlockToolCallHeader, {
+  type CodeBlockToolCallHeaderSignature,
+} from './tool-call-header';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -70,7 +70,7 @@ interface Signature {
   Blocks: {
     default: [
       {
-        commandHeader: ComponentLike<CodeBlockCommandHeaderSignature>;
+        commandHeader: ComponentLike<CodeBlockToolCallHeaderSignature>;
         diffEditorHeader: ComponentLike<CodeBlockDiffEditorHeaderSignature>;
         editor: ComponentLike<CodeBlockEditorSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
@@ -86,7 +86,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
   <section class='code-block' ...attributes>
     {{yield
       (hash
-        commandHeader=(component CodeBlockCommandHeader)
+        commandHeader=(component CodeBlockToolCallHeader)
         diffEditorHeader=(component
           CodeBlockDiffEditorHeader
           codeData=@codeData

@@ -2,22 +2,22 @@ import { service } from '@ember/service';
 
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
-export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ExecuteAtomicOperationsInput,
-  typeof BaseCommandModule.ExecuteAtomicOperationsResult
+export default class ExecuteAtomicOperationsTool extends HostBaseTool<
+  typeof BaseToolModule.ExecuteAtomicOperationsInput,
+  typeof BaseToolModule.ExecuteAtomicOperationsResult
 > {
   @service declare private cardService: CardService;
 
   description = 'Execute atomic operations against a realm';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ExecuteAtomicOperationsInput } = commandModule;
     return ExecuteAtomicOperationsInput;
   }
@@ -25,9 +25,9 @@ export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
   requireInputFields = ['realmIdentifier', 'operations'];
 
   protected async run(
-    input: BaseCommandModule.ExecuteAtomicOperationsInput,
-  ): Promise<BaseCommandModule.ExecuteAtomicOperationsResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.ExecuteAtomicOperationsInput,
+  ): Promise<BaseToolModule.ExecuteAtomicOperationsResult> {
+    let commandModule = await this.loadToolModule();
     const { ExecuteAtomicOperationsResult } = commandModule;
     const results = await this.cardService.executeAtomicOperations(
       input.operations as AtomicOperation[],
@@ -42,3 +42,7 @@ export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
     return new ExecuteAtomicOperationsResult({ results: atomicResults });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ExecuteAtomicOperationsTool as ExecuteAtomicOperationsCommand };

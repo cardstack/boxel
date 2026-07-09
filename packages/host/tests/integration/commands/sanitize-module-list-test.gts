@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { ri } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import SanitizeModuleListCommand from '@cardstack/host/tools/sanitize-module-list';
+import SanitizeModuleListTool from '@cardstack/host/tools/sanitize-module-list';
 
 import {
   setupIntegrationTestRealm,
@@ -72,8 +72,8 @@ module('Integration | commands | sanitize-module-list', function (hooks) {
   });
 
   test('filters out global URLs and keeps realm modules', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new SanitizeModuleListCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SanitizeModuleListTool(toolService.commandContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
@@ -88,8 +88,8 @@ module('Integration | commands | sanitize-module-list', function (hooks) {
   });
 
   test('deduplicates modules by normalized URL', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new SanitizeModuleListCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SanitizeModuleListTool(toolService.commandContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
@@ -105,8 +105,8 @@ module('Integration | commands | sanitize-module-list', function (hooks) {
 
   test('excludes modules from unreadable realms', async function (assert) {
     readableRealms = new Set([testRealmURL]);
-    let commandService = getService('command-service');
-    let command = new SanitizeModuleListCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new SanitizeModuleListTool(toolService.commandContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,

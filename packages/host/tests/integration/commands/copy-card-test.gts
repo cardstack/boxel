@@ -4,8 +4,8 @@ import { module, test } from 'qunit';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
-import CopyCardToRealmCommand from '@cardstack/host/tools/copy-card';
-import CopyCardToStackCommand from '@cardstack/host/tools/copy-card-to-stack';
+import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
+import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -102,12 +102,10 @@ module('Integration | commands | copy-card', function (hooks) {
     await realmService.login(testRealm2URL);
   });
 
-  module('CopyCardToRealmCommand', function () {
+  module('CopyCardToRealmTool', function () {
     test('copies card to target realm', async function (assert) {
-      let commandService = getService('command-service');
-      let copyCardCommand = new CopyCardToRealmCommand(
-        commandService.commandContext,
-      );
+      let toolService = getService('tool-service');
+      let copyCardCommand = new CopyCardToRealmTool(toolService.commandContext);
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
       let targetRealm = testRealm2URL;
@@ -149,10 +147,8 @@ module('Integration | commands | copy-card', function (hooks) {
     });
 
     test('errors when user does not have write permissions to target realm', async function (assert) {
-      let commandService = getService('command-service');
-      let copyCardCommand = new CopyCardToRealmCommand(
-        commandService.commandContext,
-      );
+      let toolService = getService('tool-service');
+      let copyCardCommand = new CopyCardToRealmTool(toolService.commandContext);
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
       let targetRealm = testRealm2URL;
@@ -184,11 +180,11 @@ module('Integration | commands | copy-card', function (hooks) {
     });
   });
 
-  module('CopyCardToStackCommand', function () {
+  module('CopyCardToStackTool', function () {
     test('copies card to stack when valid targetStackIndex is provided', async function (assert) {
-      let commandService = getService('command-service');
-      let copyCardToStackCommand = new CopyCardToStackCommand(
-        commandService.commandContext,
+      let toolService = getService('tool-service');
+      let copyCardToStackCommand = new CopyCardToStackTool(
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
@@ -241,9 +237,9 @@ module('Integration | commands | copy-card', function (hooks) {
       );
     });
     test('errors when targetStackIndex does not exist', async function (assert) {
-      let commandService = getService('command-service');
-      let copyCardToStackCommand = new CopyCardToStackCommand(
-        commandService.commandContext,
+      let toolService = getService('tool-service');
+      let copyCardToStackCommand = new CopyCardToStackTool(
+        toolService.commandContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;

@@ -3,18 +3,18 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CopyCardToRealmCommand from './copy-card';
+import CopyCardToRealmTool from './copy-card';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class CopyAndEditCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CopyAndEditInput,
+export default class CopyAndEditTool extends HostBaseTool<
+  typeof BaseToolModule.CopyAndEditInput,
   undefined
 > {
   @service operatorModeStateService!: OperatorModeStateService;
@@ -26,7 +26,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
   static actionVerb = 'Copy and Edit';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CopyAndEditInput } = commandModule;
     return CopyAndEditInput;
   }
@@ -41,7 +41,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.CopyAndEditInput,
+    input: BaseToolModule.CopyAndEditInput,
   ): Promise<undefined> {
     if (!input.card?.id) {
       throw new Error('copy-and-edit requires a card with an id');
@@ -58,7 +58,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let copyCardCommand = new CopyCardToRealmCommand(this.commandContext);
+    let copyCardCommand = new CopyCardToRealmTool(this.commandContext);
     let { newCardId } = await copyCardCommand.execute({
       sourceCard: input.card,
       targetRealm,
@@ -349,3 +349,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     return this.dotGetter(parentPath, base);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CopyAndEditTool as CopyAndEditCommand };

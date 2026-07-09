@@ -6,21 +6,21 @@ import {
 } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class OpenCreateListingModalCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingCreateInput
+export default class OpenCreateListingModalTool extends HostBaseTool<
+  typeof BaseToolModule.ListingCreateInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   description = 'Open create listing confirmation modal';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ListingCreateInput } = commandModule;
     return ListingCreateInput;
   }
@@ -28,7 +28,7 @@ export default class OpenCreateListingModalCommand extends HostBaseCommand<
   requireInputFields = ['codeRef', 'targetRealm'];
 
   protected async run(
-    input: BaseCommandModule.ListingCreateInput,
+    input: BaseToolModule.ListingCreateInput,
   ): Promise<undefined> {
     let declarationKind: 'card' | 'field' = 'card';
     if (input.codeRef) {
@@ -50,3 +50,7 @@ export default class OpenCreateListingModalCommand extends HostBaseCommand<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { OpenCreateListingModalTool as OpenCreateListingModalCommand };

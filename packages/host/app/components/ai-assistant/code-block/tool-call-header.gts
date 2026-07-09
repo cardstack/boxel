@@ -9,13 +9,13 @@ import ApplyButton, { type ApplyButtonState } from '../apply-button';
 
 import ViewCodeButton from './view-code-button';
 
-export interface CodeBlockCommandHeaderSignature {
+export interface CodeBlockToolCallHeaderSignature {
   Args: {
     action: () => void;
     actionVerb: string;
     code: string;
     commandDescription: string;
-    commandState: ApplyButtonState;
+    toolCallState: ApplyButtonState;
     hideCodeActions?: boolean;
     isDisplayingCode?: boolean;
     isCompact?: boolean;
@@ -25,7 +25,7 @@ export interface CodeBlockCommandHeaderSignature {
   Element: HTMLElement;
 }
 
-export default class CodeBlockCommandHeader extends Component<CodeBlockCommandHeaderSignature> {
+export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCallHeaderSignature> {
   get isDisplayingCode() {
     return this.args.isDisplayingCode ?? false;
   }
@@ -52,9 +52,9 @@ export default class CodeBlockCommandHeader extends Component<CodeBlockCommandHe
           class='command-action'
           @actionVerb={{@actionVerb}}
           @isCompact={{@isCompact}}
-          @state={{@commandState}}
+          @state={{@toolCallState}}
           {{on 'click' @action}}
-          data-test-command-apply={{@commandState}}
+          data-test-tool-call-apply={{@toolCallState}}
         />
       </div>
     </header>

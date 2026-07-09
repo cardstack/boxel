@@ -1,13 +1,13 @@
 import type { CommandContext } from '@cardstack/runtime-common';
 
-import InviteUserToRoomCommand from '@cardstack/boxel-host/commands/invite-user-to-room';
+import InviteUserToRoomTool from '@cardstack/boxel-host/commands/invite-user-to-room';
 
 export async function ensureSubmissionBotIsInRoom(
   commandContext: CommandContext,
   roomId: string,
 ) {
   try {
-    await new InviteUserToRoomCommand(commandContext).execute({
+    await new InviteUserToRoomTool(commandContext).execute({
       roomId,
       userId: 'submissionbot',
     });

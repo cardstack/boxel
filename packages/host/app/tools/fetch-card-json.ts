@@ -1,21 +1,21 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 
-export default class FetchCardJsonCommand extends HostBaseCommand<
-  typeof BaseCommandModule.FetchCardJsonInput,
-  typeof BaseCommandModule.FetchCardJsonResult
+export default class FetchCardJsonTool extends HostBaseTool<
+  typeof BaseToolModule.FetchCardJsonInput,
+  typeof BaseToolModule.FetchCardJsonResult
 > {
   @service declare private cardService: CardService;
 
   description = 'Fetch a card as a JSON document by URL';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FetchCardJsonInput } = commandModule;
     return FetchCardJsonInput;
   }
@@ -23,11 +23,15 @@ export default class FetchCardJsonCommand extends HostBaseCommand<
   requireInputFields = ['cardIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FetchCardJsonInput,
-  ): Promise<BaseCommandModule.FetchCardJsonResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.FetchCardJsonInput,
+  ): Promise<BaseToolModule.FetchCardJsonResult> {
+    let commandModule = await this.loadToolModule();
     const { FetchCardJsonResult } = commandModule;
     const doc = await this.cardService.fetchJSON(input.cardIdentifier);
     return new FetchCardJsonResult({ document: doc });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { FetchCardJsonTool as FetchCardJsonCommand };

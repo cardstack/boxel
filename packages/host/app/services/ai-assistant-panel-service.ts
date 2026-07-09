@@ -25,9 +25,9 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Submodes } from '../components/submode-switcher';
 import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
-import CreateAiAssistantRoomCommand from '../tools/create-ai-assistant-room';
-import SummarizeSessionCommand from '../tools/summarize-session';
-import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+import CreateAiAssistantRoomTool from '../tools/create-ai-assistant-room';
+import SummarizeSessionTool from '../tools/summarize-session';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
 
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
@@ -36,13 +36,13 @@ import { titleize } from '../utils/titleize';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
 import type CodeSemanticsService from './code-semantics-service';
-import type CommandService from './command-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
@@ -55,7 +55,7 @@ export interface SessionRoomData {
 
 export default class AiAssistantPanelService extends Service {
   @service declare private codeSemanticsService: CodeSemanticsService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -399,8 +399,8 @@ export default class AiAssistantPanelService extends Service {
           // that can hang on 404s). Skills are applied in the background.
           roomId = await this.createFallbackRoom(name);
         } else {
-          let createRoomCommand = new CreateAiAssistantRoomCommand(
-            this.commandService.commandContext,
+          let createRoomCommand = new CreateAiAssistantRoomTool(
+            this.toolService.commandContext,
           );
 
           let input: any = { name };
@@ -521,11 +521,11 @@ export default class AiAssistantPanelService extends Service {
       if (!skillIds.length) {
         return;
       }
-      // Kind-agnostic: `UpdateRoomSkillsCommand` resolves each id to a `.md`
+      // Kind-agnostic: `UpdateRoomSkillsTool` resolves each id to a `.md`
       // skill file or a legacy `Skill` card, uploads it, and populates the
       // room's skills config + command definitions.
-      let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-        this.commandService.commandContext,
+      let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
+        this.toolService.commandContext,
       );
       await updateRoomSkillsCommand.execute({
         roomId,
@@ -540,8 +540,8 @@ export default class AiAssistantPanelService extends Service {
   private summarizeSessionTask = restartableTask(
     async (oldRoomId: string, newRoomId: string) => {
       try {
-        const summarizeCommand = new SummarizeSessionCommand(
-          this.commandService.commandContext,
+        const summarizeCommand = new SummarizeSessionTool(
+          this.toolService.commandContext,
         );
         const result = await summarizeCommand.execute({
           roomId: oldRoomId,

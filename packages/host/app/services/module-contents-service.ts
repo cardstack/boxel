@@ -42,14 +42,14 @@ export type CardOrFieldReexport = CardOrField &
     displayName?: string;
   };
 
-export type CommandDeclaration = Omit<ClassDeclaration, 'type'> & {
+export type ToolDeclaration = Omit<ClassDeclaration, 'type'> & {
   type: 'command';
   command: typeof Command;
 };
 
 export type ModuleDeclaration =
   | CardOrFieldDeclaration
-  | CommandDeclaration
+  | ToolDeclaration
   | ClassDeclaration
   | FunctionDeclaration
   | CardOrFieldReexport;
@@ -63,9 +63,9 @@ export function isCardOrFieldDeclaration(
   );
 }
 
-export function isCommandDeclaration(
+export function isToolDeclaration(
   declaration: ModuleDeclaration,
-): declaration is CommandDeclaration {
+): declaration is ToolDeclaration {
   return declaration.type === 'command';
 }
 
@@ -342,7 +342,7 @@ function isCommandConstructor(
 function asCommandDeclaration(
   declaration: PossibleCardOrFieldDeclaration | ClassDeclaration,
   command: typeof Command,
-): CommandDeclaration {
+): ToolDeclaration {
   return {
     ...('super' in declaration ? { super: declaration.super } : {}),
     localName: declaration.localName,

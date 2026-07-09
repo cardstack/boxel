@@ -1,10 +1,14 @@
 import { Command } from '@cardstack/runtime-common';
 
 import { PatchCardInput } from 'https://cardstack.com/base/command';
-import { StringField, contains, field } from 'https://cardstack.com/base/card-api';
+import {
+  StringField,
+  contains,
+  field,
+} from 'https://cardstack.com/base/card-api';
 
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import SendBotTriggerEventCommand from '@cardstack/boxel-host/commands/send-bot-trigger-event';
+import UseAiAssistantTool from '@cardstack/boxel-host/commands/ai-assistant';
+import SendBotTriggerEventTool from '@cardstack/boxel-host/commands/send-bot-trigger-event';
 import { ensureSubmissionBotIsInRoom } from './bot-request-utils';
 
 export class CreatePatchCardInstanceRequestInput extends PatchCardInput {
@@ -38,7 +42,7 @@ export default class CreatePatchCardInstanceRequestCommand extends Command<
 
     let roomId = input.roomId?.trim();
     if (!roomId) {
-      let createRoomResult = await new UseAiAssistantCommand(
+      let createRoomResult = await new UseAiAssistantTool(
         this.commandContext,
       ).execute({
         roomId: 'new',
@@ -50,7 +54,7 @@ export default class CreatePatchCardInstanceRequestCommand extends Command<
 
     await ensureSubmissionBotIsInRoom(this.commandContext, roomId);
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.commandContext).execute({
       roomId,
       realm,
       type: 'patch-card-instance',

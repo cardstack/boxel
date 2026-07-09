@@ -2,22 +2,22 @@ import { service } from '@ember/service';
 
 import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
 import { isReady } from '../resources/file';
 
 import { findNonConflictingFilename } from '../utils/file-name';
 
-import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
-import LintAndFixCommand from './lint-and-fix';
+import ApplySearchReplaceBlockTool from './apply-search-replace-block';
+import LintAndFixTool from './lint-and-fix';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type ToolService from '../services/tool-service';
 
 interface FileInfo {
   exists: boolean;
@@ -25,21 +25,21 @@ interface FileInfo {
   content: string;
 }
 
-export default class PatchCodeCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PatchCodeInput,
-  typeof BaseCommandModule.PatchCodeCommandResult
+export default class PatchCodeTool extends HostBaseTool<
+  typeof BaseToolModule.PatchCodeInput,
+  typeof BaseToolModule.PatchCodeCommandResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   description = `Apply code changes to file and then apply lint fixes`;
   static actionVerb = 'Apply';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCodeInput } = commandModule;
     return PatchCodeInput;
   }
@@ -47,8 +47,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
   requireInputFields = ['fileIdentifier', 'codeBlocks'];
 
   protected async run(
-    input: BaseCommandModule.PatchCodeInput,
-  ): Promise<BaseCommandModule.PatchCodeCommandResult> {
+    input: BaseToolModule.PatchCodeInput,
+  ): Promise<BaseToolModule.PatchCodeCommandResult> {
     let { fileIdentifier: fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
@@ -73,7 +73,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
-      let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+      let clientRequestId = this.toolService.trackAiAssistantCardRequest({
         action: 'patch-code',
         roomId,
         fileUrl: finalFileIdentifier,
@@ -91,12 +91,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
             clientRequestId,
           })
           .catch((error: unknown) => {
-            console.error('PatchCodeCommand: failed to save source', error);
+            console.error('PatchCodeTool: failed to save source', error);
           });
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCodeCommandResult, PatchCodeResultField } = commandModule;
 
     return new PatchCodeCommandResult({
@@ -135,14 +135,14 @@ export default class PatchCodeCommand extends HostBaseCommand<
         })
         .catch((error: unknown) => {
           console.error(
-            'PatchCodeCommand: failed to write through FileResource',
+            'PatchCodeTool: failed to write through FileResource',
             error,
           );
         });
       return true;
     } catch (error) {
       console.error(
-        'PatchCodeCommand: unable to save through FileResource',
+        'PatchCodeTool: unable to save through FileResource',
         error,
       );
       return false;
@@ -175,7 +175,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     patchedCode: string;
     results: { status: 'applied' | 'failed'; failureReason?: string }[];
   }> {
-    let applyCommand = new ApplySearchReplaceBlockCommand(this.commandContext);
+    let applyCommand = new ApplySearchReplaceBlockTool(this.commandContext);
     let content = initialContent;
     let results: { status: 'applied' | 'failed'; failureReason?: string }[] =
       [];
@@ -202,8 +202,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
   private async lintAndFix(
     fileUrl: string,
     content: string,
-  ): Promise<BaseCommandModule.LintAndFixResult> {
-    let lintCommand = new LintAndFixCommand(this.commandContext);
+  ): Promise<BaseToolModule.LintAndFixResult> {
+    let lintCommand = new LintAndFixTool(this.commandContext);
     let realmURL = this.realm.url(fileUrl);
     let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
 
@@ -241,3 +241,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return getSourceResult.status !== 404;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PatchCodeTool as PatchCodeCommand };

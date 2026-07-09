@@ -2,13 +2,13 @@ import { getClass } from '@cardstack/runtime-common';
 
 import type { VisitCardsInput } from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import ReadSourceCommand from './read-source';
-import { SearchCardsByQueryCommand } from './search-cards';
-import WriteTextFileCommand from './write-text-file';
+import ReadSourceTool from './read-source';
+import { SearchCardsByQueryTool } from './search-cards';
+import WriteTextFileTool from './write-text-file';
 
-export default class TransformCardsCommand extends HostBaseCommand<
+export default class TransformCardsTool extends HostBaseTool<
   typeof VisitCardsInput
 > {
   description =
@@ -17,7 +17,7 @@ export default class TransformCardsCommand extends HostBaseCommand<
   static actionVerb = 'Transform';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { VisitCardsInput } = commandModule;
     return VisitCardsInput;
   }
@@ -25,7 +25,7 @@ export default class TransformCardsCommand extends HostBaseCommand<
   requireInputFields = ['query', 'commandRef'];
 
   protected async run(input: VisitCardsInput): Promise<undefined> {
-    let { cardIds } = await new SearchCardsByQueryCommand(
+    let { cardIds } = await new SearchCardsByQueryTool(
       this.commandContext,
     ).execute({
       query: input.query,
@@ -35,7 +35,7 @@ export default class TransformCardsCommand extends HostBaseCommand<
       this.loaderService.loader,
     );
     let visitPromises = cardIds.map(async (cardId: string) => {
-      let readSourceCommand = new ReadSourceCommand(this.commandContext);
+      let readSourceCommand = new ReadSourceTool(this.commandContext);
       let { content } = await readSourceCommand.execute({
         path: cardId + '.json',
       });
@@ -45,7 +45,7 @@ export default class TransformCardsCommand extends HostBaseCommand<
       });
 
       let updatedContent = JSON.stringify(json, null, 2);
-      let writeTextFileCommand = new WriteTextFileCommand(this.commandContext);
+      let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
       return writeTextFileCommand.execute({
         content: updatedContent,
         path: cardId + '.json',
@@ -57,3 +57,7 @@ export default class TransformCardsCommand extends HostBaseCommand<
     // In the future, we might want to return some kind of summary card
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { TransformCardsTool as TransformCardsCommand };

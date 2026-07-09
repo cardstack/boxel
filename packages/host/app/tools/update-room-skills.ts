@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type {
   FileDef,
   SerializedFile,
@@ -16,18 +16,18 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { isSkillCard } from '../lib/file-def-manager';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   loadSkillSource,
   type SkillSource,
-} from '../lib/skill-commands';
+} from '../lib/skill-tools';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
-export default class UpdateRoomSkillsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.UpdateRoomSkillsInput
+export default class UpdateRoomSkillsTool extends HostBaseTool<
+  typeof BaseToolModule.UpdateRoomSkillsInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -36,7 +36,7 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
   description = 'Updates the enabled and disabled skills for a room';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UpdateRoomSkillsInput } = commandModule;
     return UpdateRoomSkillsInput;
   }
@@ -44,7 +44,7 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.UpdateRoomSkillsInput,
+    input: BaseToolModule.UpdateRoomSkillsInput,
   ): Promise<undefined> {
     let {
       roomId,
@@ -111,12 +111,12 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
               }
             } else {
               console.warn(
-                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": not a skill card or skill markdown file`,
+                `[UpdateRoomSkillsTool] skipping activation of "${skillId}": not a skill card or skill markdown file`,
               );
             }
           } catch (err) {
             console.warn(
-              `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get threw: ${errorSummary(err)}`,
+              `[UpdateRoomSkillsTool] skipping activation of "${skillId}": store.get threw: ${errorSummary(err)}`,
             );
           }
         }
@@ -160,11 +160,11 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
                 return source;
               }
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": not a skill card or skill markdown file`,
+                `[UpdateRoomSkillsTool] cannot rehydrate enabled skill "${skillId}": not a skill card or skill markdown file`,
               );
             } catch (err) {
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get threw: ${errorSummary(err)}`,
+                `[UpdateRoomSkillsTool] cannot rehydrate enabled skill "${skillId}": store.get threw: ${errorSummary(err)}`,
               );
             }
             return undefined;
@@ -184,16 +184,16 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
 
         if (validEnabledSkills.length > 0) {
           let allCommandDefinitions = validEnabledSkills.flatMap((skill) =>
-            getSkillSourceCommands(skill),
+            getSkillSourceTools(skill),
           );
 
           if (allCommandDefinitions.length > 0) {
             let uniqueCommandDefinitions =
-              this.matrixService.getUniqueCommandDefinitions(
+              this.matrixService.getUniqueToolDefinitions(
                 allCommandDefinitions,
               );
             let uploadedCommandDefs =
-              await this.matrixService.uploadCommandDefinitions(
+              await this.matrixService.uploadToolDefinitions(
                 uniqueCommandDefinitions,
               );
             serializedCommandDefinitions = uploadedCommandDefs.map((fileDef) =>
@@ -207,10 +207,12 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
         }
 
         // Write only the tool-named key; a pre-rename room's state may carry
-        // `commandDefinitions`, which must not survive the rewrite or it would
+        // `toolDefinitionFileDefs`, which must not survive the rewrite or it would
         // shadow nothing but confuse readers of raw state.
-        let { commandDefinitions: _legacyDefinitions, ...restOfSkillsConfig } =
-          currentSkillsConfig;
+        let {
+          toolDefinitionFileDefs: _legacyDefinitions,
+          ...restOfSkillsConfig
+        } = currentSkillsConfig;
         return {
           ...restOfSkillsConfig,
           enabledSkillCards: Array.from(enabledSkillCardMap.values()),
@@ -228,3 +230,7 @@ function errorSummary(err: unknown): string {
   }
   return typeof err === 'string' ? err : `<${typeof err}>`;
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UpdateRoomSkillsTool as UpdateRoomSkillsCommand };

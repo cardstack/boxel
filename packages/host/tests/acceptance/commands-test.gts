@@ -34,12 +34,12 @@ import {
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CreateAiAssistantRoomCommand from '@cardstack/host/tools/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
-import SaveCardCommand from '@cardstack/host/tools/save-card';
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/tools/search-cards';
-import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
-import ShowCardCommand from '@cardstack/host/tools/show-card';
+import CreateAiAssistantRoomTool from '@cardstack/host/tools/create-ai-assistant-room';
+import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
+import SaveCardTool from '@cardstack/host/tools/save-card';
+import { SearchCardsByTypeAndTitleTool } from '@cardstack/host/tools/search-cards';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 import {
   waitForCompletedCommandRequest,
   waitForRealmState,
@@ -175,20 +175,20 @@ module('Acceptance | Commands tests', function (hooks) {
           topic: 'unset topic',
           participants: input.participants,
         });
-        let saveCardCommand = new SaveCardCommand(this.commandContext);
+        let saveCardCommand = new SaveCardTool(this.commandContext);
         let savedMeeting = await saveCardCommand.execute({
           card: meeting,
           realm: testRealmURL,
         });
         savedMeetingCardId = savedMeeting?.id;
 
-        let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+        let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
           this.commandContext,
         );
         let { roomId } = await createAIAssistantRoomCommand.execute({
           name: 'AI Assistant Room',
         });
-        let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+        let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
           this.commandContext,
         );
         let { eventId } = await sendAiAssistantMessageCommand.execute({
@@ -200,7 +200,7 @@ module('Acceptance | Commands tests', function (hooks) {
         await waitForCompletedCommandRequest(
           this.commandContext,
           roomId,
-          (commandRequest) => commandRequest.name === 'patchCardInstance',
+          (toolRequest) => toolRequest.name === 'patchCardInstance',
           { afterEventId: eventId },
         );
 
@@ -210,7 +210,7 @@ module('Acceptance | Commands tests', function (hooks) {
           () => meeting.topic === input.topic,
         );
 
-        let showCardCommand = new ShowCardCommand(this.commandContext);
+        let showCardCommand = new ShowCardTool(this.commandContext);
         await showCardCommand.execute({
           cardId: meeting.id,
         });
@@ -240,19 +240,19 @@ module('Acceptance | Commands tests', function (hooks) {
       static displayName = 'SearchAndOpenCardCommand';
       static actionVerb = 'Search';
       async getInputType() {
-        return new SearchCardsByTypeAndTitleCommand(
+        return new SearchCardsByTypeAndTitleTool(
           this.commandContext,
         ).getInputType();
       }
       protected async run(
         input: SearchCardsByTypeAndTitleInput,
       ): Promise<undefined> {
-        let searchCommand = new SearchCardsByTypeAndTitleCommand(
+        let searchCommand = new SearchCardsByTypeAndTitleTool(
           this.commandContext,
         );
         let searchResult = await searchCommand.execute(input);
         if (searchResult.cardIds.length > 0) {
-          let showCardCommand = new ShowCardCommand(this.commandContext);
+          let showCardCommand = new ShowCardTool(this.commandContext);
           await showCardCommand.execute({
             cardId: searchResult.cardIds[0],
           });
@@ -323,7 +323,7 @@ module('Acceptance | Commands tests', function (hooks) {
             return;
           }
 
-          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+          let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
             commandContext,
           );
           await openAiAssistantRoomCommand.execute({
@@ -337,7 +337,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -348,7 +348,7 @@ module('Acceptance | Commands tests', function (hooks) {
               )) as Skill,
             ],
           });
-          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
             commandContext,
           );
           await sendAiAssistantMessageCommand.execute({
@@ -436,7 +436,7 @@ module('Acceptance | Commands tests', function (hooks) {
               commands: [
                 {
                   codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
+                    name: 'SearchCardsByTypeAndTitleTool',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
                   requiresApproval: true,
@@ -484,7 +484,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {
+  test('OpenAiAssistantRoomTool opens the AI assistant room', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}Person/hassan`, format: 'isolated' }]],
     });
@@ -553,7 +553,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
   });
 
-  test('SaveCardCommand returns the saved card with its id set', async function (assert) {
+  test('SaveCardTool returns the saved card with its id set', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
@@ -564,7 +564,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     await click('[data-test-schedule-meeting-button]');
     await waitUntil(() => savedMeetingCardId !== undefined);
-    assert.ok(savedMeetingCardId, 'SaveCardCommand returned the saved card');
+    assert.ok(savedMeetingCardId, 'SaveCardTool returned the saved card');
     assert.true(
       savedMeetingCardId!.startsWith(testRealmURL),
       'saved card id is a URL within the test realm',
@@ -641,7 +641,7 @@ module('Acceptance | Commands tests', function (hooks) {
     // and otherwise picks aiSessionRooms[0]. The beforeEach createAndJoinRoom
     // also marks aibot as a member (mock createRoom auto-invites), so both
     // rooms qualify — and a stale sessionStorage entry from a prior test
-    // (e.g. OpenAiAssistantRoomCommand racing schedule-meeting and persisting
+    // (e.g. OpenAiAssistantRoomTool racing schedule-meeting and persisting
     // the beforeEach room) can land us in the wrong one. Be explicit instead.
     await click('[data-test-open-ai-assistant]');
     getService('ai-assistant-panel-service').enterRoom(roomId);
@@ -655,15 +655,16 @@ module('Acceptance | Commands tests', function (hooks) {
     // processRoomTask returned early on a memberIds-without-aiBot read, and
     // never re-ran because _events alone didn't change after _roomState was
     // populated.
-    let applySelector = '[data-test-message-idx="1"] [data-test-command-apply]';
+    let applySelector =
+      '[data-test-message-idx="1"] [data-test-tool-call-apply]';
     try {
       await waitFor(applySelector, { timeout: 10_000 });
     } catch (err) {
       let messageIdxs = findAll('[data-test-message-idx]').map((el) =>
         el.getAttribute('data-test-message-idx'),
       );
-      let applyButtons = findAll('[data-test-command-apply]').map((el) =>
-        el.getAttribute('data-test-command-apply'),
+      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) =>
+        el.getAttribute('data-test-tool-call-apply'),
       );
       let roomElements = findAll('[data-room-id]').map((el) => ({
         roomId: el.getAttribute('data-room-id'),
@@ -802,7 +803,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Switching to code submode');
 
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     // check we're in code mode
     await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
@@ -883,9 +884,9 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Finding and opening Hassan card');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .containsText('Search');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
       .dom(
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
@@ -999,7 +1000,9 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText(description);
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .dom(
+        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+      )
       .exists();
   });
 
@@ -1069,11 +1072,11 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
       );
     } catch (err) {
-      let applyButtons = findAll('[data-test-command-apply]').map((el) => ({
+      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
         idx: el
           .closest('[data-test-message-idx]')
           ?.getAttribute('data-test-message-idx'),
-        state: el.getAttribute('data-test-command-apply'),
+        state: el.getAttribute('data-test-tool-call-apply'),
       }));
       let applyStates = findAll('[data-test-apply-state]').map((el) =>
         el.getAttribute('data-test-apply-state'),
@@ -1095,7 +1098,7 @@ module('Acceptance | Commands tests', function (hooks) {
               roomData?.skillsConfig?.enabledSkillCards?.map(
                 (f) => f.sourceUrl,
               ) ?? null,
-            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+            roomResourceCommandCount: roomResource?.tools?.length ?? null,
           },
           null,
           2,
@@ -1104,7 +1107,7 @@ module('Acceptance | Commands tests', function (hooks) {
       throw err;
     }
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // check we're in interact mode
     await waitFor('[data-test-submode-switcher=interact]');
@@ -1195,7 +1198,7 @@ module('Acceptance | Commands tests', function (hooks) {
       '[data-test-message-idx="0"] [data-test-apply-state="ready"]',
     );
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
     assert.dom('[data-test-submode-switcher=interact]').exists();
   });
 
@@ -1232,7 +1235,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     await waitFor('[data-test-message-idx="0"]');
     assert
-      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
       .exists({ count: 2 });
   });
 
@@ -1287,7 +1290,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-idx="0"]');
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-command-apply]')
+      .dom('[data-test-tool-call-apply]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-apply-state="applied"]')
@@ -1363,7 +1366,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-idx="2"]');
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1378,7 +1381,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // The command from message idx 2 should still not be auto-applied because it was sent before act mode
     assert
-      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
       .exists('Apply button is still shown for command sent before act mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1474,7 +1477,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "no-such-command" was found');
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
     let message = getRoomEvents(roomId).pop()!;
@@ -1578,7 +1581,7 @@ module('Acceptance | Commands tests', function (hooks) {
               roomData?.skillsConfig?.enabledSkillCards?.map(
                 (f) => f.sourceUrl,
               ) ?? null,
-            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+            roomResourceCommandCount: roomResource?.tools?.length ?? null,
           },
           null,
           2,
@@ -1589,7 +1592,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom('[data-test-boxel-alert="warning"]')
       .containsText(expectedValidationText);
 
-    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
     let message = getRoomEvents(roomId).pop()!;

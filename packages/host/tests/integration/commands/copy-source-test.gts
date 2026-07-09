@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
-import CopySourceCommand from '@cardstack/host/tools/copy-source';
+import CopySourceTool from '@cardstack/host/tools/copy-source';
 
 import {
   setupIntegrationTestRealm,
@@ -64,10 +64,8 @@ module('Integration | commands | copy-source', function (hooks) {
   });
 
   test('able to copy source or file', async function (assert) {
-    let commandService = getService('command-service');
-    let copySourceCommand = new CopySourceCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let copySourceCommand = new CopySourceTool(toolService.commandContext);
     const originSourceIdentifier = testRealmURL + 'person.gts';
     const destinationSourceIdentifier = testRealmURL + 'person-copy.gts';
     await copySourceCommand.execute({

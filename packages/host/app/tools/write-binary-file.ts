@@ -4,9 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
@@ -34,9 +34,9 @@ function base64ToUint8Array(base64: string): Uint8Array {
   throw new Error('No base64 decoder available in this environment');
 }
 
-export default class WriteBinaryFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.WriteBinaryFileInput,
-  typeof BaseCommandModule.WriteBinaryFileResult
+export default class WriteBinaryFileTool extends HostBaseTool<
+  typeof BaseToolModule.WriteBinaryFileInput,
+  typeof BaseToolModule.WriteBinaryFileResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -46,7 +46,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
   static actionVerb = 'Write';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteBinaryFileInput } = commandModule;
     return WriteBinaryFileInput;
   }
@@ -54,8 +54,8 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
   requireInputFields = ['path', 'base64Content'];
 
   protected async run(
-    input: BaseCommandModule.WriteBinaryFileInput,
-  ): Promise<BaseCommandModule.WriteBinaryFileResult> {
+    input: BaseToolModule.WriteBinaryFileInput,
+  ): Promise<BaseToolModule.WriteBinaryFileResult> {
     let realm;
     if (input.realm) {
       realm = this.realm.realmOf(rri(input.realm));
@@ -130,7 +130,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
       throw new Error(details);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteBinaryFileResult } = commandModule;
     return new WriteBinaryFileResult({ fileIdentifier: finalUrl.href });
   }
@@ -140,3 +140,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
     return getSourceResult.status !== 404;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { WriteBinaryFileTool as WriteBinaryFileCommand };

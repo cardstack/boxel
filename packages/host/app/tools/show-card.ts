@@ -9,17 +9,17 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
 
-export default class ShowCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ShowCardInput,
+export default class ShowCardTool extends HostBaseTool<
+  typeof BaseToolModule.ShowCardInput,
   typeof CardDef
 > {
   @service declare private network: NetworkService;
@@ -33,16 +33,14 @@ export default class ShowCardCommand extends HostBaseCommand<
   static actionVerb = 'Show Card';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ShowCardInput } = commandModule;
     return ShowCardInput;
   }
 
   requireInputFields = ['cardId'];
 
-  protected async run(
-    input: BaseCommandModule.ShowCardInput,
-  ): Promise<CardDef> {
+  protected async run(input: BaseToolModule.ShowCardInput): Promise<CardDef> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
@@ -102,3 +100,7 @@ export default class ShowCardCommand extends HostBaseCommand<
     return maybeCard;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ShowCardTool as ShowCardCommand };

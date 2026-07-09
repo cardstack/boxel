@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
-import AuthedFetchCommand from '@cardstack/host/tools/authed-fetch';
+import AuthedFetchTool from '@cardstack/host/tools/authed-fetch';
 
 import {
   setupIntegrationTestRealm,
@@ -83,8 +83,8 @@ module('Integration | commands | authed-fetch', function (hooks) {
       status: 200,
       text: async () => JSON.stringify({ data: 'hello' }),
     };
-    let commandService = getService('command-service');
-    let command = new AuthedFetchCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new AuthedFetchTool(toolService.commandContext);
     let result = await command.execute({
       url: 'https://example.com/api/resource',
     });
@@ -99,8 +99,8 @@ module('Integration | commands | authed-fetch', function (hooks) {
       status: 404,
       text: async () => 'not found',
     };
-    let commandService = getService('command-service');
-    let command = new AuthedFetchCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new AuthedFetchTool(toolService.commandContext);
     let result = await command.execute({
       url: 'https://example.com/api/missing',
     });

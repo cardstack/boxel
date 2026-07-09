@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import RealmService from '@cardstack/host/services/realm';
-import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
 import {
   setupIntegrationTestRealm,
@@ -61,10 +61,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
-    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
+    let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
+      toolService.commandContext,
     );
     await sendAiAssistantMessageCommand.execute({
       roomId,

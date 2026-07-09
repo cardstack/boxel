@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import CheckDomainAvailabilityCommand from '@cardstack/host/tools/check-domain-availability';
+import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
 
 import {
   setupIntegrationTestRealm,
@@ -79,8 +79,8 @@ module('Integration | commands | check-domain-availability', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new CheckDomainAvailabilityCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new CheckDomainAvailabilityTool(toolService.commandContext);
   }
 
   test('reports an available custom subdomain, deriving the URL from the server hostname', async function (assert) {

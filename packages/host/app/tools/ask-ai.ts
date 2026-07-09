@@ -1,19 +1,19 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import CreateAiAssistantRoomTool from './create-ai-assistant-room';
+import OpenAiAssistantRoomTool from './open-ai-assistant-room';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class AskAiCommand extends HostBaseCommand<
-  typeof BaseCommandModule.AskAiInput,
-  typeof BaseCommandModule.AskAiOutput
+export default class AskAiTool extends HostBaseTool<
+  typeof BaseToolModule.AskAiInput,
+  typeof BaseToolModule.AskAiOutput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -21,19 +21,17 @@ export default class AskAiCommand extends HostBaseCommand<
   static actionVerb = 'Ask';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { AskAiInput } = commandModule;
     return AskAiInput;
   }
 
   protected async run(
-    input: BaseCommandModule.AskAiInput,
-  ): Promise<BaseCommandModule.AskAiOutput> {
-    let createRoomCommand = new CreateAiAssistantRoomCommand(
-      this.commandContext,
-    );
-    let openRoomCommand = new OpenAiAssistantRoomCommand(this.commandContext);
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
+    input: BaseToolModule.AskAiInput,
+  ): Promise<BaseToolModule.AskAiOutput> {
+    let createRoomCommand = new CreateAiAssistantRoomTool(this.commandContext);
+    let openRoomCommand = new OpenAiAssistantRoomTool(this.commandContext);
+    let sendMessageCommand = new SendAiAssistantMessageTool(
       this.commandContext,
     );
 
@@ -57,10 +55,14 @@ export default class AskAiCommand extends HostBaseCommand<
 
     await openRoomCommand.execute({ roomId });
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return new commandModule.AskAiOutput({
       response:
         'AI assistant room created and opened successfully. You can now interact with the AI assistant.',
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { AskAiTool as AskAiCommand };

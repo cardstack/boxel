@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
-export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
-  typeof BaseCommandModule.InvalidateRealmIdentifiersInput,
+export default class InvalidateRealmIdentifiersTool extends HostBaseTool<
+  typeof BaseToolModule.InvalidateRealmIdentifiersInput,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -17,13 +17,13 @@ export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
     'Invalidate files in a realm to trigger re-indexing. A user may request that they want to reload or refresh a card in order to re-index it.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { InvalidateRealmIdentifiersInput } = commandModule;
     return InvalidateRealmIdentifiersInput;
   }
 
   protected async run(
-    input: BaseCommandModule.InvalidateRealmIdentifiersInput,
+    input: BaseToolModule.InvalidateRealmIdentifiersInput,
   ): Promise<undefined> {
     await this.realm.invalidateUrls(
       input.realmIdentifier,
@@ -31,3 +31,7 @@ export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
     );
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { InvalidateRealmIdentifiersTool as InvalidateRealmIdentifiersCommand };

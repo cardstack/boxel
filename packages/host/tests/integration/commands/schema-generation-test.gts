@@ -7,8 +7,8 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { AttributesSchema } from '@cardstack/runtime-common/helpers/ai';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import type HostBaseCommand from '@cardstack/host/lib/host-base-command';
-import { HostCommandClasses } from '@cardstack/host/tools';
+import type HostBaseTool from '@cardstack/host/lib/host-base-tool';
+import { HostToolClasses } from '@cardstack/host/tools';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -32,16 +32,16 @@ module(
         );
       });
       // for each host command, attempt to generate a JSON schema with strict: true
-      for (const CommandClass of HostCommandClasses) {
+      for (const CommandClass of HostToolClasses) {
         test(
           'getInputJsonSchema for ' + CommandClass.name,
           async function (assert) {
             // Type CommandClass as a concrete subclass of BaseHostCommand
             const TypedCommandClass = CommandClass as unknown as new (
               ...args: any[]
-            ) => HostBaseCommand<any, any>;
+            ) => HostBaseTool<any, any>;
             let command = new TypedCommandClass(
-              getService('command-service').commandContext,
+              getService('tool-service').commandContext,
             );
             const inputSchema = await command.getInputJsonSchema(
               cardAPI,

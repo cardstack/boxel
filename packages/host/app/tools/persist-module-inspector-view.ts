@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class PersistModuleInspectorViewCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PersistModuleInspectorViewInput,
+export default class PersistModuleInspectorViewTool extends HostBaseTool<
+  typeof BaseToolModule.PersistModuleInspectorViewInput,
   undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -15,7 +15,7 @@ export default class PersistModuleInspectorViewCommand extends HostBaseCommand<
   description = 'Persist the module inspector view selection to local storage';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PersistModuleInspectorViewInput } = commandModule;
     return PersistModuleInspectorViewInput;
   }
@@ -23,7 +23,7 @@ export default class PersistModuleInspectorViewCommand extends HostBaseCommand<
   requireInputFields = ['codePath', 'moduleInspectorView'];
 
   protected async run(
-    input: BaseCommandModule.PersistModuleInspectorViewInput,
+    input: BaseToolModule.PersistModuleInspectorViewInput,
   ): Promise<undefined> {
     let view = input.moduleInspectorView;
     let allowedViews: Set<string> = new Set(['schema', 'spec', 'preview']);
@@ -39,3 +39,7 @@ export default class PersistModuleInspectorViewCommand extends HostBaseCommand<
     return undefined;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PersistModuleInspectorViewTool as PersistModuleInspectorViewCommand };

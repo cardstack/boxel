@@ -9,25 +9,25 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
-export default class CheckCorrectnessCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CheckCorrectnessInput,
-  typeof BaseCommandModule.CorrectnessResultCard
+export default class CheckCorrectnessTool extends HostBaseTool<
+  typeof BaseToolModule.CheckCorrectnessInput,
+  typeof BaseToolModule.CorrectnessResultCard
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
 
@@ -36,15 +36,15 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   static actionVerb = 'Check';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.CheckCorrectnessInput;
   }
 
   requireInputFields = ['targetType', 'targetRef', 'roomId'];
 
   protected async run(
-    input: BaseCommandModule.CheckCorrectnessInput,
-  ): Promise<BaseCommandModule.CorrectnessResultCard> {
+    input: BaseToolModule.CheckCorrectnessInput,
+  ): Promise<BaseToolModule.CorrectnessResultCard> {
     if (!input.targetType || !input.targetRef) {
       throw new Error(
         'Target type and reference are required to run correctness checks.',
@@ -70,7 +70,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
     let lintIssues: string[] = input.lintIssues ?? [];
@@ -119,7 +119,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     cardId: string,
     roomId: string,
   ): Promise<string[]> {
-    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       cardId,
       cardIndexingTimeout,
@@ -148,7 +148,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       }
     } catch (error) {
       console.warn(
-        `CheckCorrectnessCommand: failed to refresh card ${cardId}`,
+        `CheckCorrectnessTool: failed to refresh card ${cardId}`,
         error,
       );
     } finally {
@@ -170,7 +170,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
     let { moduleURL, realmURL, fileURL } = moduleInfo;
 
-    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       fileURL.href,
       cardIndexingTimeout,
@@ -300,10 +300,14 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       return fileUrl.replace(/\.json$/, '');
     } catch (error) {
       console.warn(
-        `CheckCorrectnessCommand: unable to inspect file ${fileUrl} for card content`,
+        `CheckCorrectnessTool: unable to inspect file ${fileUrl} for card content`,
         error,
       );
       return undefined;
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CheckCorrectnessTool as CheckCorrectnessCommand };

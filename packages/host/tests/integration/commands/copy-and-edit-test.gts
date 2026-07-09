@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
-import CopyAndEditCommand from '@cardstack/host/tools/copy-and-edit';
+import CopyAndEditTool from '@cardstack/host/tools/copy-and-edit';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -182,7 +182,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card and relinks linksTo parent (same realm)', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -209,7 +209,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -237,7 +237,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card and relinks nested linksTo parent when only leaf field name is provided', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -266,7 +266,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: originalTheme,
     });
@@ -287,7 +287,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card without linked parent (query-derived stack) and does not throw', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -303,7 +303,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       ),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -312,7 +312,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card in single stack and replaces current item', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -328,7 +328,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: simpleCard,
     });
@@ -346,7 +346,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card and relinks linksToMany parent (same realm)', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -373,7 +373,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: childCard,
     });
@@ -391,7 +391,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies linked card and relinks linksTo parent (cross realm)', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -419,7 +419,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: remoteChild,
     });
@@ -443,7 +443,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   });
 
   test('copies card and relinks linksToMany parent (cross realm)', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let store = getService('store');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -477,7 +477,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditCommand(commandService.commandContext);
+    let command = new CopyAndEditTool(toolService.commandContext);
     await command.execute({
       card: remoteChild,
     });

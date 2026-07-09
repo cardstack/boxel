@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
-import InviteUserToRoomCommand from '@cardstack/host/tools/invite-user-to-room';
+import InviteUserToRoomTool from '@cardstack/host/tools/invite-user-to-room';
 
 import {
   setupIntegrationTestRealm,
@@ -60,10 +60,10 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
+    let command = new InviteUserToRoomTool(toolService.commandContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',
@@ -87,9 +87,9 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
+    let command = new InviteUserToRoomTool(toolService.commandContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',

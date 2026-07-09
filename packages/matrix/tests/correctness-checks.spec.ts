@@ -136,7 +136,7 @@ test.describe('Correctness Checks', () => {
 
     // Wait for the command to render
     let commandContainer = page.locator(
-      `[data-test-command-id="${commandRequestId}"]`,
+      `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await commandContainer.waitFor();
 
@@ -313,7 +313,7 @@ ${brokenContent}
     );
 
     let failingCommandContainer = page.locator(
-      `[data-test-command-id="${failingCommandRequestId}"]`,
+      `[data-test-tool-call-id="${failingCommandRequestId}"]`,
     );
     await failingCommandContainer.waitFor();
 
@@ -455,7 +455,7 @@ ${originalContent}
     );
 
     let finalCommandContainer = page.locator(
-      `[data-test-command-id="${finalCommandRequestId}"]`,
+      `[data-test-tool-call-id="${finalCommandRequestId}"]`,
     );
     await finalCommandContainer.waitFor();
     await finalCommandContainer
@@ -668,7 +668,7 @@ ${brokenModuleContent}
       );
 
       let commandContainer = page.locator(
-        `[data-test-command-id="${commandRequestId}"]`,
+        `[data-test-tool-call-id="${commandRequestId}"]`,
       );
       await commandContainer.waitFor();
       await commandContainer

@@ -1,27 +1,27 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
-export default class SearchGoogleImagesCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SearchGoogleImagesInput,
-  typeof BaseCommandModule.SearchGoogleImagesResult
+export default class SearchGoogleImagesTool extends HostBaseTool<
+  typeof BaseToolModule.SearchGoogleImagesInput,
+  typeof BaseToolModule.SearchGoogleImagesResult
 > {
   static actionVerb = 'Search Google Images';
   description = 'Search for images on Google using the Custom Search API';
   requireInputFields = ['query'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SearchGoogleImagesInput } = commandModule;
     return SearchGoogleImagesInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SearchGoogleImagesInput,
-  ): Promise<BaseCommandModule.SearchGoogleImagesResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.SearchGoogleImagesInput,
+  ): Promise<BaseToolModule.SearchGoogleImagesResult> {
+    const commandModule = await this.loadToolModule();
     const { SearchGoogleImagesResult } = commandModule;
 
     try {
@@ -33,7 +33,7 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
       // The API key will be handled by the proxy endpoint
       const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}&start=${startIndex}&cx=064501294a5c9430a`;
 
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
         this.commandContext,
       );
 
@@ -98,3 +98,7 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SearchGoogleImagesTool as SearchGoogleImagesCommand };

@@ -4,9 +4,9 @@ import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
@@ -38,7 +38,7 @@ export default class MessageCodePatchResult {
     this.failureReason = failureReason;
   }
 
-  @service declare commandService: CommandService;
+  @service declare toolService: ToolService;
   @service declare matrixService: MatrixService;
   @service declare store: StoreService;
 }

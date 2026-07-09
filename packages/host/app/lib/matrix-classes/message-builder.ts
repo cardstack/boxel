@@ -8,7 +8,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
   decodeCommandRequest,
@@ -32,32 +32,32 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   loadSkillSource,
-} from '@cardstack/host/lib/skill-commands';
+} from '@cardstack/host/lib/skill-tools';
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
-import type { CommandStatus } from 'https://cardstack.com/base/command';
+import type { ToolCallStatus } from 'https://cardstack.com/base/command';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
   DebugMessageEvent,
-  CommandResultEvent,
-  EncodedCommandRequest,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';
-import MessageCommand from './message-command';
+import MessageTool from './message-tool';
 
 import type { RoomMember } from './member';
 
@@ -85,13 +85,13 @@ export default class MessageBuilder {
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
-      commandResultEvent?: CommandResultEvent;
+      toolResultEvent?: ToolResultEvent;
     },
   ) {
     setOwner(this, owner);
   }
 
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -186,7 +186,7 @@ export default class MessageBuilder {
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
       if (getToolRequests(event.content)) {
-        message.setCommands(await this.buildMessageCommands(message));
+        message.setTools(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
@@ -246,17 +246,17 @@ export default class MessageBuilder {
     }
 
     let encodedCommandRequests =
-      getToolRequests<Partial<EncodedCommandRequest>>(
+      getToolRequests<Partial<EncodedToolRequest>>(
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
-      let command = message.commands.find(
-        (c) => c.commandRequest.id === encodedCommandRequest.id,
+      let command = message.tools.find(
+        (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
+        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
-        message.commands.push(
+        message.tools.push(
           await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
@@ -267,24 +267,24 @@ export default class MessageBuilder {
   }
 
   async updateMessageCommandResult(message: Message) {
-    if (message.commands.length === 0) {
-      message.setCommands(await this.buildMessageCommands(message));
+    if (message.tools.length === 0) {
+      message.setTools(await this.buildMessageCommands(message));
     }
 
-    if (this.builderContext.commandResultEvent && message.commands.length > 0) {
-      let event = this.builderContext.commandResultEvent;
+    if (this.builderContext.toolResultEvent && message.tools.length > 0) {
+      let event = this.builderContext.toolResultEvent;
       if (
         isToolResultWithOutputMsgtype(event.content.msgtype) ||
         isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
-        let messageCommand = message.commands.find(
-          (c) => c.commandRequest.id === commandRequestId,
+        let messageCommand = message.tools.find(
+          (c) => c.toolRequest.id === commandRequestId,
         );
         if (messageCommand) {
-          messageCommand.commandStatus = event.content['m.relates_to']
-            .key as CommandStatus;
-          messageCommand.commandResultFileDef = isToolResultWithOutputContent(
+          messageCommand.toolCallStatus = event.content['m.relates_to']
+            .key as ToolCallStatus;
+          messageCommand.toolResultFileDef = isToolResultWithOutputContent(
             event.content,
           )
             ? event.content.data.card
@@ -301,16 +301,16 @@ export default class MessageBuilder {
 
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
-    let commandRequests =
-      getToolRequests<Partial<EncodedCommandRequest>>(eventContent);
-    if (!commandRequests) {
-      return new TrackedArray<MessageCommand>();
+    let toolRequests =
+      getToolRequests<Partial<EncodedToolRequest>>(eventContent);
+    if (!toolRequests) {
+      return new TrackedArray<MessageTool>();
     }
-    let commands = new TrackedArray<MessageCommand>();
-    for (let commandRequest of commandRequests) {
+    let commands = new TrackedArray<MessageTool>();
+    for (let toolRequest of toolRequests) {
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(commandRequest),
+        decodeCommandRequest(toolRequest),
       );
       commands.push(command);
     }
@@ -319,10 +319,10 @@ export default class MessageBuilder {
 
   private async buildMessageCommand(
     message: Message,
-    commandRequest: Partial<CommandRequest>,
+    toolRequest: Partial<ToolRequest>,
   ) {
-    let commandResultEvent =
-      this.builderContext.commandResultEvent ??
+    let toolResultEvent =
+      this.builderContext.toolResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
         // Correlate the result to its command by commandRequestId (the
@@ -335,9 +335,9 @@ export default class MessageBuilder {
         return (
           isToolResultEventType(e.type) &&
           isToolResultRelType(r?.rel_type) &&
-          e.content.commandRequestId === commandRequest.id
+          e.content.commandRequestId === toolRequest.id
         );
-      }) as CommandResultEvent | undefined);
+      }) as ToolResultEvent | undefined);
 
     // ai-bot ran this one itself (e.g. readRealmFile), so the host never
     // resolves a command class or runs it. Skip the skill lookup below — it's
@@ -345,20 +345,20 @@ export default class MessageBuilder {
     // leave the indicator blank for a beat while it runs. Build the command
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
-    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
-      return new MessageCommand(
+    if (toolRequest.executedBy === AI_BOT_EXECUTOR) {
+      return new MessageTool(
         message,
-        commandRequest,
+        toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
         false, // requiresApproval — never prompts or runs
         'Apply', // actionVerb — unused; the indicator shows status, not a Run button
-        (commandResultEvent
-          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
-          : 'applying') as CommandStatus,
+        (toolResultEvent
+          ? toolResultEvent.content['m.relates_to']?.key || 'applied'
+          : 'applying') as ToolCallStatus,
         undefined, // no result card (server-handled results carry no output)
         getOwner(this)!,
-        commandResultEvent?.content.failureReason,
+        toolResultEvent?.content.failureReason,
       );
     }
 
@@ -372,8 +372,8 @@ export default class MessageBuilder {
       if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of getSkillSourceCommands(source)) {
-        if (commandRequest.name === candidateSkillCommand.functionName) {
+      for (let candidateSkillCommand of getSkillSourceTools(source)) {
+        if (toolRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;
         }
@@ -393,24 +393,23 @@ export default class MessageBuilder {
 
     let requiresApproval = skillCommand?.requiresApproval ?? true;
 
-    let commandStatus: CommandStatus = (commandResultEvent?.content[
+    let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
       'm.relates_to'
-    ]?.key || 'ready') as CommandStatus;
+    ]?.key || 'ready') as ToolCallStatus;
 
-    let messageCommand = new MessageCommand(
+    let messageCommand = new MessageTool(
       message,
-      commandRequest,
+      toolRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      commandStatus,
-      commandResultEvent &&
-        isToolResultWithOutputContent(commandResultEvent.content)
-        ? commandResultEvent.content.data.card
+      toolCallStatus,
+      toolResultEvent && isToolResultWithOutputContent(toolResultEvent.content)
+        ? toolResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
-      commandResultEvent?.content.failureReason,
+      toolResultEvent?.content.failureReason,
     );
     return messageCommand;
   }

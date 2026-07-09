@@ -8,10 +8,10 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
@@ -22,9 +22,9 @@ interface Configuration {
   cardType: typeof CardDef;
 }
 
-export default class PatchFieldsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PatchFieldsInput,
-  typeof BaseCommandModule.PatchFieldsOutput
+export default class PatchFieldsTool extends HostBaseTool<
+  typeof BaseToolModule.PatchFieldsInput,
+  typeof BaseToolModule.PatchFieldsOutput
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -42,7 +42,7 @@ export default class PatchFieldsCommand extends HostBaseCommand<
   }
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchFieldsInput } = commandModule;
     return PatchFieldsInput;
   }
@@ -87,11 +87,11 @@ export default class PatchFieldsCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.PatchFieldsInput,
-  ): Promise<BaseCommandModule.PatchFieldsOutput> {
+    input: BaseToolModule.PatchFieldsInput,
+  ): Promise<BaseToolModule.PatchFieldsOutput> {
     if (!input.cardId || !input.fieldUpdates) {
       throw new Error(
-        "PatchFieldsCommand can't run because it doesn't have all the required fields",
+        "PatchFieldsTool can't run because it doesn't have all the required fields",
       );
     }
 
@@ -183,7 +183,7 @@ export default class PatchFieldsCommand extends HostBaseCommand<
       Object.assign(errors, fieldErrors);
 
       // Create and return the output
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { PatchFieldsOutput } = commandModule;
 
       return new PatchFieldsOutput({
@@ -192,13 +192,13 @@ export default class PatchFieldsCommand extends HostBaseCommand<
         errors,
       });
     } catch (error: any) {
-      console.log('PatchFieldsCommand: Caught error:', error.message);
+      console.log('PatchFieldsTool: Caught error:', error.message);
       // If the whole operation fails, mark all fields as failed
       Object.keys(input.fieldUpdates).forEach((fieldPath) => {
         errors[fieldPath] = error.message || 'Update failed';
       });
 
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { PatchFieldsOutput } = commandModule;
 
       return new PatchFieldsOutput({
@@ -302,3 +302,7 @@ export default class PatchFieldsCommand extends HostBaseCommand<
     };
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PatchFieldsTool as PatchFieldsCommand };

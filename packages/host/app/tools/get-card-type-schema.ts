@@ -9,27 +9,27 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-export default class GetCardTypeSchemaCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CardTypeSchemaInput,
-  typeof BaseCommandModule.JsonCard
+export default class GetCardTypeSchemaTool extends HostBaseTool<
+  typeof BaseToolModule.CardTypeSchemaInput,
+  typeof BaseToolModule.JsonCard
 > {
   static actionVerb = 'Generate';
   description = 'Generate JSON schema for a card type definition';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.CardTypeSchemaInput;
   }
 
   requireInputFields = ['codeRef'];
 
   protected async run(
-    input: BaseCommandModule.CardTypeSchemaInput,
-  ): Promise<BaseCommandModule.JsonCard> {
+    input: BaseToolModule.CardTypeSchemaInput,
+  ): Promise<BaseToolModule.JsonCard> {
     let codeRef = input.codeRef as unknown as ResolvedCodeRef;
     if (!codeRef?.module || !codeRef?.name) {
       throw new Error('codeRef must be a ResolvedCodeRef with module and name');
@@ -53,7 +53,11 @@ export default class GetCardTypeSchemaCommand extends HostBaseCommand<
       mappings,
     );
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: schema });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetCardTypeSchemaTool as GetCardTypeSchemaCommand };

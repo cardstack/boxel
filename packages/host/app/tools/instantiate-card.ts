@@ -16,15 +16,15 @@
 
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 
-export default class InstantiateCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.InstantiateCardInput,
-  typeof BaseCommandModule.InstantiateCardResult
+export default class InstantiateCardTool extends HostBaseTool<
+  typeof BaseToolModule.InstantiateCardInput,
+  typeof BaseToolModule.InstantiateCardResult
 > {
   description = 'Instantiate a card from JSON via the store in the prerenderer';
   static actionVerb = 'Instantiate';
@@ -32,15 +32,15 @@ export default class InstantiateCardCommand extends HostBaseCommand<
   @service declare private store: StoreService;
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.InstantiateCardInput;
   }
 
   requireInputFields = ['moduleIdentifier', 'cardName', 'realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.InstantiateCardInput,
-  ): Promise<BaseCommandModule.InstantiateCardResult> {
+    input: BaseToolModule.InstantiateCardInput,
+  ): Promise<BaseToolModule.InstantiateCardResult> {
     let moduleUrl = input.moduleIdentifier;
     let cardName = input.cardName;
     let realmUrl = input.realmIdentifier;
@@ -59,7 +59,7 @@ export default class InstantiateCardCommand extends HostBaseCommand<
 
     this.validateModuleUrl(moduleUrl, realmUrl);
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
 
     try {
       // Reset the loader to clear cached modules from prior runs.
@@ -183,3 +183,7 @@ export default class InstantiateCardCommand extends HostBaseCommand<
     return pathname.endsWith('/') ? pathname : `${pathname}/`;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { InstantiateCardTool as InstantiateCardCommand };

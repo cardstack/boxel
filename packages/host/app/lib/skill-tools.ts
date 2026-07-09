@@ -10,8 +10,8 @@ import type StoreService from '../services/store';
 // A skill is either a `Skill` card (commands on `Skill.commands`) or a
 // markdown file whose `boxel.kind: skill` frontmatter rehydrates as a
 // `SkillFrontmatterField` (tools on `MarkdownDef.frontmatter.tools`).
-// Both fields are `containsMany(CommandField)`, so once gathered the
-// `CommandField` instances feed the command-definition upload flow identically.
+// Both fields are `containsMany(ToolField)`, so once gathered the
+// `ToolField` instances feed the command-definition upload flow identically.
 export type SkillSource = SkillModule.Skill | MarkdownDef;
 
 const MARKDOWN_EXTENSION = /\.(md|markdown)$/i;
@@ -37,23 +37,23 @@ export function isSkillSource(instance: unknown): instance is SkillSource {
   return isSkillCardInstance(instance) || isSkillMarkdown(instance);
 }
 
-// Returns the `CommandField` instances a skill source contributes, regardless
+// Returns the `ToolField` instances a skill source contributes, regardless
 // of whether the source is a `Skill` card or a skill-bearing markdown file.
-export function getSkillSourceCommands(
+export function getSkillSourceTools(
   instance: SkillSource | null | undefined,
-): SkillModule.CommandField[] {
+): SkillModule.ToolField[] {
   if (isSkillCardInstance(instance)) {
     return instance.commands ?? [];
   }
   if (isSkillMarkdown(instance)) {
     // For `boxel.kind: skill`, `frontmatter` is a `SkillFrontmatterField` whose
-    // `tools` is the same `containsMany(CommandField)` as `Skill.commands`.
+    // `tools` is the same `containsMany(ToolField)` as `Skill.commands`.
     // Index rows extracted before the command → tool rename carry the value
     // under the legacy `commands` field instead; fall back until all realms
     // have reindexed.
     let frontmatter = instance.frontmatter as {
-      tools?: SkillModule.CommandField[];
-      commands?: SkillModule.CommandField[];
+      tools?: SkillModule.ToolField[];
+      commands?: SkillModule.ToolField[];
     } | null;
     // `tools` is a containsMany, so a rehydrated pre-rename row yields [] (not
     // undefined) — an empty-check, not `??`, is what routes to the fallback.

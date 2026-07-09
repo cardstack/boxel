@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
+import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
 
 // `isMarkdownSkillId` drives the load-type dispatch for skills: a true result
 // loads through the `file-meta` read type, false loads as a card. Lock the

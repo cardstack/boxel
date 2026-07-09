@@ -1,13 +1,13 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import UseAiAssistantCommand from './ai-assistant';
+import UseAiAssistantTool from './ai-assistant';
 
-export default class PatchThemeCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PatchThemeInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+export default class PatchThemeTool extends HostBaseTool<
+  typeof BaseToolModule.PatchThemeInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
 > {
   description =
     'Open the AI assistant to suggest improvements to a theme card and generate a patch.';
@@ -17,14 +17,14 @@ export default class PatchThemeCommand extends HostBaseCommand<
   requireInputFields = ['cardId'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchThemeInput } = commandModule;
     return PatchThemeInput;
   }
 
   protected async run(
-    input: BaseCommandModule.PatchThemeInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseToolModule.PatchThemeInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     if (!input.cardId) {
       throw new Error('patch-theme command requires a cardId');
     }
@@ -39,7 +39,7 @@ export default class PatchThemeCommand extends HostBaseCommand<
         ? linkedSkill.id
         : undefined;
 
-    let useAssistant = new UseAiAssistantCommand(this.commandContext);
+    let useAssistant = new UseAiAssistantTool(this.commandContext);
     return await useAssistant.execute({
       roomId: 'new',
       openRoom: true,
@@ -50,3 +50,7 @@ export default class PatchThemeCommand extends HostBaseCommand<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PatchThemeTool as PatchThemeCommand };

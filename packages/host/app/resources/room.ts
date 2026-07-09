@@ -16,7 +16,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -42,7 +42,7 @@ import type {
   CardMessageEvent,
   DebugMessageEvent,
   MessageEvent,
-  CommandResultEvent,
+  ToolResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
   ActiveLLMEvent,
@@ -58,21 +58,21 @@ import {
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
 import {
-  getSkillSourceCommands,
+  getSkillSourceTools,
   isMarkdownSkillId,
   loadSkillSource,
   peekSkillSource,
-} from '../lib/skill-commands';
+} from '../lib/skill-tools';
 
 import type { Message } from '../lib/matrix-classes/message';
 
 import type Room from '../lib/matrix-classes/room';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
@@ -113,7 +113,7 @@ export class RoomResource extends Resource<Args> {
   @tracked private llmModeBeingActivated: LLMMode | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
 
@@ -341,8 +341,8 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
-  get commands() {
-    // Usable commands are all commands on *active* skills, whether the skill is
+  get tools() {
+    // Usable tools are all tools on *active* skills, whether the skill is
     // a Skill card or a skill-bearing markdown file.
     let commands = [];
     for (let skill of this.skills) {
@@ -351,7 +351,7 @@ export class RoomResource extends Resource<Args> {
       }
       let skillSource = peekSkillSource(this.store, skill.cardId);
       if (skillSource) {
-        commands.push(...getSkillSourceCommands(skillSource));
+        commands.push(...getSkillSourceTools(skillSource));
       }
     }
     return commands;
@@ -723,7 +723,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: CommandResultEvent;
+    event: ToolResultEvent;
     index: number;
   }) {
     // Locate the owning bot message by commandRequestId. The commandResult's
@@ -769,7 +769,7 @@ export class RoomResource extends Resource<Args> {
         index,
         events: this.events,
         skills: this.skills,
-        commandResultEvent: event,
+        toolResultEvent: event,
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
@@ -813,7 +813,7 @@ export class RoomResource extends Resource<Args> {
     event:
       | MessageEvent
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | DebugMessageEvent,
   ) {
@@ -875,14 +875,14 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  public isDisplayingCode(commandRequest: CommandRequest) {
-    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
+  public isDisplayingCode(toolRequest: ToolRequest) {
+    return this._isDisplayingViewCodeMap.get(toolRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: CommandRequest) {
+  public toggleViewCode(toolRequest: ToolRequest) {
     this._isDisplayingViewCodeMap.set(
-      commandRequest.id,
-      !this.isDisplayingCode(commandRequest),
+      toolRequest.id,
+      !this.isDisplayingCode(toolRequest),
     );
   }
 }

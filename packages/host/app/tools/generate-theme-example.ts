@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import {
   buildAttachedFileURLs,
@@ -9,18 +9,18 @@ import {
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
 } from '../lib/example-card-helpers';
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import { createExampleInstanceFromPayload } from './generate-example-cards';
-import OneShotLlmRequestCommand from './one-shot-llm-request';
+import OneShotLlmRequestTool from './one-shot-llm-request';
 
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-export default class GenerateThemeExampleCommand extends HostBaseCommand<
-  typeof BaseCommandModule.GenerateThemeExampleInput,
-  typeof BaseCommandModule.CreateInstanceResult
+export default class GenerateThemeExampleTool extends HostBaseTool<
+  typeof BaseToolModule.GenerateThemeExampleInput,
+  typeof BaseToolModule.CreateInstanceResult
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -29,14 +29,14 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
   static actionVerb = 'Create Theme Example';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateThemeExampleInput } = commandModule;
     return GenerateThemeExampleInput;
   }
 
   protected async run(
-    input: BaseCommandModule.GenerateThemeExampleInput,
-  ): Promise<BaseCommandModule.CreateInstanceResult> {
+    input: BaseToolModule.GenerateThemeExampleInput,
+  ): Promise<BaseToolModule.CreateInstanceResult> {
     if (!input.codeRef) {
       throw new Error('codeRef is required to create a card');
     }
@@ -70,7 +70,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       ),
     );
 
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.commandContext);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
@@ -103,7 +103,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       throw new Error('Failed to create theme example card');
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateInstanceResult } = commandModule;
     return new CreateInstanceResult({
       createdCard: createdCard as CardDef,
@@ -148,3 +148,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
     ].join('\n');
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GenerateThemeExampleTool as GenerateThemeExampleCommand };

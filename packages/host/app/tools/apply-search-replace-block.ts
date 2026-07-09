@@ -4,9 +4,9 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { stripTrailingSeparatorMarker } from '../lib/search-replace-block-parsing';
 
 let standardErrorMessage =
@@ -18,9 +18,9 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE: `${standardErrorMessage} (empty search pattern for non-empty file)`,
 } as const;
 
-export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ApplySearchReplaceBlockInput,
-  typeof BaseCommandModule.ApplySearchReplaceBlockResult
+export default class ApplySearchReplaceBlockTool extends HostBaseTool<
+  typeof BaseToolModule.ApplySearchReplaceBlockInput,
+  typeof BaseToolModule.ApplySearchReplaceBlockResult
 > {
   description = `Apply search/replace blocks to file contents. The format is:
 ╔═══ SEARCH ════╗
@@ -32,7 +32,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   static actionVerb = 'Apply';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ApplySearchReplaceBlockInput } = commandModule;
     return ApplySearchReplaceBlockInput;
   }
@@ -40,9 +40,9 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   requireInputFields = ['codeBlock', 'fileContent'];
 
   protected async run(
-    input: BaseCommandModule.ApplySearchReplaceBlockInput,
-  ): Promise<BaseCommandModule.ApplySearchReplaceBlockResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.ApplySearchReplaceBlockInput,
+  ): Promise<BaseToolModule.ApplySearchReplaceBlockResult> {
+    let commandModule = await this.loadToolModule();
     const { ApplySearchReplaceBlockResult } = commandModule;
 
     // Parse the search and replace blocks from the provided code block
@@ -229,3 +229,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     return { matched: true, matchLength: contentLineIndex - startIndex };
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ApplySearchReplaceBlockTool as ApplySearchReplaceBlockCommand };

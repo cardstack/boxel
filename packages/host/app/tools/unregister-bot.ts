@@ -1,13 +1,13 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
-export default class UnregisterBotCommand extends HostBaseCommand<
-  typeof BaseCommandModule.UnregisterBotInput,
+export default class UnregisterBotTool extends HostBaseTool<
+  typeof BaseToolModule.UnregisterBotInput,
   undefined
 > {
   @service declare private realmServer: RealmServerService;
@@ -16,14 +16,18 @@ export default class UnregisterBotCommand extends HostBaseCommand<
   description = 'Unregister bot';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UnregisterBotInput } = commandModule;
     return UnregisterBotInput;
   }
 
   protected async run(
-    input: BaseCommandModule.UnregisterBotInput,
+    input: BaseToolModule.UnregisterBotInput,
   ): Promise<undefined> {
     await this.realmServer.unregisterBot(input.botRegistrationId);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UnregisterBotTool as UnregisterBotCommand };

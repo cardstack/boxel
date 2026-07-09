@@ -110,7 +110,6 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
-import type CommandService from './command-service';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -121,6 +120,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type ToolService from './tool-service';
 import type { SearchResource } from '../resources/search';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
@@ -217,7 +217,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;

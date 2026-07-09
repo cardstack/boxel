@@ -4,11 +4,11 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import WriteBinaryFileCommand from './write-binary-file';
+import WriteBinaryFileTool from './write-binary-file';
 
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
@@ -31,9 +31,9 @@ function generateFilenameFromCard(cardId: string): string {
   return slug ? `${slug}-${uniqueId}` : `screenshot-${uniqueId}`;
 }
 
-export default class ScreenshotCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ScreenshotCardInput,
-  typeof BaseCommandModule.ScreenshotCardOutput
+export default class ScreenshotCardTool extends HostBaseTool<
+  typeof BaseToolModule.ScreenshotCardInput,
+  typeof BaseToolModule.ScreenshotCardOutput
 > {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -43,7 +43,7 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
     "Screenshot a rendered card and save it as an ImageDef in the card's own realm";
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ScreenshotCardInput } = commandModule;
     return ScreenshotCardInput;
   }
@@ -51,8 +51,8 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
   requireInputFields = ['card', 'format'];
 
   protected async run(
-    input: BaseCommandModule.ScreenshotCardInput,
-  ): Promise<BaseCommandModule.ScreenshotCardOutput> {
+    input: BaseToolModule.ScreenshotCardInput,
+  ): Promise<BaseToolModule.ScreenshotCardOutput> {
     let { card, format } = input;
     let normalizedFormat = format?.trim();
     if (!card) {
@@ -130,7 +130,7 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
     // promotes the PNG into a PngDef / ImageDef card automatically.
     let filename = `${generateFilenameFromCard(cardURL)}.png`;
     let filePath = `Screenshots/${filename}`;
-    let writeResult = await new WriteBinaryFileCommand(
+    let writeResult = await new WriteBinaryFileTool(
       this.commandContext,
     ).execute({
       path: filePath,
@@ -144,10 +144,14 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
       throw new Error('Failed to write screenshot PNG to realm.');
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ScreenshotCardOutput } = commandModule;
     return new ScreenshotCardOutput({
       imageDefUrl: writeResult.fileIdentifier,
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ScreenshotCardTool as ScreenshotCardCommand };

@@ -15,17 +15,17 @@ import { Skill } from './skill';
 import { getMenuItems, rri } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
-import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
-import GetUserSystemCardCommand from '@cardstack/boxel-host/commands/get-user-system-card';
+import SetUserSystemCardTool from '@cardstack/boxel-host/commands/set-user-system-card';
+import GetUserSystemCardTool from '@cardstack/boxel-host/commands/get-user-system-card';
 import {
   BoxelButton,
   BoxelDropdown,
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import AppsIcon from '@cardstack/boxel-icons/apps';
-import CopyCardToRealmCommand from '@cardstack/boxel-host/commands/copy-card';
-import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
-import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import CopyCardToRealmTool from '@cardstack/boxel-host/commands/copy-card';
+import GetAllRealmMetasTool from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
 import { on } from '@ember/modifier';
 import { restartableTask, task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
@@ -109,7 +109,7 @@ export class SystemCard extends CardDef {
       {
         label: 'Set as My System Card',
         action: async () => {
-          await new SetUserSystemCardCommand(params.commandContext).execute({
+          await new SetUserSystemCardTool(params.commandContext).execute({
             cardId: this.id,
           });
         },
@@ -143,7 +143,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     }
     try {
       let result =
-        await new GetUserSystemCardCommand(commandContext).execute();
+        await new GetUserSystemCardTool(commandContext).execute();
       this.activeSystemCardId = result.cardId ?? undefined;
       this.activeIsDefault = result.isDefault ?? false;
     } finally {
@@ -169,7 +169,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
     this,
-    GetAllRealmMetasCommand,
+    GetAllRealmMetasTool,
   );
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
@@ -216,14 +216,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       return;
     }
     try {
-      let copyResult = await new CopyCardToRealmCommand(
+      let copyResult = await new CopyCardToRealmTool(
         commandContext,
       ).execute({
         sourceCard: this.args.model as CardDef,
         targetRealm: targetRealmUrl,
       });
       if (copyResult.newCardId) {
-        await new ShowCardCommand(commandContext).execute({
+        await new ShowCardTool(commandContext).execute({
           cardId: copyResult.newCardId,
           format: 'isolated',
         });
@@ -252,13 +252,13 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     if (!commandContext || !this.args.model.id) {
       return;
     }
-    await new SetUserSystemCardCommand(commandContext).execute({
+    await new SetUserSystemCardTool(commandContext).execute({
       cardId: this.args.model.id,
     });
     this.activeSystemCardId = this.args.model.id;
     // Re-check default status after setting active
     let result =
-      await new GetUserSystemCardCommand(commandContext).execute();
+      await new GetUserSystemCardTool(commandContext).execute();
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
   });
@@ -272,10 +272,10 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     if (!commandContext) {
       return;
     }
-    await new SetUserSystemCardCommand(commandContext).execute({});
+    await new SetUserSystemCardTool(commandContext).execute({});
     // Reload to pick up the new active system card (the default)
     let result =
-      await new GetUserSystemCardCommand(commandContext).execute();
+      await new GetUserSystemCardTool(commandContext).execute();
     this.activeSystemCardId = result.cardId ?? undefined;
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;

@@ -9,7 +9,7 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardService from '@cardstack/host/services/card-service';
-import SyncOpenRouterModelsCommand from '@cardstack/host/tools/sync-openrouter-models';
+import SyncOpenRouterModelsTool from '@cardstack/host/tools/sync-openrouter-models';
 
 import {
   testRealmURL,
@@ -129,10 +129,8 @@ module('Integration | commands | sync-openrouter-models', function (hooks) {
   });
 
   function runSync() {
-    let commandService = getService('command-service');
-    let command = new SyncOpenRouterModelsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let command = new SyncOpenRouterModelsTool(toolService.commandContext);
     return command.execute({ realmIdentifier: testRealmURL });
   }
 

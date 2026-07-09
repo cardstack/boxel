@@ -19,15 +19,15 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type { RoomResource } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
-import RoomMessageCommand from './room-message-command';
+import RoomMessageTool from './room-message-tool';
 
 interface Signature {
   Element: HTMLElement;
@@ -163,8 +163,8 @@ export default class RoomMessage extends Component<Signature> {
     return undefined;
   }
 
-  private run = task(async (command: MessageCommand) => {
-    return this.commandService.run.unlinked().perform(command);
+  private run = task(async (command: MessageTool) => {
+    return this.toolService.run.unlinked().perform(command);
   });
 
   <template>
@@ -210,13 +210,13 @@ export default class RoomMessage extends Component<Signature> {
         @isPending={{@isPending}}
         @hideMeta={{this.message.isCodePatchCorrectness}}
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
-        @commands={{this.message.commands}}
+        @commands={{this.message.tools}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#each this.message.commands as |command|}}
-          <RoomMessageCommand
+        {{#each this.message.tools as |command|}}
+          <RoomMessageTool
             @messageCommand={{command}}
             @roomResource={{@roomResource}}
             @runCommand={{fn (perform this.run) command}}
@@ -232,7 +232,7 @@ export default class RoomMessage extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare commandService: CommandService;
+  @service declare toolService: ToolService;
 
   knownErrorMessagePrefixes: { [errorMessagePrefix: string]: string }[] = [
     {

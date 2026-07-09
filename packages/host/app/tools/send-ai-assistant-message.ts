@@ -5,28 +5,28 @@ import { v4 as uuidv4 } from 'uuid';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type ToolService from '../services/tool-service';
 
-export default class SendAiAssistantMessageCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SendAiAssistantMessageInput,
-  typeof BaseCommandModule.SendAiAssistantMessageResult
+export default class SendAiAssistantMessageTool extends HostBaseTool<
+  typeof BaseToolModule.SendAiAssistantMessageInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
 > {
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -36,7 +36,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendAiAssistantMessageInput } = commandModule;
     return SendAiAssistantMessageInput;
   }
@@ -53,8 +53,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.SendAiAssistantMessageInput,
-  ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
+    input: BaseToolModule.SendAiAssistantMessageInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let { matrixService, operatorModeStateService } = this;
     let roomId = input.roomId;
     let requireToolCall = input.requireCommandCall ?? false;
@@ -88,7 +88,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     if (files?.length) {
       files = await matrixService.uploadFiles(files);
     }
-    await matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+    await matrixService.updateSkillsAndToolsIfNeeded(roomId);
     let cardFileDefs = await matrixService.uploadCards(
       input.attachedCards ?? [],
     );
@@ -115,8 +115,12 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
         context,
       },
     } as CardMessageContent);
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendAiAssistantMessageResult } = commandModule;
     return new SendAiAssistantMessageResult({ roomId, eventId: event_id });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SendAiAssistantMessageTool as SendAiAssistantMessageCommand };

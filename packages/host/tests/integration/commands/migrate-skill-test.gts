@@ -10,7 +10,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
-import MigrateSkillCommand from '@cardstack/host/tools/migrate-skill';
+import MigrateSkillTool from '@cardstack/host/tools/migrate-skill';
 
 import {
   setupCardLogs,
@@ -22,7 +22,7 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
+import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -114,12 +114,12 @@ export class DoThingQuietly extends Command {
             cardDescription: 'Manage data in a realm',
             instructions: '# Data\n\nDo data things.',
             commands: [
-              new CommandField({
+              new ToolField({
                 codeRef: { module: COMMAND_MODULE, name: 'DoThing' },
                 requiresApproval: true,
               }),
               // requiresApproval: false must survive migration — see assertion.
-              new CommandField({
+              new ToolField({
                 codeRef: { module: COMMAND_MODULE, name: 'DoThingQuietly' },
                 requiresApproval: false,
               }),
@@ -141,9 +141,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('migrates a Skill card with commands into a SKILL.md', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillCommand(commandContext);
+    let command = new MigrateSkillTool(commandContext);
 
     let result = await command.execute({ realm: testRealmURL });
 
@@ -185,9 +185,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('omits boxel.tools when the skill has none', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillCommand(commandContext);
+    let command = new MigrateSkillTool(commandContext);
 
     await command.execute({ realm: testRealmURL });
 
@@ -203,9 +203,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('reports skills with no instructions instead of writing an empty file', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillCommand(commandContext);
+    let command = new MigrateSkillTool(commandContext);
 
     let result = await command.execute({ realm: testRealmURL });
 
@@ -224,9 +224,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('skips existing targets unless overwrite is set', async function (assert) {
-    let commandContext = getService('command-service').commandContext;
+    let commandContext = getService('tool-service').commandContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillCommand(commandContext);
+    let command = new MigrateSkillTool(commandContext);
 
     let first = await command.execute({ realm: testRealmURL });
     assert.strictEqual(

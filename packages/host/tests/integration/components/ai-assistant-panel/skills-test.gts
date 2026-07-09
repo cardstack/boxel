@@ -183,8 +183,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         }),
         'search-and-open-card-command.ts': `
             import { Command } from '@cardstack/runtime-common';
-            import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
-            import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+            import { SearchCardsByTypeAndTitleTool } from '@cardstack/boxel-host/commands/search-cards';
+            import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
             import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/commands/search-card-result';
 
             export default class SearchAndOpenCardCommand extends Command<
@@ -194,19 +194,19 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               static displayName = 'SearchAndOpenCardCommand';
               static actionVerb = 'Search';
               async getInputType() {
-                return new SearchCardsByTypeAndTitleCommand(
+                return new SearchCardsByTypeAndTitleTool(
                   this.commandContext,
                 ).getInputType();
               }
               protected async run(
                 input: SearchCardsByTitleInput,
               ): Promise<undefined> {
-                let searchCommand = new SearchCardsByTypeAndTitleCommand(
+                let searchCommand = new SearchCardsByTypeAndTitleTool(
                   this.commandContext,
                 );
                 let searchResult = await searchCommand.execute(input);
                 if (searchResult.cardIds.length > 0) {
-                  let showCardCommand = new ShowCardCommand(this.commandContext);
+                  let showCardCommand = new ShowCardTool(this.commandContext);
                   await showCardCommand.execute({
                     cardId: searchResult.cardIds[0],
                   });
@@ -959,8 +959,8 @@ Instructions live in the markdown body.
     });
     await settled();
     // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

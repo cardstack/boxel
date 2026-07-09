@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import SearchAndChooseCommand from '@cardstack/host/tools/search-and-choose';
+import SearchAndChooseTool from '@cardstack/host/tools/search-and-choose';
 
 import {
   setupIntegrationTestRealm,
@@ -82,7 +82,7 @@ module('Integration | commands | search-and-choose', function (hooks) {
     capturedMessages = undefined;
   });
 
-  let searchAndChooseCommand: SearchAndChooseCommand;
+  let searchAndChooseCommand: SearchAndChooseTool;
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
@@ -141,9 +141,9 @@ export class ContextCard extends CardDef {
       }),
     );
 
-    const commandService = getService('command-service');
-    searchAndChooseCommand = new SearchAndChooseCommand(
-      commandService.commandContext,
+    const toolService = getService('tool-service');
+    searchAndChooseCommand = new SearchAndChooseTool(
+      toolService.commandContext,
     );
   });
 

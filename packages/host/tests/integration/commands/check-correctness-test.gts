@@ -11,9 +11,9 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import CheckCorrectnessCommand from '@cardstack/host/tools/check-correctness';
-import PatchCardInstanceCommand from '@cardstack/host/tools/patch-card-instance';
-import PatchCodeCommand from '@cardstack/host/tools/patch-code';
+import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
+import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
+import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import {
   testRealmURL,
@@ -85,8 +85,8 @@ module('Integration | commands | check-correctness', function (hooks) {
     await realmService.login(testRealmURL);
   });
 
-  test('reports card instance correctness when PatchCardInstanceCommand is used', async function (assert) {
-    let commandService = getService('command-service') as {
+  test('reports card instance correctness when PatchCardInstanceTool is used', async function (assert) {
+    let toolService = getService('tool-service') as {
       commandContext: CommandContext;
     };
     let store = getService('store') as any;
@@ -97,8 +97,8 @@ module('Integration | commands | check-correctness', function (hooks) {
     store.addReference(cardId);
     await store.waitForCardLoad(cardId);
 
-    let command = new CheckCorrectnessCommand(commandService.commandContext);
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let command = new CheckCorrectnessTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
     let roomId = '!room:example.com';
 
     let firstResult = await command.execute({
@@ -109,10 +109,9 @@ module('Integration | commands | check-correctness', function (hooks) {
 
     assert.true(firstResult.correct, 'initial run reports no errors');
 
-    let patchCommand = new PatchCardInstanceCommand(
-      commandService.commandContext,
-      { cardType: Pet },
-    );
+    let patchCommand = new PatchCardInstanceTool(toolService.commandContext, {
+      cardType: Pet,
+    });
     await patchCommand.execute({
       cardId,
       patch: {
@@ -141,7 +140,7 @@ module('Integration | commands | check-correctness', function (hooks) {
       'reports the validation error from the card constructor',
     );
 
-    // Put the card back to its working state. We can't use PatchCardInstanceCommand, because the instance
+    // Put the card back to its working state. We can't use PatchCardInstanceTool, because the instance
     // is broken and patching won't work. Instead, we need to patch the code directly.
 
     let revertResult = await patchCodeCommand.execute({
@@ -173,14 +172,14 @@ module('Integration | commands | check-correctness', function (hooks) {
     assert.true(thirdResult.correct, 'third run reports no errors');
   });
 
-  test('reports card instance correctness when PatchCodeCommand is used', async function (assert) {
-    let commandService = getService('command-service') as {
+  test('reports card instance correctness when PatchCodeTool is used', async function (assert) {
+    let toolService = getService('tool-service') as {
       commandContext: CommandContext;
     };
     let store = getService('store') as any;
 
-    let command = new CheckCorrectnessCommand(commandService.commandContext);
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let command = new CheckCorrectnessTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
     let cardId = `${testRealmURL}Pet/billy`;
     let fileUrl = `${cardId}.json`;
     let roomId = '!room:example.com';
@@ -254,11 +253,11 @@ module('Integration | commands | check-correctness', function (hooks) {
   });
 
   test('skips correctness checks for empty files', async function (assert) {
-    let commandService = getService('command-service') as {
+    let toolService = getService('tool-service') as {
       commandContext: CommandContext;
     };
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
-    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let command = new CheckCorrectnessTool(toolService.commandContext);
     let roomId = '!room:example.com';
     let emptyFileUrl = `${testRealmURL}empty.gts`;
     let cardService = getService('card-service');
@@ -291,13 +290,13 @@ ${REPLACE_MARKER}`;
   });
 
   test('reports size limit errors for file writes', async function (assert) {
-    let commandService = getService('command-service') as {
+    let toolService = getService('tool-service') as {
       commandContext: CommandContext;
     };
     let environmentService = getService('environment-service') as any;
     let cardService = getService('card-service');
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
-    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let command = new CheckCorrectnessTool(toolService.commandContext);
     let roomId = '!room:example.com';
     let fileUrl = `${testRealmURL}pet.gts`;
 
@@ -333,14 +332,14 @@ ${REPLACE_MARKER}`;
     }
   });
 
-  test('reports size limit errors for card writes via PatchCardInstanceCommand', async function (assert) {
-    let commandService = getService('command-service') as {
+  test('reports size limit errors for card writes via PatchCardInstanceTool', async function (assert) {
+    let toolService = getService('tool-service') as {
       commandContext: CommandContext;
     };
     let environmentService = getService('environment-service') as any;
     let loader = getService('loader-service').loader as any;
     let store = getService('store') as any;
-    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let command = new CheckCorrectnessTool(toolService.commandContext);
     let roomId = '!room:example.com';
     let { Pet } = await loader.import(`${testRealmURL}pet`);
     let cardId = `${testRealmURL}Pet/billy`;
@@ -352,10 +351,9 @@ ${REPLACE_MARKER}`;
     environmentService.cardSizeLimitBytes = 1000;
 
     try {
-      let patchCommand = new PatchCardInstanceCommand(
-        commandService.commandContext,
-        { cardType: Pet },
-      );
+      let patchCommand = new PatchCardInstanceTool(toolService.commandContext, {
+        cardType: Pet,
+      });
 
       await patchCommand.execute({
         cardId,

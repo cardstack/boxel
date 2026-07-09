@@ -8,9 +8,9 @@ import {
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -145,9 +145,9 @@ function buildCardJson(model: OpenRouterApiModel) {
   };
 }
 
-export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RealmIdentifierCard,
-  typeof BaseCommandModule.SyncOpenRouterModelsResult
+export default class SyncOpenRouterModelsTool extends HostBaseTool<
+  typeof BaseToolModule.RealmIdentifierCard,
+  typeof BaseToolModule.SyncOpenRouterModelsResult
 > {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
@@ -156,14 +156,14 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
   description = 'Sync OpenRouter model data from the OpenRouter API';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.RealmIdentifierCard;
   }
 
   protected async run(
-    input: BaseCommandModule.RealmIdentifierCard,
-  ): Promise<BaseCommandModule.SyncOpenRouterModelsResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.RealmIdentifierCard,
+  ): Promise<BaseToolModule.SyncOpenRouterModelsResult> {
+    let commandModule = await this.loadToolModule();
     let realmURL = input.realmIdentifier;
     if (!realmURL) {
       throw new Error('realmIdentifier is required');
@@ -396,3 +396,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     return slugs;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SyncOpenRouterModelsTool as SyncOpenRouterModelsCommand };

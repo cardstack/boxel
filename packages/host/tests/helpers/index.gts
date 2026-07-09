@@ -57,7 +57,7 @@ import {
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
-import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 
 import {
   coerceRenderError,
@@ -2019,8 +2019,8 @@ export async function addSkillToAiAssistant(
     );
   }
 
-  let command = new UpdateRoomSkillsCommand(
-    getService('command-service').commandContext,
+  let command = new UpdateRoomSkillsTool(
+    getService('tool-service').commandContext,
   );
   await command.execute({
     roomId: resolvedRoomId,
@@ -2037,7 +2037,7 @@ export async function addSkillToAiAssistant(
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
         disabledSkillCards?: Array<{ sourceUrl?: string }>;
-        commandDefinitions?: Array<{ sourceUrl?: string }>;
+        toolDefinitionFileDefs?: Array<{ sourceUrl?: string }>;
       };
     } | null;
   };
@@ -2072,7 +2072,7 @@ export async function addSkillToAiAssistant(
         snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
       disabledSkillCards:
         snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
-      commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
+      commandDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(
@@ -2101,14 +2101,14 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
         disabledSkillCards?: Array<{ sourceUrl?: string }>;
-        commandDefinitions?: Array<{ sourceUrl?: string }>;
+        toolDefinitionFileDefs?: Array<{ sourceUrl?: string }>;
       };
     } | null;
     roomResources: Map<
       string,
       {
         skills?: Array<{ cardId: string }>;
-        commands?: Array<unknown>;
+        tools?: Array<unknown>;
       }
     >;
   };
@@ -2126,9 +2126,7 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
         // a non-empty list proves that loadSkills finished and the skill
         // card's @field commands is populated — i.e. message-builder will be
         // able to resolve the request's functionName.
-        return Boolean(
-          roomResource && (roomResource.commands?.length ?? 0) > 0,
-        );
+        return Boolean(roomResource && (roomResource.tools?.length ?? 0) > 0);
       },
       {
         timeout: 5000,
@@ -2149,9 +2147,9 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
         roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
         null,
       commandDefinitionsCount:
-        roomData?.skillsConfig?.commandDefinitions?.length ?? null,
+        roomData?.skillsConfig?.toolDefinitionFileDefs?.length ?? null,
       roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
-      roomResourceCommandCount: roomResource?.commands?.length ?? null,
+      roomResourceCommandCount: roomResource?.tools?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(

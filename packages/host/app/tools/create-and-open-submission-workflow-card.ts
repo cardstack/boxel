@@ -1,17 +1,17 @@
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CreateSubmissionWorkflowCommand from './create-submission-workflow';
+import CreateSubmissionWorkflowTool from './create-submission-workflow';
 
-export default class CreateAndOpenSubmissionWorkflowCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CreateListingPRRequestInput
+export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseTool<
+  typeof BaseToolModule.CreateListingPRRequestInput
 > {
   description =
     'Create a submission workflow card and open it in interact mode to track PR creation.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateListingPRRequestInput } = commandModule;
     return CreateListingPRRequestInput;
   }
@@ -19,12 +19,16 @@ export default class CreateAndOpenSubmissionWorkflowCardCommand extends HostBase
   requireInputFields = ['realm', 'listingId'];
 
   protected async run(
-    input: BaseCommandModule.CreateListingPRRequestInput,
+    input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
-    await new CreateSubmissionWorkflowCommand(this.commandContext).execute({
+    await new CreateSubmissionWorkflowTool(this.commandContext).execute({
       realm: input.realm,
       listingId: input.listingId,
       listingName: input.listingName,
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CreateAndOpenSubmissionWorkflowCardTool as CreateAndOpenSubmissionWorkflowCardCommand };

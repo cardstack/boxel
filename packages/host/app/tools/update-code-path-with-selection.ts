@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RecentFilesService from '../services/recent-files-service';
 
-export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
-  typeof BaseCommandModule.UpdateCodePathWithSelectionInput
+export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
+  typeof BaseToolModule.UpdateCodePathWithSelectionInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private recentFilesService: RecentFilesService;
@@ -17,7 +17,7 @@ export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
   static actionVerb = 'Open';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UpdateCodePathWithSelectionInput } = commandModule;
     return UpdateCodePathWithSelectionInput;
   }
@@ -27,7 +27,7 @@ export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.UpdateCodePathWithSelectionInput,
+    input: BaseToolModule.UpdateCodePathWithSelectionInput,
   ): Promise<undefined> {
     await this.operatorModeStateService.updateCodePathWithSelection({
       codeRef: input.codeRef,
@@ -43,3 +43,7 @@ export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UpdateCodePathWithSelectionTool as UpdateCodePathWithSelectionCommand };

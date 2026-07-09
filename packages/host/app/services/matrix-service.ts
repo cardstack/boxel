@@ -110,19 +110,19 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
   CodePatchStatus,
-  CommandResultWithNoOutputContent,
-  CommandResultWithOutputContent,
+  ToolResultWithNoOutputContent,
+  ToolResultWithOutputContent,
   RealmEventContent,
   Tool,
-  CommandResultStatus,
+  ToolResultStatus,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
-import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
-import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
+import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
+import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import {
   sourceCodeEditingSkillUrl,
   devSkillId,
@@ -131,11 +131,10 @@ import {
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
-import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type {
@@ -152,6 +151,7 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type ToolService from './tool-service';
 import type { RoomResource } from '../resources/room';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type {
@@ -176,7 +176,7 @@ export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private loggerService: LoggerService;
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realm: RealmService;
   @service declare private matrixSdkLoader: MatrixSDKLoader;
   @service declare private messageService: MessageService;
@@ -222,7 +222,7 @@ export default class MatrixService extends Service {
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
-  failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  failedToolState: TrackedMap<string, Error> = new TrackedMap();
   reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -1321,8 +1321,8 @@ export default class MatrixService extends Service {
       | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | ToolResultWithNoOutputContent
+      | ToolResultWithOutputContent,
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -1344,7 +1344,7 @@ export default class MatrixService extends Service {
 
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
-  async updateSkillsAndCommandsIfNeeded(roomId: string) {
+  async updateSkillsAndToolsIfNeeded(roomId: string) {
     await this.updateStateEvent(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -1353,7 +1353,7 @@ export default class MatrixService extends Service {
         let enabledSkillCardFileDefs =
           (currentSkillsConfig?.enabledSkillCards ??
             []) as FileAPI.SerializedFile[];
-        let enabledCommandDefinitions: SkillModule.CommandField[] = [];
+        let enabledCommandDefinitions: SkillModule.ToolField[] = [];
         // Skill cards re-upload their serialized card content; skill markdown
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
@@ -1365,7 +1365,7 @@ export default class MatrixService extends Service {
               return;
             }
             enabledCommandDefinitions = enabledCommandDefinitions.concat(
-              getSkillSourceCommands(source),
+              getSkillSourceTools(source),
             );
             if (isSkillCard in source) {
               skillCardsToReupload.push(source as SkillModule.Skill);
@@ -1381,10 +1381,10 @@ export default class MatrixService extends Service {
           ? await this.uploadFiles(markdownSkillFileDefs)
           : [];
         // get the unique subset of enabledCommandDefinitions by functionName
-        enabledCommandDefinitions = this.getUniqueCommandDefinitions(
+        enabledCommandDefinitions = this.getUniqueToolDefinitions(
           enabledCommandDefinitions,
         );
-        let enabledCommandDefFileDefs = await this.uploadCommandDefinitions(
+        let enabledCommandDefFileDefs = await this.uploadToolDefinitions(
           enabledCommandDefinitions,
         );
         return {
@@ -1405,10 +1405,10 @@ export default class MatrixService extends Service {
     return await this.client.downloadAsFileInBrowser(serializedFile);
   }
 
-  public getUniqueCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ): SkillModule.CommandField[] {
-    return getUniqueValidCommandDefinitions(commandDefinitions);
+  public getUniqueToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
+  ): SkillModule.ToolField[] {
+    return getUniqueValidToolDefinitions(toolDefinitionFileDefs);
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -1416,15 +1416,14 @@ export default class MatrixService extends Service {
     return cardFileDefs;
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ) {
-    let validCommandDefinitions =
-      getUniqueValidCommandDefinitions(commandDefinitions);
+  async uploadToolDefinitions(toolDefinitionFileDefs: SkillModule.ToolField[]) {
+    let validCommandDefinitions = getUniqueValidToolDefinitions(
+      toolDefinitionFileDefs,
+    );
     if (validCommandDefinitions.length === 0) {
       return [];
     }
-    let commandFileDefs = await this.client.uploadCommandDefinitions(
+    let commandFileDefs = await this.client.uploadToolDefinitions(
       validCommandDefinitions,
     );
     return commandFileDefs;
@@ -1442,11 +1441,11 @@ export default class MatrixService extends Service {
     );
   }
 
-  async sendCommandResultEvent(params: {
+  async sendToolResultEvent(params: {
     roomId: string;
     invokedToolFromEventId: string;
     toolCallId: string;
-    status: CommandResultStatus;
+    status: ToolResultStatus;
     resultCard?: CardDef;
     failureReason?: string;
     attachedCards?: CardDef[];
@@ -1480,9 +1479,7 @@ export default class MatrixService extends Service {
       );
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
-    let content:
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent;
+    let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -1749,13 +1746,13 @@ export default class MatrixService extends Service {
     // Generate tool calls for patching currently open cards permitted for modification
     tools = tools.concat(
       await addPatchTools(
-        this.commandService.commandContext,
+        this.toolService.commandContext,
         patchableCards,
         this.cardAPI,
       ),
     );
 
-    await this.updateSkillsAndCommandsIfNeeded(roomId);
+    await this.updateSkillsAndToolsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
       attachedCards,
@@ -1982,7 +1979,7 @@ export default class MatrixService extends Service {
     }
     this.roomResourcesCache.clear();
     this.canceledActionMessageIdByRoom.clear();
-    this.failedCommandState.clear();
+    this.failedToolState.clear();
     this.reasoningExpandedState.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
@@ -2748,7 +2745,7 @@ export default class MatrixService extends Service {
       getToolRequests(event.content)?.length &&
       event.content?.isStreamingFinished
     ) {
-      this.commandService.queueEventForCommandProcessing(event);
+      this.toolService.queueEventForToolProcessing(event);
     }
 
     // Queue code patches for processing
@@ -2764,7 +2761,7 @@ export default class MatrixService extends Service {
         body.includes(SEPARATOR_MARKER) &&
         body.includes(REPLACE_MARKER)
       ) {
-        this.commandService.queueEventForCodePatchProcessing(event);
+        this.toolService.queueEventForCodePatchProcessing(event);
       }
     }
   }
@@ -2819,8 +2816,8 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
+      this.toolService.commandContext,
     );
     let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({

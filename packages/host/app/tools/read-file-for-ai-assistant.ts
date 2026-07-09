@@ -1,22 +1,22 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 
-export default class ReadFileForAssistantCommand extends HostBaseCommand<
-  typeof BaseCommandModule.FileIdentifierCard,
-  typeof BaseCommandModule.FileForAttachmentCard
+export default class ReadFileForAssistantTool extends HostBaseTool<
+  typeof BaseToolModule.FileIdentifierCard,
+  typeof BaseToolModule.FileForAttachmentCard
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return FileIdentifierCard;
   }
@@ -24,8 +24,8 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FileIdentifierCard,
-  ): Promise<BaseCommandModule.FileForAttachmentCard> {
+    input: BaseToolModule.FileIdentifierCard,
+  ): Promise<BaseToolModule.FileForAttachmentCard> {
     let { matrixService } = this;
 
     let fileUrl = input.fileIdentifier;
@@ -39,8 +39,12 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
     if (file) {
       file = (await matrixService.uploadFiles([file]))[0] as FileDef;
     }
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileForAttachmentCard } = commandModule;
     return new FileForAttachmentCard({ fileForAttachment: file });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadFileForAssistantTool as ReadFileForAssistantCommand };

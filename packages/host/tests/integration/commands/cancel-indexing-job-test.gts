@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import CancelIndexingJobCommand from '@cardstack/host/tools/cancel-indexing-job';
+import CancelIndexingJobTool from '@cardstack/host/tools/cancel-indexing-job';
 
 import {
   setupIntegrationTestRealm,
@@ -74,9 +74,9 @@ module('Integration | commands | cancel-indexing-job', function (hooks) {
   });
 
   test('calls realm endpoint with expected auth header', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let command = new CancelIndexingJobCommand(commandService.commandContext);
+    let command = new CancelIndexingJobTool(toolService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     let result = await command.execute({

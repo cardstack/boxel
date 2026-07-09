@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import FetchCardJsonCommand from '@cardstack/host/tools/fetch-card-json';
+import FetchCardJsonTool from '@cardstack/host/tools/fetch-card-json';
 
 import {
   setupIntegrationTestRealm,
@@ -79,8 +79,8 @@ module('Integration | commands | fetch-card-json', function (hooks) {
   });
 
   test('fetches card JSON for an existing card', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new FetchCardJsonCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let command = new FetchCardJsonTool(toolService.commandContext);
     let result = await command.execute({
       cardIdentifier: `${testRealmURL}Person/alice`,
     });

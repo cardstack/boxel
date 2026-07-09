@@ -4,29 +4,29 @@ import { isCardInstance, logger } from '@cardstack/runtime-common';
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
 
-import ReadSourceCommand from './read-source';
-import ReadTextFileCommand from './read-text-file';
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import ReadSourceTool from './read-source';
+import ReadTextFileTool from './read-text-file';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
-export default class OneShotLlmRequestCommand extends HostBaseCommand<
-  typeof BaseCommandModule.OneShotLLMRequestInput,
-  typeof BaseCommandModule.OneShotLLMRequestResult
+export default class OneShotLlmRequestTool extends HostBaseTool<
+  typeof BaseToolModule.OneShotLLMRequestInput,
+  typeof BaseToolModule.OneShotLLMRequestResult
 > {
   @service declare private matrixService: MatrixService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
@@ -34,15 +34,15 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
   description = 'Execute a one-shot LLM request with custom prompts';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { OneShotLLMRequestInput } = commandModule;
     return OneShotLLMRequestInput;
   }
 
   protected async run(
-    input: BaseCommandModule.OneShotLLMRequestInput,
-  ): Promise<BaseCommandModule.OneShotLLMRequestResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.OneShotLLMRequestInput,
+  ): Promise<BaseToolModule.OneShotLLMRequestResult> {
+    const commandModule = await this.loadToolModule();
     const { OneShotLLMRequestResult } = commandModule;
 
     if (!input.systemPrompt) {
@@ -64,8 +64,8 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       // Read the file contents using the codeRef
       let fileContent = '';
       if (input.codeRef?.module) {
-        const readSourceCommand = new ReadSourceCommand(
-          this.commandService.commandContext,
+        const readSourceCommand = new ReadSourceTool(
+          this.toolService.commandContext,
         );
         const fileContents = await readSourceCommand.execute({
           path: input.codeRef.module,
@@ -79,8 +79,8 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         input.attachedFileIdentifiers &&
         input.attachedFileIdentifiers.length > 0
       ) {
-        const readTextFileCommand = new ReadTextFileCommand(
-          this.commandService.commandContext,
+        const readTextFileCommand = new ReadTextFileTool(
+          this.toolService.commandContext,
         );
 
         const attachedFilePromises = input.attachedFileIdentifiers.map(
@@ -163,8 +163,8 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         skillCards: loadedSkillCards.map((c) => c.id),
       });
 
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
-        this.commandService.commandContext,
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
+        this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -207,3 +207,7 @@ const skillsToMessage = (cards: Skill[]) => {
     })
     .join('\n\n');
 };
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { OneShotLlmRequestTool as OneShotLlmRequestCommand };

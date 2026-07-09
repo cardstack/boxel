@@ -3224,7 +3224,7 @@ Attached Files (files with newer versions don't show their content):
           id: 'http://localhost:4201/admin/custom-embedded/Skill/72d005b5-1a6b-4c6d-995f-2411c5948e74',
           attributes: {
             instructions:
-              'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+              'Use the tool SwitchSubmodeTool with "code" to go to codemode and "interact" to go to interact mode.',
             commands: [
               {
                 codeRef: {
@@ -3323,7 +3323,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(
       switchSubmodeTool,
-      'Should have SwitchSubmodeCommand function available',
+      'Should have SwitchSubmodeTool function available',
     );
   });
 

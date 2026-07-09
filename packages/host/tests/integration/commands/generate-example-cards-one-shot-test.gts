@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { GenerateExampleCardsOneShotCommand } from '@cardstack/host/tools/generate-example-cards';
+import { GenerateExampleCardsOneShotTool } from '@cardstack/host/tools/generate-example-cards';
 
 import {
   setupIntegrationTestRealm,
@@ -68,7 +68,7 @@ module(
     ]);
 
     let generateExampleCommand: InstanceType<
-      typeof GenerateExampleCardsOneShotCommand
+      typeof GenerateExampleCardsOneShotTool
     >;
 
     setupRealmCacheTeardown(hooks);
@@ -90,9 +90,9 @@ export class TestCard extends CardDef {
         }),
       );
 
-      const commandService = getService('command-service');
-      generateExampleCommand = new GenerateExampleCardsOneShotCommand(
-        commandService.commandContext,
+      const toolService = getService('tool-service');
+      generateExampleCommand = new GenerateExampleCardsOneShotTool(
+        toolService.commandContext,
       );
     });
 

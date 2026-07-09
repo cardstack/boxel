@@ -1,19 +1,19 @@
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import GetAvailableRealmIdentifiersCommand from './get-available-realm-identifiers';
+import GetAvailableRealmIdentifiersTool from './get-available-realm-identifiers';
 
-export default class ValidateRealmCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ValidateRealmInput,
-  typeof BaseCommandModule.ValidateRealmResult
+export default class ValidateRealmTool extends HostBaseTool<
+  typeof BaseToolModule.ValidateRealmInput,
+  typeof BaseToolModule.ValidateRealmResult
 > {
   description = 'Validate that a realm URL is available and normalize it';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ValidateRealmInput } = commandModule;
     return ValidateRealmInput;
   }
@@ -21,11 +21,11 @@ export default class ValidateRealmCommand extends HostBaseCommand<
   requireInputFields = ['realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.ValidateRealmInput,
-  ): Promise<BaseCommandModule.ValidateRealmResult> {
+    input: BaseToolModule.ValidateRealmInput,
+  ): Promise<BaseToolModule.ValidateRealmResult> {
     let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
-    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersCommand(
+    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
       this.commandContext,
     ).execute();
 
@@ -33,8 +33,12 @@ export default class ValidateRealmCommand extends HostBaseCommand<
       throw new Error(`Invalid realm: ${realmIdentifier}`);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ValidateRealmResult } = commandModule;
     return new ValidateRealmResult({ realmIdentifier });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ValidateRealmTool as ValidateRealmCommand };

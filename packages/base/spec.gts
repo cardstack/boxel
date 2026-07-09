@@ -55,9 +55,9 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
-import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
-import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
+import GenerateReadmeSpecTool from '@cardstack/boxel-host/commands/generate-readme-spec';
+import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';
 import { type GetMenuItemParams } from './menu-items';
 import { provide } from 'ember-provide-consume-context';
 import {
@@ -67,7 +67,7 @@ import {
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
-class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
+class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
   constructor(commandContext: CommandContext) {
     super(commandContext);
   }
@@ -97,7 +97,7 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
   }
 }
 
-class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsCommand {
+class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsTool {
   constructor(commandContext: CommandContext) {
     super(commandContext);
   }
@@ -286,7 +286,7 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
     }
 
     try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
         commandContext,
       );
       await generateReadmeSpecCommand.execute({

@@ -3,17 +3,17 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
-export default class ReadCardForAssistantCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CardIdCard,
-  typeof BaseCommandModule.CardForAttachmentCard
+export default class ReadCardForAssistantTool extends HostBaseTool<
+  typeof BaseToolModule.CardIdCard,
+  typeof BaseToolModule.CardForAttachmentCard
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -21,7 +21,7 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
   static actionVerb = 'Send';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
@@ -29,8 +29,8 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
   requireInputFields = ['cardId'];
 
   protected async run(
-    input: BaseCommandModule.CardIdCard,
-  ): Promise<BaseCommandModule.CardForAttachmentCard> {
+    input: BaseToolModule.CardIdCard,
+  ): Promise<BaseToolModule.CardForAttachmentCard> {
     let { matrixService } = this;
 
     await matrixService.ready;
@@ -39,7 +39,7 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
       let cardFileDef = (
         await matrixService.uploadCards([maybeCard])
       )[0] as FileDef;
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { CardForAttachmentCard } = commandModule;
       return new CardForAttachmentCard({ cardForAttachment: cardFileDef });
     } else {
@@ -48,3 +48,7 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadCardForAssistantTool as ReadCardForAssistantCommand };

@@ -36,8 +36,8 @@ module('Integration | commands | commands-calling', function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
 
-    let commandService = getService('command-service');
-    commandContext = commandService.commandContext;
+    let toolService = getService('tool-service');
+    commandContext = toolService.commandContext;
   });
 
   test('can be called with a card as input', async function (assert) {

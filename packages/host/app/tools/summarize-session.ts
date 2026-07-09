@@ -1,36 +1,36 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendRequestViaProxyCommand from './send-request-via-proxy';
+import SendRequestViaProxyTool from './send-request-via-proxy';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
+import type ToolService from '../services/tool-service';
 
-export default class SummarizeSessionCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SummarizeSessionInput,
-  typeof BaseCommandModule.SummarizeSessionResult
+export default class SummarizeSessionTool extends HostBaseTool<
+  typeof BaseToolModule.SummarizeSessionInput,
+  typeof BaseToolModule.SummarizeSessionResult
 > {
   @service declare private matrixService: MatrixService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Summarize Session';
   description = 'Summarize the current session conversation';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SummarizeSessionInput } = commandModule;
     return SummarizeSessionInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SummarizeSessionInput,
-  ): Promise<BaseCommandModule.SummarizeSessionResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.SummarizeSessionInput,
+  ): Promise<BaseToolModule.SummarizeSessionResult> {
+    const commandModule = await this.loadToolModule();
     const { SummarizeSessionResult } = commandModule;
 
     try {
@@ -49,8 +49,8 @@ export default class SummarizeSessionCommand extends HostBaseCommand<
             'Please provide a concise summary of this conversation. Focus on the key points, decisions made, and any important outcomes.',
         },
       ];
-      const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
-        this.commandService.commandContext,
+      const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
+        this.toolService.commandContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -80,3 +80,7 @@ export default class SummarizeSessionCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SummarizeSessionTool as SummarizeSessionCommand };

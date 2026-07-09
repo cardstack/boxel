@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import ApplyMarkdownEditCommand from '@cardstack/host/tools/apply-markdown-edit';
+import ApplyMarkdownEditTool from '@cardstack/host/tools/apply-markdown-edit';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -82,7 +82,7 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     autostart: true,
   });
 
-  let command: ApplyMarkdownEditCommand;
+  let command: ApplyMarkdownEditTool;
 
   setupRealmServerEndpoints(hooks, [
     {
@@ -171,8 +171,8 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
       }),
     );
 
-    command = new ApplyMarkdownEditCommand(
-      getService('command-service').commandContext,
+    command = new ApplyMarkdownEditTool(
+      getService('tool-service').commandContext,
     );
   });
 

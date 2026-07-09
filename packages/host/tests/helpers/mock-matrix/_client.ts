@@ -37,7 +37,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { CommandField } from 'https://cardstack.com/base/skill';
+import type { ToolField } from 'https://cardstack.com/base/skill';
 
 import type { MockSDK } from './_sdk';
 
@@ -894,11 +894,11 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.uploadCards(cards);
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: CommandField[],
+  async uploadToolDefinitions(
+    toolDefinitionFileDefs: ToolField[],
   ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCommandDefinitions(
-      commandDefinitions,
+    return await this.fileDefManager.uploadToolDefinitions(
+      toolDefinitionFileDefs,
     );
   }
 

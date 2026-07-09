@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
-export default class SendRequestViaProxyCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SendRequestViaProxyInput,
-  typeof BaseCommandModule.SendRequestViaProxyResult
+export default class SendRequestViaProxyTool extends HostBaseTool<
+  typeof BaseToolModule.SendRequestViaProxyInput,
+  typeof BaseToolModule.SendRequestViaProxyResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -16,15 +16,15 @@ export default class SendRequestViaProxyCommand extends HostBaseCommand<
   description = 'Make a request to an external API through the Boxel proxy';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SendRequestViaProxyInput } = commandModule;
     return SendRequestViaProxyInput;
   }
 
   protected async run(
-    input: BaseCommandModule.SendRequestViaProxyInput,
-  ): Promise<BaseCommandModule.SendRequestViaProxyResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.SendRequestViaProxyInput,
+  ): Promise<BaseToolModule.SendRequestViaProxyResult> {
+    const commandModule = await this.loadToolModule();
     const { SendRequestViaProxyResult } = commandModule;
 
     try {
@@ -68,3 +68,7 @@ export default class SendRequestViaProxyCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SendRequestViaProxyTool as SendRequestViaProxyCommand };

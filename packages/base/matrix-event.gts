@@ -172,7 +172,7 @@ export interface DebugMessageEvent extends BaseMatrixEvent {
 }
 
 // Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
-export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
+export type EncodedToolRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
 
@@ -250,10 +250,10 @@ export interface CardMessageContent {
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_TOOL_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [APP_BOXEL_TOOL_REQUESTS_KEY]?: Partial<EncodedToolRequest>[];
   // Replay-only: messages written before the command → tool rename carry
   // their requests under this key. Read via `getToolRequests`; never write.
-  [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedToolRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -295,9 +295,9 @@ export interface LLMModeEvent extends RoomStateEvent {
   };
 }
 
-export interface CommandResultEvent extends BaseMatrixEvent {
+export interface ToolResultEvent extends BaseMatrixEvent {
   type: ToolResultEventType;
-  content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
+  content: ToolResultWithOutputContent | ToolResultWithNoOutputContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -331,7 +331,7 @@ export interface CodePatchResultEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandDefinitionSchema {
+export interface ToolDefinitionSchema {
   codeRef: {
     module: string;
     name: string;
@@ -339,12 +339,12 @@ export interface CommandDefinitionSchema {
   tool: Tool;
 }
 
-export type CommandResultStatus = 'applied' | 'failed' | 'invalid';
+export type ToolResultStatus = 'applied' | 'failed' | 'invalid';
 
-export interface CommandResultWithOutputContent {
+export interface ToolResultWithOutputContent {
   'm.relates_to': {
     rel_type: ToolResultRelType;
-    key: CommandResultStatus;
+    key: ToolResultStatus;
     event_id: string;
   };
   commandRequestId: string;
@@ -362,10 +362,10 @@ export interface CommandResultWithOutputContent {
   msgtype: ToolResultWithOutputMsgtype;
 }
 
-export interface CommandResultWithNoOutputContent {
+export interface ToolResultWithNoOutputContent {
   'm.relates_to': {
     rel_type: ToolResultRelType;
-    key: CommandResultStatus;
+    key: ToolResultStatus;
     event_id: string;
   };
   msgtype: ToolResultWithNoOutputMsgtype;
@@ -487,7 +487,7 @@ export interface StopGeneratingEvent extends BaseMatrixEvent {
 
 export type MatrixEventWithBoxelContext =
   | CardMessageEvent
-  | CommandResultEvent
+  | ToolResultEvent
   | CodePatchResultEvent;
 
 export type MatrixEvent =
@@ -495,7 +495,7 @@ export type MatrixEvent =
   | BotTriggerEvent
   | CardMessageEvent
   | CodePatchResultEvent
-  | CommandResultEvent
+  | ToolResultEvent
   | DebugMessageEvent
   | InviteEvent
   | JoinEvent
@@ -510,3 +510,13 @@ export type MatrixEvent =
   | RoomPowerLevels
   | RoomTopicEvent
   | SkillsConfigEvent;
+
+// Pre-rename spellings; new code imports the Tool-named types. These stay
+// until the ai-bot / prompt-assembly sweep (and out-of-tree content) stops
+// importing them.
+export type EncodedCommandRequest = EncodedToolRequest;
+export type CommandDefinitionSchema = ToolDefinitionSchema;
+export type CommandResultEvent = ToolResultEvent;
+export type CommandResultWithOutputContent = ToolResultWithOutputContent;
+export type CommandResultWithNoOutputContent = ToolResultWithNoOutputContent;
+export type CommandResultStatus = ToolResultStatus;

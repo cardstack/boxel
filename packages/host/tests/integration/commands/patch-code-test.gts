@@ -14,7 +14,7 @@ import {
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { isReady, type Ready } from '@cardstack/host/resources/file';
-import PatchCodeCommand from '@cardstack/host/tools/patch-code';
+import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import {
   testRealmURL,
@@ -87,8 +87,8 @@ export class Task extends CardDef {
   });
 
   test('lint-fixes contents before returning them', async function (assert) {
-    let commandService = getService('command-service');
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
 
     // Set up a custom lintStub that verifies the filename header
     adapter.lintStub = async (
@@ -155,8 +155,8 @@ export class Task extends CardDef {
   test('uses the open file resource when the target file is open', async function (assert) {
     assert.expect(7);
 
-    let commandService = getService('command-service');
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
     let operatorModeStateService = getService('operator-mode-state-service');
     let cardService = getService('card-service');
 
@@ -227,8 +227,8 @@ ${REPLACE_MARKER}`;
   });
 
   test('allows empty search and replace blocks via patch-code for new files', async function (assert) {
-    let commandService = getService('command-service');
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
     let emptyFileUrl = `${testRealmURL}empty.gts`;
 
     adapter.lintStub = async (request: Request): Promise<LintResult> => {
@@ -254,8 +254,8 @@ ${REPLACE_MARKER}`;
   });
 
   test('skips linting for non-gts/ts files', async function (assert) {
-    let commandService = getService('command-service');
-    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
 
     adapter.lintStub = async () => {
       assert.ok(false, 'lint should not run for json files');

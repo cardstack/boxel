@@ -1,20 +1,20 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 
-export default class InviteUserToRoomCommand extends HostBaseCommand<
-  typeof BaseCommandModule.InviteUserToRoomInput
+export default class InviteUserToRoomTool extends HostBaseTool<
+  typeof BaseToolModule.InviteUserToRoomInput
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Invite';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { InviteUserToRoomInput } = commandModule;
     return InviteUserToRoomInput;
   }
@@ -22,7 +22,7 @@ export default class InviteUserToRoomCommand extends HostBaseCommand<
   requireInputFields = ['roomId', 'userId'];
 
   protected async run(
-    input: BaseCommandModule.InviteUserToRoomInput,
+    input: BaseToolModule.InviteUserToRoomInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
     let userId = this.matrixService.getFullUserId(input.userId);
@@ -32,3 +32,7 @@ export default class InviteUserToRoomCommand extends HostBaseCommand<
     await this.matrixService.inviteUserToRoom(input.roomId, userId);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { InviteUserToRoomTool as InviteUserToRoomCommand };

@@ -1,7 +1,7 @@
 import { on } from '@ember/modifier';
 
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import CreateAiAssistantRoomTool from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import SendAiAssistantMessageTool from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -59,7 +59,7 @@ export class AiCommandExample extends CardDef {
 
       // let getWeatherCommand = new GetWeatherCommand(commandContext);
 
-      let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+      let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
         commandContext,
       );
       let weatherSkill = new Skill({
@@ -83,7 +83,7 @@ export class AiCommandExample extends CardDef {
         enabledSkills: [weatherSkill],
       });
 
-      let sendMessageCommand = new SendAiAssistantMessageCommand(
+      let sendMessageCommand = new SendAiAssistantMessageTool(
         commandContext,
       );
 

@@ -4,12 +4,12 @@ import {
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import CanReadRealmCommand from './can-read-realm';
-import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
+import CanReadRealmTool from './can-read-realm';
+import GetRealmOfResourceIdentifierTool from './get-realm-of-resource-identifier';
 
 const GLOBAL_URL_STEMS = [
   'https://cardstack.com',
@@ -17,15 +17,15 @@ const GLOBAL_URL_STEMS = [
   'https://boxel-icons.boxel.ai',
 ];
 
-export default class SanitizeModuleListCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SanitizeModuleListInput,
-  typeof BaseCommandModule.SanitizeModuleListResult
+export default class SanitizeModuleListTool extends HostBaseTool<
+  typeof BaseToolModule.SanitizeModuleListInput,
+  typeof BaseToolModule.SanitizeModuleListResult
 > {
   description =
     'Filter and deduplicate a list of module URLs, removing globals and unreadable realms';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SanitizeModuleListInput } = commandModule;
     return SanitizeModuleListInput;
   }
@@ -33,8 +33,8 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
   requireInputFields = ['moduleIdentifiers'];
 
   protected async run(
-    input: BaseCommandModule.SanitizeModuleListInput,
-  ): Promise<BaseCommandModule.SanitizeModuleListResult> {
+    input: BaseToolModule.SanitizeModuleListInput,
+  ): Promise<BaseToolModule.SanitizeModuleListResult> {
     // Normalize to extensionless URLs before deduplication so that e.g.
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
@@ -58,14 +58,13 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
         }
 
         // Only allow modules that belong to a realm we can read
-        const { realmIdentifier } =
-          await new GetRealmOfResourceIdentifierCommand(
-            this.commandContext,
-          ).execute({ resourceIdentifier: dep });
+        const { realmIdentifier } = await new GetRealmOfResourceIdentifierTool(
+          this.commandContext,
+        ).execute({ resourceIdentifier: dep });
         if (!realmIdentifier) {
           return null;
         }
-        const { canRead } = await new CanReadRealmCommand(
+        const { canRead } = await new CanReadRealmTool(
           this.commandContext,
         ).execute({ realmIdentifier });
         return canRead ? dep : null;
@@ -76,8 +75,12 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
       (dep): dep is string => dep !== null,
     );
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SanitizeModuleListResult } = commandModule;
     return new SanitizeModuleListResult({ moduleIdentifiers });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SanitizeModuleListTool as SanitizeModuleListCommand };

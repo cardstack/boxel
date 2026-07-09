@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import ScreenshotCardCommand from '@cardstack/boxel-host/commands/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/commands/screenshot-card';
 import { Button } from '@cardstack/boxel-ui/components';
 
 type ScreenshotFormat = 'isolated' | 'embedded';
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     this.errorMessage = null;
     this.imageDefUrl = null;
     try {
-      let result = await new ScreenshotCardCommand(commandContext).execute({
+      let result = await new ScreenshotCardTool(commandContext).execute({
         card,
         format: this.effectiveFormat,
       });

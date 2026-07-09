@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import GetDefaultWritableRealmCommand from '@cardstack/host/tools/get-default-writable-realm';
+import GetDefaultWritableRealmTool from '@cardstack/host/tools/get-default-writable-realm';
 
 import {
   setupIntegrationTestRealm,
@@ -56,10 +56,8 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
   });
 
   test('returns realm path when a default writable realm exists', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new GetDefaultWritableRealmCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let command = new GetDefaultWritableRealmTool(toolService.commandContext);
     let result = await command.execute();
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
@@ -72,10 +70,8 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
       },
       configurable: true,
     });
-    let commandService = getService('command-service');
-    let command = new GetDefaultWritableRealmCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let command = new GetDefaultWritableRealmTool(toolService.commandContext);
     let result = await command.execute();
     assert.strictEqual(result.realmIdentifier, '');
   });

@@ -1,15 +1,15 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
-export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
-  typeof BaseCommandModule.OpenAiAssistantRoomInput
+export default class OpenAiAssistantRoomTool extends HostBaseTool<
+  typeof BaseToolModule.OpenAiAssistantRoomInput
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -18,7 +18,7 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   static actionVerb = 'Open';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { OpenAiAssistantRoomInput } = commandModule;
     return OpenAiAssistantRoomInput;
   }
@@ -26,7 +26,7 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   requireInputFields = ['roomId'];
 
   protected async run(
-    input: BaseCommandModule.OpenAiAssistantRoomInput,
+    input: BaseToolModule.OpenAiAssistantRoomInput,
   ): Promise<undefined> {
     if (input.roomId) {
       this.operatorModeStateService.openAiAssistant();
@@ -36,3 +36,7 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { OpenAiAssistantRoomTool as OpenAiAssistantRoomCommand };

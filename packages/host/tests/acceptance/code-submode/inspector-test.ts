@@ -1278,16 +1278,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}command-module.gts`,
     });
 
-    await waitFor('[data-test-command-panel-header]');
+    await waitFor('[data-test-tool-panel-header]');
     assert
-      .dom('[data-test-command-panel-header]')
-      .hasText('Command', 'renders command panel');
+      .dom('[data-test-tool-panel-header]')
+      .hasText('Tool', 'renders tool panel');
     assert
       .dom('[data-test-card-module-definition]')
-      .hasTextContaining('SampleCommand', 'shows command definition details');
+      .hasTextContaining('SampleCommand', 'shows tool definition details');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText('SampleCommand command', 'selector shows command type');
+      .hasText('SampleCommand tool', 'selector shows tool type');
   });
 
   test('shows component panel and Create Listing action for component declarations', async function (assert) {

@@ -2,18 +2,18 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
 import type { SaveType } from '../services/card-service';
 import type RealmService from '../services/realm';
 
-export default class WriteTextFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.WriteTextFileInput,
-  typeof BaseCommandModule.FileIdentifierCard
+export default class WriteTextFileTool extends HostBaseTool<
+  typeof BaseToolModule.WriteTextFileInput,
+  typeof BaseToolModule.FileIdentifierCard
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -22,7 +22,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   static actionVerb = 'Write';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { WriteTextFileInput } = commandModule;
     return WriteTextFileInput;
   }
@@ -30,8 +30,8 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   requireInputFields = ['path', 'content'];
 
   protected async run(
-    input: BaseCommandModule.WriteTextFileInput,
-  ): Promise<BaseCommandModule.FileIdentifierCard> {
+    input: BaseToolModule.WriteTextFileInput,
+  ): Promise<BaseToolModule.FileIdentifierCard> {
     if (input.overwrite && input.useNonConflictingFilename) {
       throw new Error(
         'Cannot use both overwrite and useNonConflictingFilename.',
@@ -92,7 +92,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
       await this.cardService.saveSource(finalUrl, input.content, saveType);
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
     return new FileIdentifierCard({ fileIdentifier: finalUrl.href });
   }
@@ -102,3 +102,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     return getSourceResult.status !== 404;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { WriteTextFileTool as WriteTextFileCommand };

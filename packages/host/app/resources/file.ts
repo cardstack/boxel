@@ -385,7 +385,7 @@ class _FileResource extends Resource<Args> {
       } else if (
         clientRequestId.startsWith('bot-patch:') ||
         // create-file writes originate from this host (cardService.saveSource
-        // with saveType 'create-file' — the path WriteTextFileCommand uses)
+        // with saveType 'create-file' — the path WriteTextFileTool uses)
         // but the FileResource may not yet have any content because its first
         // fetch raced indexing and 404'd. The clientRequestId being in
         // cardService.clientRequestIds does NOT imply we already have the

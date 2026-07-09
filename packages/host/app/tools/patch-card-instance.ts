@@ -11,23 +11,22 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
-
-import type CommandService from '../services/command-service';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
 interface Configuration {
   cardType: typeof CardDef;
 }
-export default class PatchCardInstanceCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PatchCardInput,
+export default class PatchCardInstanceTool extends HostBaseTool<
+  typeof BaseToolModule.PatchCardInput,
   undefined
 > {
   @service declare private store: StoreService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   description = `Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
   static actionVerb = 'Update Card';
@@ -40,7 +39,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
   }
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { PatchCardInput } = commandModule;
     return PatchCardInput;
   }
@@ -48,7 +47,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
   requireInputFields = ['cardId', 'patch'];
 
   protected async run(
-    input: BaseCommandModule.PatchCardInput,
+    input: BaseToolModule.PatchCardInput,
   ): Promise<undefined> {
     if (!input.cardId || !input.patch) {
       throw new Error(
@@ -56,7 +55,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
       );
     }
 
-    let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+    let clientRequestId = this.toolService.trackAiAssistantCardRequest({
       action: 'patch-instance',
       roomId: input.roomId,
       fileUrl: input.cardId.endsWith('.json')
@@ -106,3 +105,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
     return inputTypeCardSchema;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PatchCardInstanceTool as PatchCardInstanceCommand };

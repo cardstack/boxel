@@ -1,8 +1,8 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
@@ -22,9 +22,9 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export default class ReadBinaryFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ReadBinaryFileInput,
-  typeof BaseCommandModule.ReadBinaryFileResult
+export default class ReadBinaryFileTool extends HostBaseTool<
+  typeof BaseToolModule.ReadBinaryFileInput,
+  typeof BaseToolModule.ReadBinaryFileResult
 > {
   @service declare private network: NetworkService;
 
@@ -33,7 +33,7 @@ export default class ReadBinaryFileCommand extends HostBaseCommand<
   static actionVerb = 'Read';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ReadBinaryFileInput } = commandModule;
     return ReadBinaryFileInput;
   }
@@ -41,10 +41,10 @@ export default class ReadBinaryFileCommand extends HostBaseCommand<
   requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.ReadBinaryFileInput,
-  ): Promise<BaseCommandModule.ReadBinaryFileResult> {
+    input: BaseToolModule.ReadBinaryFileInput,
+  ): Promise<BaseToolModule.ReadBinaryFileResult> {
     let response = await this.network.authedFetch(input.fileIdentifier);
-    let { ReadBinaryFileResult } = await this.loadCommandModule();
+    let { ReadBinaryFileResult } = await this.loadToolModule();
 
     if (!response.ok) {
       throw new Error(
@@ -60,3 +60,7 @@ export default class ReadBinaryFileCommand extends HostBaseCommand<
     return new ReadBinaryFileResult({ base64Content, contentType });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadBinaryFileTool as ReadBinaryFileCommand };

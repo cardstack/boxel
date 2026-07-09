@@ -4,19 +4,19 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { Listing } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../../lib/host-base-command';
+import HostBaseTool from '../../lib/host-base-tool';
 
-import UseAiAssistantCommand from '../ai-assistant';
+import UseAiAssistantTool from '../ai-assistant';
 
-import SendBotTriggerEventCommand from './send-bot-trigger-event';
+import SendBotTriggerEventTool from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
 
-export default class CreateListingPRRequestCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CreateListingPRRequestInput
+export default class CreateListingPRRequestTool extends HostBaseTool<
+  typeof BaseToolModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -25,7 +25,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     'Request a GitHub PR from a catalog listing and notify the bot runner.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateListingPRRequestInput } = commandModule;
     return CreateListingPRRequestInput;
   }
@@ -33,7 +33,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
   requireInputFields = ['realm', 'listingId'];
 
   protected async run(
-    input: BaseCommandModule.CreateListingPRRequestInput,
+    input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
 
@@ -46,7 +46,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       listingSummary = listing.summary ?? undefined;
     }
 
-    let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
+    let useAiAssistantCommand = new UseAiAssistantTool(this.commandContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
       roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
@@ -61,7 +61,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
     let submittedBy = this.matrixService.userId ?? undefined;
 
-    await new SendBotTriggerEventCommand(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.commandContext).execute({
       roomId,
       realm,
       type: 'pr-listing-create',
@@ -76,3 +76,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CreateListingPRRequestTool as CreateListingPRRequestCommand };

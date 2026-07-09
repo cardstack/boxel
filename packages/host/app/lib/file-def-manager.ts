@@ -31,7 +31,7 @@ import type {
   SerializedFile,
 } from 'https://cardstack.com/base/file-api';
 import type {
-  CommandDefinitionSchema,
+  ToolDefinitionSchema,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -39,10 +39,10 @@ import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
 import type { ExtendedClient } from '../services/matrix-sdk-loader';
 import type NetworkService from '../services/network';
+import type ToolService from '../services/tool-service';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
@@ -64,11 +64,11 @@ export interface FileDefManager {
 
   /**
    * Uploads command definitions and returns their file definitions
-   * @param commandDefinitions Array of command definitions to upload
+   * @param toolDefinitionFileDefs Array of command definitions to upload
    * @returns Promise resolving to array of file definitions
    */
-  uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+  uploadToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]>;
 
   /**
@@ -136,7 +136,7 @@ export default class FileDefManagerImpl
   private getFileAPI: () => typeof FileAPI;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -354,18 +354,18 @@ export default class FileDefManagerImpl
     );
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+  async uploadToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]> {
-    if (!commandDefinitions.length) {
+    if (!toolDefinitionFileDefs.length) {
       return [];
     }
 
     // Create the command defs to get the json schema
-    let commandDefinitionSchemas: CommandDefinitionSchema[] = [];
+    let commandDefinitionSchemas: ToolDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
 
-    for (let commandDef of commandDefinitions) {
+    for (let commandDef of toolDefinitionFileDefs) {
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
         commandDef.codeRef,
         commandDef[relativeTo],
@@ -376,9 +376,9 @@ export default class FileDefManagerImpl
         absoluteCodeRef,
         this.loaderService.loader,
       );
-      const command = new Command(this.commandService.commandContext);
+      const command = new Command(this.toolService.commandContext);
       const name = commandDef.functionName;
-      const schema: CommandDefinitionSchema = {
+      const schema: ToolDefinitionSchema = {
         codeRef: absoluteCodeRef,
         tool: {
           type: 'function' as Tool['type'],

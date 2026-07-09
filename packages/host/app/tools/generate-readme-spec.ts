@@ -3,22 +3,22 @@ import { service } from '@ember/service';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import { devSkillId } from '../lib/utils';
 
-import OneShotLlmRequestCommand from './one-shot-llm-request';
-import PatchCardInstanceCommand from './patch-card-instance';
+import OneShotLlmRequestTool from './one-shot-llm-request';
+import PatchCardInstanceTool from './patch-card-instance';
 
-import type CommandService from '../services/command-service';
+import type ToolService from '../services/tool-service';
 
-export default class GenerateReadmeSpecCommand extends HostBaseCommand<
-  typeof BaseCommandModule.GenerateReadmeSpecInput,
-  typeof BaseCommandModule.GenerateReadmeSpecResult
+export default class GenerateReadmeSpecTool extends HostBaseTool<
+  typeof BaseToolModule.GenerateReadmeSpecInput,
+  typeof BaseToolModule.GenerateReadmeSpecResult
 > {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   private static getUserPrompt(
     ref: {
@@ -48,28 +48,28 @@ Requirements:
     'Generate a README for a spec and patch it to the spec readMe field';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateReadmeSpecInput } = commandModule;
     return GenerateReadmeSpecInput;
   }
 
   protected async run(
-    input: BaseCommandModule.GenerateReadmeSpecInput,
-  ): Promise<BaseCommandModule.GenerateReadmeSpecResult> {
+    input: BaseToolModule.GenerateReadmeSpecInput,
+  ): Promise<BaseToolModule.GenerateReadmeSpecResult> {
     if (!input.spec) {
       throw new Error('Spec is required');
     }
 
     // Generate the README using the existing command
-    const generateReadmeCommand = new OneShotLlmRequestCommand(
-      this.commandService.commandContext,
+    const generateReadmeCommand = new OneShotLlmRequestTool(
+      this.toolService.commandContext,
     );
 
-    let userPrompt = GenerateReadmeSpecCommand.getUserPrompt(
+    let userPrompt = GenerateReadmeSpecTool.getUserPrompt(
       input.spec.ref,
       input.spec.specType as SpecType,
     );
-    let systemPrompt = GenerateReadmeSpecCommand.SYSTEM_PROMPT;
+    let systemPrompt = GenerateReadmeSpecTool.SYSTEM_PROMPT;
 
     const result = await generateReadmeCommand.execute({
       codeRef: {
@@ -85,8 +85,8 @@ Requirements:
     // Patch the spec's readMe field
     if (input.spec.id) {
       try {
-        const patchCardInstanceCommand = new PatchCardInstanceCommand(
-          this.commandService.commandContext,
+        const patchCardInstanceCommand = new PatchCardInstanceTool(
+          this.toolService.commandContext,
           { cardType: input.spec.constructor as typeof CardDef }, //is this correct?
         );
 
@@ -106,7 +106,7 @@ Requirements:
       }
     }
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GenerateReadmeSpecResult } = commandModule;
 
     return new GenerateReadmeSpecResult({
@@ -114,3 +114,7 @@ Requirements:
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GenerateReadmeSpecTool as GenerateReadmeSpecCommand };

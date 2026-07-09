@@ -1,8 +1,8 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
 
@@ -10,9 +10,9 @@ type RegisterBotResult = {
   botRegistrationId: string;
 };
 
-export default class RegisterBotCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RegisterBotInput,
-  typeof BaseCommandModule.RegisterBotResult
+export default class RegisterBotTool extends HostBaseTool<
+  typeof BaseToolModule.RegisterBotInput,
+  typeof BaseToolModule.RegisterBotResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -20,15 +20,15 @@ export default class RegisterBotCommand extends HostBaseCommand<
   description = 'Register bot';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RegisterBotInput } = commandModule;
     return RegisterBotInput;
   }
 
   protected async run(
-    input: BaseCommandModule.RegisterBotInput,
-  ): Promise<BaseCommandModule.RegisterBotResult> {
-    const commandModule = await this.loadCommandModule();
+    input: BaseToolModule.RegisterBotInput,
+  ): Promise<BaseToolModule.RegisterBotResult> {
+    const commandModule = await this.loadToolModule();
     const { RegisterBotResult } = commandModule;
 
     let registration = (await this.realmServer.registerBot(
@@ -40,3 +40,7 @@ export default class RegisterBotCommand extends HostBaseCommand<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { RegisterBotTool as RegisterBotCommand };

@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableCommand,
-} from '@cardstack/host/lib/command-auto-execute';
+} from '@cardstack/host/lib/tool-auto-execute';
 
 type AutoExecCommandInput = Parameters<typeof isAutoExecutableCommand>[0];
 
@@ -15,7 +15,7 @@ function cmd(
   return { name, requiresApproval, executedBy };
 }
 
-module('Unit | Lib | command-auto-execute', function () {
+module('Unit | Lib | tool-auto-execute', function () {
   test('check-correctness commands auto-execute regardless of mode or approval flag', function (assert) {
     assert.true(
       isAutoExecutableCommand(
@@ -96,7 +96,7 @@ module('Unit | Lib | command-auto-execute', function () {
   });
 
   test('commands owned by another agent never auto-execute', function (assert) {
-    // Mirrors the agentId gate in command-service.drainCommandProcessingQueue:
+    // Mirrors the agentId gate in tool-service.drainToolProcessingQueue:
     // a command whose message came from a different agent must not auto-run
     // on this host, even if it would otherwise satisfy one of the auto-exec
     // branches. UI callers rely on this so the manual approval bar / per-

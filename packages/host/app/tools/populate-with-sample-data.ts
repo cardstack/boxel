@@ -9,23 +9,23 @@ import {
 import { isBaseInstance, realmURL } from '@cardstack/runtime-common/constants';
 
 import type { CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
 
-export default class PopulateWithSampleDataCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CardIdCard,
+export default class PopulateWithSampleDataTool extends HostBaseTool<
+  typeof BaseToolModule.CardIdCard,
   undefined
 > {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
 
@@ -33,7 +33,7 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
   description = 'Fill in the card with sample data';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
@@ -50,7 +50,7 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
     return cardModuleURL ? [cardModuleURL] : [];
   }
 
-  protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
+  protected async run(input: BaseToolModule.CardIdCard): Promise<undefined> {
     if (!input.cardId) {
       throw new Error('Card is required');
     }
@@ -61,7 +61,7 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
       throw new Error(`Could not load card: ${card.message}`);
     }
 
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
+    let sendMessageCommand = new SendAiAssistantMessageTool(
       this.commandContext,
     );
 
@@ -82,3 +82,7 @@ function isCardOrField(card: any): card is CardDef | FieldDef {
 function isCard(card: any): card is CardDef {
   return isCardOrField(card) && !('isFieldDef' in card.constructor);
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PopulateWithSampleDataTool as PopulateWithSampleDataCommand };

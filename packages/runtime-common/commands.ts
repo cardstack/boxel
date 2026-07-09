@@ -16,7 +16,7 @@ import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 // readRealmFile).
 export const AI_BOT_EXECUTOR = 'ai-bot';
 
-export interface CommandRequest {
+export interface ToolRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
@@ -199,12 +199,12 @@ export function buildCommandFunctionNameFromResolvedRef(ref: {
 
 export function decodeCommandRequest(
   commandRequest: Partial<EncodedCommandRequest>,
-): Partial<CommandRequest> {
+): Partial<ToolRequest> {
   if (typeof commandRequest.arguments === 'object') {
     // backwards compatibility for older format
-    return commandRequest as Partial<CommandRequest>;
+    return commandRequest as Partial<ToolRequest>;
   }
-  let decodedCommandRequest: Partial<CommandRequest> = {};
+  let decodedCommandRequest: Partial<ToolRequest> = {};
   if (commandRequest.id) {
     decodedCommandRequest.id = commandRequest.id;
   }
@@ -229,7 +229,7 @@ export function decodeCommandRequest(
 }
 
 export function encodeCommandRequest(
-  commandRequest: Partial<CommandRequest>,
+  commandRequest: Partial<ToolRequest>,
 ): Partial<EncodedCommandRequest> {
   if (typeof commandRequest.arguments === 'string') {
     // backwards compatibility for older format
@@ -252,7 +252,10 @@ export function encodeCommandRequest(
 }
 
 export function encodeCommandRequests(
-  commandRequests: Partial<CommandRequest>[],
+  commandRequests: Partial<ToolRequest>[],
 ): Partial<EncodedCommandRequest>[] {
   return commandRequests.map(encodeCommandRequest);
 }
+
+// Pre-rename spelling; new code imports `ToolRequest`.
+export type CommandRequest = ToolRequest;

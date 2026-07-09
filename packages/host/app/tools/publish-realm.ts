@@ -9,9 +9,9 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
@@ -23,9 +23,9 @@ import type { PublishabilityViolation } from '../services/realm';
 // thus completes only once every published realm is indexed and viewable.
 // (Readiness is polled over HTTP rather than awaited via realm `index` events,
 // which aren't delivered to the run-command/prerender context.)
-export default class PublishRealmCommand extends HostBaseCommand<
-  typeof BaseCommandModule.PublishRealmInput,
-  typeof BaseCommandModule.PublishRealmResult
+export default class PublishRealmTool extends HostBaseTool<
+  typeof BaseToolModule.PublishRealmInput,
+  typeof BaseToolModule.PublishRealmResult
 > {
   @service declare private realm: RealmService;
 
@@ -33,16 +33,16 @@ export default class PublishRealmCommand extends HostBaseCommand<
   description = 'Publish a realm to one or more destinations';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.PublishRealmInput;
   }
 
   requireInputFields = ['realmURL'];
 
   protected async run(
-    input: BaseCommandModule.PublishRealmInput,
-  ): Promise<BaseCommandModule.PublishRealmResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.PublishRealmInput,
+  ): Promise<BaseToolModule.PublishRealmResult> {
+    let commandModule = await this.loadToolModule();
     let { PublishRealmResult, PublishTargetResult } = commandModule;
 
     // Normalize so endpoint URLs like `${realmURL}_publishability` are well
@@ -145,3 +145,7 @@ function describeViolations(violations: PublishabilityViolation[]): string {
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { PublishRealmTool as PublishRealmCommand };

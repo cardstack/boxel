@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
 
-export default class ReadTextFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ReadTextFileInput,
-  typeof BaseCommandModule.FileContents
+export default class ReadTextFileTool extends HostBaseTool<
+  typeof BaseToolModule.ReadTextFileInput,
+  typeof BaseToolModule.FileContents
 > {
   @service declare private network: NetworkService;
 
@@ -16,7 +16,7 @@ export default class ReadTextFileCommand extends HostBaseCommand<
   static actionVerb = 'Read';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { ReadTextFileInput } = commandModule;
     return ReadTextFileInput;
   }
@@ -24,8 +24,8 @@ export default class ReadTextFileCommand extends HostBaseCommand<
   requireInputFields = ['path'];
 
   protected async run(
-    input: BaseCommandModule.ReadTextFileInput,
-  ): Promise<BaseCommandModule.FileContents> {
+    input: BaseToolModule.ReadTextFileInput,
+  ): Promise<BaseToolModule.FileContents> {
     let url = input.realm
       ? new URL(input.path, input.realm)
       : new URL(input.path);
@@ -33,7 +33,7 @@ export default class ReadTextFileCommand extends HostBaseCommand<
       headers: { Accept: 'text/plain' },
     });
 
-    let { FileContents } = await this.loadCommandModule();
+    let { FileContents } = await this.loadToolModule();
     if (response.ok) {
       return new FileContents({
         content: await response.text(),
@@ -42,3 +42,7 @@ export default class ReadTextFileCommand extends HostBaseCommand<
     throw new Error(`Error reading file ${url}: ${response.statusText}`);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { ReadTextFileTool as ReadTextFileCommand };

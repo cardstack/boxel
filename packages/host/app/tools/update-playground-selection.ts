@@ -3,21 +3,21 @@ import { service } from '@ember/service';
 import { rri } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type PlaygroundPanelService from '../services/playground-panel-service';
 
-export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
-  typeof BaseCommandModule.UpdatePlaygroundSelectionInput
+export default class UpdatePlaygroundSelectionTool extends HostBaseTool<
+  typeof BaseToolModule.UpdatePlaygroundSelectionInput
 > {
   @service declare private playgroundPanelService: PlaygroundPanelService;
   description = 'Persist the playground selections.';
   static actionVerb = 'Save';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { UpdatePlaygroundSelectionInput } = commandModule;
     return UpdatePlaygroundSelectionInput;
   }
@@ -25,7 +25,7 @@ export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
   requireInputFields = ['moduleId', 'cardId', 'format'];
 
   protected async run(
-    input: BaseCommandModule.UpdatePlaygroundSelectionInput,
+    input: BaseToolModule.UpdatePlaygroundSelectionInput,
   ): Promise<undefined> {
     this.playgroundPanelService.persistSelections(
       input.moduleId,
@@ -35,3 +35,7 @@ export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
     );
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UpdatePlaygroundSelectionTool as UpdatePlaygroundSelectionCommand };

@@ -7,9 +7,9 @@ import { module, test } from 'qunit';
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
-import UnpublishRealmCommand from '@cardstack/host/tools/unpublish-realm';
+import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import {
   setupIntegrationTestRealm,
@@ -36,7 +36,7 @@ class StubRealmService extends RealmService {
 let unpublishShouldFail: boolean;
 let unpublishedURLs: string[];
 let loader: Loader;
-let PublishTarget: typeof BaseCommandModule.PublishTarget;
+let PublishTarget: typeof BaseToolModule.PublishTarget;
 
 module('Integration | commands | unpublish-realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -77,7 +77,7 @@ module('Integration | commands | unpublish-realm', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loader = getService('loader-service').loader;
     PublishTarget = (
-      await loader.import<typeof BaseCommandModule>(`${baseRealm.url}command`)
+      await loader.import<typeof BaseToolModule>(`${baseRealm.url}command`)
     ).PublishTarget;
     unpublishShouldFail = false;
     unpublishedURLs = [];
@@ -92,8 +92,8 @@ module('Integration | commands | unpublish-realm', function (hooks) {
   });
 
   function makeCommand() {
-    let commandService = getService('command-service');
-    return new UnpublishRealmCommand(commandService.commandContext);
+    let toolService = getService('tool-service');
+    return new UnpublishRealmTool(toolService.commandContext);
   }
 
   test('unpublishes an explicit published-realm URL', async function (assert) {

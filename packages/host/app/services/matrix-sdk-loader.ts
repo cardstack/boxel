@@ -311,8 +311,8 @@ function extendedClient({
           return getJoinedRoomsWithCache.bind(null, target);
         case 'uploadCards':
           return fileDefManager.uploadCards.bind(fileDefManager);
-        case 'uploadCommandDefinitions':
-          return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadToolDefinitions':
+          return fileDefManager.uploadToolDefinitions.bind(fileDefManager);
         case 'uploadFiles':
           return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'prefetchFileContent':

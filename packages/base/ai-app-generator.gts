@@ -12,7 +12,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 
-import AskAiCommand from '@cardstack/boxel-host/commands/ask-ai';
+import AskAiTool from '@cardstack/boxel-host/commands/ask-ai';
 import { AskAiInput } from './command';
 import { tracked } from '@glimmer/tracking';
 
@@ -54,7 +54,7 @@ export class AiAppGenerator extends CardDef {
         throw new Error('No command context found');
       }
 
-      let command = new AskAiCommand(commandContext);
+      let command = new AskAiTool(commandContext);
       await command.execute(
         new AskAiInput({
           prompt: this.args.model.promptValue,

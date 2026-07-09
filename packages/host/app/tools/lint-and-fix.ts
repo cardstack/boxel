@@ -2,9 +2,9 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   formatLintIssues,
   formatLintIssuesBySeverity,
@@ -12,16 +12,16 @@ import {
 
 import type NetworkService from '../services/network';
 
-export default class LintAndFixCommand extends HostBaseCommand<
-  typeof BaseCommandModule.LintAndFixInput,
-  typeof BaseCommandModule.LintAndFixResult
+export default class LintAndFixTool extends HostBaseTool<
+  typeof BaseToolModule.LintAndFixInput,
+  typeof BaseToolModule.LintAndFixResult
 > {
   @service declare private network: NetworkService;
   description = `Pass file content through linting endpoint`;
   static actionVerb = 'Autofix';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { LintAndFixInput } = commandModule;
     return LintAndFixInput;
   }
@@ -29,9 +29,9 @@ export default class LintAndFixCommand extends HostBaseCommand<
   requireInputFields = ['fileContent', 'realm'];
 
   protected async run(
-    input: BaseCommandModule.LintAndFixInput,
-  ): Promise<BaseCommandModule.LintAndFixResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.LintAndFixInput,
+  ): Promise<BaseToolModule.LintAndFixResult> {
+    let commandModule = await this.loadToolModule();
     const { LintAndFixResult } = commandModule;
     let response = await this.network.authedFetch(`${input.realm}_lint`, {
       method: 'POST',
@@ -58,3 +58,7 @@ export default class LintAndFixCommand extends HostBaseCommand<
     throw new Error(result.message);
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { LintAndFixTool as LintAndFixCommand };

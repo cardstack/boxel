@@ -3,9 +3,9 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
-import PatchFieldsCommand from '@cardstack/host/tools/patch-fields';
+import type ToolService from '@cardstack/host/services/tool-service';
+import PatchFieldsTool from '@cardstack/host/tools/patch-fields';
 
 import {
   testRealmURL,
@@ -39,13 +39,13 @@ module('Integration | Command | patch-fields', function (hooks) {
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 
-  let commandService: CommandService;
+  let toolService: ToolService;
   let AuthorDef: typeof CardDef;
   let BookDef: typeof CardDef;
   let store: StoreService;
 
   hooks.beforeEach(async function () {
-    commandService = getService('command-service');
+    toolService = getService('tool-service');
 
     class Coordinates extends FieldDef {
       @field latitude = contains(NumberField);
@@ -161,12 +161,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     test<TestContextWithSave>('patches do not await persistence', async function (assert) {
       assert.expect(6);
 
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
       let cardId = `${testRealmURL}Author/john`;
       let store = getService('store');
 
@@ -245,8 +242,8 @@ module('Integration | Command | patch-fields', function (hooks) {
   module('Simple Field Update Tests', function () {
     module('Relationship Update Tests', function () {
       test('should update a linksTo relationship field', async function (assert) {
-        let patchFieldsCommand = new PatchFieldsCommand(
-          commandService.commandContext,
+        let patchFieldsCommand = new PatchFieldsTool(
+          toolService.commandContext,
           {
             cardType: AuthorDef,
           },
@@ -281,8 +278,8 @@ module('Integration | Command | patch-fields', function (hooks) {
         }
       });
       test('should update a linksToMany relationship field', async function (assert) {
-        let patchFieldsCommand = new PatchFieldsCommand(
-          commandService.commandContext,
+        let patchFieldsCommand = new PatchFieldsTool(
+          toolService.commandContext,
         );
         let bookId1 = `${testRealmURL}Book/book-1`;
         let bookId2 = `${testRealmURL}Book/book-2`;
@@ -331,8 +328,8 @@ module('Integration | Command | patch-fields', function (hooks) {
         }
       });
       test('should update a nested relationship field (e.g., address.country)', async function (assert) {
-        let patchFieldsCommand = new PatchFieldsCommand(
-          commandService.commandContext,
+        let patchFieldsCommand = new PatchFieldsTool(
+          toolService.commandContext,
         );
         let result = await patchFieldsCommand.execute({
           cardId: `${testRealmURL}Author/john`,
@@ -373,12 +370,9 @@ module('Integration | Command | patch-fields', function (hooks) {
       });
     });
     test('should update single primitive field', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -398,12 +392,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should update multiple primitive fields', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -424,12 +415,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should return success with updated field list', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -451,12 +439,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should preserve unchanged fields', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // First verify the original state
       let originalCard = await store.get(`${testRealmURL}Author/john`);
@@ -516,12 +501,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Nested Field Update Tests', function () {
     test('should update nested object field using dot notation', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -558,12 +540,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should update multiple nested fields', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -613,12 +592,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
     test("should create nested objects if they don't exist", async function (assert) {
       // Test using the existing john card but targeting a nested field that would be null
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // First, let's create a scenario where we set the address to null
       await patchFieldsCommand.execute({
@@ -665,12 +641,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle deep nesting (3+ levels)', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test deep nesting on the existing john card
       let result = await patchFieldsCommand.execute({
@@ -722,12 +695,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Array Field Update Tests', function () {
     test('should update array element by index', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -762,12 +732,9 @@ module('Integration | Command | patch-fields', function (hooks) {
       // We need to add a contacts field to our test data setup
 
       // For now, let's test nested field in the address object
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -805,12 +772,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should replace entire array', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -841,12 +805,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should add new item to array using push syntax', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -877,12 +838,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should add new item to array at specific index', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -913,12 +871,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle mixed array and object updates', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -969,12 +924,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Validation Tests', function () {
     test('should reject non-existent field paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -993,12 +945,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should reject invalid field types', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1020,12 +969,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should validate array bounds for existing arrays', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Try to access an array index that's way beyond reasonable bounds
       let result = await patchFieldsCommand.execute({
@@ -1055,12 +1001,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should validate relationship field constraints', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Try to update fields that would be relationship fields (but don't exist in our schema)
       let result = await patchFieldsCommand.execute({
@@ -1091,12 +1034,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Partial Success Tests', function () {
     test('should update valid fields when some fields fail', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1148,12 +1088,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should report successful and failed fields separately', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1203,12 +1140,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should return success=true for partial success', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1235,12 +1169,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should return success=false when no fields update', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1275,12 +1206,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Error Handling Tests', function () {
     test('should handle card not found error', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/nonexistent`,
@@ -1303,12 +1231,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should provide detailed error messages for invalid fields', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1338,12 +1263,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle array index out of bounds when updating existing items', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Try to access a very high index that should trigger bounds checking
       let result = await patchFieldsCommand.execute({
@@ -1371,12 +1293,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should allow adding beyond current array bounds (append behavior)', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Add at an index just beyond current bounds (should work with null padding)
       let result = await patchFieldsCommand.execute({
@@ -1413,12 +1332,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle null reference in field paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test updating a path where intermediate objects might be null/undefined
       // This should create nested objects as needed
@@ -1464,12 +1380,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle malformed field paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Author/john`,
@@ -1515,12 +1428,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Field Path Parsing Tests', function () {
     test('should parse simple field paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test parsing of simple field paths by successfully updating them
       let result = await patchFieldsCommand.execute({
@@ -1546,12 +1456,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should parse dot notation paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test parsing of dot notation paths
       let result = await patchFieldsCommand.execute({
@@ -1583,12 +1490,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should parse array index paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test parsing of array index paths
       let result = await patchFieldsCommand.execute({
@@ -1614,12 +1518,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should parse array append operations (e.g., "tags[]" or "tags[-1]")', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test parsing of array append operations
       let result = await patchFieldsCommand.execute({
@@ -1659,12 +1560,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should parse complex mixed paths', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test parsing of complex mixed paths (combining dots and arrays)
       let result = await patchFieldsCommand.execute({
@@ -1696,12 +1594,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle edge cases in parsing', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Test edge cases that should work
       let result = await patchFieldsCommand.execute({
@@ -1729,12 +1624,9 @@ module('Integration | Command | patch-fields', function (hooks) {
 
   module('Schema Generation Tests', function () {
     test('should generate correct JSON schema for card type', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let schema = await patchFieldsCommand.getInputJsonSchema();
 
@@ -1774,12 +1666,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should include field descriptions in schema', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let schema = await patchFieldsCommand.getInputJsonSchema();
 
@@ -1804,12 +1693,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should support nested field schemas', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let schema = await patchFieldsCommand.getInputJsonSchema();
       let fieldUpdatesSchema = schema.attributes.properties.fieldUpdates;
@@ -1828,12 +1714,9 @@ module('Integration | Command | patch-fields', function (hooks) {
     });
 
     test('should handle array field schemas', async function (assert) {
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       let schema = await patchFieldsCommand.getInputJsonSchema();
       let fieldUpdatesSchema = schema.attributes.properties.fieldUpdates;
@@ -1855,12 +1738,9 @@ module('Integration | Command | patch-fields', function (hooks) {
   module('Dynamic Field Validation Tests', function () {
     test('should work with different card types (not just hardcoded Author fields)', async function (assert) {
       // Create command instance configured for Book card type
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: BookDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: BookDef,
+      });
 
       // This should now work since we've implemented dynamic field validation
       let result = await patchFieldsCommand.execute({
@@ -1895,12 +1775,9 @@ module('Integration | Command | patch-fields', function (hooks) {
       // but trying to update fields that wouldn't have been in a hardcoded list
 
       // Let's test with a field that exists on Author but might not be in every hardcoded list
-      let patchFieldsCommand = new PatchFieldsCommand(
-        commandService.commandContext,
-        {
-          cardType: AuthorDef,
-        },
-      );
+      let patchFieldsCommand = new PatchFieldsTool(toolService.commandContext, {
+        cardType: AuthorDef,
+      });
 
       // Try to update fields that should work with dynamic validation
       let result = await patchFieldsCommand.execute({

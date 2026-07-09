@@ -2,11 +2,11 @@ import { service } from '@ember/service';
 
 import { isCardInstance, rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
+import SendBotTriggerEventTool from './bot-requests/send-bot-trigger-event';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
@@ -22,8 +22,8 @@ interface WorkflowCardView {
 // SubmissionWorkflowCard that ended in a failed state. Reads roomId + listing
 // off the card so the same Matrix room is reused (preserving the prior
 // conversation and the bot-runner's view of the workflow).
-export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RetrySubmissionWorkflowInput
+export default class RetrySubmissionWorkflowTool extends HostBaseTool<
+  typeof BaseToolModule.RetrySubmissionWorkflowInput
 > {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -32,7 +32,7 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
     'Retry a failed submission workflow by re-emitting the bot trigger event into the original room.';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { RetrySubmissionWorkflowInput } = commandModule;
     return RetrySubmissionWorkflowInput;
   }
@@ -40,7 +40,7 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
   requireInputFields = ['workflowCardId'];
 
   protected async run(
-    input: BaseCommandModule.RetrySubmissionWorkflowInput,
+    input: BaseToolModule.RetrySubmissionWorkflowInput,
   ): Promise<undefined> {
     let { workflowCardId } = input;
 
@@ -88,7 +88,7 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
     );
 
     try {
-      await new SendBotTriggerEventCommand(this.commandContext).execute({
+      await new SendBotTriggerEventTool(this.commandContext).execute({
         roomId,
         realm: listingRealm,
         type: 'pr-listing-retry',
@@ -115,3 +115,7 @@ export default class RetrySubmissionWorkflowCommand extends HostBaseCommand<
     }
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { RetrySubmissionWorkflowTool as RetrySubmissionWorkflowCommand };

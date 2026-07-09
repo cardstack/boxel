@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
-export default class GetDefaultWritableRealmCommand extends HostBaseCommand<
+export default class GetDefaultWritableRealmTool extends HostBaseTool<
   undefined,
-  typeof BaseCommandModule.GetDefaultWritableRealmResult
+  typeof BaseToolModule.GetDefaultWritableRealmResult
 > {
   @service declare private realm: RealmService;
 
@@ -18,11 +18,15 @@ export default class GetDefaultWritableRealmCommand extends HostBaseCommand<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetDefaultWritableRealmResult> {
-    let commandModule = await this.loadCommandModule();
+  protected async run(): Promise<BaseToolModule.GetDefaultWritableRealmResult> {
+    let commandModule = await this.loadToolModule();
     const { GetDefaultWritableRealmResult } = commandModule;
     return new GetDefaultWritableRealmResult({
       realmIdentifier: this.realm.defaultWritableRealm?.path ?? '',
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetDefaultWritableRealmTool as GetDefaultWritableRealmCommand };

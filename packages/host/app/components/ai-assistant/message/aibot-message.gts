@@ -31,8 +31,8 @@ import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-par
 
 import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
@@ -60,7 +60,7 @@ interface Signature {
 }
 
 export default class FormattedAiBotMessage extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   @cached
   private get reasoningHtml() {
@@ -80,7 +80,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
   };
 
   private codePatchStatus = (codeData: CodeData) => {
-    return this.commandService.getCodePatchStatus(codeData);
+    return this.toolService.getCodePatchStatus(codeData);
   };
 
   <template>
@@ -122,11 +122,11 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchResult={{this.commandService.getCodePatchResult
+            @codePatchResult={{this.toolService.getCodePatchResult
               htmlPart.codeData
             }}
             @onPatchCode={{fn
-              this.commandService.patchCode
+              this.toolService.patchCode
               htmlPart.codeData.roomId
               htmlPart.codeData.fileUrl
               (array htmlPart.codeData)

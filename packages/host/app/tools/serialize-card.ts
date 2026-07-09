@@ -1,16 +1,16 @@
 import { service } from '@ember/service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
 
-export default class SerializeCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CardIdCard,
-  typeof BaseCommandModule.JsonCard
+export default class SerializeCardTool extends HostBaseTool<
+  typeof BaseToolModule.CardIdCard,
+  typeof BaseToolModule.JsonCard
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -19,7 +19,7 @@ export default class SerializeCardCommand extends HostBaseCommand<
   description = 'Serialize a card by id';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
@@ -27,8 +27,8 @@ export default class SerializeCardCommand extends HostBaseCommand<
   requireInputFields = ['cardId'];
 
   protected async run(
-    input: BaseCommandModule.CardIdCard,
-  ): Promise<BaseCommandModule.JsonCard> {
+    input: BaseToolModule.CardIdCard,
+  ): Promise<BaseToolModule.JsonCard> {
     let card = await this.store.get(input.cardId);
     if (!card || !('id' in card)) {
       throw new Error(`Card not found for id: ${input.cardId}`);
@@ -38,8 +38,12 @@ export default class SerializeCardCommand extends HostBaseCommand<
       omitQueryFields: true,
     });
 
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { JsonCard } = commandModule;
     return new JsonCard({ json: serialized });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SerializeCardTool as SerializeCardCommand };

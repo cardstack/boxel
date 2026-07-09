@@ -19,11 +19,11 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -31,7 +31,7 @@ import {
   isReexportCardOrField,
 } from '../services/module-contents-service';
 
-import GenerateReadmeSpecCommand from './generate-readme-spec';
+import GenerateReadmeSpecTool from './generate-readme-spec';
 
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
@@ -119,7 +119,7 @@ class SpecTypeGuesser {
     const superName = declaration.super.name;
     return (
       superName === 'Command' ||
-      superName === 'HostBaseCommand' ||
+      superName === 'HostBaseTool' ||
       superName?.includes('Command')
     );
   }
@@ -129,9 +129,9 @@ interface CreateSpecResult {
   new: boolean;
 }
 
-export default class CreateSpecCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CreateSpecsInput,
-  typeof BaseCommandModule.CreateSpecsResult
+export default class CreateSpecTool extends HostBaseTool<
+  typeof BaseToolModule.CreateSpecsInput,
+  typeof BaseToolModule.CreateSpecsResult
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -143,7 +143,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
   requireInputFields = ['targetRealm'];
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { CreateSpecsInput } = commandModule;
     return CreateSpecsInput;
   }
@@ -226,7 +226,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
     if (autoGenerateReadme && !createdSpecRes.spec.readMe) {
       // we populate the readme when is not already set even when spec is already created
-      let generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+      let generateReadmeSpecCommand = new GenerateReadmeSpecTool(
         this.commandContext,
       );
       await generateReadmeSpecCommand.execute({
@@ -252,8 +252,8 @@ export default class CreateSpecCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.CreateSpecsInput,
-  ): Promise<BaseCommandModule.CreateSpecsResult> {
+    input: BaseToolModule.CreateSpecsInput,
+  ): Promise<BaseToolModule.CreateSpecsResult> {
     let { codeRef, targetRealm, module, autoGenerateReadme } = input;
 
     if (!targetRealm) {
@@ -355,7 +355,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
 
     try {
-      let commandModule = await this.loadCommandModule();
+      let commandModule = await this.loadToolModule();
       const { CreateSpecsResult } = commandModule;
       return new CreateSpecsResult({
         newSpecs,
@@ -427,3 +427,7 @@ function isSpecSubclass(
   }
   return false;
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { CreateSpecTool as CreateSpecCommand };

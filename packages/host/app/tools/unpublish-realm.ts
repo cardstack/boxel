@@ -9,18 +9,18 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
 // Unpublishes a realm from a single published destination. Resolves once the
 // realm-server accepts the request; there is no reindex on unpublish (the
 // published realm is removed), so v1 has no completion-wait.
-export default class UnpublishRealmCommand extends HostBaseCommand<
-  typeof BaseCommandModule.UnpublishRealmInput,
-  typeof BaseCommandModule.UnpublishRealmResult
+export default class UnpublishRealmTool extends HostBaseTool<
+  typeof BaseToolModule.UnpublishRealmInput,
+  typeof BaseToolModule.UnpublishRealmResult
 > {
   @service declare private realm: RealmService;
 
@@ -28,16 +28,16 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
   description = 'Unpublish a realm from a published destination';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.UnpublishRealmInput;
   }
 
   requireInputFields = ['realmURL'];
 
   protected async run(
-    input: BaseCommandModule.UnpublishRealmInput,
-  ): Promise<BaseCommandModule.UnpublishRealmResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.UnpublishRealmInput,
+  ): Promise<BaseToolModule.UnpublishRealmResult> {
+    let commandModule = await this.loadToolModule();
     let { UnpublishRealmResult } = commandModule;
 
     // Normalize so the cached RealmResource (token/claims, _unPublishingRealms
@@ -64,7 +64,7 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
   }
 
   private resolvePublishedRealmURL(
-    input: BaseCommandModule.UnpublishRealmInput,
+    input: BaseToolModule.UnpublishRealmInput,
     realmURL: string,
   ): string {
     if (input.publishedRealmURL) {
@@ -94,3 +94,7 @@ export default class UnpublishRealmCommand extends HostBaseCommand<
     );
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UnpublishRealmTool as UnpublishRealmCommand };

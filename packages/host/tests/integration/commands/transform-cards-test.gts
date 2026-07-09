@@ -8,8 +8,8 @@ import { baseRealm, Command } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
-import type { SearchCardsByQueryCommand as SearchCardsByQueryCommandType } from '@cardstack/host/tools/search-cards';
-import TransformCardsCommand from '@cardstack/host/tools/transform-cards';
+import type { SearchCardsByQueryTool as SearchCardsByQueryCommandType } from '@cardstack/host/tools/search-cards';
+import TransformCardsTool from '@cardstack/host/tools/transform-cards';
 
 import type * as CommandModule from 'https://cardstack.com/base/command';
 
@@ -143,7 +143,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       ): Promise<CommandModule.JsonCard> {
         let json = { ...input.json };
         if (!json.data.attributes.metadata) {
-          json.data.attributes.metadata = 'Added by TransformCardsCommand';
+          json.data.attributes.metadata = 'Added by TransformCardsTool';
         }
         return new JsonCard({ json });
       }
@@ -241,10 +241,8 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms all cards matching a query', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     await transformCommand.execute({
       query: {
@@ -262,13 +260,11 @@ module('Integration | commands | transform-cards', function (hooks) {
     });
 
     // Verify that all Person cards were transformed
-    let { SearchCardsByQueryCommand } = (await import(
+    let { SearchCardsByQueryTool } = (await import(
       // @ts-expect-error tsconfig paths not resolved for dynamic import()
       '@cardstack/host/tools/search-cards'
-    )) as { SearchCardsByQueryCommand: typeof SearchCardsByQueryCommandType };
-    let searchCommand = new SearchCardsByQueryCommand(
-      commandService.commandContext,
-    );
+    )) as { SearchCardsByQueryTool: typeof SearchCardsByQueryCommandType };
+    let searchCommand = new SearchCardsByQueryTool(toolService.commandContext);
     let { cardIds } = await searchCommand.execute({
       query: {
         filter: {
@@ -295,10 +291,8 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms specific cards using title filter', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     await transformCommand.execute({
       query: {
@@ -336,10 +330,8 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms Pet cards with different command', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     await transformCommand.execute({
       query: {
@@ -366,7 +358,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     let fluffyData = JSON.parse(fluffyContent);
     assert.strictEqual(
       fluffyData.data.attributes.metadata,
-      'Added by TransformCardsCommand',
+      'Added by TransformCardsTool',
     );
 
     response = await networkService.authedFetch(
@@ -376,15 +368,13 @@ module('Integration | commands | transform-cards', function (hooks) {
     let roverData = JSON.parse(roverContent);
     assert.strictEqual(
       roverData.data.attributes.metadata,
-      'Added by TransformCardsCommand',
+      'Added by TransformCardsTool',
     );
   });
 
   test('handles empty search results gracefully', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     // Search for non-existent cards
     await transformCommand.execute({
@@ -404,10 +394,8 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('preserves JSON structure while transforming', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     // Get original structure first
     let networkService = getService('network');
@@ -455,10 +443,8 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   // Skipped because we don't have the ability to capture command errors in the current test setup
   skip('handles malformed command references gracefully', async function (assert) {
-    let commandService = getService('command-service');
-    let transformCommand = new TransformCardsCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.commandContext);
 
     try {
       await transformCommand.execute({

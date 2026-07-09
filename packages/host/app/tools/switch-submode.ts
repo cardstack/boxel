@@ -2,20 +2,20 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
 import { Submodes } from '../components/submode-switcher';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
-import WriteTextFileCommand from './write-text-file';
+import WriteTextFileTool from './write-text-file';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
-export default class SwitchSubmodeCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SwitchSubmodeInput,
-  typeof BaseCommandModule.SwitchSubmodeResult | undefined
+export default class SwitchSubmodeTool extends HostBaseTool<
+  typeof BaseToolModule.SwitchSubmodeInput,
+  typeof BaseToolModule.SwitchSubmodeResult | undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
@@ -26,7 +26,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     'Navigate the UI to another submode. Possible values for submode are "interact" and "code".';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { SwitchSubmodeInput } = commandModule;
     return SwitchSubmodeInput;
   }
@@ -53,9 +53,9 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
   }
 
   protected async run(
-    input: BaseCommandModule.SwitchSubmodeInput,
-  ): Promise<BaseCommandModule.SwitchSubmodeResult | undefined> {
-    let resultCard: BaseCommandModule.SwitchSubmodeResult | undefined;
+    input: BaseToolModule.SwitchSubmodeInput,
+  ): Promise<BaseToolModule.SwitchSubmodeResult | undefined> {
+    let resultCard: BaseToolModule.SwitchSubmodeResult | undefined;
     switch (input.submode) {
       case Submodes.Interact:
         await this.operatorModeStateService.updateCodePath(null);
@@ -77,9 +77,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
           input.createFile &&
           currentSubmode === Submodes.Interact
         ) {
-          let writeTextFileCommand = new WriteTextFileCommand(
-            this.commandContext,
-          );
+          let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
           let writeResult = await writeTextFileCommand.execute({
             path: codeRRI,
             content: '',
@@ -88,7 +86,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
           if (writeResult.fileIdentifier !== codeRRI) {
             finalCodePath = rri(writeResult.fileIdentifier);
 
-            let commandModule = await this.loadCommandModule();
+            let commandModule = await this.loadToolModule();
             const { SwitchSubmodeResult } = commandModule;
             resultCard = new SwitchSubmodeResult({
               codePath: finalCodePath,
@@ -110,3 +108,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     return resultCard;
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { SwitchSubmodeTool as SwitchSubmodeCommand };

@@ -5,63 +5,63 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import type { Message } from './message';
 
-type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
+type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
-export default class MessageCommand {
-  @tracked commandRequest: Partial<CommandRequest>;
-  @tracked commandStatus?: CommandStatus;
-  @tracked commandResultFileDef?: SerializedFile;
+export default class MessageTool {
+  @tracked toolRequest: Partial<ToolRequest>;
+  @tracked toolCallStatus?: ToolCallStatus;
+  @tracked toolResultFileDef?: SerializedFile;
 
   constructor(
     public message: Message,
-    commandRequest: Partial<CommandRequest>,
+    toolRequest: Partial<ToolRequest>,
     public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     public requiresApproval: boolean,
     public actionVerb: string,
-    commandStatus: CommandStatus,
-    commandResultFileDef: SerializedFile | undefined,
+    toolCallStatus: ToolCallStatus,
+    toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
   ) {
     setOwner(this, owner);
 
-    this.commandRequest = commandRequest;
-    this.commandStatus = commandStatus;
-    this.commandResultFileDef = commandResultFileDef;
+    this.toolRequest = toolRequest;
+    this.toolCallStatus = toolCallStatus;
+    this.toolResultFileDef = toolResultFileDef;
   }
 
-  @service declare commandService: CommandService;
+  @service declare toolService: ToolService;
   @service declare matrixService: MatrixService;
   @service declare store: StoreService;
 
   get id() {
-    return this.commandRequest.id;
+    return this.toolRequest.id;
   }
 
   get name() {
-    return this.commandRequest.name;
+    return this.toolRequest.name;
   }
 
   // The actor that already executed this tool call (e.g. 'ai-bot' for
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
-    return this.commandRequest.executedBy;
+    return this.toolRequest.executedBy;
   }
 
   get arguments() {
-    return this.commandRequest.arguments;
+    return this.toolRequest.arguments;
   }
 
   get description() {
@@ -73,15 +73,15 @@ export default class MessageCommand {
   }
 
   get status() {
-    if (this.commandService.currentlyExecutingCommandRequestIds.has(this.id!)) {
+    if (this.toolService.currentlyExecutingToolRequestIds.has(this.id!)) {
       return 'applying';
     }
 
-    return this.commandStatus;
+    return this.toolCallStatus;
   }
 
   async commandResultCardDoc() {
-    if (!this.commandResultFileDef) {
+    if (!this.toolResultFileDef) {
       return undefined;
     }
     let roomResource = this.matrixService.roomResources.get(
@@ -91,11 +91,11 @@ export default class MessageCommand {
       return undefined;
     }
     try {
-      if (!this.commandResultFileDef) {
+      if (!this.toolResultFileDef) {
         return undefined;
       }
       let cardDoc = await this.matrixService.downloadCardFileDef(
-        this.commandResultFileDef,
+        this.toolResultFileDef,
       );
       return cardDoc;
     } catch {

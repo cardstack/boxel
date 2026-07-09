@@ -2,9 +2,9 @@ import { service } from '@ember/service';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 
@@ -12,9 +12,9 @@ import type RealmService from '../services/realm';
 // published. The data comes from the source realm's `_info` response, whose
 // `lastPublishedAt` is a { publishedRealmURL: lastPublishedAt } map populated
 // server-side from the realm_registry.
-export default class GetPublishedRealmsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.GetPublishedRealmsInput,
-  typeof BaseCommandModule.GetPublishedRealmsResult
+export default class GetPublishedRealmsTool extends HostBaseTool<
+  typeof BaseToolModule.GetPublishedRealmsInput,
+  typeof BaseToolModule.GetPublishedRealmsResult
 > {
   @service declare private realm: RealmService;
 
@@ -23,16 +23,16 @@ export default class GetPublishedRealmsCommand extends HostBaseCommand<
     "Get a source realm's published destinations and when each was last published";
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     return commandModule.GetPublishedRealmsInput;
   }
 
   requireInputFields = ['realmURL'];
 
   protected async run(
-    input: BaseCommandModule.GetPublishedRealmsInput,
-  ): Promise<BaseCommandModule.GetPublishedRealmsResult> {
-    let commandModule = await this.loadCommandModule();
+    input: BaseToolModule.GetPublishedRealmsInput,
+  ): Promise<BaseToolModule.GetPublishedRealmsResult> {
+    let commandModule = await this.loadToolModule();
     let { GetPublishedRealmsResult, PublishedRealmInfo } = commandModule;
 
     let realmURL = ensureTrailingSlash(input.realmURL);
@@ -59,3 +59,7 @@ export default class GetPublishedRealmsCommand extends HostBaseCommand<
     return new GetPublishedRealmsResult({ results });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetPublishedRealmsTool as GetPublishedRealmsCommand };

@@ -1,14 +1,14 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseToolModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseTool from '../lib/host-base-tool';
 
 import type Realm from '../services/realm';
 
-export default class GetAllRealmMetasCommand extends HostBaseCommand<
+export default class GetAllRealmMetasTool extends HostBaseTool<
   undefined,
-  typeof BaseCommandModule.GetAllRealmMetasResult
+  typeof BaseToolModule.GetAllRealmMetasResult
 > {
   @service declare private realm: Realm;
 
@@ -19,9 +19,9 @@ export default class GetAllRealmMetasCommand extends HostBaseCommand<
     return undefined;
   }
 
-  protected async run(): Promise<BaseCommandModule.GetAllRealmMetasResult> {
+  protected async run(): Promise<BaseToolModule.GetAllRealmMetasResult> {
     let realmMetas = this.realm.allRealmsInfo;
-    let commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadToolModule();
     const { GetAllRealmMetasResult, RealmInfoField, RealmMetaField } =
       commandModule;
 
@@ -36,3 +36,7 @@ export default class GetAllRealmMetasCommand extends HostBaseCommand<
     });
   }
 }
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetAllRealmMetasTool as GetAllRealmMetasCommand };

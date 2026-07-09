@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import OpenWorkspaceCommand from '@cardstack/host/tools/open-workspace';
+import OpenWorkspaceTool from '@cardstack/host/tools/open-workspace';
 
 import {
   setupIntegrationTestRealm,
@@ -37,15 +37,15 @@ module('Integration | commands | open-workspace', function (hooks) {
   });
 
   test('opens specified workspace in interact submode', async function (assert) {
-    let commandService = getService('command-service');
+    let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [],
       submode: 'interact',
       workspaceChooserOpened: true,
     });
-    let openWorkspaceCommand = new OpenWorkspaceCommand(
-      commandService.commandContext,
+    let openWorkspaceCommand = new OpenWorkspaceTool(
+      toolService.commandContext,
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await openWorkspaceCommand.execute({

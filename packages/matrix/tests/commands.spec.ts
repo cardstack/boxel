@@ -210,9 +210,11 @@ test.describe('Commands', () => {
       commandRequestId,
       content,
     );
-    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    let command = page.locator(
+      `[data-test-tool-call-id="${commandRequestId}"]`,
+    );
     await command.waitFor();
-    await command.locator('[data-test-command-apply]').click();
+    await command.locator('[data-test-tool-call-apply]').click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -264,9 +266,11 @@ test.describe('Commands', () => {
       commandRequestId,
       content,
     );
-    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    let command = page.locator(
+      `[data-test-tool-call-id="${commandRequestId}"]`,
+    );
     await command.waitFor();
-    await command.locator('[data-test-command-apply]').click();
+    await command.locator('[data-test-tool-call-apply]').click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -371,7 +375,7 @@ test.describe('Commands', () => {
     // local echo — synapse's /messages stream can still lag a beat behind.
     // Poll until the user message (and its data.context.agentId) is visible
     // via /messages; without this the bot putEvent below carries
-    // `agentId: undefined`, and command-service's auto-execute gate
+    // `agentId: undefined`, and tool-service's auto-execute gate
     // (`message.agentId !== matrixService.agentId`) skips the command.
     let roomEvents: any[] = [];
     let agentId: string | undefined;
@@ -415,7 +419,7 @@ test.describe('Commands', () => {
     );
 
     await expect(
-      page.locator('[data-test-message-idx="1"] [data-test-command-id]'),
+      page.locator('[data-test-message-idx="1"] [data-test-tool-call-id]'),
     ).not.toHaveClass(/is-failed/);
 
     // check we're in code mode
@@ -488,7 +492,7 @@ test.describe('Commands', () => {
     );
 
     await expect(
-      page.locator('[data-test-message-idx="3"] [data-test-command-id]'),
+      page.locator('[data-test-message-idx="3"] [data-test-tool-call-id]'),
     ).not.toHaveClass(/is-failed/);
 
     // check we're in interact mode
