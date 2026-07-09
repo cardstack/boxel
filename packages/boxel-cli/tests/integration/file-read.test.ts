@@ -22,8 +22,8 @@ const SOURCE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class FileReadCheck extends CardDef {
   static displayName = 'File Read Check';

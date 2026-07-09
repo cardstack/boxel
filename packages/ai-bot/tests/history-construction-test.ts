@@ -15,7 +15,7 @@ import { EventStatus, type IRoomEvent } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 
 module('constructHistory', (hooks) => {

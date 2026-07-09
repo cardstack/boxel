@@ -560,6 +560,7 @@ async function runGlintCheck(
           // resolvable `@cardstack/local-types` package in node_modules.
           types: ['qunit-dom'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],

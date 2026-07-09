@@ -48,7 +48,7 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title.ts';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { spendUsageCost } from '@cardstack/billing/ai-billing';

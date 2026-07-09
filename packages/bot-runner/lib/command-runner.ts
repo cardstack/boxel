@@ -9,7 +9,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
-import type { BotTriggerContent as BotTriggerEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { BotTriggerContent as BotTriggerEventContent } from '@cardstack/base/matrix-event';
 
 const log = logger('bot-runner');
 

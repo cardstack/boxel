@@ -29,8 +29,8 @@ const GADGET_MODULE_ABS = `${ROOT}widgets/gadget/gadget`;
 
 const REALM_FILES: Record<string, string> = {
   'widgets/gadget/gadget.gts': `
-import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 import { formatLabel } from '../shared/format-utils';
 import { WidgetPart } from './parts/widget-part';
 import type { GadgetTuning } from '../shared/tuning-types';
@@ -79,7 +79,7 @@ export interface GadgetTuning { level: number; }
   }),
   // --- everything below must NOT be ingested ---
   'standalone/clock.gts': `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class Clock extends CardDef {}
 `,
   'Clock/c1.json': JSON.stringify({

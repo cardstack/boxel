@@ -28,9 +28,9 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
   CardMessageContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import fsExtra from 'fs-extra';
 const { readFileSync } = fsExtra;
 import * as path from 'path';
