@@ -30,11 +30,11 @@ export class ToolField extends FieldDef {
   });
 
   @field codeRef = contains(AbsoluteCodeRefField, {
-    description: 'An absolute code reference to the command to be executed',
+    description: 'An absolute code reference to the tool to be executed',
   });
   @field requiresApproval = contains(BooleanField, {
     description:
-      'If true, this command will require human approval before it is executed in the host.',
+      'If true, this tool will require human approval before it is executed in the host.',
   });
 
   @field functionName = contains(StringField, {
