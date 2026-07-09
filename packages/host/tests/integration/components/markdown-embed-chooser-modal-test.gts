@@ -259,6 +259,67 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     await pending;
   });
 
+  test('edit-mode preload of a broken ref shows the broken preview + Remove/Replace, not the empty placeholder', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // A card URL that isn't in the realm — the preload can't resolve it.
+    let brokenUrl = `${testRealmURL}books/ghost`;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: brokenUrl,
+      sizeSpec: 'embedded',
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // The preview pane renders the broken-ref visual rather than the empty
+    // "search & preview" placeholder.
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      )
+      .exists('the broken preview shows for an unresolvable preload');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-empty]',
+      )
+      .doesNotExist('the empty placeholder is suppressed for a broken ref');
+
+    // The current-target tile still offers Remove / Replace as the fix/remove
+    // affordance, and labels the broken ref by its URL.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
+      )
+      .exists('the current-target tile renders for the broken preload');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+      )
+      .hasText(brokenUrl, 'the label falls back to the broken URL');
+    assert
+      .dom('[data-test-markdown-embed-chooser-remove]')
+      .exists('Remove is available');
+    assert
+      .dom('[data-test-markdown-embed-chooser-replace]')
+      .exists('Replace is available');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
   test('Remove resolves the deferred with { remove: true }', async function (assert) {
     await render(
       <template>

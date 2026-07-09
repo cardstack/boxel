@@ -8,11 +8,21 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { isCardErrorJSONAPI } from '@cardstack/runtime-common';
+import {
+  isCardErrorJSONAPI,
+  type CardErrorJSONAPI,
+} from '@cardstack/runtime-common';
 
-import { fileNameFromUrl } from '@cardstack/runtime-common/bfm-card-references';
+import {
+  cardTypeName,
+  fileNameFromUrl,
+} from '@cardstack/runtime-common/bfm-card-references';
 
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
@@ -68,6 +78,11 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
+  // Set when the picked/preloaded ref fails to resolve (deleted, moved, no
+  // permission). Distinguishes "resolution failed" from "still loading /
+  // nothing picked" so the pane can render the broken-ref visual instead of
+  // the empty placeholder.
+  @tracked private selectedError: CardErrorJSONAPI | undefined;
   @tracked private mode: 'choose' | 'current' = 'choose';
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -134,17 +149,60 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     async (url: string, refType: MarkdownEmbedRefType) => {
       this.selectedUrl = url;
       this.selectedTarget = undefined;
+      this.selectedError = undefined;
       let result =
         refType === 'card'
           ? await this.store.get(url)
           : await this.store.get<FileDef>(url, { type: 'file-meta' });
       if (isCardErrorJSONAPI(result)) {
-        this.selectedTarget = undefined;
+        // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
+        // renders the broken-ref visual from `selectedError` instead of the
+        // resolved embed.
+        this.selectedError = result;
         return;
       }
       this.selectedTarget = result as CardDef | FileDef;
     },
   );
+
+  // The pane mounts once a row is picked and either resolves (selectedTarget)
+  // or fails (selectedError); the empty placeholder shows only before then.
+  private get hasPreview(): boolean {
+    return !!this.selectedTarget || !!this.selectedError;
+  }
+
+  // Broken-ref state threaded to the pane. Each is undefined unless the load
+  // failed, so the pane renders the resolved embed on the happy path and the
+  // broken visual only when `selectedError` is set.
+  private get brokenUrl(): string | undefined {
+    return this.selectedError ? this.selectedUrl : undefined;
+  }
+
+  private get brokenState(): BrokenLinkState | undefined {
+    if (!this.selectedError) return undefined;
+    return this.selectedError.status === 404 ? 'not-found' : 'error';
+  }
+
+  private get brokenErrorDoc(): BrokenLinkErrorDoc | undefined {
+    let e = this.selectedError;
+    if (!e) return undefined;
+    return {
+      status: e.status,
+      title: e.title,
+      message: e.message,
+      stack: e.meta?.stack ?? undefined,
+      additionalErrors: e.additionalErrors ?? null,
+    };
+  }
+
+  // Card refs label by type name; file refs label by filename — matching the
+  // label the base `linksTo` broken visual derives for cards.
+  private get brokenTypeName(): string | undefined {
+    if (!this.selectedError || !this.selectedUrl) return undefined;
+    return this.args.refType === 'file'
+      ? fileNameFromUrl(this.selectedUrl)
+      : cardTypeName(this.selectedUrl);
+  }
 
   @action
   private handleInsert(bfm: string) {
@@ -226,13 +284,17 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        {{#if this.selectedTarget}}
+        {{#if this.hasPreview}}
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
             @refType={{@refType}}
             @selection={{@selection}}
             @onInsert={{this.handleInsert}}
             @ctaLabelOverride={{this.ctaLabelOverride}}
+            @brokenUrl={{this.brokenUrl}}
+            @brokenState={{this.brokenState}}
+            @brokenTypeName={{this.brokenTypeName}}
+            @errorDoc={{this.brokenErrorDoc}}
           />
         {{else}}
           <p

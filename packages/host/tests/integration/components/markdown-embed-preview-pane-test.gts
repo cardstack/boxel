@@ -554,4 +554,45 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
         );
     }
   });
+
+  test('a broken ref surfaces the broken preview; the CTA still serializes the broken URL', async function (assert) {
+    let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
+    let brokenUrl = `${testRealmURL}books/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @refType='card'
+              @selection={{selection}}
+              @onInsert={{harness.onInsert}}
+              @brokenUrl={{brokenUrl}}
+              @brokenTypeName='Book'
+              @errorDoc={{errorDoc}}
+              @brokenState='not-found'
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-broken-link-template]')
+      .exists('the broken-ref visual surfaces in the pane');
+    assert.dom('[data-test-broken-link-type]').hasText('Book');
+
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[${brokenUrl}]`,
+      'the CTA serializes the broken URL so DONE/ACCEPT keep the ref',
+    );
+  });
 });

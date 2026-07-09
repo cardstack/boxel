@@ -3,6 +3,11 @@ import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
+import { BrokenLinkTemplate } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -111,8 +116,18 @@ interface Signature {
     // Already-resolved instance to preview. Both card refs (`:card[...]`) and
     // file refs (`:file[...]`) render through the same CardRenderer, so the
     // caller resolves the URL and hands us the instance — this component loads
-    // nothing.
-    target: CardDef | FileDef;
+    // nothing. Absent when the ref failed to resolve; the broken-ref args
+    // below then drive the render.
+    target?: CardDef | FileDef;
+    // Broken-ref render: when `brokenUrl` is present (and `target` is not),
+    // render `BrokenLinkTemplate` instead of the embed. The same warning box +
+    // reveal overlay the base `linksTo` broken UI shows, format-aware so the
+    // format dropdown still drives its footprint. No `@viewCard` — the chooser
+    // offers no "Open anyway".
+    brokenUrl?: string;
+    errorDoc?: BrokenLinkErrorDoc;
+    brokenState?: BrokenLinkState;
+    brokenTypeName?: string;
     // Render format. `fitted` consults `@sizeSpec` for its width/height;
     // atom/embedded/isolated ignore it.
     format: EmbedFormat;
@@ -142,6 +157,17 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
 
   private get renderFormat(): Format {
     return this.args.format;
+  }
+
+  // The broken template requires a state + error doc; default them so the arg
+  // types stay optional at this boundary (the parent only sets them alongside
+  // `brokenUrl`, but the correlation isn't expressible in the type).
+  private get brokenState(): BrokenLinkState {
+    return this.args.brokenState ?? 'error';
+  }
+
+  private get brokenErrorDoc(): BrokenLinkErrorDoc {
+    return this.args.errorDoc ?? {};
   }
 
   // Fitted slots carry an inline width/height plus `overflow: hidden` so the
@@ -198,12 +224,22 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
             class='markdown-embed-preview-doc__word is-sm'
             aria-hidden='true'
           ></span>
-          <Embed
-            @target={{@target}}
-            @format={{this.renderFormat}}
-            @kind={{this.kind}}
-            @sizeStyle={{this.sizeStyle}}
-          />
+          {{#if @target}}
+            <Embed
+              @target={{@target}}
+              @format={{this.renderFormat}}
+              @kind={{this.kind}}
+              @sizeStyle={{this.sizeStyle}}
+            />
+          {{else if @brokenUrl}}
+            <BrokenLinkTemplate
+              @brokenUrl={{@brokenUrl}}
+              @typeName={{@brokenTypeName}}
+              @errorDoc={{this.brokenErrorDoc}}
+              @state={{this.brokenState}}
+              @format={{@format}}
+            />
+          {{/if}}
           <span
             class='markdown-embed-preview-doc__word is-lg'
             aria-hidden='true'
@@ -222,12 +258,21 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
           aria-hidden='true'
         ></span>
       </div>
-    {{else}}
+    {{else if @target}}
       <Embed
         @target={{@target}}
         @format={{this.renderFormat}}
         @kind={{this.kind}}
         @sizeStyle={{this.sizeStyle}}
+        ...attributes
+      />
+    {{else if @brokenUrl}}
+      <BrokenLinkTemplate
+        @brokenUrl={{@brokenUrl}}
+        @typeName={{@brokenTypeName}}
+        @errorDoc={{this.brokenErrorDoc}}
+        @state={{this.brokenState}}
+        @format={{@format}}
         ...attributes
       />
     {{/if}}

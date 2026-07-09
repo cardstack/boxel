@@ -8,6 +8,10 @@ import {
   BoxelSelect,
   Button,
 } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { serializeBfmRef } from '@cardstack/runtime-common/bfm-card-references';
@@ -26,12 +30,20 @@ export { type OptionValue };
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // Resolved instance being previewed. Its `id` is the BFM ref URL. Always a
-    // real target — the parent (tab-panel) only mounts the pane once a row is
-    // picked and its instance resolves, rendering its own placeholder until then.
-    target: CardDef | FileDef;
+    // Resolved instance being previewed. Its `id` is the BFM ref URL. Absent
+    // when the picked/preloaded ref failed to resolve — the broken-ref args
+    // below then drive the preview instead.
+    target?: CardDef | FileDef;
     // Which BFM keyword to emit: `:card[...]` vs `:file[...]`.
     refType: 'card' | 'file';
+    // Broken-ref state, set by the parent when the ref can't resolve. When
+    // `brokenUrl` is present (and `target` is not), the preview renders the
+    // broken-ref visual; the CTA still serializes `brokenUrl` so DONE/ACCEPT
+    // keep the ref.
+    brokenUrl?: string;
+    errorDoc?: BrokenLinkErrorDoc;
+    brokenState?: BrokenLinkState;
+    brokenTypeName?: string;
     // The shared format/placement/size selection. Owned by the modal and shared
     // across both tabs so the choice survives a tab switch; this pane is a pure
     // view over it plus the resolved target.
@@ -59,7 +71,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   private get bfmString(): string {
-    let url = this.args.target.id;
+    let url = this.args.target?.id ?? this.args.brokenUrl;
     if (!url) {
       return '';
     }
@@ -131,6 +143,10 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       <div class='markdown-embed-preview-pane__viewport'>
         <MarkdownEmbedPreview
           @target={{@target}}
+          @brokenUrl={{@brokenUrl}}
+          @brokenTypeName={{@brokenTypeName}}
+          @errorDoc={{@errorDoc}}
+          @brokenState={{@brokenState}}
           @format={{@selection.previewFormat}}
           @sizeSpec={{@selection.sizeSpec}}
           @kind={{@selection.kind}}

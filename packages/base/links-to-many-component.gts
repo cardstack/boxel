@@ -16,7 +16,6 @@ import {
   isFileDef,
   brokenLinkFormat,
 } from './card-api';
-import BrokenLinkTemplate from './default-templates/broken-link-template';
 import {
   getRelationshipMembershipState,
   type RelationshipState,
@@ -29,7 +28,12 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
-import { Button, IconButton, Pill } from '@cardstack/boxel-ui/components';
+import {
+  BrokenLinkTemplate,
+  Button,
+  IconButton,
+  Pill,
+} from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
 import {
   chooseCard,
@@ -46,6 +50,7 @@ import {
   uuidv4,
   CardCrudFunctionsContextName,
   CardErrorJSONAPI,
+  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -303,6 +308,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                     @errorDoc={{entry.broken.errorDoc}}
                     @state={{entry.broken.kind}}
                     @format='fitted'
+                    @typeName={{cardTypeName entry.broken.reference}}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{entry.index}}
                   />
@@ -458,6 +464,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
                     @errorDoc={{broken.errorDoc}}
                     @state={{broken.kind}}
                     @format='atom'
+                    @typeName={{cardTypeName broken.reference}}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{i}}
                   />
@@ -715,6 +722,7 @@ export function getLinksToManyComponent({
                               effectiveFormat
                               effectiveFormat
                             }}
+                            @typeName={{cardTypeName broken.reference}}
                             @viewCard={{crud.viewCard}}
                             data-test-plural-view-item={{i}}
                           />

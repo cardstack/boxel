@@ -1,37 +1,64 @@
-import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
+import type { TOC } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { htmlSafe } from '@ember/template';
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import LinkOffIcon from '@cardstack/boxel-icons/link-off';
-import { Button, CopyButton } from '@cardstack/boxel-ui/components';
-import { cardTypeName } from '@cardstack/runtime-common';
-import type { SerializedError } from '@cardstack/runtime-common';
-import type { ViewCardFn } from '../card-api';
+
+import Button from '../button/index.gts';
+import CopyButton from '../copy-button/index.gts';
 
 type TipCorner = 'tl' | 'tr' | 'bl' | 'br';
 
 export type BrokenLinkState = 'error' | 'not-found';
 export type BrokenLinkFormat = 'isolated' | 'fitted' | 'embedded' | 'atom';
 
+// The failure payload the overlay reads. Kept local so boxel-ui carries no
+// dependency on runtime-common (which would invert the existing
+// runtime-common → boxel-ui edge into a cycle). It lists only the fields the
+// template renders; runtime-common's `SerializedError` is a structural
+// superset, so base callers can pass one unchanged.
+export interface BrokenLinkErrorDoc {
+  additionalErrors?: Array<{
+    message?: string;
+    stack?: string;
+    status?: number;
+    title?: string;
+  }> | null;
+  message?: string;
+  stack?: string;
+  status?: number;
+  title?: string;
+}
+
+// Navigates to the broken reference for "Open anyway". Local so boxel-ui needn't
+// import base's `ViewCardFn`; base's wider `crud.viewCard` (its first param
+// accepts `URL`) stays assignable to this.
+export type BrokenLinkViewFn = (url: URL) => void;
+
 export interface BrokenLinkTemplateArgs {
   brokenUrl: string;
-  errorDoc: SerializedError;
-  state: BrokenLinkState;
+  errorDoc: BrokenLinkErrorDoc;
   format: BrokenLinkFormat;
+  state: BrokenLinkState;
+  // Human-readable label shown next to the link-off icon. Card sites pass the
+  // card type name; the BFM file chooser passes the filename. Falls back to
+  // 'Card' when omitted.
+  typeName?: string;
   // Threaded from the field component's CardCrudFunctions. When present, the
   // overlay offers an "Open anyway" affordance that navigates to the broken
   // reference (a stack visit in interact mode, a code-editor jump in code
   // mode — whatever the host's viewCard does for the current submode).
-  viewCard?: ViewCardFn;
+  viewCard?: BrokenLinkViewFn;
 }
 
 interface NormalizedAdditionalError {
   message: string;
+  stack?: string;
   status?: number;
   title?: string;
-  stack?: string;
 }
 
 // Only http(s) references are navigable. The brokenUrl is a card reference
@@ -54,58 +81,56 @@ function parseHttpUrl(url: string): URL | null {
 // single-colour boxel icon can't express. Shared by the reveal trigger and the
 // overlay title; `@size` sets both svg dimensions so each caller can match its
 // context.
-class WarningIcon extends GlimmerComponent<{
-  Element: SVGElement;
+const WarningIcon: TOC<{
   Args: { size: string };
-}> {
-  <template>
-    <svg
-      class='warn-icon'
-      viewBox='0 0 24 24'
-      width={{@size}}
-      height={{@size}}
-      aria-hidden='true'
-      ...attributes
-    >
-      <path
-        class='warn-icon-tri'
-        d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
-      />
-      <path class='warn-icon-mark' d='M12 9.2v4.3' />
-      <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
-    </svg>
-    <style scoped>
-      .warn-icon {
-        display: block;
-      }
-      .warn-icon-tri {
-        fill: var(--boxel-warning-200, #ffba00);
-        stroke: var(--boxel-warning-200, #ffba00);
-        stroke-width: 1.5;
-        stroke-linejoin: round;
-      }
-      .warn-icon-mark {
-        fill: none;
-        stroke: #1a1a1a;
-        stroke-width: 2.2;
-        stroke-linecap: round;
-      }
-      .warn-icon-dot {
-        fill: #1a1a1a;
-      }
-    </style>
-  </template>
-}
+  Element: SVGElement;
+}> = <template>
+  <svg
+    class='warn-icon'
+    viewBox='0 0 24 24'
+    width={{@size}}
+    height={{@size}}
+    aria-hidden='true'
+    ...attributes
+  >
+    <path
+      class='warn-icon-tri'
+      d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
+    />
+    <path class='warn-icon-mark' d='M12 9.2v4.3' />
+    <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
+  </svg>
+  <style scoped>
+    .warn-icon {
+      display: block;
+    }
+    .warn-icon-tri {
+      fill: var(--boxel-warning-200, #ffba00);
+      stroke: var(--boxel-warning-200, #ffba00);
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+    .warn-icon-mark {
+      fill: none;
+      stroke: #1a1a1a;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+    }
+    .warn-icon-dot {
+      fill: #1a1a1a;
+    }
+  </style>
+</template>;
 
 export default class BrokenLinkTemplate extends GlimmerComponent<{
-  Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
+  Element: HTMLDivElement;
 }> {
   // The placeholder box is identical for every failure — what went wrong only
   // surfaces inside the reveal overlay. `typeName` is the human-readable label
-  // shown next to the link-off icon, derived from the reference URL.
+  // shown next to the link-off icon, supplied by the caller.
   private get typeName(): string {
-    return cardTypeName(this.args.brokenUrl);
+    return this.args.typeName ?? 'Card';
   }
 
   private get isNotFound() {
@@ -245,6 +270,11 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     }
     let root = input.closest('.broken-link-template') as HTMLElement | null;
     if (root) {
+      // The overlay is revealed by pure CSS (`:checked ~ .overlay`), not an
+      // Ember render, so `afterRender` can't observe it. We genuinely need a
+      // post-paint callback to measure the laid-out overlay before picking the
+      // tip corner — the sanctioned use for rAF per the rule's own escape hatch.
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
       requestAnimationFrame(() => this.updateTipCorner(root));
     }
   };

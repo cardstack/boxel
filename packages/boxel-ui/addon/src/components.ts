@@ -3,6 +3,13 @@ import AddButton from './components/add-button/index.gts';
 import Alert from './components/alert/index.gts';
 import Avatar from './components/avatar/index.gts';
 import BasicFitted from './components/basic-fitted/index.gts';
+import BrokenLink, {
+  type BrokenLinkErrorDoc,
+  type BrokenLinkFormat,
+  type BrokenLinkState,
+  type BrokenLinkTemplateArgs,
+  type BrokenLinkViewFn,
+} from './components/broken-link/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
@@ -95,6 +102,11 @@ import ViewSelector, {
 } from './components/view-selector/index.gts';
 
 export {
+  type BrokenLinkErrorDoc,
+  type BrokenLinkFormat,
+  type BrokenLinkState,
+  type BrokenLinkTemplateArgs,
+  type BrokenLinkViewFn,
   type Filter,
   type FittedCardLayout,
   type FittedCardTitleTag,
@@ -126,6 +138,7 @@ export {
   BoxelMultiSelectBasic,
   BoxelSelect,
   BoxelTag,
+  BrokenLink as BrokenLinkTemplate,
   Button,
   CardContainer,
   CardHeader,
