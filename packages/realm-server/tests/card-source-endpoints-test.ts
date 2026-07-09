@@ -29,6 +29,7 @@ import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   expectIncrementalIndexEvent,
+  maxPrerenderHtmlJobId,
   settlePrerenderHtmlJobs,
 } from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -194,25 +195,38 @@ module(basename(import.meta.filename), function () {
           let cacheTestPath = 'cache-test-nocache.gts';
           let initialContent = '// initial cache test content';
 
-          await testRealm.write(cacheTestPath, initialContent);
           // Each write's index pass fires a fire-and-forget `prerender_html`
           // job whose worker re-reads this module with the card+source Accept
           // header — a read that repopulates #sourceCache. write() returns
           // without awaiting that job, so its seed can land at any later
           // moment, including between the noCache request below (which drops
           // the entry) and the follow-up read that asserts a miss, turning the
-          // expected miss into a spurious hit. Drain the prerender-html channel
-          // after every write so no such job is in flight during the
-          // assertions.
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+          // expected miss into a spurious hit. Settle the prerender-html
+          // channel after every write, keyed off a pre-write baseline so the
+          // fire-and-forget enqueue can't be missed, leaving no such job in
+          // flight during the assertions.
+          let beforeInitial = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
+          await testRealm.write(cacheTestPath, initialContent);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeInitial,
+          });
 
           await request
             .get(`/${cacheTestPath}`)
             .set('Accept', 'application/vnd.card+source');
 
           let updatedContent = `${initialContent}\n// updated by test`;
+          let beforeUpdate = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
           await testRealm.write(cacheTestPath, updatedContent);
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeUpdate,
+          });
 
           let noCacheResponse = await request
             .get(`/${cacheTestPath}?noCache=true`)
@@ -259,16 +273,24 @@ module(basename(import.meta.filename), function () {
         // reset.
         test('clearLocalSourceCaches drops cached source bytes', async function (assert) {
           let cacheTestPath = 'clear-local-caches.gts';
+          // Settle the fire-and-forget prerender_html job the write spawns
+          // before we clear the cache: that job re-reads the module with the
+          // card+source Accept header and reseeds #sourceCache, so if it lands
+          // after clearLocalSourceCaches() the afterClear fetch would be a
+          // spurious hit rather than the miss this test asserts. The baseline
+          // keys the settle to the job this write spawns so the fire-and-forget
+          // enqueue can't be missed.
+          let beforeWrite = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
           await testRealm.write(
             cacheTestPath,
             '// clear-local-caches initial content',
           );
-          // Settle the fire-and-forget prerender_html job the write spawned
-          // before we clear the cache: that job re-reads the module with the
-          // card+source Accept header and reseeds #sourceCache, so if it lands
-          // after clearLocalSourceCaches() the afterClear fetch would be a
-          // spurious hit rather than the miss this test asserts.
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeWrite,
+          });
 
           await request
             .get(`/${cacheTestPath}`)
