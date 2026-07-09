@@ -11,6 +11,7 @@ import {
   type CheckpointChange,
 } from '../../lib/checkpoint-manager.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   getProfileManager,
@@ -569,6 +570,20 @@ export async function ingestCard(
   // card path rather than the realm) and realm auto-detection below.
   cardUrl = cardUrl.replace(/\/$/, '');
   let pm = options.profileManager ?? getProfileManager();
+  let resolvedCard = resolveRealmIdentifier(cardUrl, { profileManager: pm });
+  if (!resolvedCard.ok) {
+    return { files: [], error: resolvedCard.error };
+  }
+  cardUrl = resolvedCard.url;
+  if (options.realm) {
+    let resolvedRealm = resolveRealmIdentifier(options.realm, {
+      profileManager: pm,
+    });
+    if (!resolvedRealm.ok) {
+      return { files: [], error: resolvedRealm.error };
+    }
+    options = { ...options, realm: resolvedRealm.url };
+  }
   let resolution = resolveRealmAuthenticator({
     realmUrl: options.realm ?? cardUrl,
     realmSecretSeed: options.realmSecretSeed,

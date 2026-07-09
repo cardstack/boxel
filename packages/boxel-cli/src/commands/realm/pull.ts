@@ -7,6 +7,7 @@ import {
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -232,6 +233,13 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
+  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    return { files: [], error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
   const resolution = resolveRealmAuthenticator({
     realmUrl,
     realmSecretSeed: options.realmSecretSeed,

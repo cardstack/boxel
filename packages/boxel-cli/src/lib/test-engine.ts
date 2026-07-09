@@ -10,6 +10,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from './profile-manager.ts';
+import { resolveRealmIdentifier } from './resolve-realm-identifier.ts';
 import { findBoxelCliRoot } from './find-package-root.ts';
 import { listFiles } from '../commands/file/list.ts';
 import { readdirSync } from 'node:fs';
@@ -194,6 +195,12 @@ export async function runTestsForRealm(
   if (!active) {
     return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return emptyErrorResult(resolvedRealm.error);
+  }
+  realmUrl = resolvedRealm.url;
 
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
   let hostAppUrl = ensureTrailingSlash(

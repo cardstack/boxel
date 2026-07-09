@@ -6,6 +6,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 
 export interface ReadTranspiledResult {
   ok: boolean;
@@ -47,6 +48,12 @@ export async function readTranspiledModule(
       'No active profile. Run `boxel profile add` to create one.',
     );
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
 

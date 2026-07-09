@@ -8,6 +8,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 
 export interface IndexingErrorsCommandOptions {
   profileManager?: ProfileManager;
@@ -111,6 +112,12 @@ export async function indexingErrors(
   if (!active) {
     return { ok: false, error: NO_ACTIVE_PROFILE_ERROR };
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let endpoint = `${ensureTrailingSlash(realmUrl)}_indexing-errors`;
 
