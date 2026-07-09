@@ -314,6 +314,12 @@ export class Loader {
     });
   }
 
+  // Returns the transitive consumed modules of `moduleIdentifier` in
+  // canonical identifier form: the registered realm-prefix (RRI) spelling
+  // (e.g. `@cardstack/base/card-api`) when the virtual network has a matching
+  // prefix mapping, otherwise the module URL. Accepts either spelling as
+  // input. Callers that need a fetchable URL resolve via the virtual network
+  // at the network boundary.
   async getConsumedModules(moduleIdentifier: string): Promise<string[]> {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
@@ -355,7 +361,10 @@ export class Loader {
     await walk(moduleIdentifier, initialHref);
     // you can't consume yourself
     visited.delete(initialHref);
-    return [...visited];
+    return this.canonicalizeIdentifiers(
+      visited,
+      this.canonicalIdentifier(initialHref),
+    );
   }
 
   static identify(
@@ -440,15 +449,65 @@ export class Loader {
     }
   }
 
+  // Synchronous sibling of `getConsumedModules` limited to modules already
+  // known to this loader. Output is in the same canonical identifier form:
+  // realm-prefix (RRI) spelling where a prefix mapping is registered,
+  // module URL otherwise.
   getKnownConsumedModules(moduleIdentifier: string): string[] {
     let resolvedModuleIdentifier = this.resolveImport(moduleIdentifier);
     let knownDependencies = this.collectKnownModuleDependencies(
       resolvedModuleIdentifier,
     );
-    // Filter rather than delete to avoid mutating the cached Set
-    return [...knownDependencies].filter(
-      (dep) => dep !== resolvedModuleIdentifier,
+    // Copy rather than delete from the cached Set to avoid mutating it
+    return this.canonicalizeIdentifiers(
+      knownDependencies,
+      this.canonicalIdentifier(resolvedModuleIdentifier),
     );
+  }
+
+  // Canonical form for module identifiers that flow out of the loader
+  // (dependency lists, identities): the registered realm-prefix (RRI)
+  // spelling when the virtual network has a matching mapping, otherwise the
+  // identifier unchanged. Resolving back to a fetchable URL is the virtual
+  // network's job at the network boundary.
+  private canonicalIdentifier(moduleIdentifier: string): string {
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(moduleIdentifier)
+      : moduleIdentifier;
+  }
+
+  // Map a set of module identifiers to canonical form, deduped (distinct
+  // spellings of one module — a real URL and its virtual alias — collapse to
+  // one canonical identifier) and with the module itself excluded: a module
+  // doesn't consume itself, and the canonical comparison catches self
+  // references under any spelling.
+  private canonicalizeIdentifiers(
+    identifiers: Iterable<string>,
+    selfCanonical: string,
+  ): string[] {
+    let seen = new Set<string>();
+    let result: string[] = [];
+    for (let identifier of identifiers) {
+      let canonical = this.canonicalIdentifier(identifier);
+      if (canonical === selfCanonical || seen.has(canonical)) {
+        continue;
+      }
+      seen.add(canonical);
+      result.push(canonical);
+    }
+    return result;
+  }
+
+  // The runtime dependency tracker keys module nodes by http(s) URL — its
+  // canonicalURL guard drops realm-prefix identifiers (see
+  // dependency-tracker.ts) — and this loader collapses each tracked module
+  // onto its virtual-alias URL when one is registered (see
+  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
+  // form included, into that tracking-key form. Callers recording
+  // loader-derived module identifiers with the tracker must cross this
+  // boundary; identifiers stay in canonical RRI form everywhere else.
+  dependencyTrackingKey(moduleIdentifier: string): string {
+    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
   }
 
   private trackKnownModuleDependencies(
@@ -789,6 +848,15 @@ export class Loader {
   // and RRI forms evaluate as two distinct modules and `instanceof` /
   // polymorphic-field identity checks across them diverge. Mirrors the
   // real→virtual convention used by `canonicalizeTrackingKey`.
+  //
+  // The key deliberately does NOT use the realm-prefix (RRI) form even
+  // though that's the canonical form for identifiers flowing out of the
+  // loader: realm-prefix mappings can be registered and removed while a
+  // loader is live (tests scope temporary prefixes via
+  // `addRealmMapping`/`removeRealmMapping`), and a mapping-sensitive key
+  // would orphan already-cached entries whenever a mapping changes —
+  // re-evaluating the same module under a new key and splitting class
+  // identities across the old and new copies.
   private moduleCacheKey(moduleIdentifier: string): string {
     let trimmed = trimModuleIdentifier(moduleIdentifier);
     if (this.virtualNetwork) {
@@ -848,10 +916,11 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let trimmed = trimModuleIdentifier(moduleIdentifier);
-    let moduleId = this.virtualNetwork
-      ? this.virtualNetwork.unresolveURL(trimmed)
-      : trimmed;
+    // Identities are recorded in canonical identifier form so that
+    // `identify()` output matches the form persisted in code refs.
+    let moduleId = this.canonicalIdentifier(
+      trimModuleIdentifier(moduleIdentifier),
+    );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
