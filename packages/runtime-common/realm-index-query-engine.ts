@@ -1046,6 +1046,11 @@ export class RealmIndexQueryEngine {
     let fieldPath = fieldName.includes('.')
       ? fieldName.slice(0, fieldName.lastIndexOf('.'))
       : '';
+    // Resolved in RRI space (no VirtualNetwork): the target code ref keeps its
+    // canonical spelling (prefix form for mapped realms), which the index
+    // matches via its equivalent-spelling tolerance, and the resulting
+    // `links.search` seed URL reconciles with the client's RRI-space rebuild
+    // of the same query.
     let normalized = normalizeQueryDefinition({
       fieldDefinition,
       queryDefinition,
@@ -1054,10 +1059,6 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id
-        ? this.#realm.virtualNetwork.toURL(resource.id)
-        : realmURL,
-      virtualNetwork: this.#realm.virtualNetwork,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
