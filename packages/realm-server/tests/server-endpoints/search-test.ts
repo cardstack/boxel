@@ -29,6 +29,7 @@ import {
   runTestRealmServerWithRealms,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
@@ -148,6 +149,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           publisher,
           runner,
         });
+        // The entries' html relationships read prerendered_html, which the
+        // fire-and-forget prerender_html jobs populate after the index
+        // passes complete — settle both realms' HTML channels first.
+        await settlePrerenderHtmlJobs(dbAdapter, testRealm.url);
+        await settlePrerenderHtmlJobs(dbAdapter, secondaryRealm.url);
       },
       afterEach: async () => {
         await stopSearchRealmServer();

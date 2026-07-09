@@ -2,11 +2,12 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 
 // CS-10789 end-to-end tests for the markdown rendering pipeline (CS-10782
 // through CS-10787) as served via the realm HTTP endpoint added in CS-10798.
@@ -285,19 +286,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
+  let testDbAdapter: DBAdapter;
 
   function onRealmSetup({
     testRealm: realm,
     testRealmHttpServer: server,
     request: req,
+    dbAdapter,
   }: {
     testRealm: Realm;
     testRealmHttpServer: Server;
     request: SuperTest<Test>;
+    dbAdapter: DBAdapter;
   }) {
     testRealm = realm;
     testRealmHttpServer = server;
     request = req;
+    testDbAdapter = dbAdapter;
   }
 
   hooks.afterEach(async function () {
@@ -697,6 +702,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     // its dependents. We await fullIndex to make assertions deterministic.
     await testRealm.write('cache.gts', CACHE_CARD_UPDATED_GTS);
     await testRealm.realmIndexUpdater.fullIndex();
+    // The served markdown comes from the prerendered_html channel, which a
+    // fire-and-forget prerender_html job populates after the index pass.
+    await settlePrerenderHtmlJobs(testDbAdapter, testRealm.url);
 
     let second = await request
       .get('/cache')

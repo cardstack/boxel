@@ -25,6 +25,7 @@ import {
   type JobInfo,
   type Prerenderer,
   type LocalPath,
+  type PrerenderedHtmlChange,
   type Reader,
   type Stats,
   type Diagnostics,
@@ -108,6 +109,17 @@ export class IndexRunner {
     status: 'start' | 'finish',
   ) => void;
   #onProgress?: (event: IndexingProgressEvent) => void;
+  // Fired the moment this pass's invalidation set is fixed — after
+  // `invalidate()` (incremental) / `discoverInvalidations` (from-scratch)
+  // and before the visit loop — and only when the batch runs in split mode
+  // (`splitPrerenderHtml`). The task wires this to publish the
+  // `prerender_html` job, so a free worker can start rendering HTML
+  // concurrently with the still-running index pass.
+  #onInvalidationsReady?: (args: {
+    changes: PrerenderedHtmlChange[];
+    generation: number;
+    loaderEpoch: string;
+  }) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -135,6 +147,7 @@ export class IndexRunner {
     jobPriority,
     reportStatus,
     onProgress,
+    onInvalidationsReady,
     prerenderer,
     auth,
     fetch,
@@ -161,6 +174,11 @@ export class IndexRunner {
       status: 'start' | 'finish',
     ): void;
     onProgress?(event: IndexingProgressEvent): void;
+    onInvalidationsReady?(args: {
+      changes: PrerenderedHtmlChange[];
+      generation: number;
+      loaderEpoch: string;
+    }): void;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
@@ -173,6 +191,7 @@ export class IndexRunner {
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
+    this.#onInvalidationsReady = onInvalidationsReady;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
@@ -240,8 +259,16 @@ export class IndexRunner {
       mtimes,
     );
     invalidations = discoverResult.urls.map((href) => new URL(href));
+    // The from-scratch URL list lives outside the batch's invalidation set
+    // until each visit writes its row; feed the loader-epoch scan up front
+    // so the epoch is fixed before the enqueue and the first visit.
+    current.batch.noteInvalidatedURLs(discoverResult.urls);
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
+    );
+    current.#notifyInvalidationsReady(
+      discoverResult.urls,
+      new Set(discoverResult.deletedUrls),
     );
 
     let visitStart = Date.now();
@@ -368,6 +395,7 @@ export class IndexRunner {
       invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
+      generation: current.batch.currentGeneration,
     };
   }
 
@@ -414,6 +442,14 @@ export class IndexRunner {
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
     await current.batch.invalidate(urls);
+    current.#notifyInvalidationsReady(
+      current.batch.invalidations,
+      new Set(
+        [...operations]
+          .filter(([, operation]) => operation === 'delete')
+          .map(([href]) => href),
+      ),
+    );
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
       current.realmURL,
@@ -515,7 +551,29 @@ export class IndexRunner {
       invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
+      generation: current.batch.currentGeneration,
     };
+  }
+
+  // Announce this pass's now-fixed invalidation set, tagged per URL:
+  // genuine deletions (the URLs in `deletes`) as 'delete', everything else —
+  // fan-out dependents are always re-renders — as 'update'. Only fires in
+  // split mode; the fused path renders HTML inline and enqueues nothing.
+  #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
+    if (!this.#onInvalidationsReady || urls.length === 0) {
+      return;
+    }
+    if (!this.batch.splitPrerenderHtml) {
+      return;
+    }
+    this.#onInvalidationsReady({
+      changes: urls.map((url) => ({
+        url,
+        operation: deletes.has(url) ? 'delete' : 'update',
+      })),
+      generation: this.batch.currentGeneration,
+      loaderEpoch: this.batch.loaderEpoch,
+    });
   }
 
   private async tryToVisit(url: URL) {

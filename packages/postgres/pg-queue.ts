@@ -34,6 +34,7 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/in
 // coalesce handlers registered before publish() is called.
 import '@cardstack/runtime-common/tasks/copy';
 import '@cardstack/runtime-common/tasks/full-reindex';
+import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PgAdapter } from './pg-adapter.ts';
 import * as Sentry from '@sentry/node';
 
@@ -575,6 +576,11 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   private async processJobs(workLoop: WorkLoop) {
+    if (this.#handlers.size === 0) {
+      // nothing this runner could execute — and the claim query's
+      // job-type filter would be malformed with an empty IN list
+      return;
+    }
     await this.#pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
@@ -594,7 +600,16 @@ export class PgQueueRunner implements QueueRunner {
               pending_jobs AS (
                 SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
             param(this.#priority),
-            `),
+            // Only claim job types this runner has a handler for: a worker
+            // that claims a type it can't run would finalize the job as
+            // rejected, permanently discarding work a differently-configured
+            // worker (e.g. a newer version mid rolling-deploy) could have
+            // completed.
+            `AND job_type IN (`,
+            ...[...this.#handlers.keys()].flatMap((jobType, i) =>
+              i === 0 ? [param(jobType)] : [',', param(jobType)],
+            ),
+            `)),
               valid_reservations AS (
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
               ),

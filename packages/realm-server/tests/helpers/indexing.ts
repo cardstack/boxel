@@ -150,32 +150,170 @@ export async function expectIncrementalIndexEvent(
 
   let actualContent = { ...incrementalEventContent };
   delete actualContent.clientRequestId;
+  // The committed realm generation varies with the fixture's indexing
+  // history; assert its shape and compare the rest exactly.
+  if (actualContent.generation !== undefined) {
+    let hasPositiveGeneration =
+      typeof actualContent.generation === 'number' &&
+      actualContent.generation > 0;
+    assert.true(
+      hasPositiveGeneration,
+      `incremental event carries a positive generation: ${actualContent.generation}`,
+    );
+    delete actualContent.generation;
+  }
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
 }
 
+export interface PrerenderedHtmlRow {
+  url: string;
+  type: 'instance' | 'file';
+  isolated_html: string | null;
+  head_html: string | null;
+  atom_html: string | null;
+  embedded_html: Record<string, string> | null;
+  fitted_html: Record<string, string> | null;
+  markdown: string | null;
+  deps: string[] | null;
+  generation: number;
+  is_deleted: boolean | null;
+  error_doc: unknown | null;
+}
+
+// Fetch a production `prerendered_html` row for assertions. Returns
+// undefined when the URL has no row of that type (e.g. HTML that has not
+// been rendered).
+export async function prerenderedHtmlRowFor(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<PrerenderedHtmlRow | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT * FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+  ] as Expression)) as unknown as PrerenderedHtmlRow[];
+  return rows[0];
+}
+
+// HTML lands on its own channel: the index pass fires a `prerender_html`
+// job (fire-and-forget) and completes without waiting for it, so a test
+// that writes and then asserts prerendered HTML must settle that channel
+// first. Waits until the realm's `prerender-html:<realm>` concurrency
+// group has no unfulfilled jobs and no active reservations, and fails
+// loudly if any of its jobs rejected — a broken render should fail the
+// test, not silently satisfy the wait.
+export async function settlePrerenderHtmlJobs(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+  opts?: { timeout?: number },
+): Promise<void> {
+  let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
+  let lastState = '';
+  await waitUntil(
+    async () => {
+      let rows = (await query(dbAdapter, [
+        `SELECT j.id, j.status,
+           (SELECT COUNT(*)::int FROM job_reservations r
+             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations
+         FROM jobs j WHERE`,
+        ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+      ] as Expression)) as {
+        id: number;
+        status: string;
+        active_reservations: number;
+      }[];
+      let rejected = rows.filter((row) => row.status === 'rejected');
+      if (rejected.length > 0) {
+        throw new Error(
+          `prerender_html job(s) rejected for ${concurrencyGroup}: ${rejected
+            .map((row) => row.id)
+            .join(', ')}`,
+        );
+      }
+      lastState = JSON.stringify(rows);
+      return rows.every(
+        (row) => row.status === 'resolved' && row.active_reservations === 0,
+      );
+    },
+    {
+      timeout: opts?.timeout ?? 30000,
+      interval: 50,
+      timeoutMessage: () =>
+        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; last state: ${lastState}`,
+    },
+  );
+}
+
+// The generation the realm's index channel is at — the value a fresh
+// `prerendered_html` row's `generation` should equal.
+export async function currentRealmGeneration(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+): Promise<number | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT current_generation FROM realm_generations WHERE`,
+    ...every([
+      [
+        'realm_url =',
+        param(typeof realmURL === 'string' ? realmURL : realmURL.href),
+      ],
+    ]),
+  ] as Expression)) as { current_generation: number }[];
+  return rows[0]?.current_generation;
+}
+
+// The effective dependency graph for a row spans both channels — the index
+// visit's edges on `boxel_index.deps` plus the edges only the format renders
+// discover on `prerendered_html.deps` — matching what the invalidation
+// fan-out consults. Settles the row's realm's prerender channel first (the
+// render edges land when its fire-and-forget job completes), then returns
+// the union.
 export async function depsForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,
   type: 'instance' | 'file' = 'instance',
 ): Promise<string[]> {
-  let rows = (await query(dbAdapter, [
-    `SELECT deps FROM boxel_index WHERE`,
+  let parseDeps = (rawDeps: string[] | string | null | undefined): string[] => {
+    if (Array.isArray(rawDeps)) {
+      return rawDeps;
+    }
+    if (typeof rawDeps === 'string') {
+      return JSON.parse(rawDeps) as string[];
+    }
+    return [];
+  };
+  let indexRows = (await query(dbAdapter, [
+    `SELECT deps, realm_url FROM boxel_index WHERE`,
     ...every([
       ['url =', param(url)],
       ['type =', param(type)],
     ]),
     `ORDER BY generation DESC LIMIT 1`,
+  ] as Expression)) as {
+    deps: string[] | string | null;
+    realm_url: string;
+  }[];
+  if (indexRows[0]?.realm_url) {
+    await settlePrerenderHtmlJobs(dbAdapter, indexRows[0].realm_url);
+  }
+  let htmlRows = (await query(dbAdapter, [
+    `SELECT deps FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
   ] as Expression)) as { deps: string[] | string | null }[];
-  let rawDeps = rows[0]?.deps ?? [];
-  if (Array.isArray(rawDeps)) {
-    return rawDeps;
-  }
-  if (typeof rawDeps === 'string') {
-    return JSON.parse(rawDeps) as string[];
-  }
-  return [];
+  return [
+    ...new Set([
+      ...parseDeps(indexRows[0]?.deps),
+      ...parseDeps(htmlRows[0]?.deps),
+    ]),
+  ];
 }
 
 export async function indexedAtForIndexEntry(
@@ -210,13 +348,29 @@ export async function typeForIndexEntry(
   return rows[0]?.type ?? null;
 }
 
+// Effective error state spans both channels: index-pass failures live on
+// `boxel_index.error_doc`, render failures on `prerendered_html.error_doc`
+// (the latter counting only at-or-above the index row's generation, matching
+// the read path). Settles the realm's prerender channel first so the render
+// verdict is final.
 export async function errorDocForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,
   type: 'instance' | 'file' = 'instance',
 ): Promise<{ hasError: boolean; errorDoc: unknown | null } | null> {
+  let parseDoc = (raw: unknown): unknown => {
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch (_err) {
+        // Keep the original string when DB driver already returns serialized JSON.
+        return raw;
+      }
+    }
+    return raw;
+  };
   let rows = (await query(dbAdapter, [
-    `SELECT has_error, error_doc FROM boxel_index WHERE`,
+    `SELECT has_error, error_doc, generation, realm_url FROM boxel_index WHERE`,
     ...every([
       ['url =', param(url)],
       ['type =', param(type)],
@@ -225,21 +379,41 @@ export async function errorDocForIndexEntry(
   ] as Expression)) as {
     has_error: boolean | null;
     error_doc: unknown | string | null;
+    generation: number;
+    realm_url: string;
   }[];
   let row = rows[0];
   if (!row) {
     return null;
   }
-  let errorDoc = row.error_doc;
-  if (typeof errorDoc === 'string') {
-    try {
-      errorDoc = JSON.parse(errorDoc);
-    } catch (_err) {
-      // Keep the original string when DB driver already returns serialized JSON.
-    }
+  if (row.realm_url) {
+    await settlePrerenderHtmlJobs(dbAdapter, row.realm_url);
+  }
+  if (row.has_error) {
+    return {
+      hasError: true,
+      errorDoc: parseDoc(row.error_doc) ?? null,
+    };
+  }
+  let htmlRows = (await query(dbAdapter, [
+    `SELECT error_doc, generation FROM prerendered_html WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+  ] as Expression)) as {
+    error_doc: unknown | string | null;
+    generation: number;
+  }[];
+  let htmlRow = htmlRows[0];
+  if (htmlRow?.error_doc != null && htmlRow.generation >= row.generation) {
+    return {
+      hasError: true,
+      errorDoc: parseDoc(htmlRow.error_doc) ?? null,
+    };
   }
   return {
-    hasError: Boolean(row.has_error),
-    errorDoc: errorDoc ?? null,
+    hasError: false,
+    errorDoc: parseDoc(row.error_doc) ?? null,
   };
 }

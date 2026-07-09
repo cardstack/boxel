@@ -211,9 +211,14 @@ export async function visitFileForIndexing({
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };
 
-  // The index visit runs first and carries the one-shot clearCache.
+  // The index visit runs first and carries the one-shot clearCache. Every
+  // visit also threads the pass's loader epoch, so each prerender tab this
+  // pass touches resets its loader exactly once when the realm's module
+  // surface changed — the one-shot boolean can only sanitize the single tab
+  // its visit lands on.
   let indexRenderOptions: RenderRouteOptions = {
     fileDefCodeRef,
+    loaderEpoch: batch.loaderEpoch,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
@@ -241,15 +246,25 @@ export async function visitFileForIndexing({
   // drive the FileDef fitted/embedded renders, and the card meta's types
   // drive the card's ancestor renders. Skipped when the index visit left
   // the page unusable (mirroring the short-circuit inside a single visit)
-  // or when there is nothing for it to render.
+  // or when there is nothing for it to render. In split mode
+  // (`batch.splitPrerenderHtml`) it is skipped entirely: HTML runs on its
+  // own channel in the `prerender_html` job, and this index pass writes
+  // only the search-doc half (the HTML columns land NULL on
+  // `boxel_index_working`, which the dual-read never serves when a
+  // `prerendered_html` row exists).
   let htmlResponse: RenderVisitResponse | undefined;
   let htmlFileData = indexResponse.fileExtract?.resource
     ? { resource: indexResponse.fileExtract.resource, fileDefCodeRef }
     : undefined;
   let needFileHtml = needFileRender && htmlFileData !== undefined;
-  if (!indexResponse.pageUnusableError && (needCardRender || needFileHtml)) {
+  if (
+    !batch.splitPrerenderHtml &&
+    !indexResponse.pageUnusableError &&
+    (needCardRender || needFileHtml)
+  ) {
     let htmlRenderOptions: RenderRouteOptions = {
       fileDefCodeRef,
+      loaderEpoch: batch.loaderEpoch,
       ...(needCardRender ? { cardRender: true } : {}),
       ...(needFileHtml ? { fileRender: true } : {}),
     };

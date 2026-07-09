@@ -4,6 +4,11 @@ import type { ResolvedCodeRef } from './code-ref.ts';
 
 export interface RenderRouteOptions {
   clearCache?: true;
+  // The realm's loader epoch this render belongs to (see
+  // `RealmGenerationsTable.loader_epoch`). The render route resets its
+  // loader + store when this differs from the epoch the tab last cleared
+  // for, then records it — one reset per tab per module change.
+  loaderEpoch?: string;
   cardRender?: true;
   fileExtract?: true;
   fileRender?: true;
@@ -23,6 +28,9 @@ export function parseRenderRouteOptions(
     let options: RenderRouteOptions = {};
     if (parsed.clearCache) {
       options.clearCache = true;
+    }
+    if (typeof parsed.loaderEpoch === 'string') {
+      options.loaderEpoch = parsed.loaderEpoch;
     }
     if (parsed.cardRender) {
       options.cardRender = true;
@@ -57,6 +65,9 @@ export function serializeRenderRouteOptions(
   let serialized: RenderRouteOptions = {};
   if (options.clearCache) {
     serialized.clearCache = true;
+  }
+  if (options.loaderEpoch !== undefined) {
+    serialized.loaderEpoch = options.loaderEpoch;
   }
   if (options.cardRender) {
     serialized.cardRender = true;

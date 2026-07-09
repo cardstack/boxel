@@ -423,11 +423,13 @@ export class SearchResource<
             if (this.#previousQuery === undefined) {
               return;
             }
-            // we are only interested in incremental index events
-            if (
-              event.eventName !== 'index' ||
-              ('indexType' in event && event.indexType !== 'incremental')
-            ) {
+            // Re-run on incremental index events (the search doc changed)
+            // and on prerender_html events (fresh HTML / corrected
+            // full-text membership landed on its own channel).
+            let isIncrementalIndex =
+              event.eventName === 'index' &&
+              (!('indexType' in event) || event.indexType === 'incremental');
+            if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
               return;
             }
             this.trackStoreLoad(

@@ -22,6 +22,11 @@ interface DiscoverInvalidationsOptions {
 
 export interface DiscoverInvalidationsResult {
   urls: string[];
+  // The subset of `urls` that are genuine deletions — present in the index
+  // (or a prior attempt's working rows) but absent from disk. The
+  // from-scratch caller threads these to the `prerender_html` job as
+  // `operation: 'delete'` so the HTML channel tombstones them too.
+  deletedUrls: string[];
   // Filesystem mtimes at the moment we discovered invalidations.
   // Returned alongside the URL list so the from-scratch caller can
   // compare against `Batch.resumedRows` and decide whether a row
@@ -118,11 +123,12 @@ export async function discoverInvalidations({
       await batch.invalidate(deletedUrls.map((u) => new URL(u)));
       return {
         urls: [...new Set([...invalidationList, ...batch.invalidations])],
+        deletedUrls,
         filesystemMtimes,
       };
     }
 
-    return { urls: invalidationList, filesystemMtimes };
+    return { urls: invalidationList, deletedUrls, filesystemMtimes };
   }
 
   let invalidationStart = Date.now();
@@ -130,5 +136,5 @@ export async function discoverInvalidations({
   perfDebug(
     `${jobIdentity(jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
   );
-  return { urls: batch.invalidations, filesystemMtimes };
+  return { urls: batch.invalidations, deletedUrls, filesystemMtimes };
 }

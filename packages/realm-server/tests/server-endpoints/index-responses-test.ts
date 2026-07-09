@@ -14,6 +14,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -894,11 +895,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to be indexed (head_html populated, even if empty string).
+        // Wait for the card's rendering to land (head_html populated, even
+        // if empty string) — it arrives on the prerendered_html channel via
+        // the fire-and-forget prerender_html job.
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -998,7 +1001,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-brand-guide-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -1556,6 +1559,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
             );
           }
+          // Readiness drains the index channel only; head HTML lands via the
+          // realm's prerender_html job, so settle that channel before the
+          // assertions read it.
+          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
           await closeServer(testRealmHttpServer);

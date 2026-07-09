@@ -187,6 +187,7 @@ export class Worker {
         `incremental-index`,
         Tasks['incrementalIndex'](taskArgs),
       ),
+      this.#queue.register(`prerender_html`, Tasks['prerenderHtml'](taskArgs)),
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),

@@ -356,6 +356,58 @@ module('Integration | search-entries resource', function (hooks) {
     );
   });
 
+  test('re-runs the search on a prerender_html event; other realm events leave it alone', async function (assert) {
+    let fetchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async (...args) => {
+      fetchCount++;
+      return originalSearchEntries(...args);
+    };
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL],
+          },
+        },
+      }));
+      await search.loaded;
+      let baseline = fetchCount;
+
+      // The realm-server broadcasts prerender_html when fresh HTML lands on
+      // its own channel after the index pass; the in-browser test realm
+      // renders fused and never emits one, so inject it synthetically.
+      getService('message-service').relayRealmEvent({
+        eventName: 'prerender_html',
+        realmURL: testRealmURL,
+        generation: 2,
+        invalidations: [`${testRealmURL}books/1.json`],
+      });
+      await waitUntil(() => fetchCount > baseline, { timeout: 10_000 });
+      await settled();
+      assert.ok(
+        fetchCount > baseline,
+        'a prerender_html event re-runs the search',
+      );
+
+      let afterPrerender = fetchCount;
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: testRealmURL,
+      });
+      await settled();
+      assert.strictEqual(
+        fetchCount,
+        afterPrerender,
+        'a non-incremental index event does not re-run the search',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
+  });
+
   test('an entry with an empty html array upgrades when its rendering lands on a later event', async function (assert) {
     let entryURL = `${testRealmURL}books/1`;
     let renderingId = htmlResourceId({

@@ -17,6 +17,9 @@ export interface CopyArgs extends WorkerArgs {
 export interface CopyResult {
   totalNonErrorIndexEntries: number;
   invalidations: string[];
+  // The realm generation this copy committed. Optional so a result produced
+  // by an older worker mid-deploy still parses.
+  generation?: number;
 }
 
 function isObjectLike(value: unknown): value is Record<string, unknown> {
@@ -97,5 +100,6 @@ const copy: Task<CopyArgs, CopyResult> = ({
     return {
       invalidations,
       totalNonErrorIndexEntries,
+      generation: batch.currentGeneration,
     };
   };

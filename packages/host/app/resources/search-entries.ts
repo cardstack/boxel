@@ -227,16 +227,19 @@ export class SearchEntriesResource extends Resource<Args> {
           if (this.#previousQuery === undefined) {
             return;
           }
-          // Only incremental index events re-run the search — the coarse
-          // "anything moved in a subscribed realm" trigger.
-          if (
-            event.eventName !== 'index' ||
-            ('indexType' in event && event.indexType !== 'incremental')
-          ) {
+          // Two coarse "anything moved in a subscribed realm" triggers
+          // re-run the search: an incremental index event (the search doc
+          // changed) and a prerender_html event (fresh HTML / corrected
+          // full-text membership landed on its own channel after the
+          // index pass).
+          let isIncrementalIndex =
+            event.eventName === 'index' &&
+            (!('indexType' in event) || event.indexType === 'incremental');
+          if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
             return;
           }
           this.#log.info(
-            `incremental index event on ${realm}; scheduling partial refresh`,
+            `${event.eventName === 'prerender_html' ? 'prerender_html' : 'incremental index'} event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
           this.#trackSearchLoad(this.search.perform());

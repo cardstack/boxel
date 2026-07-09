@@ -407,6 +407,7 @@ export interface RealmEvent extends BaseMatrixEvent {
 
 export type RealmEventContent =
   | IndexRealmEventContent
+  | PrerenderHtmlEventContent
   | UpdateRealmEventContent;
 
 export type IndexRealmEventContent =
@@ -420,12 +421,16 @@ export interface IncrementalIndexEventContent {
   indexType: 'incremental';
   invalidations: string[];
   clientRequestId?: string | null;
+  // The realm generation the indexing pass committed. Lets a consumer correlate
+  // this search-doc update with the prerendered HTML that belongs to it.
+  generation?: number;
   realmURL: string;
 }
 
 interface FullIndexEventContent {
   eventName: 'index';
   indexType: 'full';
+  generation?: number;
   realmURL: string;
 }
 
@@ -433,6 +438,18 @@ interface CopiedIndexEventContent {
   eventName: 'index';
   indexType: 'copy';
   sourceRealmURL: string;
+  generation?: number;
+  realmURL: string;
+}
+
+// Prerendered HTML for the listed URLs has landed at `generation`, on its own
+// channel after (or concurrently with) the indexing pass. Emitted by the
+// `prerender_html` worker job through the worker-event bridge so open live
+// searches re-run and pick up the fresh HTML / corrected full-text membership.
+export interface PrerenderHtmlEventContent {
+  eventName: 'prerender_html';
+  invalidations: string[];
+  generation: number;
   realmURL: string;
 }
 

@@ -36,6 +36,7 @@ import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
+  settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
@@ -497,29 +498,69 @@ module(basename(import.meta.filename), function () {
     // false; the from-scratch job below is produced by the `isNewIndex`
     // branch in Realm.start(), not by the env-var-driven branch.
     test('newly-created realm full-indexes on first boot', async function (assert) {
-      let jobs = await testDbAdapter.execute('select * from jobs');
+      let jobs = await testDbAdapter.execute('select * from jobs order by id');
       assert.strictEqual(
         jobs.length,
-        1,
-        'there is one job that was run in the queue',
+        2,
+        'the boot produced an index job and its spawned prerender_html job',
       );
-      let [job] = jobs;
+      let [indexJob, prerenderJob] = jobs;
       assert.strictEqual(
-        job.job_type,
+        indexJob.job_type,
         'from-scratch-index',
-        'the job is a from scratch index job',
+        'the first job is a from scratch index job',
       );
       assert.strictEqual(
-        job.concurrency_group,
+        indexJob.concurrency_group,
         `indexing:${testRealm}`,
         'the job is an index of the test realm',
       );
       assert.strictEqual(
-        job.status,
+        indexJob.status,
         'resolved',
         'the job completed successfully',
       );
-      assert.ok(job.finished_at, 'the job was marked with a finish time');
+      assert.ok(indexJob.finished_at, 'the job was marked with a finish time');
+      assert.strictEqual(
+        prerenderJob.job_type,
+        'prerender_html',
+        'the index pass spawned an HTML prerender job',
+      );
+      assert.strictEqual(
+        prerenderJob.concurrency_group,
+        `prerender-html:${testRealm}`,
+        'HTML work runs in its own per-realm concurrency group',
+      );
+      assert.strictEqual(
+        prerenderJob.status,
+        'resolved',
+        'the prerender_html job completed successfully',
+      );
+      let prerenderArgs = prerenderJob.args as {
+        generation: number;
+        spawningJobId: number | null;
+        changes: { url: string; operation: string }[];
+      };
+      assert.strictEqual(
+        prerenderArgs.generation,
+        1,
+        'the job carries the generation the index pass anticipated',
+      );
+      assert.strictEqual(
+        prerenderArgs.spawningJobId,
+        indexJob.id,
+        'the job is correlated back to the index pass that spawned it',
+      );
+      assert.true(
+        prerenderArgs.changes.every((change) => change.operation === 'update'),
+        'the job carries the invalidation set as update operations',
+      );
+      assert.true(
+        prerenderArgs.changes.some(
+          (change) => change.url === `${testRealm}mango.json`,
+        ),
+        'the invalidation set covers the realm content',
+      );
     });
 
     test('can store card pre-rendered html in the index', async function (assert) {
@@ -2060,6 +2101,7 @@ module(basename(import.meta.filename), function () {
           export class Intentionally Thrown Error {}
         `,
         );
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let { data: result } = await searchCardsForTest(
           realm.realmIndexQueryEngine,
           {
@@ -2087,6 +2129,7 @@ module(basename(import.meta.filename), function () {
           }
         `,
         );
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         result = (
           await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
@@ -2320,6 +2363,7 @@ module(basename(import.meta.filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2349,6 +2393,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2437,6 +2482,7 @@ module(basename(import.meta.filename), function () {
             // expected while dependencies are missing
           }
 
+          await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
           brokenInstance = await realm.realmIndexQueryEngine.instance(
             new URL(`${testRealm}deep-card`),
           );
@@ -3889,6 +3935,7 @@ module(basename(import.meta.filename), function () {
         // downstream card; instance → instance propagation terminates at
         // the first hop, so the consumers stay indexable. The broken slot
         // renders the placeholder inline.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let childError = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}child-error`),
         );
@@ -3926,6 +3973,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let childErrorAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}child-error`),
         );
@@ -4147,38 +4195,26 @@ module(basename(import.meta.filename), function () {
           'FileDef target error doc includes file extract failure details',
         );
 
+        // Relationship consumers stay indexable while a target is broken —
+        // the same first-hop termination card targets have: the error lives
+        // on the target's own rows and the consumer's broken slot renders
+        // the placeholder inline.
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-file-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'first-degree relationship consumer is in error while FileDef target is broken',
+          'instance',
+          'first-degree relationship consumer stays indexable while FileDef target is broken',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-file-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'second-degree relationship consumer is in error while delegated FileDef target is broken',
+          'instance',
+          'second-degree relationship consumer stays indexable while delegated FileDef target is broken',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          let delegatedHasExpectedErrorDetail =
-            hasErrorDetail(
-              grandParentBefore.error,
-              'Received HTTP 404 from server',
-            ) || hasErrorDetail(grandParentBefore.error, 'missing-child');
-          assert.ok(
-            delegatedHasExpectedErrorDetail,
-            'delegated relationship consumer receives nested FileDef error details',
-          );
-        } else {
-          assert.ok(
-            false,
-            'expected delegated relationship consumer error details',
-          );
-        }
 
         await realm.write(
           'filedef-mismatch.gts',
@@ -4442,6 +4478,7 @@ module(basename(import.meta.filename), function () {
           }),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4470,6 +4507,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4602,6 +4640,7 @@ module(basename(import.meta.filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let { data: result } = await searchCardsForTest(
           realm.realmIndexQueryEngine,
           {
@@ -4619,6 +4658,7 @@ module(basename(import.meta.filename), function () {
 
       test('can incrementally index instance that depends on deleted card source', async function (assert) {
         await realm.delete('post.gts');
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         {
           let { data: result } = await searchCardsForTest(
             realm.realmIndexQueryEngine,
@@ -4652,10 +4692,23 @@ module(basename(import.meta.filename), function () {
             actual.error.errorDetail.isCardError,
             'error is marked as a card error',
           );
-          assert.strictEqual(
+          // The render surfaces the module 404 both as the primary error and
+          // as a captured browser console entry; only the latter may ride in
+          // additionalErrors — never a dependency error document.
+          let additionalErrors = Array.isArray(
             actual.error.errorDetail.additionalErrors,
-            null,
-            'no additional dependency errors are present',
+          )
+            ? (actual.error.errorDetail.additionalErrors as {
+                title?: string;
+              }[])
+            : [];
+          assert.true(
+            additionalErrors.every(
+              (additionalError) => additionalError.title === 'Console error',
+            ),
+            `no additional dependency errors are present: ${JSON.stringify(
+              additionalErrors,
+            )}`,
           );
           assert.strictEqual(
             actual.error.errorDetail.message,
@@ -4818,6 +4871,7 @@ module(basename(import.meta.filename), function () {
            export class Pet extends OnlyExistsInDreams {}`,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}ringo`),
         );

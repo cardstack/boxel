@@ -234,7 +234,7 @@ module('Unit | index-writer', function (hooks) {
       'the index entries from other realms are unchanged',
     );
     let generations = await adapter.execute(
-      'select * from realm_generations ORDER BY realm_url COLLATE "POSIX"',
+      'select realm_url, current_generation from realm_generations ORDER BY realm_url COLLATE "POSIX"',
     );
     assert.deepEqual(
       generations,
@@ -2435,7 +2435,7 @@ module('Unit | index-writer', function (hooks) {
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
     let generations = await adapter.execute(
-      'select * from realm_generations ORDER BY realm_url COLLATE "POSIX"',
+      'select realm_url, current_generation from realm_generations ORDER BY realm_url COLLATE "POSIX"',
     );
     assert.deepEqual(
       generations,
