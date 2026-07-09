@@ -367,4 +367,48 @@ module('Integration | markdown-embed-preview', function (hooks) {
     );
     assert.dom('[data-test-broken-link-type]').hasText('notes.md');
   });
+
+  test('a fitted broken ref takes the picked tile footprint and does not clip its overlay', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    // tall-tile = 150x275
+    let tallTile: BfmSizeSpec = { format: 'fitted', width: 150, height: 275 };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenTypeName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='fitted'
+            @sizeSpec={{tallTile}}
+          />
+        </PreviewBox>
+      </template>,
+    );
+    let style =
+      document
+        .querySelector('[data-test-broken-link-template="fitted"]')
+        ?.getAttribute('style') ?? '';
+    assert.ok(
+      style.includes('width: 150px'),
+      `fitted broken box takes the picked width (${style})`,
+    );
+    assert.ok(
+      style.includes('height: 275px'),
+      `fitted broken box takes the picked height (${style})`,
+    );
+    // The root must not clip, or the reveal overlay would be cut off — only the
+    // inner box clips its own content.
+    assert.notOk(
+      style.includes('overflow'),
+      'the broken root does not set overflow, so the reveal overlay is not clipped',
+    );
+  });
 });

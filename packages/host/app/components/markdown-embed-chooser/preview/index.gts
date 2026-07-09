@@ -170,6 +170,26 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
     return this.args.errorDoc ?? {};
   }
 
+  // A fitted broken placeholder takes the same picked footprint as a real
+  // fitted embed, so the chooser previews the actual tile size rather than
+  // collapsing to the template's min-height. Unlike the embed's `sizeStyle`
+  // this omits `overflow: hidden`: the broken template's root must not clip, or
+  // the reveal overlay (which extends beyond the placeholder) would be cut off
+  // — the inner `.box` handles its own clipping. Non-fitted formats keep their
+  // intrinsic footprint.
+  private get brokenSizeStyle(): ReturnType<typeof htmlSafe> | undefined {
+    if (this.args.format !== 'fitted') {
+      return undefined;
+    }
+    let { width, height } = this.args.sizeSpec ?? { format: 'fitted' };
+    let { sizeStyle } = bfmRefFormatAndSize(
+      'fitted',
+      width === undefined ? undefined : String(width),
+      height === undefined ? undefined : String(height),
+    );
+    return sizeStyle ? htmlSafe(sizeStyle) : undefined;
+  }
+
   // Fitted slots carry an inline width/height plus `overflow: hidden` so the
   // instance occupies the requested footprint — derived through the same helper
   // the live markdown renderer uses (`rendered-markdown.gts`). Inline embedded
@@ -238,6 +258,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
               @errorDoc={{this.brokenErrorDoc}}
               @state={{this.brokenState}}
               @format={{@format}}
+              style={{this.brokenSizeStyle}}
             />
           {{/if}}
           <span
@@ -273,6 +294,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
         @errorDoc={{this.brokenErrorDoc}}
         @state={{this.brokenState}}
         @format={{@format}}
+        style={{this.brokenSizeStyle}}
         ...attributes
       />
     {{/if}}
