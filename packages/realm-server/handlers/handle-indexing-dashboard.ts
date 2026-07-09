@@ -57,17 +57,31 @@ function durationMs(startMs: number, endMs?: number): string {
   return `${minutes}m ${seconds % 60}s`;
 }
 
-function renderActiveCard(state: RealmIndexingState): string {
+// Index passes report themselves to the event sink as 'from-scratch' /
+// 'incremental'; the prerender pass reports the queue's own job_type
+// spelling, 'prerender_html'.
+function isPrerenderJob(jobType: string): boolean {
+  return jobType === 'prerender_html';
+}
+
+function jobTypeLabel(jobType: string): string {
+  return isPrerenderJob(jobType) ? 'prerender HTML' : `${jobType} index`;
+}
+
+function renderJobSection(state: RealmIndexingState): string {
+  let prerender = isPrerenderJob(state.jobType);
   let remaining = state.totalFiles - state.filesCompleted;
   let pct =
     state.totalFiles > 0
       ? Math.round((state.filesCompleted / state.totalFiles) * 100)
       : 0;
-  // The job announces itself at kickoff with a total of 0 and fills it in
-  // once invalidation discovery + pre-warm have determined how much work
+  // An index job announces itself at kickoff with a total of 0 and fills it
+  // in once invalidation discovery + pre-warm have determined how much work
   // there is. Show a "calculating" state for that window instead of a
-  // misleading 0 / 0 (0%).
-  let calculating = state.status === 'indexing' && state.totalFiles === 0;
+  // misleading 0 / 0 (0%). A prerender job's URL set arrives fully computed
+  // in its args, so its total is real from the first event.
+  let calculating =
+    !prerender && state.status === 'indexing' && state.totalFiles === 0;
 
   const completedSet = new Set(state.completedFiles);
   let remainingFiles = state.files.filter((f) => !completedSet.has(f));
@@ -79,17 +93,13 @@ function renderActiveCard(state: RealmIndexingState): string {
     .join('');
 
   return `
-    <div class="realm-card indexing">
-      <div class="realm-header">
-        <span class="status-indicator"></span>
-        <h3>${escapeHtml(state.realmURL)}</h3>
-      </div>
+      <div class="job-section">
       <div class="job-info">
-        <span class="job-type">${escapeHtml(state.jobType)} index</span>
+        <span class="job-type${prerender ? ' prerender' : ''}">${escapeHtml(jobTypeLabel(state.jobType))}</span>
         <span class="job-meta">job #${state.jobId} &middot; started ${timeSince(state.startedAt)} &middot; ${durationMs(state.startedAt)} elapsed</span>
       </div>
       <div class="progress-bar-container">
-        <div class="progress-bar${calculating ? ' calculating' : ''}" style="width: ${calculating ? 100 : pct}%"></div>
+        <div class="progress-bar${prerender ? ' prerender' : ''}${calculating ? ' calculating' : ''}" style="width: ${calculating ? 100 : pct}%"></div>
         <span class="progress-text">${
           calculating
             ? 'Calculating files to index&hellip;'
@@ -104,7 +114,7 @@ function renderActiveCard(state: RealmIndexingState): string {
       ${
         !calculating && remainingFiles.length > 0
           ? `<details>
-        <summary>${remaining} file${remaining !== 1 ? 's' : ''} left to index</summary>
+        <summary>${remaining} file${remaining !== 1 ? 's' : ''} left to ${prerender ? 'render' : 'index'}</summary>
         <ul class="file-list">${remainingList}</ul>
       </details>`
           : ''
@@ -117,6 +127,55 @@ function renderActiveCard(state: RealmIndexingState): string {
       </details>`
           : ''
       }
+      </div>`;
+}
+
+function renderFinishedLine(state: RealmIndexingState): string {
+  return `
+      <div class="job-done">
+        <span class="done-check">&#10003;</span>
+        <span class="job-type${isPrerenderJob(state.jobType) ? ' prerender' : ''}">${escapeHtml(jobTypeLabel(state.jobType))}</span>
+        <span class="job-meta">job #${state.jobId} &middot; ${state.totalFiles} file${state.totalFiles !== 1 ? 's' : ''} &middot; finished ${timeSince(state.lastUpdatedAt)}</span>
+      </div>`;
+}
+
+function renderRealmCard(
+  realmURL: string,
+  jobs: RealmIndexingState[],
+  history: RealmIndexingState[],
+): string {
+  // Both passes of the split indexing pipeline can be in flight for one
+  // realm at once (the index job spawns the prerender job), so a realm's
+  // card holds a section per active job — index first, prerender after,
+  // mirroring the pipeline order. When one pass is active and the other
+  // has already finished, the finished pass shows as a compact ✓ line
+  // (from the event sink's history) so the realm reads as one story:
+  // "index ✓, prerender 40/93".
+  let sections: string[] = [];
+  for (let inCategory of [
+    (jobType: string) => !isPrerenderJob(jobType),
+    isPrerenderJob,
+  ]) {
+    let categoryJobs = jobs.filter((j) => inCategory(j.jobType));
+    if (categoryJobs.length > 0) {
+      sections.push(...categoryJobs.map(renderJobSection));
+    } else {
+      let finished = history.find(
+        (h) => h.realmURL === realmURL && inCategory(h.jobType),
+      );
+      if (finished) {
+        sections.push(renderFinishedLine(finished));
+      }
+    }
+  }
+
+  return `
+    <div class="realm-card indexing">
+      <div class="realm-header">
+        <span class="status-indicator"></span>
+        <h3>${escapeHtml(realmURL)}</h3>
+      </div>
+      ${sections.join('')}
     </div>`;
 }
 
@@ -158,7 +217,18 @@ export interface DashboardSnapshot {
 export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
   let { active, pending, history } = snapshot;
 
-  let activeCards = active.map(renderActiveCard).join('');
+  let activeByRealm = new Map<string, RealmIndexingState[]>();
+  for (let state of active) {
+    let realmJobs = activeByRealm.get(state.realmURL);
+    if (!realmJobs) {
+      realmJobs = [];
+      activeByRealm.set(state.realmURL, realmJobs);
+    }
+    realmJobs.push(state);
+  }
+  let activeCards = [...activeByRealm]
+    .map(([realmURL, jobs]) => renderRealmCard(realmURL, jobs, history))
+    .join('');
   let pendingRows = pending.map(renderPendingRow).join('');
   let historyRows = history.map(renderHistoryRow).join('');
 
@@ -266,7 +336,25 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       color: #f0883e;
       text-transform: capitalize;
     }
+    .job-type.prerender { color: #a371f7; }
     .job-meta { color: #8b949e; font-size: 12px; }
+    .job-section + .job-section,
+    .job-done + .job-section,
+    .job-section + .job-done {
+      margin-top: 12px;
+      border-top: 1px solid #21262d;
+      padding-top: 12px;
+    }
+    .job-done {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .job-done .done-check {
+      color: #3fb950;
+      font-weight: 700;
+    }
     .progress-bar-container {
       position: relative;
       background: #21262d;
@@ -280,6 +368,9 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       height: 100%;
       border-radius: 4px;
       transition: width 0.3s ease;
+    }
+    .progress-bar.prerender {
+      background: linear-gradient(90deg, #6e40c9, #a371f7);
     }
     /* "Calculating" state: full-width subdued bar with moving diagonal
        stripes, shown while the invalidation/pre-warm phase determines how

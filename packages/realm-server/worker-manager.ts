@@ -237,7 +237,7 @@ if (port != null) {
         `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
         `FROM jobs j`,
         `WHERE j.status = 'unfulfilled'`,
-        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index', 'prerender_html')`,
         `AND NOT EXISTS (`,
         `  SELECT 1 FROM job_reservations jr`,
         `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
