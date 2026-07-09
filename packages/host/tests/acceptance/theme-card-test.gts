@@ -1108,7 +1108,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
     });
 
-    test('cards sharing a theme emit identical scoped stylesheets', async function (assert) {
+    test('cards sharing a theme emit identical scoped stylesheets with only one active copy', async function (assert) {
       let cardId = `${testRealmURL}checkbox-forest-green`;
       let otherCardId = `${testRealmURL}checkbox-forest-green-2`;
       await visitOperatorMode({
@@ -1151,10 +1151,41 @@ module('Acceptance | theme-card-test', function (hooks) {
         themeStyleText(otherCardId),
         'cards sharing a theme emit byte-identical theme stylesheets',
       );
+
+      let copies = () =>
+        [...document.querySelectorAll('style')].filter((style) =>
+          style.textContent?.includes(
+            `data-boxel-theme-scope="${testRealmURL}forest-green-theme-`,
+          ),
+        );
+      assert.strictEqual(copies().length, 2, 'each card emits its own copy');
+      assert.strictEqual(
+        copies().filter((style) => !style.disabled).length,
+        1,
+        'exactly one copy participates in style matching',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#2e7d32',
+        'the first card resolves the theme variables',
+      );
       assert.strictEqual(
         computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
         '#2e7d32',
-        'the second card still resolves the theme variables',
+        'the second card resolves the theme variables',
+      );
+
+      // when the active copy leaves the DOM, a survivor is promoted
+      copies()
+        .find((style) => !style.disabled)!
+        .remove();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(copies().length, 1, 'one copy remains');
+      assert.false(copies()[0].disabled, 'the surviving copy is re-enabled');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the theme stays applied after the active copy is removed',
       );
     });
   });
