@@ -40,7 +40,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
-import { isCodeRef } from './card-document-shape.ts';
+import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
 import { generalSortFields } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
@@ -736,6 +736,77 @@ export function fieldsetFromParam(
     item: item ? { kind: 'full' } : { kind: 'none' },
     itemAsFallback: false,
   };
+}
+
+// The (format, renderType) a single-leaf htmlQuery selects — the pair the
+// card+html GET spells as `?format=` / `?renderType=`. Returns `undefined`
+// whenever the htmlQuery has no query-string spelling, and the caller must
+// fall back to a full search instead of refreshing one member in isolation:
+// a composite htmlQuery (`every`/`any`/`not`), an `eq` leaf with no `format`
+// (that leaves format UNCONSTRAINED — the row carries a rendering per format,
+// which one GET's single `?format=` cannot reproduce), or an `eq` leaf whose
+// renderType isn't a resolved `<module>/<name>` ref.
+export function htmlQueryRenderingSelection(
+  htmlQuery: HtmlQuery | undefined,
+): { format: PrerenderedHtmlFormat; renderType?: ResolvedCodeRef } | undefined {
+  // Structural guards, not just types: the input can come straight off a wire
+  // document's `meta.htmlQuery`, whose shape the document guard does not
+  // validate. A malformed value must read as "no single-leaf selection" (the
+  // caller falls back to a full re-run) rather than throw.
+  if (
+    typeof htmlQuery !== 'object' ||
+    htmlQuery == null ||
+    !('eq' in htmlQuery) ||
+    typeof htmlQuery.eq !== 'object' ||
+    htmlQuery.eq == null
+  ) {
+    return undefined;
+  }
+  let { format, renderType } = htmlQuery.eq;
+  if (!isValidPrerenderedHtmlFormat(format)) {
+    return undefined;
+  }
+  if (
+    renderType !== undefined &&
+    // `isResolvedCodeRef` assumes an object (it probes with `in`), so the
+    // structural check must come first for the same malformed-wire reason as
+    // above.
+    (typeof renderType !== 'object' ||
+      renderType == null ||
+      !isResolvedCodeRef(renderType))
+  ) {
+    return undefined;
+  }
+  return {
+    format,
+    ...(renderType !== undefined ? { renderType } : {}),
+  };
+}
+
+// Whether a full-text `matches` predicate appears anywhere in the entry wire
+// filter tree — the wire-grammar counterpart of `filterHasMatches`. A live
+// search reads this to route a `prerender_html` event: a query whose membership
+// depends on `markdown` (matches) needs a full re-run, a structured one only a
+// targeted rendering refresh.
+export function wireFilterHasMatches(
+  filter: SearchEntryWireFilter | undefined,
+): boolean {
+  if (!filter) {
+    return false;
+  }
+  if (filter.matches !== undefined) {
+    return true;
+  }
+  if (filter.any) {
+    return filter.any.some(wireFilterHasMatches);
+  }
+  if (filter.every) {
+    return filter.every.some(wireFilterHasMatches);
+  }
+  if (filter.not) {
+    return wireFilterHasMatches(filter.not);
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
