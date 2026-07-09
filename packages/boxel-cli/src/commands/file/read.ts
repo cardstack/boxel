@@ -41,6 +41,40 @@ interface ReadCliOptions {
   realmSecretSeed?: boolean;
 }
 
+export type ReadTarget =
+  | { ok: true; realm: string; path: string }
+  | { ok: false; error: string };
+
+/**
+ * Derive the realm identifier and realm-relative path for `file read` from
+ * its CLI inputs: a full @cardstack/ identifier as <path> carries its own
+ * realm; otherwise --realm is required.
+ */
+export function resolveReadTarget(
+  path: string,
+  realm: string | undefined,
+): ReadTarget {
+  let split = splitRealmResourceIdentifier(path);
+  if (split) {
+    if (realm) {
+      return {
+        ok: false,
+        error:
+          'Pass either a full @cardstack/ identifier as <path> or --realm with a realm-relative path, not both',
+      };
+    }
+    return { ok: true, ...split };
+  }
+  if (!realm) {
+    return {
+      ok: false,
+      error:
+        '--realm is required unless <path> is a full @cardstack/ identifier',
+    };
+  }
+  return { ok: true, realm, path };
+}
+
 /**
  * Read a file from a realm. Returns raw text in `content` for text files;
  * returns raw bytes in `bytes` for binary files (PNG / PDF / font / etc.,
@@ -125,20 +159,9 @@ export function registerReadCommand(parent: Command): void {
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: ReadCliOptions) => {
-      let realm = opts.realm;
-      let split = splitRealmResourceIdentifier(filePath);
-      if (split) {
-        if (realm) {
-          console.error(
-            `${FG_RED}Error:${RESET} Pass either a full @cardstack/ identifier as <path> or --realm with a realm-relative path, not both`,
-          );
-          process.exit(1);
-        }
-        ({ realm, path: filePath } = split);
-      } else if (!realm) {
-        console.error(
-          `${FG_RED}Error:${RESET} --realm is required unless <path> is a full @cardstack/ identifier`,
-        );
+      let target = resolveReadTarget(filePath, opts.realm);
+      if (!target.ok) {
+        console.error(`${FG_RED}Error:${RESET} ${target.error}`);
         process.exit(1);
       }
 
@@ -149,7 +172,7 @@ export function registerReadCommand(parent: Command): void {
         let realmSecretSeed = await resolveRealmSecretSeed(
           opts.realmSecretSeed === true,
         );
-        result = await read(realm, filePath, { realmSecretSeed });
+        result = await read(target.realm, target.path, { realmSecretSeed });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,

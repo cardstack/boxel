@@ -202,6 +202,30 @@ describe('realm ingest-card (integration)', () => {
     }
   });
 
+  it('ingests via non-URL @cardstack/ identifiers for both the card and --realm', async () => {
+    // `@cardstack/<realm>/` resolves against the profile's realm-server
+    // URL, so these identifiers name the same realm as realmHref. The card
+    // identifier and the realm option resolve independently in ingestCard.
+    let rriDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-ingest-rri-'));
+    try {
+      let rriResult = await ingestCard(
+        '@cardstack/test/widgets/gadget/gadget',
+        rriDir,
+        {
+          realm: '@cardstack/test/',
+          profileManager,
+        },
+      );
+      expect(
+        rriResult.error,
+        `ingest failed: ${rriResult.error}`,
+      ).toBeUndefined();
+      expect(rriResult.files).toEqual(EXPECTED_INGESTED);
+    } finally {
+      fs.rmSync(rriDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it('does not copy base-realm modules the card imports', () => {
     // The copied source still imports the base realm by absolute URL; no
     // base-realm file is materialized locally.

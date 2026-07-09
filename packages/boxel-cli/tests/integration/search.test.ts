@@ -142,6 +142,21 @@ describe('federated search (integration)', () => {
     expect(Array.isArray(result.data)).toBe(true);
   });
 
+  it('accepts a non-URL @cardstack/ realm identifier in the realm list', async () => {
+    // `@cardstack/<realm>/` resolves against the profile's realm-server
+    // URL, so `@cardstack/test/` names the same realm as realmHref.
+    let result = await search(['@cardstack/test/'], {}, { profileManager });
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    let titles = (result.data ?? []).map(
+      (entry) =>
+        (entry as { attributes?: { cardTitle?: string } }).attributes
+          ?.cardTitle,
+    );
+    expect(titles).toEqual(
+      expect.arrayContaining(['Shared Card', 'Other Card']),
+    );
+  });
+
   it('returns ok: false for search on unknown realm URL', async () => {
     let unknownRealm = new URL('nonexistent/', new URL(realmHref)).href;
     let result = await search(unknownRealm, {}, { profileManager });
