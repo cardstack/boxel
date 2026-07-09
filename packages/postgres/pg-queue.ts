@@ -35,6 +35,7 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/in
 import '@cardstack/runtime-common/tasks/copy';
 import '@cardstack/runtime-common/tasks/full-reindex';
 import '@cardstack/runtime-common/tasks/prerender-html';
+import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
 import type { PgAdapter } from './pg-adapter.ts';
 import * as Sentry from '@sentry/node';
 

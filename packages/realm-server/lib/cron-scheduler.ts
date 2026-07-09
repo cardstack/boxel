@@ -13,6 +13,12 @@ import {
   createOpenRouterSyncCronJob,
   getOpenRouterRealmURL,
 } from './openrouter-sync-config.ts';
+import { enqueuePrerenderHtmlReconcile } from '../scripts/prerender-html-reconcile.ts';
+import {
+  PRERENDER_HTML_RECONCILE_CRON_SCHEDULE,
+  PRERENDER_HTML_RECONCILE_CRON_TZ,
+  createPrerenderHtmlReconcileCronJob,
+} from './prerender-html-reconcile-config.ts';
 
 let log = logger('cron-scheduler');
 
@@ -27,6 +33,11 @@ export function startCronJobs(): void {
   let openRouterJob = startOpenRouterSyncCron();
   if (openRouterJob) {
     jobs.push(openRouterJob);
+  }
+
+  let prerenderHtmlReconcileJob = startPrerenderHtmlReconcileCron();
+  if (prerenderHtmlReconcileJob) {
+    jobs.push(prerenderHtmlReconcileJob);
   }
 }
 
@@ -87,6 +98,26 @@ function startOpenRouterSyncCron(): CronJob | undefined {
   job.start();
   log.info(
     `openrouter-sync cron scheduled for 4:00am ${OPENROUTER_SYNC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startPrerenderHtmlReconcileCron(): CronJob | undefined {
+  let job = createPrerenderHtmlReconcileCronJob(
+    async () => {
+      try {
+        await enqueuePrerenderHtmlReconcile();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('prerender-html-reconcile cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `prerender-html-reconcile cron scheduled for ${PRERENDER_HTML_RECONCILE_CRON_SCHEDULE} ${PRERENDER_HTML_RECONCILE_CRON_TZ}`,
   );
   return job;
 }
