@@ -18,6 +18,7 @@ export * from './daily-credit-grant.ts';
 export * from './copy.ts';
 export * from './indexer.ts';
 export * from './prerender-html.ts';
+export * from './prerender-html-reconcile.ts';
 export * from './run-command.ts';
 export * from './screenshot-card.ts';
 

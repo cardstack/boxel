@@ -239,6 +239,7 @@ const ALL_TEST_FILES: string[] = [
   './prerendering-test',
   './prerender-html-split-test',
   './prerender-html-split-integration-test',
+  './prerender-html-reconcile-test',
   './prerender-server-test',
   './prerender-manager-test',
   './prerender-host-shell-recycle-test',
