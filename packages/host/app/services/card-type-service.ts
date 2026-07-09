@@ -6,7 +6,6 @@ import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
-  baseRealm,
   moduleFrom,
   getAncestor,
   SupportedMimeType,
@@ -124,7 +123,7 @@ export default class CardTypeService extends Service {
       this.moduleInfoCache.get(moduleURL.href) ??
       (await this.fetchModuleInfo(moduleURL));
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let { id: _remove, ...fields } = api.getFields(card, {
       includeComputeds: true,
     });

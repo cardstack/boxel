@@ -18,11 +18,7 @@ import {
 
 import type { CodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type {
-  BaseDef,
-  CardDef,
-  Field,
-} from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef, Field } from '@cardstack/base/card-api';
 
 // The client-side counterpart to the server's `filterCondition()` /
 // `orderExpression()` in `index-query-engine.ts`. Those compile a `Query` to
