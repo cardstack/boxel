@@ -60,30 +60,32 @@ export async function findStalePrerenderedHtmlRows(
   }));
 }
 
-// The highest generation at which any not-yet-succeeded prerender_html job is
-// on track to (re)render each URL, keyed realm → url → generation. Only
-// `update` changes count: an `update` is what a repair enqueues, and a job's
-// `delete` change tombstones rather than renders, so it must not suppress the
-// repair of a live row (a consistent index cannot show a live row while a job
-// is deleting it, so this never masks real coverage).
+// The highest generation at which a still-pending prerender_html job is on
+// track to (re)render each URL, keyed realm → url → generation. Only queued or
+// running (`unfulfilled`) jobs count, and only their `update` changes: an
+// `update` is what a repair enqueues, while a `delete` change tombstones rather
+// than renders, so it must not suppress the repair of a live row (a consistent
+// index cannot show a live row while a job is deleting it).
 //
-//   - `unfulfilled` (queued or running) — a repair is already scheduled or
-//     in flight; re-enqueuing would only be absorbed by the coalescing.
-//   - `rejected` — the render deterministically failed and was abandoned;
-//     re-enqueuing it at the same generation would just fail again.
-//
-// `resolved` jobs are deliberately excluded: if a row is still stale after a
-// job resolved (e.g. its lower-generation write lost to the monotonic swap
-// guard), that is genuine residue this sweep exists to repair. The per-row
-// generation gate means an old job (below the row's current generation) never
-// masks residue whose content has since advanced.
+// `resolved` and `rejected` jobs are both excluded, so both are eligible for
+// repair. A resolved job that left a row stale (e.g. its lower-generation write
+// lost the monotonic swap) is genuine residue. A `rejected` job is a whole-job
+// failure: the handler threw — a transient upstream outage, a job timeout —
+// before the swap, so its HTML never landed. That is exactly the residue this
+// sweep repairs; re-enqueuing renders the row once the transient cause clears,
+// and a job that keeps failing simply re-rejects at the background tier rather
+// than pinning the row stale forever. A per-URL render that deterministically
+// fails never reaches this path: it records an `error_doc` row at the current
+// generation, which reads as fresh and so never appears stale. The per-row
+// generation gate means an older job never masks residue the index has moved
+// past.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, Map<string, number>>> {
   let rows = (await query(dbAdapter, [
     `SELECT args FROM jobs
      WHERE job_type = 'prerender_html'
-       AND status IN ('unfulfilled', 'rejected')`,
+       AND status = 'unfulfilled'`,
   ] as Expression)) as { args: unknown }[];
 
   let byRealm = new Map<string, Map<string, number>>();

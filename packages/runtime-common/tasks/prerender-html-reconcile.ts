@@ -57,9 +57,9 @@ registerQueueJobDefinition({
 // prerender_html job whose enqueue was lost between the generation commit and
 // the publish, or whose swap lost a race, leaves index rows stale with nothing
 // scheduled to repair them. Job death itself is the queue's problem (lease
-// expiry re-runs it), so this sweep only enqueues repair where no active or
-// deterministically-failed job already covers the row. Purely additive: a sweep
-// over a healthy system finds nothing and enqueues nothing.
+// expiry re-runs it), so this sweep only enqueues repair where no queued or
+// running job already covers the row. Purely additive: a sweep over a healthy
+// system finds nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
   PrerenderHtmlReconcileResult
@@ -102,14 +102,17 @@ const prerenderHtmlReconcile: Task<
       // deploy rather than here — the same scoping full-reindex uses.
       let owner = ownerByRealm.get(realmURL);
       if (!owner || owner.startsWith('realm/')) {
-        log.warn(
+        // Debug, not warn: a bot-owned realm's residue is expected to heal on
+        // the next deploy reindex, so this fires every tick until then and is
+        // not actionable on its own.
+        log.debug(
           `${jobIdentity(jobInfo)} prerender-html reconcile: skipping realm without a non-bot owner: ${realmURL} (${urls.length} stale url(s))`,
         );
         continue;
       }
       let realmGeneration = generations.get(realmURL);
       if (!realmGeneration) {
-        log.warn(
+        log.debug(
           `${jobIdentity(jobInfo)} prerender-html reconcile: skipping realm without a generation row: ${realmURL} (${urls.length} stale url(s))`,
         );
         continue;

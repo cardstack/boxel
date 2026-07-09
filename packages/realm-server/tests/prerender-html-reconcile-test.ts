@@ -165,11 +165,13 @@ module(basename(import.meta.filename), function (hooks) {
     generation,
     urls,
     status = 'unfulfilled',
+    operation = 'update',
   }: {
     realmURL: string;
     generation: number;
     urls: string[];
     status?: string;
+    operation?: string;
   }) {
     return insertJob(dbAdapter, {
       job_type: 'prerender_html',
@@ -182,7 +184,7 @@ module(basename(import.meta.filename), function (hooks) {
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
-        changes: urls.map((url) => ({ url, operation: 'update' })),
+        changes: urls.map((url) => ({ url, operation })),
       },
     });
   }
@@ -336,7 +338,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('skips URLs whose prerender_html job was rejected', async function (assert) {
+  test('re-attempts a stale row whose prerender_html job was rejected', async function (assert) {
     const realmURL = 'http://example.com/c/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
@@ -350,6 +352,11 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 4,
     });
+    // A rejected job is a whole-job failure (the handler threw — often a
+    // transient upstream outage) whose HTML never landed. That is the residue
+    // the sweep exists to repair, so it must not count as coverage. A per-URL
+    // deterministic render error is different: it records a current-generation
+    // error_doc row that reads as fresh and never appears stale here.
     await seedPrerenderHtmlJob({
       realmURL,
       generation: 5,
@@ -360,8 +367,8 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
-      'a deterministically-failed render is not re-enqueued to fail again',
+      { realmsRepaired: 1, urlsEnqueued: 1 },
+      'the rejected job does not suppress repair of its stale row',
     );
 
     let unfulfilled = (await prerenderHtmlJobs(realmURL)).filter(
@@ -369,8 +376,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       unfulfilled.length,
-      0,
-      'no fresh repair job was enqueued for the rejected URL',
+      1,
+      'a fresh repair job is enqueued despite the rejected one',
+    );
+    assert.ok(
+      unfulfilled[0].args.changes.some(
+        (change) => change.url === `${realmURL}mango.json`,
+      ),
+      'the fresh repair covers the stale URL',
     );
   });
 
@@ -515,6 +528,136 @@ module(basename(import.meta.filename), function (hooks) {
       (await prerenderHtmlJobs(realmURL)).length,
       1,
       'no duplicate repair job accumulates',
+    );
+  });
+
+  test('sweeps multiple realms in one pass, including file-type rows', async function (assert) {
+    const realmA = 'http://example.com/multi-a/';
+    const realmB = 'http://example.com/multi-b/';
+    await seedOwner(realmA);
+    await seedOwner(realmB);
+    await seedRealmGeneration(realmA, 5);
+    await seedRealmGeneration(realmB, 7);
+    // realmA: a stale instance row
+    await seedIndexRow({
+      url: `${realmA}mango.json`,
+      realmURL: realmA,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmA}mango.json`,
+      realmURL: realmA,
+      generation: 4,
+    });
+    // realmB: a stale file row — exercises the (url, realm_url, type) join with type='file'
+    await seedIndexRow({
+      url: `${realmB}readme.md`,
+      realmURL: realmB,
+      type: 'file',
+      generation: 7,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmB}readme.md`,
+      realmURL: realmB,
+      type: 'file',
+      generation: 6,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 2, urlsEnqueued: 2 },
+      'both realms were repaired in one sweep',
+    );
+    let jobsA = await prerenderHtmlJobs(realmA);
+    let jobsB = await prerenderHtmlJobs(realmB);
+    assert.strictEqual(jobsA.length, 1, 'realmA got a repair job');
+    assert.strictEqual(
+      jobsA[0].args.generation,
+      5,
+      'realmA stamped at its generation',
+    );
+    assert.strictEqual(jobsB.length, 1, 'realmB got a repair job');
+    assert.strictEqual(
+      jobsB[0].args.generation,
+      7,
+      'realmB stamped at its generation',
+    );
+    assert.ok(
+      jobsB[0].args.changes.some(
+        (change) => change.url === `${realmB}readme.md`,
+      ),
+      'the file-type stale row is repaired',
+    );
+  });
+
+  test('a delete-operation job does not count as coverage', async function (assert) {
+    const realmURL = 'http://example.com/del/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+    // A queued job carrying this URL as a `delete` tombstones rather than
+    // renders, so it must not suppress the repair of a live row.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 5,
+      urls: [`${realmURL}mango.json`],
+      operation: 'delete',
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1 },
+      'the live row is repaired despite the pending delete job',
+    );
+    // The repair enqueue coalesces with the pending delete (update wins per URL).
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1, 'the repair coalesced into one job');
+    assert.ok(
+      jobs[0].args.changes.some(
+        (change) =>
+          change.url === `${realmURL}mango.json` &&
+          change.operation === 'update',
+      ),
+      'the URL is now scheduled as an update render',
+    );
+  });
+
+  test('skips a realm with no generation row', async function (assert) {
+    const realmURL = 'http://example.com/nogen/';
+    await seedOwner(realmURL);
+    // No realm_generations row seeded.
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0 },
+      'a realm without a generation row is skipped rather than crashing',
+    );
+    assert.strictEqual(
+      (await prerenderHtmlJobs(realmURL)).length,
+      0,
+      'no repair job is enqueued',
     );
   });
 });
