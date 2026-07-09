@@ -12,10 +12,10 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import UseAiAssistantCommand from '@cardstack/host/commands/ai-assistant';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
+import UseAiAssistantCommand from '@cardstack/host/tools/ai-assistant';
+import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 

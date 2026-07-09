@@ -22,13 +22,13 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as CommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
-import SummarizeSessionCommand from '../commands/summarize-session';
-import UpdateRoomSkillsCommand from '../commands/update-room-skills';
-
 import { Submodes } from '../components/submode-switcher';
 import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
+import CreateAiAssistantRoomCommand from '../tools/create-ai-assistant-room';
+import SummarizeSessionCommand from '../tools/summarize-session';
+import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import { titleize } from '../utils/titleize';

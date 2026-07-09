@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import CreateSpecCommand from '@cardstack/host/commands/create-specs';
+import CreateSpecCommand from '@cardstack/host/tools/create-specs';
 
 import type { Spec } from 'https://cardstack.com/base/spec';
 

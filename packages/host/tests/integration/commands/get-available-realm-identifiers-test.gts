@@ -4,9 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import GetAvailableRealmIdentifiersCommand from '@cardstack/host/commands/get-available-realm-identifiers';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import GetAvailableRealmIdentifiersCommand from '@cardstack/host/tools/get-available-realm-identifiers';
 
 import {
   setupIntegrationTestRealm,

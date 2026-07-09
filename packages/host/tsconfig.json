@@ -27,7 +27,8 @@
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
-      "@cardstack/boxel-host/commands/*": ["app/commands/*"],
+      "@cardstack/boxel-host/tools/*": ["app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["app/tools/*"],
       "https://cardstack.com/base/*": [
         "../base/*.gts",
         "../base/*.ts",

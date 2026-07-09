@@ -42,7 +42,6 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -59,6 +58,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
+import OpenCreateListingModalCommand from '@cardstack/host/tools/open-create-listing-modal';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 

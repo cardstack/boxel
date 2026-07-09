@@ -4,9 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import RegisterBotCommand from '@cardstack/host/commands/register-bot';
-import UnregisterBotCommand from '@cardstack/host/commands/unregister-bot';
 import RealmService from '@cardstack/host/services/realm';
+import RegisterBotCommand from '@cardstack/host/tools/register-bot';
+import UnregisterBotCommand from '@cardstack/host/tools/unregister-bot';
 
 import {
   setupIntegrationTestRealm,

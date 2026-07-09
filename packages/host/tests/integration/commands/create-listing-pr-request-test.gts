@@ -6,9 +6,9 @@ import { module, test } from 'qunit';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import CreateListingPRRequestCommand from '@cardstack/host/commands/bot-requests/create-listing-pr-request';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
+import CreateListingPRRequestCommand from '@cardstack/host/tools/bot-requests/create-listing-pr-request';
 
 import {
   setupIntegrationTestRealm,

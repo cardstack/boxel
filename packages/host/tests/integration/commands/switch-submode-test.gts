@@ -6,9 +6,9 @@ import { module, test } from 'qunit';
 
 import { localId } from '@cardstack/runtime-common';
 
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
+import SwitchSubmodeCommand from '@cardstack/host/tools/switch-submode';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 

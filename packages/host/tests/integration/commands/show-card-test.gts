@@ -13,11 +13,11 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
+import ShowCardCommand from '@cardstack/host/tools/show-card';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 

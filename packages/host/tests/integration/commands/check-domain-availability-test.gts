@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import CheckDomainAvailabilityCommand from '@cardstack/host/commands/check-domain-availability';
 import RealmService from '@cardstack/host/services/realm';
+import CheckDomainAvailabilityCommand from '@cardstack/host/tools/check-domain-availability';
 
 import {
   setupIntegrationTestRealm,

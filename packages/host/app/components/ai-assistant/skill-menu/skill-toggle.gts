@@ -19,12 +19,12 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import ShowCardCommand from '@cardstack/host/tools/show-card';
 
 interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;

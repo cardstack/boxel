@@ -6,9 +6,8 @@ import { module, test } from 'qunit';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import SendBotTriggerEventCommand from '@cardstack/host/commands/bot-requests/send-bot-trigger-event';
-
 import RealmService from '@cardstack/host/services/realm';
+import SendBotTriggerEventCommand from '@cardstack/host/tools/bot-requests/send-bot-trigger-event';
 
 import {
   setupIntegrationTestRealm,

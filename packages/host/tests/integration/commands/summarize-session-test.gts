@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import SummarizeSessionCommand from '@cardstack/host/commands/summarize-session';
 import RealmService from '@cardstack/host/services/realm';
+import SummarizeSessionCommand from '@cardstack/host/tools/summarize-session';
 
 import {
   setupIntegrationTestRealm,

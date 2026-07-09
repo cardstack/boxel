@@ -97,385 +97,415 @@ import * as WriteTextFileCommandModule from './write-text-file';
 
 import type HostBaseCommand from '../lib/host-base-command';
 
-export function shimHostCommands(virtualNetwork: VirtualNetwork) {
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/add-field-to-card-definition',
+// Registers a host tool module under its `@cardstack/boxel-host/tools/*`
+// specifier and the pre-rename `@cardstack/boxel-host/commands/*` spelling.
+// The legacy alias stays for as long as content referencing it exists: skill
+// frontmatter codeRefs and room-state tool definitions persisted before the
+// command → tool rename resolve through it. functionName hashing already
+// canonicalizes the two spellings to one name (see moduleForFunctionNameHash).
+function shimHostToolModule(
+  virtualNetwork: VirtualNetwork,
+  name: string,
+  module: object,
+) {
+  virtualNetwork.shimModule(`@cardstack/boxel-host/tools/${name}`, module);
+  virtualNetwork.shimModule(`@cardstack/boxel-host/commands/${name}`, module);
+}
+
+export function shimHostTools(virtualNetwork: VirtualNetwork) {
+  shimHostToolModule(
+    virtualNetwork,
+    'add-field-to-card-definition',
     AddFieldToCardDefinitionCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/ask-ai',
-    AskAiCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/authed-fetch',
-    AuthedFetchCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/apply-markdown-edit',
+  shimHostToolModule(virtualNetwork, 'ask-ai', AskAiCommandModule);
+  shimHostToolModule(virtualNetwork, 'authed-fetch', AuthedFetchCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'apply-markdown-edit',
     ApplyMarkdownEditCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/apply-search-replace-block',
+  shimHostToolModule(
+    virtualNetwork,
+    'apply-search-replace-block',
     ApplySearchReplaceBlockCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-card-as-markdown',
+  shimHostToolModule(
+    virtualNetwork,
+    'copy-card-as-markdown',
     CopyCardAsMarkdownCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-card',
-    CopyCardToRealmModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-card-to-stack',
+  shimHostToolModule(virtualNetwork, 'copy-card', CopyCardToRealmModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'copy-card-to-stack',
     CopyCardToStackCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-file-to-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'copy-file-to-realm',
     CopyFileToRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-source',
-    CopySourceCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/copy-and-edit',
-    CopyAndEditCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-ai-assistant-room',
+  shimHostToolModule(virtualNetwork, 'copy-source', CopySourceCommandModule);
+  shimHostToolModule(virtualNetwork, 'copy-and-edit', CopyAndEditCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'create-ai-assistant-room',
     CreateAIAssistantRoomCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-specs',
-    CreateSpecCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/check-correctness',
+  shimHostToolModule(virtualNetwork, 'create-specs', CreateSpecCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'check-correctness',
     CheckCorrectnessCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/check-domain-availability',
+  shimHostToolModule(
+    virtualNetwork,
+    'check-domain-availability',
     CheckDomainAvailabilityCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/evaluate-module',
+  shimHostToolModule(
+    virtualNetwork,
+    'evaluate-module',
     EvaluateModuleCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/instantiate-card',
+  shimHostToolModule(
+    virtualNetwork,
+    'instantiate-card',
     InstantiateCardCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/cancel-indexing-job',
+  shimHostToolModule(
+    virtualNetwork,
+    'cancel-indexing-job',
     CancelIndexingJobCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/generate-theme-example',
+  shimHostToolModule(
+    virtualNetwork,
+    'generate-theme-example',
     GenerateThemeExampleCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/execute-atomic-operations',
+  shimHostToolModule(
+    virtualNetwork,
+    'execute-atomic-operations',
     ExecuteAtomicOperationsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/fetch-card-json',
+  shimHostToolModule(
+    virtualNetwork,
+    'fetch-card-json',
     FetchCardJsonCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/full-reindex-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'full-reindex-realm',
     FullReindexRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-events-from-room',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-events-from-room',
     GetEventsFromRoomCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-published-realms',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-published-realms',
     GetPublishedRealmsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invite-user-to-room',
+  shimHostToolModule(
+    virtualNetwork,
+    'invite-user-to-room',
     InviteUserToRoomCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invalidate-realm-identifiers',
+  shimHostToolModule(
+    virtualNetwork,
+    'invalidate-realm-identifiers',
     InvalidateRealmIdentifiersCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/lint-and-fix',
-    LintAndFixCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/listing-action-build',
+  shimHostToolModule(virtualNetwork, 'lint-and-fix', LintAndFixCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'listing-action-build',
     ListingBuildCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/migrate-skill',
+  shimHostToolModule(
+    virtualNetwork,
+    'migrate-skill',
     MigrateSkillCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-listing-pr-request',
+  shimHostToolModule(
+    virtualNetwork,
+    'create-listing-pr-request',
     CreateListingPRRequestCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-in-interact-mode',
+  shimHostToolModule(
+    virtualNetwork,
+    'open-in-interact-mode',
     OpenInInteractModeModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/patch-card-instance',
+  shimHostToolModule(
+    virtualNetwork,
+    'patch-card-instance',
     PatchCardInstanceCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/patch-code',
-    PatchCodeCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/patch-fields',
-    PatchFieldsCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/patch-theme',
-    PatchThemeCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/persist-module-inspector-view',
+  shimHostToolModule(virtualNetwork, 'patch-code', PatchCodeCommandModule);
+  shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsCommandModule);
+  shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'persist-module-inspector-view',
     PersistModuleInspectorViewCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/preview-format',
+  shimHostToolModule(
+    virtualNetwork,
+    'preview-format',
     PreviewFormatCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/publish-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'publish-realm',
     PublishRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/read-binary-file',
+  shimHostToolModule(
+    virtualNetwork,
+    'read-binary-file',
     ReadBinaryFileCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/read-card-for-ai-assistant',
+  shimHostToolModule(
+    virtualNetwork,
+    'read-card-for-ai-assistant',
     ReadCardForAiAssistantCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+  shimHostToolModule(
+    virtualNetwork,
+    'read-file-for-ai-assistant',
     ReadFileForAiAssistantCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/read-source',
-    ReadSourceCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/read-text-file',
+  shimHostToolModule(virtualNetwork, 'read-source', ReadSourceCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'read-text-file',
     ReadTextFileCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/reindex-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'reindex-realm',
     ReindexRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/register-bot',
-    RegisterBotCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/save-card',
-    SaveCardCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/serialize-card',
+  shimHostToolModule(virtualNetwork, 'register-bot', RegisterBotCommandModule);
+  shimHostToolModule(virtualNetwork, 'save-card', SaveCardCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'serialize-card',
     SerializeCardCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/search-cards',
-    SearchCardsCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/search-and-choose',
+  shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'search-and-choose',
     SearchAndChooseCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-ai-assistant-room',
+  shimHostToolModule(
+    virtualNetwork,
+    'open-ai-assistant-room',
     OpenAiAssistantRoomCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-create-listing-modal',
+  shimHostToolModule(
+    virtualNetwork,
+    'open-create-listing-modal',
     OpenCreateListingModalCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-and-open-submission-workflow-card',
+  shimHostToolModule(
+    virtualNetwork,
+    'create-and-open-submission-workflow-card',
     CreateAndOpenSubmissionWorkflowCard,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-submission-workflow',
+  shimHostToolModule(
+    virtualNetwork,
+    'create-submission-workflow',
     CreateSubmissionWorkflowCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/retry-submission-workflow',
+  shimHostToolModule(
+    virtualNetwork,
+    'retry-submission-workflow',
     RetrySubmissionWorkflowCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-workspace',
+  shimHostToolModule(
+    virtualNetwork,
+    'open-workspace',
     OpenWorkspaceCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/send-ai-assistant-message',
+  shimHostToolModule(
+    virtualNetwork,
+    'send-ai-assistant-message',
     SendAiAssistantMessageModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/send-bot-trigger-event',
+  shimHostToolModule(
+    virtualNetwork,
+    'send-bot-trigger-event',
     SendBotTriggerEventCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/set-active-llm',
-    SetActiveLlmModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/show-card',
-    ShowCardCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/show-file',
-    ShowFileCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/switch-submode',
+  shimHostToolModule(virtualNetwork, 'set-active-llm', SetActiveLlmModule);
+  shimHostToolModule(virtualNetwork, 'show-card', ShowCardCommandModule);
+  shimHostToolModule(virtualNetwork, 'show-file', ShowFileCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'switch-submode',
     SwitchSubmodeCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/transform-cards',
+  shimHostToolModule(
+    virtualNetwork,
+    'transform-cards',
     TransformCardsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/unpublish-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'unpublish-realm',
     UnpublishRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/unregister-bot',
+  shimHostToolModule(
+    virtualNetwork,
+    'unregister-bot',
     UnregisterBotCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/update-code-path-with-selection',
+  shimHostToolModule(
+    virtualNetwork,
+    'update-code-path-with-selection',
     UpdateCodePathWithSelectionCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/update-playground-selection',
+  shimHostToolModule(
+    virtualNetwork,
+    'update-playground-selection',
     UpdatePlaygroundSelectionCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/update-room-skills',
+  shimHostToolModule(
+    virtualNetwork,
+    'update-room-skills',
     UpdateRoomSkillsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/send-request-via-proxy',
+  shimHostToolModule(
+    virtualNetwork,
+    'send-request-via-proxy',
     SendRequestViaProxyCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/summarize-session',
+  shimHostToolModule(
+    virtualNetwork,
+    'summarize-session',
     SummarizeSessionCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/sync-openrouter-models',
+  shimHostToolModule(
+    virtualNetwork,
+    'sync-openrouter-models',
     SyncOpenRouterModelsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/ai-assistant',
+  shimHostToolModule(
+    virtualNetwork,
+    'ai-assistant',
     UseAiAssistantCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/utils',
-    CommandUtilsModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/write-binary-file',
+  shimHostToolModule(virtualNetwork, 'utils', CommandUtilsModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'write-binary-file',
     WriteBinaryFileCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/write-text-file',
+  shimHostToolModule(
+    virtualNetwork,
+    'write-text-file',
     WriteTextFileCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/ai-assistant',
+  shimHostToolModule(
+    virtualNetwork,
+    'ai-assistant',
     UseAiAssistantCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/generate-example-cards',
+  shimHostToolModule(
+    virtualNetwork,
+    'generate-example-cards',
     GenerateExampleCardsCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/generate-readme-spec',
+  shimHostToolModule(
+    virtualNetwork,
+    'generate-readme-spec',
     GenerateReadmeSpecCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/generate-thumbnail',
+  shimHostToolModule(
+    virtualNetwork,
+    'generate-thumbnail',
     GenerateThumbnailCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/screenshot-card',
+  shimHostToolModule(
+    virtualNetwork,
+    'screenshot-card',
     ScreenshotCardCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-card',
-    GetCardCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-card-type-schema',
+  shimHostToolModule(virtualNetwork, 'get-card', GetCardCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'get-card-type-schema',
     GetCardTypeSchemaCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-all-realm-metas',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-all-realm-metas',
     GetAllRealmMetasCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-available-realm-identifiers',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-available-realm-identifiers',
     GetAvailableRealmIdentifiersCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-catalog-realm-identifiers',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-catalog-realm-identifiers',
     GetCatalogRealmIdentifiersCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/can-read-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'can-read-realm',
     CanReadRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-default-writable-realm',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-default-writable-realm',
     GetDefaultWritableRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-resource-identifier',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-realm-of-resource-identifier',
     GetRealmOfResourceIdentifierCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/sanitize-module-list',
+  shimHostToolModule(
+    virtualNetwork,
+    'sanitize-module-list',
     SanitizeModuleListCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/store-add',
-    StoreAddCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/validate-realm',
+  shimHostToolModule(virtualNetwork, 'store-add', StoreAddCommandModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'validate-realm',
     ValidateRealmCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-user-system-card',
+  shimHostToolModule(
+    virtualNetwork,
+    'get-user-system-card',
     GetUserSystemCardCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/search-google-images',
+  shimHostToolModule(
+    virtualNetwork,
+    'search-google-images',
     SearchGoogleImagesCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/one-shot-llm-request',
+  shimHostToolModule(
+    virtualNetwork,
+    'one-shot-llm-request',
     OneShotLlmRequestCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/populate-with-sample-data',
+  shimHostToolModule(
+    virtualNetwork,
+    'populate-with-sample-data',
     PopulateWithSampleDataCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/set-user-system-card',
+  shimHostToolModule(
+    virtualNetwork,
+    'set-user-system-card',
     SetUserSystemCardCommandModule,
   );
 }

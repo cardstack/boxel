@@ -120,8 +120,6 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
-import UpdateRoomSkillsCommand from '../commands/update-room-skills';
-import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
@@ -133,6 +131,8 @@ import {
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
+import UpdateRoomSkillsCommand from '../tools/update-room-skills';
+import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';

@@ -9,7 +9,7 @@ import {
 import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
-import { CommandField } from './command-field';
+import { CommandField } from './tool-field';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 

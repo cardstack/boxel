@@ -4,10 +4,10 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import CopySourceCommand from '@cardstack/host/commands/copy-source';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
+import CopySourceCommand from '@cardstack/host/tools/copy-source';
 
 import {
   setupIntegrationTestRealm,

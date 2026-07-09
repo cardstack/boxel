@@ -3,9 +3,9 @@ import { module, test } from 'qunit';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
-import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 import { StackItem } from '@cardstack/host/lib/stack-item';
+import CopyCardToRealmCommand from '@cardstack/host/tools/copy-card';
+import CopyCardToStackCommand from '@cardstack/host/tools/copy-card-to-stack';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 

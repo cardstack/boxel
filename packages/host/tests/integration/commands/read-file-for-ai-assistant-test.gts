@@ -4,9 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import ReadFileForAiAssistantCommand from '@cardstack/host/commands/read-file-for-ai-assistant';
-
 import RealmService from '@cardstack/host/services/realm';
+import ReadFileForAiAssistantCommand from '@cardstack/host/tools/read-file-for-ai-assistant';
 
 import {
   setupIntegrationTestRealm,

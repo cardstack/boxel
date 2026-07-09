@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import { rri } from '@cardstack/runtime-common';
 
-import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
+import OpenCreateListingModalCommand from '@cardstack/host/tools/open-create-listing-modal';
 
 import {
   setupIntegrationTestRealm,

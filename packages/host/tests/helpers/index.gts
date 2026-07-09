@@ -48,7 +48,6 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -58,6 +57,7 @@ import {
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
+import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
 
 import {
   coerceRenderError,

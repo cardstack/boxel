@@ -34,7 +34,6 @@ import {
 } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
-import LintAndFixCommand from '@cardstack/host/commands/lint-and-fix';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import {
   isReady,
@@ -55,6 +54,7 @@ import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
+import LintAndFixCommand from '@cardstack/host/tools/lint-and-fix';
 import { applyBoxelFormatting } from '@cardstack/host/utils/editor/boxel-formatter';
 
 import BinaryFileInfo from './binary-file-info';

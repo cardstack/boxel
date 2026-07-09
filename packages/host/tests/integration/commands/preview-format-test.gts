@@ -9,8 +9,8 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import PreviewFormatCommand from '@cardstack/host/commands/preview-format';
 import RealmService from '@cardstack/host/services/realm';
+import PreviewFormatCommand from '@cardstack/host/tools/preview-format';
 
 import {
   setupCardLogs,

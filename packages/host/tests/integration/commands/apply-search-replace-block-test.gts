@@ -7,7 +7,7 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import ApplySearchReplaceBlockCommand from '@cardstack/host/tools/apply-search-replace-block';
 
 import { setupRenderingTest } from '../../helpers/setup';
 

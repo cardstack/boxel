@@ -7,9 +7,8 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { AttributesSchema } from '@cardstack/runtime-common/helpers/ai';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import { HostCommandClasses } from '@cardstack/host/commands';
-
 import type HostBaseCommand from '@cardstack/host/lib/host-base-command';
+import { HostCommandClasses } from '@cardstack/host/tools';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 

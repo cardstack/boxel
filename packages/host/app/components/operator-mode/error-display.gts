@@ -15,11 +15,11 @@ import {
   Warning,
 } from '@cardstack/boxel-ui/icons';
 
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
+import SwitchSubmodeCommand from '@cardstack/host/tools/switch-submode';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';

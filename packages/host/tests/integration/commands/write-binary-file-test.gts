@@ -4,10 +4,10 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import WriteBinaryFileCommand from '@cardstack/host/commands/write-binary-file';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
+import WriteBinaryFileCommand from '@cardstack/host/tools/write-binary-file';
 
 import {
   setupIntegrationTestRealm,

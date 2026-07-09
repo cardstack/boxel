@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import FetchCardJsonCommand from '@cardstack/host/commands/fetch-card-json';
 import RealmService from '@cardstack/host/services/realm';
+import FetchCardJsonCommand from '@cardstack/host/tools/fetch-card-json';
 
 import {
   setupIntegrationTestRealm,

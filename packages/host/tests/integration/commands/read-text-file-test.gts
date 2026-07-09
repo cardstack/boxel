@@ -4,9 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import ReadTextFileCommand from '@cardstack/host/commands/read-text-file';
-
 import RealmService from '@cardstack/host/services/realm';
+import ReadTextFileCommand from '@cardstack/host/tools/read-text-file';
 
 import {
   setupIntegrationTestRealm,

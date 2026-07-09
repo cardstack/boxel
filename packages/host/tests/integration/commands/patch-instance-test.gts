@@ -10,9 +10,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
-import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
-
 import type CommandService from '@cardstack/host/services/command-service';
+import PatchCardInstanceCommand from '@cardstack/host/tools/patch-card-instance';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 

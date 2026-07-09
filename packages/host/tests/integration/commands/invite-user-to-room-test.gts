@@ -4,10 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import InviteUserToRoomCommand from '@cardstack/host/commands/invite-user-to-room';
-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
+import InviteUserToRoomCommand from '@cardstack/host/tools/invite-user-to-room';
 
 import {
   setupIntegrationTestRealm,

@@ -46,7 +46,7 @@ export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
 export type CardInstance<T extends CardDefConstructor | undefined> =
   T extends CardDefConstructor ? InstanceType<T> : undefined;
 
-export abstract class Command<
+export abstract class Tool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > {
@@ -122,6 +122,11 @@ export abstract class Command<
     });
   }
 }
+
+// Pre-rename spelling of `Tool`. Realm content (user command modules) extends
+// this under the old name, so the alias stays for as long as such content
+// exists; new code extends `Tool`.
+export { Tool as Command };
 
 function friendlyModuleName(fullModuleUrl: string) {
   return fullModuleUrl

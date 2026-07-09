@@ -61,7 +61,7 @@ import {
   fallbackShim,
 } from '@cardstack/runtime-common/package-shim-handler';
 
-import { shimHostCommands } from '../commands';
+import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   // Always shim qunit on the virtual network. In non-test environments (code
@@ -219,7 +219,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     fallbackShim({ default: class {} }),
   );
 
-  shimHostCommands(virtualNetwork);
+  shimHostTools(virtualNetwork);
 }
 
 // Shims test-only module IDs into the virtual network as empty fallbacks so

@@ -8,8 +8,8 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import SyncOpenRouterModelsCommand from '@cardstack/host/commands/sync-openrouter-models';
 import CardService from '@cardstack/host/services/card-service';
+import SyncOpenRouterModelsCommand from '@cardstack/host/tools/sync-openrouter-models';
 
 import {
   testRealmURL,

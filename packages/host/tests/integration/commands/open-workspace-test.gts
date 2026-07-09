@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import OpenWorkspaceCommand from '@cardstack/host/commands/open-workspace';
+import OpenWorkspaceCommand from '@cardstack/host/tools/open-workspace';
 
 import {
   setupIntegrationTestRealm,

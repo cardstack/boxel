@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import SearchGoogleImagesCommand from '@cardstack/host/commands/search-google-images';
+import SearchGoogleImagesCommand from '@cardstack/host/tools/search-google-images';
 
 import {
   setupIntegrationTestRealm,

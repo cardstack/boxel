@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import InstantiateCardCommand from '@cardstack/host/commands/instantiate-card';
+import InstantiateCardCommand from '@cardstack/host/tools/instantiate-card';
 
 import {
   setupIntegrationTestRealm,

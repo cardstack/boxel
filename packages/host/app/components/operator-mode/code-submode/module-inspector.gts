@@ -46,7 +46,6 @@ import {
   hasExtension,
 } from '@cardstack/runtime-common';
 
-import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
@@ -81,6 +80,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import CreateSpecCommand from '@cardstack/host/tools/create-specs';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';

@@ -22,15 +22,10 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "@cardstack/boxel-ui": [
-        "../boxel-ui/addon/declarations"
-      ],
-      "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/declarations/*"
-      ],
-      "@cardstack/boxel-host/commands/*": [
-        "../host/app/commands/*"
-      ]
+      "@cardstack/boxel-ui": ["../boxel-ui/addon/declarations"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/declarations/*"],
+      "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"]
     }
   }
 }

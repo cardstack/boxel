@@ -6,9 +6,8 @@ import { module, test } from 'qunit';
 
 import { rri } from '@cardstack/runtime-common';
 
-import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
-
 import RealmService from '@cardstack/host/services/realm';
+import AddFieldToCardDefinitionCommand from '@cardstack/host/tools/add-field-to-card-definition';
 
 import {
   setupIntegrationTestRealm,

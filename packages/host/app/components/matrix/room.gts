@@ -53,7 +53,6 @@ import {
 } from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 
-import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import ENV from '@cardstack/host/config/environment';
 import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
@@ -75,6 +74,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';

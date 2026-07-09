@@ -4,9 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import ExecuteAtomicOperationsCommand from '@cardstack/host/commands/execute-atomic-operations';
 import CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
+import ExecuteAtomicOperationsCommand from '@cardstack/host/tools/execute-atomic-operations';
 
 import {
   setupIntegrationTestRealm,

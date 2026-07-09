@@ -11,9 +11,9 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
-import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
+import CheckCorrectnessCommand from '@cardstack/host/tools/check-correctness';
+import PatchCardInstanceCommand from '@cardstack/host/tools/patch-card-instance';
+import PatchCodeCommand from '@cardstack/host/tools/patch-code';
 
 import {
   testRealmURL,

@@ -3,8 +3,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import GetPublishedRealmsCommand from '@cardstack/host/commands/get-published-realms';
 import type RealmService from '@cardstack/host/services/realm';
+import GetPublishedRealmsCommand from '@cardstack/host/tools/get-published-realms';
 
 import {
   setupIntegrationTestRealm,

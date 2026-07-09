@@ -12,9 +12,9 @@ import {
   type LintResult,
 } from '@cardstack/runtime-common';
 
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { isReady, type Ready } from '@cardstack/host/resources/file';
+import PatchCodeCommand from '@cardstack/host/tools/patch-code';
 
 import {
   testRealmURL,

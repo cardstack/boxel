@@ -1,8 +1,8 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import CopyFileToRealmCommand from '@cardstack/host/commands/copy-file-to-realm';
-import ShowFileCommand from '@cardstack/host/commands/show-file';
+import CopyFileToRealmCommand from '@cardstack/host/tools/copy-file-to-realm';
+import ShowFileCommand from '@cardstack/host/tools/show-file';
 
 import {
   setupIntegrationTestRealm,

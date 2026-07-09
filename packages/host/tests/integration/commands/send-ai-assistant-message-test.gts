@@ -6,9 +6,8 @@ import { module, test } from 'qunit';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-
 import RealmService from '@cardstack/host/services/realm';
+import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
 
 import {
   setupIntegrationTestRealm,

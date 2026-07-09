@@ -3,9 +3,9 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import PatchFieldsCommand from '@cardstack/host/commands/patch-fields';
 import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
+import PatchFieldsCommand from '@cardstack/host/tools/patch-fields';
 
 import {
   testRealmURL,

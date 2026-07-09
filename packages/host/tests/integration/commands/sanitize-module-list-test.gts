@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import { ri } from '@cardstack/runtime-common';
 
-import SanitizeModuleListCommand from '@cardstack/host/commands/sanitize-module-list';
 import RealmService from '@cardstack/host/services/realm';
+import SanitizeModuleListCommand from '@cardstack/host/tools/sanitize-module-list';
 
 import {
   setupIntegrationTestRealm,

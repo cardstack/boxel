@@ -28,11 +28,10 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
-import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
+import CheckCorrectnessCommand from '@cardstack/host/tools/check-correctness';
+import PatchCodeCommand from '@cardstack/host/tools/patch-code';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
