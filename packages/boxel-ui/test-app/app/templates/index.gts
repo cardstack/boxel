@@ -148,8 +148,26 @@ class IndexComponent extends Component {
       </CardContainer>
     </div>
     <style scoped>
+      .boxel-freestyle-guide input:not(.boxel-input):not([type='checkbox']),
+      .boxel-freestyle-guide select:not(.boxel-select) {
+        background-color: var(--background);
+        color: var(--foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .boxel-freestyle-guide
+        input:not(.boxel-input):not([type='checkbox'])::placeholder {
+        color: var(--muted-foreground);
+      }
+      .boxel-freestyle-guide
+        input:not(.boxel-input):not([type='checkbox']):focus:focus-visible,
+      .boxel-freestyle-guide select:not(.boxel-select):focus:focus-visible {
+        outline: 1px solid var(--ring);
+      }
       .boxel-freestyle-mode-wrapper {
-        height: 100%;
+        /* Render native UI (select menus, scrollbars, form controls) in the
+           scheme the data-theme toggle resolves to via theme.css. */
+        color-scheme: var(--boxel-color-scheme, light);
         background-color: var(--background);
       }
       .boxel-freestyle-guide-container {
@@ -171,6 +189,21 @@ class IndexComponent extends Component {
       }
       .boxel-freestyle-theme-selector {
         min-width: 10rem;
+      }
+      @media (max-width: 1279px) {
+        /* At narrow widths the header no longer has room for the floating
+           settings box, so it flows in the content area instead. */
+        .boxel-freestyle-theme-settings {
+          position: static;
+          width: auto;
+          --boxel-container-gap: var(--boxel-sp-xs) var(--boxel-sp);
+          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+          border-bottom: 1px solid
+            color-mix(in oklab, var(--border) 60%, transparent);
+        }
+        .boxel-freestyle-theme-row {
+          flex-wrap: wrap;
+        }
       }
       .subsection-import {
         display: flex;
@@ -195,9 +228,6 @@ class IndexComponent extends Component {
       .subsection-card {
         background-color: var(--card);
         color: var(--card-foreground);
-      }
-      .FreestyleGuide {
-        display: grid;
       }
       .FreestyleUsage {
         --radius: var(--theme-radius);
@@ -229,22 +259,49 @@ class IndexComponent extends Component {
         color: color-mix(in oklab, var(--foreground) 60%, transparent);
       }
       .FreestyleGuide-body {
-        height: 100%;
-        overflow: hidden;
         background-color: inherit;
       }
       .FreestyleGuide-nav {
-        height: 100%;
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
         border-right-color: var(--sidebar-border);
+      }
+      @media (max-width: 599px) {
+        /* Below 600px ember-freestyle stacks the nav above the content;
+           cap its height and let the content column scroll instead. */
+        .FreestyleGuide-header {
+          padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
+        }
+        .FreestyleGuide-title {
+          font-size: 1.375rem;
+        }
+        .FreestyleGuide-nav {
+          position: static;
+          height: auto;
+          max-height: 40vh;
+          border-bottom: 1px solid var(--sidebar-border);
+        }
+        .FreestyleGuide-content {
+          flex: 1;
+          min-height: 0;
+          margin-top: 0;
+        }
+        .boxel-freestyle-theme-settings {
+          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp);
+        }
+        .FreestyleUsage-apiTable,
+        .FreestyleUsage-cssVarsTable {
+          display: block;
+          overflow-x: auto;
+        }
       }
       .FreestyleMenu-itemLink,
       .FreestyleMenu-submenuItemLink {
         color: inherit;
       }
       .FreestyleMenu-itemLink.active,
-      .FreestyleMenu-submenuItemLink.active {
+      .FreestyleMenu-submenuItemLink.active,
+      .FreestyleMenu-submenuItem.is-active > .FreestyleMenu-submenuItemLink {
         background-color: var(--sidebar-foreground);
         color: var(--sidebar);
         font-weight: normal;
@@ -259,10 +316,12 @@ class IndexComponent extends Component {
         color: var(--sidebar-foreground);
       }
       .FreestyleMenu-itemLink.active:hover,
-      .FreestyleMenu-submenuItemLink.active:hover {
+      .FreestyleMenu-submenuItemLink.active:hover,
+      .FreestyleMenu-submenuItem.is-active
+        > .FreestyleMenu-submenuItemLink:hover {
         background-color: color-mix(
           in oklab,
-          var(--sidebar-foreground) 90%,
+          var(--sidebar-foreground) 80%,
           transparent
         );
         color: var(--sidebar);
@@ -309,10 +368,14 @@ class IndexComponent extends Component {
       }
       .FreestyleUsage-preview {
         --radius: var(--theme-radius, var(--boxel-border-radius));
-
         color: var(--foreground, var(--boxel-dark));
         background-color: var(--background, var(--boxel-light));
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
+        overflow: hidden;
+      }
+      .FreestyleUsage-preview:after {
+        background: var(--secondary);
+        color: var(--secondary-foreground);
       }
       .FreestyleUsage-apiTable tr:nth-child(even),
       .FreestyleUsage-cssVarsTable tr:nth-child(even) {
@@ -339,6 +402,13 @@ class IndexComponent extends Component {
       .FreestyleUsage-apiTable,
       .FreestyleUsage-cssVarsTable {
         margin-inline: unset;
+      }
+      .FreestyleGuide-ctaIcon {
+        fill: var(--foreground);
+      }
+      .FreestyleUsageControls {
+        background: var(--popover);
+        color: var(--popover-foreground);
       }
     </style>
   </template>

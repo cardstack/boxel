@@ -284,7 +284,7 @@ export default class BoxelInput extends Component<Signature> {
             var(--boxel-form-control-height)
           );
           padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-          background-color: var(--input, var(--boxel-light));
+          background-color: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
           border: 1px solid
             var(--border, var(--boxel-form-control-border-color));
