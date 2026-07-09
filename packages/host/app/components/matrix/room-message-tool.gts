@@ -226,7 +226,7 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.matrixService.failedToolState.get(toolRequest.id);
   }
 
-  private get invalidCommandState() {
+  private get invalidToolCallState() {
     return (
       this.args.messageCommand.status === 'invalid' &&
       !!this.args.messageCommand.failureReason
@@ -269,7 +269,7 @@ export default class RoomMessageTool extends Component<Signature> {
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
             @isCompact={{@isCompact}}
-            @commandState='preparing'
+            @toolCallState='preparing'
           />
         </CodeBlock>
       {{else}}
@@ -288,7 +288,7 @@ export default class RoomMessageTool extends Component<Signature> {
             @action={{@runCommand}}
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
-            @commandState={{this.applyButtonState}}
+            @toolCallState={{this.applyButtonState}}
             @isCompact={{@isCompact}}
             @isDisplayingCode={{this.isDisplayingCode}}
             @toggleCode={{this.toggleViewCode}}
@@ -302,7 +302,7 @@ export default class RoomMessageTool extends Component<Signature> {
             <Alert.Messages @messages={{array this.failedToolState.message}} />
             <Alert.Action @action={{@runCommand}} @actionName='Retry' />
           </Alert>
-        {{else if this.invalidCommandState}}
+        {{else if this.invalidToolCallState}}
           <Alert @type='warning' as |Alert|>
             <Alert.Messages @messages={{array @messageCommand.failureReason}} />
             <Alert.Action @action={{@runCommand}} @actionName='Try Anyway' />

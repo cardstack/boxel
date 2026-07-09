@@ -96,7 +96,7 @@ module('Unit | Lib | tool-auto-execute', function () {
   });
 
   test('commands owned by another agent never auto-execute', function (assert) {
-    // Mirrors the agentId gate in tool-service.drainCommandProcessingQueue:
+    // Mirrors the agentId gate in tool-service.drainToolProcessingQueue:
     // a command whose message came from a different agent must not auto-run
     // on this host, even if it would otherwise satisfy one of the auto-exec
     // branches. UI callers rely on this so the manual approval bar / per-

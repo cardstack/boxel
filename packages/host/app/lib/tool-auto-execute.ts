@@ -13,7 +13,7 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 // reintroducing the action-bar flash that prompted CS-11647.
 //
 // `isOwnedByCurrentAgent` mirrors the agentId gate in
-// tool-service.drainCommandProcessingQueue: a command sent by
+// tool-service.drainToolProcessingQueue: a command sent by
 // another agent is never auto-executed, even if it would otherwise
 // satisfy one of the three branches below. Callers that don't track
 // agents (e.g. unit tests) can pass `true` to focus on the other

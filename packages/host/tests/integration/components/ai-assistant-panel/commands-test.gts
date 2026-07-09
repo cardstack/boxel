@@ -1983,10 +1983,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let roomId = await renderAiAssistantPanel();
 
     // Verifies the followup-fix for the synthetic-spinner hang flagged in
-    // the self-review of this branch: drainCommandProcessingQueue must
+    // the self-review of this branch: drainToolProcessingQueue must
     // dispatch an `invalid` commandResult when a room is wedged, so the
     // synthetic 'applying' state in room-message-tool.gts falls through
-    // to the invalidCommandState ("Try Anyway") branch instead of pinning
+    // to the invalidToolCallState ("Try Anyway") branch instead of pinning
     // a spinner that no terminal event ever clears.
     //
     // Driving the real wait-loop end-to-end is unstable: roomResource is
@@ -2070,7 +2070,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       (captured[0]?.failureReason ?? '').startsWith(
         'Room processing did not finish within',
       ),
-      'failureReason surfaces the stuck-processing cause for the invalidCommandState alert',
+      'failureReason surfaces the stuck-processing cause for the invalidToolCallState alert',
     );
   });
 

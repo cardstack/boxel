@@ -55,7 +55,7 @@ import type { RoomResource } from '../resources/room';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
-// How long drainCommandProcessingQueue and drainCodePatchProcessingQueue wait
+// How long drainToolProcessingQueue and drainCodePatchProcessingQueue wait
 // for a room resource that's still processing before giving up on the event.
 // In tests we shorten this so the stuck-timeout invalidation path can be
 // exercised in a single test without holding a real test open for a minute.
@@ -276,7 +276,7 @@ export default class ToolService extends Service {
 
     this.commandProcessingEventQueue.push(compoundKey);
 
-    debounce(this, this.drainCommandProcessingQueue, 100);
+    debounce(this, this.drainToolProcessingQueue, 100);
   }
 
   public queueEventForCodePatchProcessing(event: Partial<IEvent>) {
@@ -305,7 +305,7 @@ export default class ToolService extends Service {
     debounce(this, this.drainCodePatchProcessingQueue, 100);
   }
 
-  private async drainCommandProcessingQueue() {
+  private async drainToolProcessingQueue() {
     let waiterToken = commandProcessingWaiter.beginAsync();
     try {
       await this.flushCommandProcessingQueue;
@@ -351,7 +351,7 @@ export default class ToolService extends Service {
           // logged and continued, the spinner would hang indefinitely with
           // no manual Run fallback. Mark each auto-executable command on
           // this message invalid so the UI falls through to the
-          // invalidCommandState "Try Anyway" branch; manual-approval
+          // invalidToolCallState "Try Anyway" branch; manual-approval
           // commands are left in 'ready' so the action bar's Run button
           // remains the user's fallback.
           console.error(
