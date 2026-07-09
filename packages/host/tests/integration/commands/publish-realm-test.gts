@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
 import RealmService from '@cardstack/host/services/realm';
+import PublishRealmCommand from '@cardstack/host/tools/publish-realm';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 

@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import CancelIndexingJobCommand from '@cardstack/host/commands/cancel-indexing-job';
 import RealmService from '@cardstack/host/services/realm';
+import CancelIndexingJobCommand from '@cardstack/host/tools/cancel-indexing-job';
 
 import {
   setupIntegrationTestRealm,

@@ -5,8 +5,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import PersistModuleInspectorViewCommand from '@cardstack/host/commands/persist-module-inspector-view';
 import RealmService from '@cardstack/host/services/realm';
+import PersistModuleInspectorViewCommand from '@cardstack/host/tools/persist-module-inspector-view';
 
 import {
   setupIntegrationTestRealm,

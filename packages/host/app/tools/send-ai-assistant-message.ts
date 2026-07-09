@@ -12,8 +12,8 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import { addPatchTools } from '../commands/utils';
 import HostBaseCommand from '../lib/host-base-command';
+import { addPatchTools } from '../tools/utils';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';

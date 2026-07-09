@@ -6,7 +6,7 @@ module.exports = {
     type: 'problem',
     docs: {
       description:
-        'Ensure every host command module is imported, shimmed, and exported',
+        'Ensure every host tool module is imported, shimmed, and exported',
       category: 'Best Practices',
       recommended: true,
     },
@@ -18,7 +18,7 @@ module.exports = {
     if (
       typeof filename !== 'string' ||
       filename === '<text>' ||
-      !filename.endsWith(path.join('app', 'commands', 'index.ts'))
+      !filename.endsWith(path.join('app', 'tools', 'index.ts'))
     ) {
       return {};
     }
@@ -88,18 +88,16 @@ module.exports = {
       },
 
       CallExpression(node) {
+        // Registrations go through the local `shimHostToolModule(virtualNetwork,
+        // '<name>', Module)` helper, which shims both the tools/ specifier and
+        // its pre-rename commands/ alias.
         if (
           node.callee &&
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object &&
-          node.callee.object.type === 'Identifier' &&
-          node.callee.object.name === 'virtualNetwork' &&
-          node.callee.property &&
-          node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'shimModule' &&
-          node.arguments.length >= 2
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'shimHostToolModule' &&
+          node.arguments.length >= 3
         ) {
-          const moduleIdentifier = node.arguments[1];
+          const moduleIdentifier = node.arguments[2];
           if (moduleIdentifier && moduleIdentifier.type === 'Identifier') {
             shimmedModules.add(moduleIdentifier.name);
           }
@@ -133,7 +131,7 @@ module.exports = {
           .forEach((missingModule) => {
             context.report({
               node,
-              message: `Command module "${missingModule.specifier}" is missing from imports in commands/index.ts.`,
+              message: `Tool module "${missingModule.specifier}" is missing from imports in tools/index.ts.`,
             });
           });
 
@@ -148,13 +146,13 @@ module.exports = {
           if (!shimmedModules.has(alias)) {
             context.report({
               node,
-              message: `Command module "${moduleName}" is imported but never shimmed with virtualNetwork.shimModule.`,
+              message: `Tool module "${moduleName}" is imported but never shimmed with shimHostToolModule.`,
             });
           }
           if (moduleInfo.requiresHostClass && !hostClassReferences.has(alias)) {
             context.report({
               node,
-              message: `Command module "${moduleName}" is imported but not referenced in HostCommandClasses.`,
+              message: `Tool module "${moduleName}" is imported but not referenced in HostCommandClasses.`,
             });
           }
         }
@@ -180,9 +178,7 @@ function listCommandModules(commandsDir) {
         requiresHostClass = /extends\s+HostBaseCommand/.test(source);
 
         if (requiresHostClass) {
-          const constructorMatch = source.match(
-            /constructor\s*\(([^)]*)\)/m,
-          );
+          const constructorMatch = source.match(/constructor\s*\(([^)]*)\)/m);
           if (constructorMatch) {
             const params = constructorMatch[1]
               .split(',')

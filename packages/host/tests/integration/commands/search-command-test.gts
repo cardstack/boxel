@@ -7,7 +7,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import {
   SearchCardsByQueryCommand,
   SearchCardsByTypeAndTitleCommand,
-} from '@cardstack/host/commands/search-cards';
+} from '@cardstack/host/tools/search-cards';
 
 import {
   testRealmURL,

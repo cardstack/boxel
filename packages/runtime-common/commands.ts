@@ -46,7 +46,7 @@ export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
 export type CardInstance<T extends CardDefConstructor | undefined> =
   T extends CardDefConstructor ? InstanceType<T> : undefined;
 
-export abstract class Command<
+export abstract class Tool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > {
@@ -123,6 +123,11 @@ export abstract class Command<
   }
 }
 
+// Pre-rename spelling of `Tool`. Realm content (user command modules) extends
+// this under the old name, so the alias stays for as long as such content
+// exists; new code extends `Tool`.
+export { Tool as Command };
+
 function friendlyModuleName(fullModuleUrl: string) {
   return fullModuleUrl
     .split('/')
@@ -152,6 +157,28 @@ export function buildCommandFunctionName(
   return buildCommandFunctionNameFromResolvedRef(absoluteCodeRef);
 }
 
+// The host tool modules were published as `@cardstack/boxel-host/commands/*`
+// before the command → tool rename; both spellings resolve to the same
+// modules. functionNames are minted by hashing `module#name`, so the hash
+// input canonicalizes the tool-named spelling back to the pre-rename one —
+// HASH INPUT ONLY, never resolution. This keeps every functionName ever
+// minted byte-identical across the rename: definitions persisted in room
+// state, names referenced in matrix history, and refs authored under either
+// spelling all agree without any re-upload or migration. Tools that never
+// had a pre-rename spelling also hash through this mapping, which is
+// harmless — the mapped string is just a stable seed.
+const HOST_TOOLS_MODULE_PREFIX = '@cardstack/boxel-host/tools/';
+const HOST_COMMANDS_MODULE_PREFIX = '@cardstack/boxel-host/commands/';
+
+export function moduleForFunctionNameHash(module: string): string {
+  if (module.startsWith(HOST_TOOLS_MODULE_PREFIX)) {
+    return `${HOST_COMMANDS_MODULE_PREFIX}${module.slice(
+      HOST_TOOLS_MODULE_PREFIX.length,
+    )}`;
+  }
+  return module;
+}
+
 // The name-construction half of buildCommandFunctionName, for callers that
 // already hold an absolute code ref (registered package prefixes resolve
 // verbatim, so e.g. ai-bot can produce identical names without a
@@ -163,7 +190,9 @@ export function buildCommandFunctionNameFromResolvedRef(ref: {
   if (!ref?.module || !ref?.name) {
     return '';
   }
-  const hashed = simpleHash(`${ref.module}#${ref.name}`);
+  const hashed = simpleHash(
+    `${moduleForFunctionNameHash(ref.module)}#${ref.name}`,
+  );
   let name = ref.name === 'default' ? friendlyModuleName(ref.module) : ref.name;
   return `${name}_${hashed.slice(0, 4)}`;
 }

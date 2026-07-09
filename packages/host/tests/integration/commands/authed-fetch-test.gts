@@ -4,9 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import AuthedFetchCommand from '@cardstack/host/commands/authed-fetch';
 import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
+import AuthedFetchCommand from '@cardstack/host/tools/authed-fetch';
 
 import {
   setupIntegrationTestRealm,

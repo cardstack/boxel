@@ -176,7 +176,7 @@ export default class CreateListingModal extends Component<Signature> {
     // runtime. Vite/Embroider has no equivalent alias and the host doesn't
     // depend on `@cardstack/catalog`, so a static import would fail to
     // resolve at build time. The realm content also imports things like
-    // `@cardstack/boxel-host/commands/...` which are likewise loader-only
+    // `@cardstack/boxel-host/tools/...` which are likewise loader-only
     // specifiers, so the catalog file isn't independently buildable. Going
     // through the loader is the only path that resolves both correctly.
     let module = await this.loaderService.loader.import<{

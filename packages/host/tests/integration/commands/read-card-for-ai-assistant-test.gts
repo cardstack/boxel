@@ -6,9 +6,8 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import ReadCardForAiAssistantCommand from '@cardstack/host/commands/read-card-for-ai-assistant';
-
 import RealmService from '@cardstack/host/services/realm';
+import ReadCardForAiAssistantCommand from '@cardstack/host/tools/read-card-for-ai-assistant';
 
 import {
   setupIntegrationTestRealm,

@@ -9,8 +9,8 @@ import { parse as parseYaml } from 'yaml';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import MigrateSkillCommand from '@cardstack/host/commands/migrate-skill';
 import RealmService from '@cardstack/host/services/realm';
+import MigrateSkillCommand from '@cardstack/host/tools/migrate-skill';
 
 import {
   setupCardLogs,

@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import EvaluateModuleCommand from '@cardstack/host/commands/evaluate-module';
+import EvaluateModuleCommand from '@cardstack/host/tools/evaluate-module';
 
 import {
   setupIntegrationTestRealm,

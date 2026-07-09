@@ -6,8 +6,8 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 

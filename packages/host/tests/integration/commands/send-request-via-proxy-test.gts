@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import SendRequestViaProxyCommand from '@cardstack/host/commands/send-request-via-proxy';
 import RealmService from '@cardstack/host/services/realm';
+import SendRequestViaProxyCommand from '@cardstack/host/tools/send-request-via-proxy';
 
 import {
   setupIntegrationTestRealm,

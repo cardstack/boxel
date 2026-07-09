@@ -7,7 +7,7 @@ import {
 } from './card-api';
 import StringField from './string';
 import { FrontmatterField } from './frontmatter-field';
-import { CommandField } from './command-field';
+import { ToolField } from './tool-field';
 
 // A skill markdown file's frontmatter (`boxel.kind: skill`). Adds typed fields
 // on top of the base `FrontmatterField` (which holds the raw frontmatter in
@@ -20,13 +20,13 @@ export class SkillFrontmatterField extends FrontmatterField {
 
   @field name = contains(StringField);
   @field description = contains(StringField);
-  @field tools = containsMany(CommandField);
+  @field tools = containsMany(ToolField);
   // Legacy spelling of `tools`. Index rows extracted before the
   // command -> tool rename persist the value under a `commands` attribute;
   // this field lets those rows rehydrate without a reindex. Consumers read
   // `tools` and fall back to this (see the host's `getSkillSourceCommands`).
   // Remove once all realms have reindexed post-rename.
-  @field commands = containsMany(CommandField);
+  @field commands = containsMany(ToolField);
 
   // `name`/`description` come from the shared top-level frontmatter keys;
   // `tools` from the `boxel:` namespace (`boxel.tools`, with the pre-rename

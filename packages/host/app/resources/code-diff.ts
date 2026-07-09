@@ -9,7 +9,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
+import ApplySearchReplaceBlockCommand from '../tools/apply-search-replace-block';
 
 interface CodeDiffResourceArgs {
   named: {

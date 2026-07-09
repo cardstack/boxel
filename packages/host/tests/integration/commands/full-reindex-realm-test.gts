@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import FullReindexRealmCommand from '@cardstack/host/commands/full-reindex-realm';
 import RealmService from '@cardstack/host/services/realm';
+import FullReindexRealmCommand from '@cardstack/host/tools/full-reindex-realm';
 
 import {
   setupIntegrationTestRealm,

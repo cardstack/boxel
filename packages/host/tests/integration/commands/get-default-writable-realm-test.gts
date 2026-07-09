@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import GetDefaultWritableRealmCommand from '@cardstack/host/commands/get-default-writable-realm';
 import RealmService from '@cardstack/host/services/realm';
+import GetDefaultWritableRealmCommand from '@cardstack/host/tools/get-default-writable-realm';
 
 import {
   setupIntegrationTestRealm,

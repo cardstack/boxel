@@ -15,8 +15,6 @@ import perform from 'ember-concurrency/helpers/perform';
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
-import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
-import UnpublishRealmCommand from '@cardstack/host/commands/unpublish-realm';
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
@@ -26,6 +24,8 @@ import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
+import PublishRealmCommand from '@cardstack/host/tools/publish-realm';
+import UnpublishRealmCommand from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 

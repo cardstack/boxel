@@ -15,7 +15,7 @@ import { module, test } from 'qunit';
 
 import { baseRealmRRI } from '@cardstack/runtime-common';
 
-import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
+import WriteTextFileCommand from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {

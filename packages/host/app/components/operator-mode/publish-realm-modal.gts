@@ -33,7 +33,6 @@ import {
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
-import CheckDomainAvailabilityCommand from '@cardstack/host/commands/check-domain-availability';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
@@ -56,6 +55,7 @@ import type {
   SubdomainAvailabilityResult,
 } from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import CheckDomainAvailabilityCommand from '@cardstack/host/tools/check-domain-availability';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 

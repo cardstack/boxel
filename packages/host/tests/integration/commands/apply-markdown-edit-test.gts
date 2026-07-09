@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import ApplyMarkdownEditCommand from '@cardstack/host/commands/apply-markdown-edit';
 import RealmService from '@cardstack/host/services/realm';
+import ApplyMarkdownEditCommand from '@cardstack/host/tools/apply-markdown-edit';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 

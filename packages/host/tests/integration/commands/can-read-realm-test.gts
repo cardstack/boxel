@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import CanReadRealmCommand from '@cardstack/host/commands/can-read-realm';
 import RealmService from '@cardstack/host/services/realm';
+import CanReadRealmCommand from '@cardstack/host/tools/can-read-realm';
 
 import {
   setupIntegrationTestRealm,

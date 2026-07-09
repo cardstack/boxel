@@ -13,8 +13,8 @@ import {
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import RealmService from '@cardstack/host/services/realm';
+import UpdateRoomSkillsCommand from '@cardstack/host/tools/update-room-skills';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';

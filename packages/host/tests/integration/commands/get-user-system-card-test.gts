@@ -4,8 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import GetUserSystemCardCommand from '@cardstack/host/commands/get-user-system-card';
 import RealmService from '@cardstack/host/services/realm';
+import GetUserSystemCardCommand from '@cardstack/host/tools/get-user-system-card';
 
 import {
   setupIntegrationTestRealm,

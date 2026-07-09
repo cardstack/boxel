@@ -52,10 +52,10 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
+import CopyCardToRealmCommand from '@cardstack/host/tools/copy-card';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';

@@ -34,16 +34,16 @@ import {
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SaveCardCommand from '@cardstack/host/commands/save-card';
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import ShowCardCommand from '@cardstack/host/commands/show-card';
+import CreateAiAssistantRoomCommand from '@cardstack/host/tools/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/host/tools/open-ai-assistant-room';
+import SaveCardCommand from '@cardstack/host/tools/save-card';
+import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/tools/search-cards';
+import SendAiAssistantMessageCommand from '@cardstack/host/tools/send-ai-assistant-message';
+import ShowCardCommand from '@cardstack/host/tools/show-card';
 import {
   waitForCompletedCommandRequest,
   waitForRealmState,
-} from '@cardstack/host/commands/utils';
+} from '@cardstack/host/tools/utils';
 
 import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
 

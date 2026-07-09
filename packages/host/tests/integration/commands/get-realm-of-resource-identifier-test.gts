@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import { ri } from '@cardstack/runtime-common';
 
-import GetRealmOfResourceIdentifierCommand from '@cardstack/host/commands/get-realm-of-resource-identifier';
 import RealmService from '@cardstack/host/services/realm';
+import GetRealmOfResourceIdentifierCommand from '@cardstack/host/tools/get-realm-of-resource-identifier';
 
 import {
   setupIntegrationTestRealm,

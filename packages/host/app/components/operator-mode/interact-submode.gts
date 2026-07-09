@@ -48,8 +48,6 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
-
 import {
   detectStackItemTypeForTarget,
   StackItem,
@@ -57,6 +55,7 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
+import CopyCardToStackCommand from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
