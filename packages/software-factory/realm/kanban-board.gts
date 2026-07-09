@@ -11,8 +11,8 @@ import {
   Component,
   StringField,
   type BaseDefComponent,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
 
 import {
   ContextButton,

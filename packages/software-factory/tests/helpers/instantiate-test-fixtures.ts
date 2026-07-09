@@ -21,8 +21,8 @@ export const VALID_MODULE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class ValidCard extends CardDef {
   static displayName = 'Valid Card';
@@ -40,8 +40,8 @@ export const TAGS_CARD_MODULE_GTS = `import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TagsCard extends CardDef {
   static displayName = 'Tags Card';

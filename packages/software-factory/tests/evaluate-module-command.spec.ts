@@ -19,8 +19,8 @@ const VALID_MODULE = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class ValidCard extends CardDef {
   static displayName = 'Valid Card';
@@ -32,7 +32,7 @@ const BROKEN_IMPORT_MODULE = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Foo } from './does-not-exist';
 
 export class BrokenImportCard extends CardDef {
@@ -44,7 +44,7 @@ export class BrokenImportCard extends CardDef {
 const BROKEN_EVAL_MODULE = `import {
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export class BrokenEvalCard extends CardDef {
   static displayName = 'Broken Eval Card';

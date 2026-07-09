@@ -1,11 +1,6 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import ColorField from 'https://cardstack.com/base/color';
-import StringField from 'https://cardstack.com/base/string';
+import { FieldDef, Component, field, contains } from '@cardstack/base/card-api';
+import ColorField from '@cardstack/base/color';
+import StringField from '@cardstack/base/string';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { StatusPill } from './status-pill.gts';

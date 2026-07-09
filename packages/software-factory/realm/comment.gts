@@ -1,12 +1,7 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+import { FieldDef, Component, field, contains } from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export class Comment extends FieldDef {
