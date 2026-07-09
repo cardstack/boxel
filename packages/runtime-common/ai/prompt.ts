@@ -37,11 +37,11 @@ import type {
   MatrixEventWithBoxelContext,
   SkillsConfigEvent,
   Tool,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   SerializedFile,
   SerializedFileDef,
-} from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/file-api';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,

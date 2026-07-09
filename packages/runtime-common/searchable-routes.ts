@@ -1,4 +1,4 @@
-import type { Searchable } from 'https://cardstack.com/base/card-api';
+import type { Searchable } from '@cardstack/base/card-api';
 
 // Shared route logic for `searchable`-driven search-doc depth. `searchable`
 // only ever governs links (see the `Searchable` docs in `base/card-api.gts`):

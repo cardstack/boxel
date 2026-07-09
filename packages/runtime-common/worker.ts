@@ -28,7 +28,7 @@ import {
 import { MatrixClient } from './matrix-client.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;

@@ -18,11 +18,11 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   isToolResultEventType,
 } from '../matrix-constants.ts';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import type { PromptParts } from './types.ts';
 import { encodeUri } from 'matrix-js-sdk/lib/utils.js';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { isTextBasedContentType } from './modality.ts';
 
 function getLog() {

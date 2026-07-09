@@ -5,8 +5,8 @@ import {
 } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDefConstructor } from '@cardstack/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
 import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';

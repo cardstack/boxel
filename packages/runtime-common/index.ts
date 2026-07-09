@@ -12,8 +12,8 @@ import type { Definition } from './definitions.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
@@ -957,12 +957,8 @@ export { sanitizeHtml } from './dompurify-runtime.ts';
 
 export { getPlural } from './pluralize-runtime.ts';
 
-import type {
-  CardDef,
-  FieldDef,
-  BaseDef,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef, FieldDef, BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { RealmInfo } from './realm.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 
