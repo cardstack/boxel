@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
-  baseRealm,
   baseRealmRRI,
   baseCardRef,
   ensureTrailingSlash,
@@ -118,7 +117,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function getInstance(
@@ -4670,7 +4669,11 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
         '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
         '@cardstack/base/default-templates/fitted',
         '@cardstack/base/default-templates/head',
         '@cardstack/base/default-templates/image-def-atom',
@@ -4835,7 +4838,11 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
         '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
         '@cardstack/base/default-templates/fitted',
         '@cardstack/base/default-templates/head',
         '@cardstack/base/default-templates/image-def-atom',

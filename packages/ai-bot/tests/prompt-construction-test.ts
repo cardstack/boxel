@@ -6704,13 +6704,13 @@ module('set model in prompt', (hooks) => {
     assert.strictEqual(reasoningEffort, 'minimal');
   });
 
-  // Regression coverage for CS-11045: the host's `commandResult` may carry an
+  // Regression coverage for CS-11045: the host's `toolResult` may carry an
   // `m.relates_to.event_id` that disagrees with the bot message's canonical
   // event_id (the matrix server normalizes the bot message's event_id to the
   // last m.replace's id, while the host captured the streaming/original id).
   // ai-bot must still pair the result with the bot message via the
   // commandRequestId.
-  test('CS-11045: getCommandResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
+  test('CS-11045: getToolResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
     const NEW_EVENT_ID = '$NEW-canonical-id';
     const OLD_EVENT_ID = '$OLD-streaming-id';
     const TOOL_CALL_ID = 'tool-call-T1';
@@ -6805,7 +6805,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6898,7 +6898,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6984,7 +6984,7 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       // Bot message #2: write-text-file tool_call. The host emits its
-      // commandResult with m.relates_to.event_id pointing to the streaming
+      // toolResult with m.relates_to.event_id pointing to the streaming
       // id, which is NOT this bot message's canonical event_id. ✗
       {
         type: 'm.room.message',
@@ -7343,7 +7343,7 @@ module('markdown skills', () => {
   });
 });
 
-module('markdown skill commands', (hooks) => {
+module('markdown skill tools', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
@@ -7386,18 +7386,18 @@ module('markdown skill commands', (hooks) => {
   ].join('\n');
 
   test('parseMarkdownSkill computes the same functionName the host derives', (assert) => {
-    let { commands } = parseMarkdownSkill(SKILL_MD, {
+    let { tools: commands } = parseMarkdownSkill(SKILL_MD, {
       sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
     } as any);
     assert.strictEqual(commands.length, 1);
-    // switch-submode_dd88 is the name the host's buildCommandFunctionName
+    // switch-submode_dd88 is the name the host's buildToolFunctionName
     // produces for this code ref (registered prefixes resolve verbatim).
     assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
     assert.false(commands[0].requiresApproval);
   });
 
   test('parseMarkdownSkill reads the pre-rename boxel.commands key', (assert) => {
-    let { commands } = parseMarkdownSkill(
+    let { tools: commands } = parseMarkdownSkill(
       SKILL_MD.replace('  tools:', '  commands:'),
       {
         sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
@@ -7420,7 +7420,7 @@ module('markdown skill commands', (hooks) => {
       '---',
       'body',
     ].join('\n');
-    let { commands } = parseMarkdownSkill(md, {
+    let { tools: commands } = parseMarkdownSkill(md, {
       sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
     } as any);
     assert.true(commands[0].requiresApproval);
@@ -7439,7 +7439,7 @@ module('markdown skill commands', (hooks) => {
       '---',
       'body',
     ].join('\n');
-    let { commands } = parseMarkdownSkill(md, {
+    let { tools: commands } = parseMarkdownSkill(md, {
       sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
     } as any);
     assert.strictEqual(
@@ -7461,7 +7461,7 @@ module('markdown skill commands', (hooks) => {
       '---',
       'body',
     ].join('\n');
-    let { commands } = parseMarkdownSkill(md, {
+    let { tools: commands } = parseMarkdownSkill(md, {
       sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
     } as any);
     assert.strictEqual(
@@ -7526,14 +7526,14 @@ module('markdown skill commands', (hooks) => {
     ] as unknown as DiscreteMatrixEvent[];
 
     // The card-shaped skill getEnabledSkills produces for this SKILL.md.
-    let { title, body, commands } = parseMarkdownSkill(SKILL_MD, {
+    let { title, body, tools } = parseMarkdownSkill(SKILL_MD, {
       sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
     } as any);
     const enabledSkills = [
       {
         id: 'https://realm/skills/boxel-environment/SKILL.md',
         type: 'card',
-        attributes: { title, instructions: body, commands },
+        attributes: { title, instructions: body, tools },
       } as unknown as LooseCardResource,
     ];
     return { eventList, enabledSkills };

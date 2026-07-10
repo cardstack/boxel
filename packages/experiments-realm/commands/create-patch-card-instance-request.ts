@@ -43,7 +43,7 @@ export default class CreatePatchCardInstanceRequestCommand extends Command<
     let roomId = input.roomId?.trim();
     if (!roomId) {
       let createRoomResult = await new UseAiAssistantTool(
-        this.commandContext,
+        this.toolContext,
       ).execute({
         roomId: 'new',
         roomName: `Patch Card: ${cardId}`,
@@ -52,9 +52,9 @@ export default class CreatePatchCardInstanceRequestCommand extends Command<
       roomId = createRoomResult.roomId;
     }
 
-    await ensureSubmissionBotIsInRoom(this.commandContext, roomId);
+    await ensureSubmissionBotIsInRoom(this.toolContext, roomId);
 
-    await new SendBotTriggerEventTool(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.toolContext).execute({
       roomId,
       realm,
       type: 'patch-card-instance',

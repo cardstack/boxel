@@ -50,7 +50,7 @@ export default class SearchAndChooseTool extends HostBaseTool<
     const { SearchAndChooseResult } = await this.loadToolModule();
 
     // 1. Gather candidates via existing search command
-    const search = new SearchCardsByTypeAndTitleTool(this.commandContext);
+    const search = new SearchCardsByTypeAndTitleTool(this.toolContext);
     const searchResult = await search.execute({ type: candidateTypeCodeRef });
     const instances = searchResult.instances ?? [];
 
@@ -91,7 +91,7 @@ export default class SearchAndChooseTool extends HostBaseTool<
       .join('\n\n');
 
     // 3. LLM selection
-    const oneShot = new OneShotLlmRequestTool(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.toolContext);
 
     const res = await oneShot.execute({
       systemPrompt,

@@ -94,8 +94,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @provide(CommandContextName)
-  private get commandContext() {
-    return this.toolService.commandContext;
+  private get toolContext() {
+    return this.toolService.toolContext;
   }
 
   @provide(CardContextName)
@@ -106,7 +106,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
-      commandContext: this.commandContext,
+      toolContext: this.toolContext,
+      // populated alongside toolContext for content still reading the
+      // pre-rename spelling
+      commandContext: this.toolContext,
       searchResultsComponent: SearchResults,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,

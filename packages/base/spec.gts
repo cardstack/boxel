@@ -35,7 +35,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  type CommandContext,
+  type ToolContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { eq, not, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
@@ -68,8 +68,8 @@ import {
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
 class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
-  constructor(commandContext: CommandContext) {
-    super(commandContext);
+  constructor(toolContext: ToolContext) {
+    super(toolContext);
   }
   protected get prompt() {
     return `Fill in sample data for this example on the card's spec.`;
@@ -98,8 +98,8 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
 }
 
 class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsTool {
-  constructor(commandContext: CommandContext) {
-    super(commandContext);
+  constructor(toolContext: ToolContext) {
+    super(toolContext);
   }
   protected getPrompt(count: number) {
     return `Generate ${count} additional examples on this card's spec.`;
@@ -279,15 +279,15 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
       return;
     }
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       console.error('Command context not available');
       return;
     }
 
     try {
       const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
-        commandContext,
+        toolContext,
       );
       await generateReadmeSpecCommand.execute({
         spec: this.args.model as Spec,
@@ -966,7 +966,7 @@ export class Spec extends CardDef {
           label: 'Fill in Sample Data with AI',
           action: async () => {
             await new PopulateFieldSpecExampleCommand(
-              params.commandContext,
+              params.toolContext,
             ).execute({
               cardId: this.id,
             });
@@ -978,7 +978,7 @@ export class Spec extends CardDef {
           label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
           action: async () => {
             await new GenerateExamplesForFieldSpecCommand(
-              params.commandContext,
+              params.toolContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
               codeRef: codeRefWithAbsoluteIdentifier(

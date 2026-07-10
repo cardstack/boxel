@@ -20,7 +20,7 @@ import {
   isRecognisedDebugCommand,
   getPromptParts,
   isInDebugMode,
-  isCommandResultStatusApplied,
+  isToolResultStatusApplied,
   getRoomEvents,
   sendPromptAsDebugMessage,
   constructHistory,
@@ -827,7 +827,7 @@ Common issues are:
     if (
       event.event.origin_server_ts! < startTime ||
       !room ||
-      !isCommandResultStatusApplied(event)
+      !isToolResultStatusApplied(event)
     ) {
       return;
     }

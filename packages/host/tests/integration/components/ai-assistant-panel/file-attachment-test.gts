@@ -12,7 +12,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -64,7 +63,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

@@ -28,12 +28,12 @@ export interface ToolRequest {
   executedBy?: string;
 }
 
-export const CommandContextStamp = Symbol.for('CommandContext');
-export interface CommandContext {
-  [CommandContextStamp]: boolean;
+export const ToolContextStamp = Symbol.for('CommandContext');
+export interface ToolContext {
+  [ToolContextStamp]: boolean;
 }
 
-export interface CommandInvocation<CardResultType extends CardDefConstructor> {
+export interface ToolInvocation<CardResultType extends CardDefConstructor> {
   cardResult: CardInstance<CardResultType> | null;
   error: Error | null;
   status: 'pending' | 'success' | 'error';
@@ -60,10 +60,17 @@ export abstract class Tool<
   name: string = this.constructor.name;
   description = '';
 
-  protected readonly commandContext: CommandContext;
+  protected readonly toolContext: ToolContext;
 
-  constructor(commandContext: CommandContext) {
-    this.commandContext = commandContext;
+  constructor(toolContext: ToolContext) {
+    this.toolContext = toolContext;
+  }
+
+  // Pre-rename spelling of `toolContext`. Realm-content tool classes read
+  // `this.commandContext` inside run(); it stays until the content window
+  // confirms nothing does.
+  protected get commandContext(): ToolContext {
+    return this.toolContext;
   }
 
   async execute(): Promise<CardInstance<CardResultType>>;
@@ -135,12 +142,12 @@ function friendlyModuleName(fullModuleUrl: string) {
     .replace(/\.gts$/, '');
 }
 
-export function buildCommandFunctionName(
+export function buildToolFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
   // `functionName` is a recomputed `computeVia` field (never persisted), and
-  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // `buildToolFunctionName` is its only producer, so dropping the VN keeps
   // every command name self-consistent.
   virtualNetwork?: VirtualNetwork,
 ) {
@@ -154,7 +161,7 @@ export function buildCommandFunctionName(
     virtualNetwork,
   ) as ResolvedCodeRef;
 
-  return buildCommandFunctionNameFromResolvedRef(absoluteCodeRef);
+  return buildToolFunctionNameFromResolvedRef(absoluteCodeRef);
 }
 
 // The host tool modules were published as `@cardstack/boxel-host/commands/*`
@@ -179,11 +186,11 @@ export function moduleForFunctionNameHash(module: string): string {
   return module;
 }
 
-// The name-construction half of buildCommandFunctionName, for callers that
+// The name-construction half of buildToolFunctionName, for callers that
 // already hold an absolute code ref (registered package prefixes resolve
 // verbatim, so e.g. ai-bot can produce identical names without a
 // VirtualNetwork).
-export function buildCommandFunctionNameFromResolvedRef(ref: {
+export function buildToolFunctionNameFromResolvedRef(ref: {
   module: string;
   name: string;
 }): string {
@@ -197,7 +204,7 @@ export function buildCommandFunctionNameFromResolvedRef(ref: {
   return `${name}_${hashed.slice(0, 4)}`;
 }
 
-export function decodeCommandRequest(
+export function decodeToolRequest(
   commandRequest: Partial<EncodedCommandRequest>,
 ): Partial<ToolRequest> {
   if (typeof commandRequest.arguments === 'object') {
@@ -251,7 +258,7 @@ export function encodeCommandRequest(
   return encodedCommandRequest;
 }
 
-export function encodeCommandRequests(
+export function encodeToolRequests(
   commandRequests: Partial<ToolRequest>[],
 ): Partial<EncodedCommandRequest>[] {
   return commandRequests.map(encodeCommandRequest);
@@ -259,3 +266,14 @@ export function encodeCommandRequests(
 
 // Pre-rename spelling; new code imports `ToolRequest`.
 export type CommandRequest = ToolRequest;
+
+// Pre-rename spellings. Realm content and out-of-tree code import these;
+// they stay until the content window (CS-12042) confirms nothing does.
+export type CommandContext = ToolContext;
+export type CommandInvocation<T extends CardDefConstructor> = ToolInvocation<T>;
+export const CommandContextStamp = ToolContextStamp;
+export const decodeCommandRequest = decodeToolRequest;
+export const encodeCommandRequests = encodeToolRequests;
+export const buildCommandFunctionName = buildToolFunctionName;
+export const buildCommandFunctionNameFromResolvedRef =
+  buildToolFunctionNameFromResolvedRef;

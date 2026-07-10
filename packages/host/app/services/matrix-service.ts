@@ -1421,10 +1421,10 @@ export default class MatrixService extends Service {
     if (validCommandDefinitions.length === 0) {
       return [];
     }
-    let commandFileDefs = await this.client.uploadToolDefinitions(
+    let toolFileDefs = await this.client.uploadToolDefinitions(
       validCommandDefinitions,
     );
-    return commandFileDefs;
+    return toolFileDefs;
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
@@ -1744,7 +1744,7 @@ export default class MatrixService extends Service {
     // Generate tool calls for patching currently open cards permitted for modification
     tools = tools.concat(
       await addPatchTools(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
         patchableCards,
         this.cardAPI,
       ),
@@ -2815,7 +2815,7 @@ export default class MatrixService extends Service {
     }
 
     let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
     let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({

@@ -78,6 +78,14 @@ export interface PrerenderedHtmlTable {
   is_deleted: boolean | null;
   error_doc: SerializedError | null;
   rendered_at: string | null; // pg represents big integers as strings in javascript
+  // The prerender-html visit's render diagnostics (launch/wait timings,
+  // render elapsed, per-format render timings, the visit's HTTP correlation
+  // id under `prerenderHtmlRequestId`). The index visit's breakdown rides on
+  // `boxel_index.diagnostics`, so a row's indexing cost and its prerendering
+  // cost are independently queryable. For render-error rows the same payload
+  // is mirrored onto `error_doc.diagnostics`, matching the `boxel_index`
+  // pattern. See `Diagnostics` in `index.ts`.
+  diagnostics: Record<string, unknown> | null;
   // Originating worker job id. Only present on `prerendered_html_working`;
   // the production `prerendered_html` mirror does not carry this column,
   // hence the field is optional.

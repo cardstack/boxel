@@ -14,7 +14,7 @@ import {
   downloadFile,
   downloadFileAsBase64DataUrl,
   extractCodePatchBlocks,
-  isCommandOrCodePatchResult,
+  isToolOrCodePatchResult,
 } from './matrix-utils.ts';
 import { isRecognisedDebugCommand } from './debug.ts';
 import {
@@ -31,9 +31,9 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
-  CommandResultEvent,
+  ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
-  EncodedCommandRequest,
+  EncodedToolRequest,
   MatrixEventWithBoxelContext,
   SkillsConfigEvent,
   Tool,
@@ -61,10 +61,10 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants.ts';
 import {
-  buildCommandFunctionNameFromResolvedRef,
-  decodeCommandRequest,
+  buildToolFunctionNameFromResolvedRef,
+  decodeToolRequest,
 } from '../commands.ts';
-import type { CommandRequest } from '../commands.ts';
+import type { ToolRequest } from '../commands.ts';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
@@ -85,7 +85,7 @@ import {
 } from '../constants.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
-const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
 
 function getLog() {
   return logger('ai-bot:prompt');
@@ -159,11 +159,11 @@ function audioFormatFromMime(contentType: string): string | undefined {
 
 // ── Read-file command scope helpers ──────────────────────────────────
 
-function isReadFileCommand(request?: CommandRequest): boolean {
+function isReadFileCommand(request?: ToolRequest): boolean {
   return !!request?.name?.startsWith('read-file-for-ai-assistant');
 }
 
-function getReadFileUrl(request?: CommandRequest): string | undefined {
+function getReadFileUrl(request?: ToolRequest): string | undefined {
   try {
     let args =
       typeof request?.arguments === 'string'
@@ -271,7 +271,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command or code patch results, it should not respond yet.
   let lastEventExcludingResults = findLast(
     history,
-    (event) => !isCommandOrCodePatchResult(event),
+    (event) => !isToolOrCodePatchResult(event),
   );
 
   if (!lastEventExcludingResults) {
@@ -286,8 +286,8 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     return false;
   }
 
-  let commandRequests =
-    getToolRequests<Partial<EncodedCommandRequest>>(
+  let toolRequests =
+    getToolRequests<Partial<EncodedToolRequest>>(
       lastEventExcludingResults.content as CardMessageContent,
     ) ?? [];
   let codePatchBlocks = extractCodePatchBlocks(
@@ -296,15 +296,15 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   let lastEventIndex = history.indexOf(lastEventExcludingResults);
   let recentEventsToCheck = history.slice(lastEventIndex + 1);
 
-  let allCommandsHaveResults =
-    commandRequests.length === 0 ||
-    commandRequests.every((commandRequest: Partial<EncodedCommandRequest>) => {
+  let allToolsHaveResults =
+    toolRequests.length === 0 ||
+    toolRequests.every((toolRequest: Partial<EncodedToolRequest>) => {
       return recentEventsToCheck.some((event) => {
         return (
-          isCommandResultEvent(event) &&
+          isToolResultEvent(event) &&
           (isToolResultWithOutputMsgtype(event.content.msgtype) ||
             isToolResultWithNoOutputMsgtype(event.content.msgtype)) &&
-          event.content.commandRequestId === commandRequest.id
+          event.content.commandRequestId === toolRequest.id
         );
       });
     });
@@ -318,38 +318,38 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  if (!allCommandsHaveResults || !allCodePatchesHaveResults) {
+  if (!allToolsHaveResults || !allCodePatchesHaveResults) {
     return false;
   }
-  if (!allCheckCorrectnessCommandsHaveResults(history)) {
+  if (!allCheckCorrectnessToolsHaveResults(history)) {
     return false;
   }
   return true;
 }
 
-function allCheckCorrectnessCommandsHaveResults(
+function allCheckCorrectnessToolsHaveResults(
   history: DiscreteMatrixEvent[],
 ): boolean {
   let lastEventWithCheckCorrectnessRequests = findLast(history, (event) => {
-    return getCheckCorrectnessCommandRequests(event).length > 0;
+    return getCheckCorrectnessToolRequests(event).length > 0;
   });
 
   if (!lastEventWithCheckCorrectnessRequests) {
     return true;
   }
 
-  let checkCommandRequests = getCheckCorrectnessCommandRequests(
+  let checkToolRequests = getCheckCorrectnessToolRequests(
     lastEventWithCheckCorrectnessRequests,
   );
-  if (checkCommandRequests.length === 0) {
+  if (checkToolRequests.length === 0) {
     return true;
   }
 
   let startIndex = history.indexOf(lastEventWithCheckCorrectnessRequests);
   let subsequentEvents = history.slice(startIndex + 1);
-  return checkCommandRequests.every((request) => {
+  return checkToolRequests.every((request) => {
     return subsequentEvents.some((event) =>
-      isTerminalCommandResultEventFor(event, request.id!),
+      isTerminalToolResultEventFor(event, request.id!),
     );
   });
 }
@@ -359,15 +359,15 @@ function shouldPromptCheckCorrectnessSummary(
   aiBotUserId: string,
 ) {
   let lastEvent = history[history.length - 1];
-  if (!isCommandResultEvent(lastEvent)) {
+  if (!isToolResultEvent(lastEvent)) {
     return false;
   }
-  if (!isCheckCorrectnessCommandResultEvent(lastEvent, history)) {
+  if (!isCheckCorrectnessToolResultEvent(lastEvent, history)) {
     return false;
   }
   let lastNonResultIndex = findLastIndex(
     history,
-    (event) => !isCommandOrCodePatchResult(event),
+    (event) => !isToolOrCodePatchResult(event),
   );
   if (lastNonResultIndex === -1) {
     return true;
@@ -376,38 +376,38 @@ function shouldPromptCheckCorrectnessSummary(
   return lastNonResultEvent.sender === aiBotUserId;
 }
 
-function getCheckCorrectnessCommandRequests(
+function getCheckCorrectnessToolRequests(
   event: DiscreteMatrixEvent,
-): CommandRequest[] {
+): ToolRequest[] {
   if (!event || event.type !== 'm.room.message') {
     return [];
   }
   let encodedRequests =
-    getToolRequests<Partial<EncodedCommandRequest>>(
+    getToolRequests<Partial<EncodedToolRequest>>(
       event.content as CardMessageContent,
     ) ?? [];
   if (!Array.isArray(encodedRequests)) {
     return [];
   }
-  let commandRequests: CommandRequest[] = [];
+  let toolRequests: ToolRequest[] = [];
   for (let encodedRequest of encodedRequests) {
-    let decoded = decodeCommandRequestSafe(
-      encodedRequest as Partial<EncodedCommandRequest>,
+    let decoded = decodeToolRequestSafe(
+      encodedRequest as Partial<EncodedToolRequest>,
     );
-    if (decoded?.id && decoded.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-      commandRequests.push(decoded);
+    if (decoded?.id && decoded.name === CHECK_CORRECTNESS_TOOL_NAME) {
+      toolRequests.push(decoded);
     }
   }
-  return commandRequests;
+  return toolRequests;
 }
 
-function decodeCommandRequestSafe(
-  request: Partial<EncodedCommandRequest>,
-): CommandRequest | undefined {
+function decodeToolRequestSafe(
+  request: Partial<EncodedToolRequest>,
+): ToolRequest | undefined {
   try {
-    let decoded = decodeCommandRequest(request);
+    let decoded = decodeToolRequest(request);
     if (decoded.id && decoded.name && decoded.arguments !== undefined) {
-      return decoded as CommandRequest;
+      return decoded as ToolRequest;
     }
     return undefined;
   } catch {
@@ -415,12 +415,12 @@ function decodeCommandRequestSafe(
   }
 }
 
-function isTerminalCommandResultEventFor(
+function isTerminalToolResultEventFor(
   event: DiscreteMatrixEvent,
   commandRequestId: string,
 ): boolean {
   if (
-    !isCommandResultEvent(event) ||
+    !isToolResultEvent(event) ||
     event.content.commandRequestId !== commandRequestId
   ) {
     return false;
@@ -458,7 +458,7 @@ async function getEnabledSkills(
           // choke on non-JSON. The JSON.parse fallthrough is the legacy
           // pushed-card path; it is removed when the push model is retired.
           if (isMarkdownSkillFile(cardFileDef)) {
-            let { title, body, kind, commands } = parseMarkdownSkill(
+            let { title, body, kind, tools } = parseMarkdownSkill(
               content,
               cardFileDef,
             );
@@ -467,7 +467,7 @@ async function getEnabledSkills(
             }
             return {
               id: cardFileDef.sourceUrl,
-              attributes: { title, instructions: body, commands },
+              attributes: { title, instructions: body, tools },
             };
           }
           return (JSON.parse(content) as LooseSingleCardDocument)?.data;
@@ -486,6 +486,9 @@ export interface EnabledSkill {
   attributes?: {
     title?: string;
     instructions?: string;
+    tools?: { functionName: string }[];
+    // Legacy Skill cards serialize their tools under the `commands` card
+    // field; read via the fallback in getTools.
     commands?: { functionName: string }[];
     [key: string]: any;
   };
@@ -500,7 +503,7 @@ export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
 // (or the pre-rename `boxel.commands` key), with the functionName the host
 // derives for the same code ref — so getTools can match it against the room's
 // uploaded command definitions.
-export interface MarkdownSkillCommand {
+export interface MarkdownSkillTool {
   codeRef: { module: string; name: string };
   functionName: string;
   requiresApproval: boolean;
@@ -519,12 +522,12 @@ export function parseMarkdownSkill(
   title: string;
   body: string;
   kind?: string;
-  commands: MarkdownSkillCommand[];
+  tools: MarkdownSkillTool[];
 } {
   let body = content;
   let title: string | undefined;
   let kind: string | undefined;
-  let commands: MarkdownSkillCommand[] = [];
+  let tools: MarkdownSkillTool[] = [];
   try {
     let { data, body: parsedBody } = parseFrontmatter(content);
     body = parsedBody;
@@ -538,7 +541,7 @@ export function parseMarkdownSkill(
     if (typeof boxel?.kind === 'string') {
       kind = boxel.kind;
     }
-    commands = markdownSkillCommands(data, fileDef.sourceUrl);
+    tools = markdownSkillTools(data, fileDef.sourceUrl);
   } catch {
     // Malformed frontmatter: keep the full content as the body.
   }
@@ -546,7 +549,7 @@ export function parseMarkdownSkill(
     let path = fileDef.sourceUrl ?? fileDef.name ?? '';
     title = path.split('/').filter(Boolean).pop() ?? 'Skill';
   }
-  return { title, body: body.trim(), kind, commands };
+  return { title, body: body.trim(), kind, tools };
 }
 
 // Extracts `boxel.tools` (falling back to the pre-rename `boxel.commands`
@@ -556,10 +559,10 @@ export function parseMarkdownSkill(
 // @cardstack/boxel-host/...) resolve verbatim on the host, so hashing the
 // literal module gives the same name; relative modules resolve against the
 // skill's own URL.
-function markdownSkillCommands(
+function markdownSkillTools(
   frontmatter: Record<string, unknown>,
   skillUrl: string | undefined,
-): MarkdownSkillCommand[] {
+): MarkdownSkillTool[] {
   let boxel =
     frontmatter.boxel &&
     typeof frontmatter.boxel === 'object' &&
@@ -574,7 +577,7 @@ function markdownSkillCommands(
   if (!entries) {
     return [];
   }
-  let commands: MarkdownSkillCommand[] = [];
+  let commands: MarkdownSkillTool[] = [];
   for (let entry of entries) {
     let codeRef = (entry as { codeRef?: { module?: string; name?: string } })
       ?.codeRef;
@@ -602,7 +605,7 @@ function markdownSkillCommands(
     let resolvedRef = { module, name: codeRef.name };
     commands.push({
       codeRef: resolvedRef,
-      functionName: buildCommandFunctionNameFromResolvedRef(resolvedRef),
+      functionName: buildToolFunctionNameFromResolvedRef(resolvedRef),
       // Missing means approval required, matching how the host treats an
       // absent requiresApproval on a skill command.
       requiresApproval:
@@ -891,15 +894,15 @@ export async function getTools(
   client: MatrixClient,
 ): Promise<Tool[]> {
   // Build map directly from messages
-  let enabledCommandNames = new Set<string>();
+  let enabledToolNames = new Set<string>();
   let toolMap = new Map<string, Tool>();
 
   // Get the list of all names from enabled skills
   for (let skill of enabledSkills) {
-    if (skill.attributes?.commands) {
-      let { commands } = skill.attributes;
-      for (let command of commands) {
-        enabledCommandNames.add(command.functionName);
+    let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
+    if (skillTools) {
+      for (let tool of skillTools) {
+        enabledToolNames.add(tool.functionName);
       }
     }
   }
@@ -909,16 +912,16 @@ export async function getTools(
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
 
-  let commandDefinitions =
+  let toolDefinitionFileDefs =
     getToolDefinitions<SerializedFile>(skillsConfigEvent?.content) ?? [];
-  for (let commandDefinition of commandDefinitions) {
-    if (enabledCommandNames.has(commandDefinition.name)) {
+  for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
+    if (enabledToolNames.has(toolDefinitionFileDef.name)) {
       let commandDefinitionContent = await downloadFile(
         client,
-        commandDefinition,
+        toolDefinitionFileDef,
       );
       let commandDefinitionObject = JSON.parse(commandDefinitionContent);
-      toolMap.set(commandDefinition.name, commandDefinitionObject.tool);
+      toolMap.set(toolDefinitionFileDef.name, commandDefinitionObject.tool);
     }
   }
 
@@ -939,7 +942,7 @@ export async function getTools(
 
   // Correctness commands should only be emitted by helper flows, not
   // directly via LLM tool calls.
-  toolMap.delete(CHECK_CORRECTNESS_COMMAND_NAME);
+  toolMap.delete(CHECK_CORRECTNESS_TOOL_NAME);
 
   return Array.from(toolMap.values()).sort((a, b) =>
     a.function.name.localeCompare(b.function.name),
@@ -984,27 +987,26 @@ export function getToolChoice(
   return 'auto';
 }
 
-function getCommandResults(
+function getToolResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ) {
   // CS-11045: pair tool_results with the bot message by commandRequestId in
-  // addition to m.relates_to.event_id. The host can emit a commandResult whose
+  // addition to m.relates_to.event_id. The host can emit a toolResult whose
   // m.relates_to.event_id is the streaming/original event_id while the matrix
   // server's /messages view normalizes the bot message to the latest m.replace
   // event_id. Without the commandRequestId fallback the result gets dropped,
   // leaving an orphan tool_use that Anthropic rejects.
   let requestIds = new Set(
     (
-      getToolRequests<Partial<EncodedCommandRequest>>(
-        cardMessageEvent.content,
-      ) ?? []
+      getToolRequests<Partial<EncodedToolRequest>>(cardMessageEvent.content) ??
+      []
     )
       .map((r) => r.id)
       .filter(Boolean) as string[],
   );
-  let commandResultEvents = history.filter((e) => {
-    if (!isCommandResultEvent(e)) {
+  let toolResultEvents = history.filter((e) => {
+    if (!isToolResultEvent(e)) {
       return false;
     }
     if (e.content['m.relates_to']?.event_id === cardMessageEvent.event_id) {
@@ -1014,15 +1016,15 @@ function getCommandResults(
       return true;
     }
     return false;
-  }) as CommandResultEvent[];
-  return commandResultEvents;
+  }) as ToolResultEvent[];
+  return toolResultEvents;
 }
 
-function isCheckCorrectnessCommandResultEvent(
-  commandResultEvent: CommandResultEvent,
+function isCheckCorrectnessToolResultEvent(
+  toolResultEvent: ToolResultEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let sourceEventId = commandResultEvent.content['m.relates_to']?.event_id;
+  let sourceEventId = toolResultEvent.content['m.relates_to']?.event_id;
   if (!sourceEventId) {
     return false;
   }
@@ -1030,12 +1032,12 @@ function isCheckCorrectnessCommandResultEvent(
   if (!sourceEvent) {
     return false;
   }
-  let checkRequests = getCheckCorrectnessCommandRequests(sourceEvent);
+  let checkRequests = getCheckCorrectnessToolRequests(sourceEvent);
   if (checkRequests.length === 0) {
     return false;
   }
   return checkRequests.some(
-    (request) => request.id === commandResultEvent.content.commandRequestId,
+    (request) => request.id === toolResultEvent.content.commandRequestId,
   );
 }
 
@@ -1057,13 +1059,13 @@ function getCodePatchResults(
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
-  return (getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []).map(
-    (commandRequest: Partial<EncodedCommandRequest>) => {
+  return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
+    (toolRequest: Partial<EncodedToolRequest>) => {
       return {
-        id: commandRequest.id!,
+        id: toolRequest.id!,
         function: {
-          name: commandRequest.name!,
-          arguments: commandRequest.arguments!,
+          name: toolRequest.name!,
+          arguments: toolRequest.arguments!,
         },
         type: 'function',
       };
@@ -1073,50 +1075,50 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 
 async function toResultMessages(
   event: CardMessageEvent,
-  commandResults: CommandResultEvent[] = [],
+  toolResults: ToolResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
 ): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
-  let commandResultEntries = await Promise.all(
-    (getToolRequests<Partial<EncodedCommandRequest>>(messageContent) ?? []).map(
-      async (commandRequest: Partial<EncodedCommandRequest>) => {
-        let decodedCommandRequest = decodeCommandRequestSafe(commandRequest);
-        let commandResult = commandResults.find(
-          (commandResult) =>
-            (isToolResultWithOutputMsgtype(commandResult.content.msgtype) ||
-              isToolResultWithNoOutputMsgtype(commandResult.content.msgtype)) &&
-            commandResult.content.commandRequestId === commandRequest.id,
+  let toolResultEntries = await Promise.all(
+    (getToolRequests<Partial<EncodedToolRequest>>(messageContent) ?? []).map(
+      async (toolRequest: Partial<EncodedToolRequest>) => {
+        let decodedToolRequest = decodeToolRequestSafe(toolRequest);
+        let toolResult = toolResults.find(
+          (toolResult) =>
+            (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
+              isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
+            toolResult.content.commandRequestId === toolRequest.id,
         );
-        if (!commandResult) {
+        if (!toolResult) {
           return undefined;
         }
         let content: string;
         let followUpUserMessage: string | undefined;
-        let status = commandResult.content['m.relates_to']?.key;
+        let status = toolResult.content['m.relates_to']?.key;
         let isCheckCorrectnessRequest =
-          decodedCommandRequest?.name === CHECK_CORRECTNESS_COMMAND_NAME;
+          decodedToolRequest?.name === CHECK_CORRECTNESS_TOOL_NAME;
         if (isCheckCorrectnessRequest) {
           let checkCorrectnessContent = buildCheckCorrectnessResultContent(
-            decodedCommandRequest,
-            commandResult,
+            decodedToolRequest,
+            toolResult,
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
-        } else if (isReadFileCommand(decodedCommandRequest)) {
-          let fileUrl = getReadFileUrl(decodedCommandRequest);
+        } else if (isReadFileCommand(decodedToolRequest)) {
+          let fileUrl = getReadFileUrl(decodedToolRequest);
           if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
             content = `Tool call rejected: the file "${fileUrl}" was not previously attached in the room. Only files attached by the user can be read.\n`;
           } else {
             content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
           }
         } else if (
-          isToolResultWithOutputContent(commandResult.content) &&
-          commandResult.content.data.card
+          isToolResultWithOutputContent(toolResult.content) &&
+          toolResult.content.data.card
         ) {
           let cardContent =
-            commandResult.content.data.card.content ??
-            commandResult.content.data.card.error;
+            toolResult.content.data.card.content ??
+            toolResult.content.data.card.error;
           content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
@@ -1125,20 +1127,20 @@ async function toResultMessages(
         // partially fulfilled, e.g. a multi-file read where one file 404ed)
         // tool call reads as a bare status with nothing to act on.
         // Check-correctness results fold their reason in above.
-        let failureReason = commandResult.content.failureReason;
+        let failureReason = toolResult.content.failureReason;
         if (!isCheckCorrectnessRequest && failureReason) {
           content = `${content}${failureReason}\n`;
         }
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
-          commandResult,
+          toolResult,
           history,
           true,
         );
         content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
-          tool_call_id: commandRequest.id,
+          tool_call_id: toolRequest.id,
           content,
         };
         let followUpMessage = followUpUserMessage
@@ -1152,12 +1154,12 @@ async function toResultMessages(
     ),
   );
   let toolMessages =
-    commandResultEntries
+    toolResultEntries
       .map((entry) => entry?.toolMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
   let followUpMessages =
-    commandResultEntries
+    toolResultEntries
       .map((entry) => entry?.followUpMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
@@ -1165,17 +1167,17 @@ async function toResultMessages(
 }
 
 function buildCheckCorrectnessResultContent(
-  request?: CommandRequest,
-  commandResult?: CommandResultEvent,
+  request?: ToolRequest,
+  toolResult?: ToolResultEvent,
 ): CheckCorrectnessResultContent {
   let targetDescription = describeCheckCorrectnessTarget(request);
-  if (!commandResult) {
+  if (!toolResult) {
     return {
       toolMessage: `Check correctness for ${targetDescription} is still pending.`,
     };
   }
-  let status = commandResult.content['m.relates_to']?.key ?? 'unknown';
-  let resultCard = extractCorrectnessResultCard(commandResult);
+  let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
+  let resultCard = extractCorrectnessResultCard(toolResult);
   if (resultCard) {
     let formattedSummary = formatCorrectnessResultSummary(
       targetDescription,
@@ -1193,7 +1195,7 @@ function buildCheckCorrectnessResultContent(
       toolMessage: `Check correctness passed for ${targetDescription}.`,
     };
   }
-  let failureReason = commandResult.content.failureReason;
+  let failureReason = toolResult.content.failureReason;
   if (failureReason) {
     return {
       toolMessage: `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`,
@@ -1204,7 +1206,7 @@ function buildCheckCorrectnessResultContent(
   };
 }
 
-function describeCheckCorrectnessTarget(request?: CommandRequest) {
+function describeCheckCorrectnessTarget(request?: ToolRequest) {
   if (!request) {
     return 'the requested target';
   }
@@ -1246,12 +1248,12 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 function extractCorrectnessResultCard(
-  commandResult?: CommandResultEvent,
+  toolResult?: ToolResultEvent,
 ): CorrectnessResultSummary | undefined {
-  if (!commandResult || !isToolResultWithOutputContent(commandResult.content)) {
+  if (!toolResult || !isToolResultWithOutputContent(toolResult.content)) {
     return undefined;
   }
-  let cardPayload = commandResult.content.data.card;
+  let cardPayload = toolResult.content.data.card;
   if (!cardPayload) {
     return undefined;
   }
@@ -1316,12 +1318,12 @@ function formatCorrectnessResultSummary(
   };
 }
 
-function findCheckCorrectnessCommandRequest(
+function findCheckCorrectnessToolRequest(
   history: DiscreteMatrixEvent[],
   commandRequestId: string,
-): CommandRequest | undefined {
+): ToolRequest | undefined {
   for (let event of history) {
-    let requests = getCheckCorrectnessCommandRequests(event);
+    let requests = getCheckCorrectnessToolRequests(event);
     let match = requests.find((request) => request.id === commandRequestId);
     if (match) {
       return match;
@@ -1350,7 +1352,7 @@ type CheckCorrectnessTargetParts = {
 };
 
 function extractCheckCorrectnessTargetParts(
-  request?: CommandRequest,
+  request?: ToolRequest,
 ): CheckCorrectnessTargetParts {
   if (!request) {
     return {};
@@ -1369,7 +1371,7 @@ function extractCheckCorrectnessTargetParts(
 }
 
 function getCheckCorrectnessTargetKey(
-  request?: CommandRequest,
+  request?: ToolRequest,
 ): string | undefined {
   let { targetRef, targetType, targetEventId } =
     extractCheckCorrectnessTargetParts(request);
@@ -1383,9 +1385,7 @@ function getCheckCorrectnessTargetKey(
   );
 }
 
-function getCorrectnessCheckAttemptFromRequest(
-  request?: CommandRequest,
-): number {
+function getCorrectnessCheckAttemptFromRequest(request?: ToolRequest): number {
   if (!request) {
     return 0;
   }
@@ -1411,13 +1411,13 @@ function getLatestCorrectnessCheckAttemptInfo(
     if (!isToolResultEventType(event.type)) {
       continue;
     }
-    let commandResult = event as CommandResultEvent;
-    if (!isCheckCorrectnessCommandResultEvent(commandResult, history)) {
+    let toolResult = event as ToolResultEvent;
+    if (!isCheckCorrectnessToolResultEvent(toolResult, history)) {
       continue;
     }
-    let sourceRequest = findCheckCorrectnessCommandRequest(
+    let sourceRequest = findCheckCorrectnessToolRequest(
       history,
-      commandResult.content.commandRequestId,
+      toolResult.content.commandRequestId,
     );
     if (!sourceRequest) {
       continue;
@@ -1429,8 +1429,8 @@ function getLatestCorrectnessCheckAttemptInfo(
       1,
       getCorrectnessCheckAttemptFromRequest(sourceRequest),
     );
-    let resultCard = extractCorrectnessResultCard(commandResult);
-    let status = commandResult.content['m.relates_to']?.key;
+    let resultCard = extractCorrectnessResultCard(toolResult);
+    let status = toolResult.content['m.relates_to']?.key;
     let succeeded =
       status === 'applied' &&
       Boolean(resultCard) &&
@@ -1511,13 +1511,13 @@ export async function buildPromptForModel(
     (event) =>
       event.sender !== aiBotUserId &&
       event.type === 'm.room.message' &&
-      !isCommandOrCodePatchResult(event),
+      !isToolOrCodePatchResult(event),
   );
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
     }
-    if (isCommandOrCodePatchResult(event)) {
+    if (isToolOrCodePatchResult(event)) {
       continue; // we'll include these with the tool calls
     }
     if (
@@ -1545,14 +1545,11 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      let commandResults = getCommandResults(
-        event as CardMessageEvent,
-        history,
-      );
+      let toolResults = getToolResults(event as CardMessageEvent, history);
       (
         await toResultMessages(
           event as CardMessageEvent,
-          commandResults,
+          toolResults,
           client,
           history,
         )
@@ -1686,14 +1683,14 @@ function collectPendingCodePatchCorrectnessCheck(
     // Only consider messages that contain code patches or card patch commands.
     let content = event.content as CardMessageContent;
     let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let commandRequests = (
-      getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
-    ).map((request) => decodeCommandRequest(request));
-    let relevantCommands = commandRequests.filter((request) =>
+    let toolRequests = (
+      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+    ).map((request) => decodeToolRequest(request));
+    let relevantTools = toolRequests.filter((request) =>
       isCardPatchCommand(request.name),
     );
     let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+      codePatchBlocks.length > 0 || relevantTools.length > 0;
     if (!hasRelevantChanges) {
       continue;
     }
@@ -1702,13 +1699,13 @@ function collectPendingCodePatchCorrectnessCheck(
       event as CardMessageEvent,
       history,
     );
-    let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let toolResults = getToolResults(event as CardMessageEvent, history);
     let isCancelled =
       content.isCanceled || (event as any).status === 'cancelled';
     let appliedChanges = hasAppliedChanges(
       codePatchResults,
-      relevantCommands,
-      commandResults,
+      relevantTools,
+      toolResults,
     );
     if (isCancelled && !appliedChanges) {
       continue;
@@ -1724,17 +1721,17 @@ function collectPendingCodePatchCorrectnessCheck(
           (result) => result.content.codeBlockIndex === index,
         ),
       );
-    let allRelevantCommandsResolved =
-      relevantCommands.length === 0 ||
-      relevantCommands.every((request) =>
-        commandResults.some(
+    let allRelevantToolsResolved =
+      relevantTools.length === 0 ||
+      relevantTools.every((request) =>
+        toolResults.some(
           (result) => result.content.commandRequestId === request.id,
         ),
       );
 
     // If the most recent message with patches/commands isn't resolved yet,
     // don't walk back to earlier messages—wait for the current one to finish.
-    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+    if (!allCodePatchesResolved || !allRelevantToolsResolved) {
       return undefined;
     }
 
@@ -1766,14 +1763,14 @@ function hasUnresolvedCodePatches(
     }
     let content = event.content as CardMessageContent;
     let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let commandRequests = (
-      getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
-    ).map((request) => decodeCommandRequest(request));
-    let relevantCommands = commandRequests.filter((request) =>
+    let toolRequests = (
+      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+    ).map((request) => decodeToolRequest(request));
+    let relevantTools = toolRequests.filter((request) =>
       isCardPatchCommand(request.name),
     );
     let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+      codePatchBlocks.length > 0 || relevantTools.length > 0;
     if (!hasRelevantChanges) {
       continue;
     }
@@ -1782,13 +1779,13 @@ function hasUnresolvedCodePatches(
       event as CardMessageEvent,
       history,
     );
-    let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let toolResults = getToolResults(event as CardMessageEvent, history);
     let isCancelled =
       content.isCanceled || (event as any).status === 'cancelled';
     let appliedChanges = hasAppliedChanges(
       codePatchResults,
-      relevantCommands,
-      commandResults,
+      relevantTools,
+      toolResults,
     );
     if (isCancelled && !appliedChanges) {
       return false;
@@ -1802,15 +1799,15 @@ function hasUnresolvedCodePatches(
             result.content.codeBlockIndex === index,
         ),
       );
-    let allRelevantCommandsResolved =
-      relevantCommands.length === 0 ||
-      relevantCommands.every((request) =>
-        commandResults.some(
+    let allRelevantToolsResolved =
+      relevantTools.length === 0 ||
+      relevantTools.every((request) =>
+        toolResults.some(
           (result) => result.content.commandRequestId === request.id,
         ),
       );
 
-    return !(allCodePatchesResolved && allRelevantCommandsResolved);
+    return !(allCodePatchesResolved && allRelevantToolsResolved);
   }
   return false;
 }
@@ -1821,14 +1818,14 @@ function buildCodePatchCorrectnessMessage(
 ): PendingCodePatchCorrectnessCheck | undefined {
   let content = messageEvent.content as CardMessageContent;
   let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-  let commandRequests = (
-    getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
-  ).map((request) => decodeCommandRequest(request));
-  let relevantCommands = commandRequests.filter((request) =>
+  let toolRequests = (
+    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+  ).map((request) => decodeToolRequest(request));
+  let relevantTools = toolRequests.filter((request) =>
     isCardPatchCommand(request.name),
   );
 
-  if (codePatchBlocks.length === 0 && relevantCommands.length === 0) {
+  if (codePatchBlocks.length === 0 && relevantTools.length === 0) {
     return undefined;
   }
 
@@ -1841,13 +1838,13 @@ function buildCodePatchCorrectnessMessage(
   }
 
   let codePatchResults = getCodePatchResults(messageEvent, history);
-  let commandResults = getCommandResults(messageEvent, history);
+  let toolResults = getToolResults(messageEvent, history);
   let isCancelled =
     content.isCanceled || (messageEvent as any).status === 'cancelled';
   let appliedChanges = hasAppliedChanges(
     codePatchResults,
-    relevantCommands,
-    commandResults,
+    relevantTools,
+    toolResults,
   );
   if (isCancelled && !appliedChanges) {
     return undefined;
@@ -1863,20 +1860,20 @@ function buildCodePatchCorrectnessMessage(
         (result) => result.content.codeBlockIndex === index,
       ),
     );
-  let allRelevantCommandsResolved =
-    relevantCommands.length === 0 ||
-    relevantCommands.every((request) =>
-      commandResults.some(
+  let allRelevantToolsResolved =
+    relevantTools.length === 0 ||
+    relevantTools.every((request) =>
+      toolResults.some(
         (result) => result.content.commandRequestId === request.id,
       ),
     );
 
-  if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+  if (!allCodePatchesResolved || !allRelevantToolsResolved) {
     return undefined;
   }
 
   let files = gatherPatchedFiles(codePatchResults);
-  let cards = gatherPatchedCards(relevantCommands, commandResults);
+  let cards = gatherPatchedCards(relevantTools, toolResults);
 
   if (files.length === 0 && cards.length === 0) {
     return undefined;
@@ -1971,14 +1968,14 @@ function mergeLintIssues(
 }
 
 function gatherPatchedCards(
-  commandRequests: Partial<CommandRequest>[],
-  commandResults: CommandResultEvent[],
+  toolRequests: Partial<ToolRequest>[],
+  toolResults: ToolResultEvent[],
 ): CodePatchCorrectnessCard[] {
   let cards: CodePatchCorrectnessCard[] = [];
   let seen = new Set<string>();
-  for (let request of commandRequests) {
-    let result = commandResults.find(
-      (commandResult) => commandResult.content.commandRequestId === request.id,
+  for (let request of toolRequests) {
+    let result = toolResults.find(
+      (toolResult) => toolResult.content.commandRequestId === request.id,
     );
     if (!result) {
       continue;
@@ -2029,7 +2026,7 @@ function buildCorrectnessCheckAttemptMap(
 }
 
 function extractCardIdFromCommandRequest(
-  request: Partial<CommandRequest>,
+  request: Partial<ToolRequest>,
 ): string | undefined {
   let args = request.arguments as Record<string, any> | undefined;
   if (!args) {
@@ -2085,8 +2082,8 @@ function formatFileDisplayName(identifier?: string) {
 
 function hasAppliedChanges(
   codePatchResults: CodePatchResultEvent[],
-  relevantCommands: Partial<CommandRequest>[],
-  commandResults: CommandResultEvent[],
+  relevantTools: Partial<ToolRequest>[],
+  toolResults: ToolResultEvent[],
 ): boolean {
   if (
     codePatchResults.some(
@@ -2096,8 +2093,8 @@ function hasAppliedChanges(
     return true;
   }
 
-  return relevantCommands.some((request) =>
-    commandResults.some(
+  return relevantTools.some((request) =>
+    toolResults.some(
       (result) =>
         result.content.commandRequestId === request.id &&
         result.content['m.relates_to']?.key === 'applied',
@@ -2245,11 +2242,7 @@ export const buildContextMessage = async (
       isToolResultEventType(ev.type) ||
       ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
     );
-  }) as
-    | CardMessageEvent
-    | CommandResultEvent
-    | CodePatchResultEvent
-    | undefined;
+  }) as CardMessageEvent | ToolResultEvent | CodePatchResultEvent | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
   // Extract room ID from any event in history
@@ -2457,12 +2450,12 @@ export function cleanContent(content: string) {
   return content.trim();
 }
 
-export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
+export const isToolResultStatusApplied = (event?: MatrixEvent) => {
   if (event === undefined) {
     return false;
   }
   return (
-    isCommandResultEvent(event.event as DiscreteMatrixEvent) &&
+    isToolResultEvent(event.event as DiscreteMatrixEvent) &&
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
@@ -2542,16 +2535,16 @@ function normalizeReasoningEffort(
   return undefined;
 }
 
-export function isCommandResultEvent(
+export function isToolResultEvent(
   event?: DiscreteMatrixEvent,
-): event is CommandResultEvent {
+): event is ToolResultEvent {
   if (event === undefined) {
     return false;
   }
   return (
     isToolResultEventType(event.type) &&
     isToolResultRelType(
-      (event as CommandResultEvent).content['m.relates_to']?.rel_type,
+      (event as ToolResultEvent).content['m.relates_to']?.rel_type,
     )
   );
 }

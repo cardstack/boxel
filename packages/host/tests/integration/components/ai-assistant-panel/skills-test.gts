@@ -10,7 +10,6 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -74,7 +73,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -195,18 +194,18 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               static actionVerb = 'Search';
               async getInputType() {
                 return new SearchCardsByTypeAndTitleTool(
-                  this.commandContext,
+                  this.toolContext,
                 ).getInputType();
               }
               protected async run(
                 input: SearchCardsByTitleInput,
               ): Promise<undefined> {
                 let searchCommand = new SearchCardsByTypeAndTitleTool(
-                  this.commandContext,
+                  this.toolContext,
                 );
                 let searchResult = await searchCommand.execute(input);
                 if (searchResult.cardIds.length > 0) {
-                  let showCardCommand = new ShowCardTool(this.commandContext);
+                  let showCardCommand = new ShowCardTool(this.toolContext);
                   await showCardCommand.execute({
                     cardId: searchResult.cardIds[0],
                   });

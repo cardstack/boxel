@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -27,7 +27,7 @@ module('Unit | FileDef menu items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}file-api`);
+    let mod: any = await loader.import('@cardstack/base/file-api');
     getDefaultFileMenuItems = mod.getDefaultFileMenuItems;
   });
 
@@ -39,7 +39,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -54,7 +54,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -79,7 +79,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -107,7 +107,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-preview',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 
@@ -127,7 +127,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
-      commandContext: {} as any,
+      toolContext: {} as any,
       menuContextParams: {
         canEditActiveRealm: true,
         activeRealmURL: 'https://example.com/my-realm/',
@@ -149,7 +149,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
-      commandContext: {} as any,
+      toolContext: {} as any,
       menuContextParams: {
         canEditActiveRealm: false,
         activeRealmURL: 'https://example.com/my-realm/',
@@ -171,7 +171,7 @@ module('Unit | FileDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-playground',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 

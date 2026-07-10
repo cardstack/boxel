@@ -277,18 +277,18 @@ export default class MessageBuilder {
         isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
-        let messageCommand = message.tools.find(
+        let messageTool = message.tools.find(
           (c) => c.toolRequest.id === commandRequestId,
         );
-        if (messageCommand) {
-          messageCommand.toolCallStatus = event.content['m.relates_to']
+        if (messageTool) {
+          messageTool.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
-          messageCommand.toolResultFileDef = isToolResultWithOutputContent(
+          messageTool.toolResultFileDef = isToolResultWithOutputContent(
             event.content,
           )
             ? event.content.data.card
             : undefined;
-          messageCommand.failureReason = event.content.failureReason;
+          messageTool.failureReason = event.content.failureReason;
         }
       }
     }
@@ -363,7 +363,7 @@ export default class MessageBuilder {
 
     // Find command in skills. loadSkillSource handles both legacy Skill
     // cards and markdown skills (tools in boxel.tools frontmatter).
-    let skillCommand:
+    let skillTool:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
@@ -371,18 +371,18 @@ export default class MessageBuilder {
       if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of getSkillSourceTools(source)) {
-        if (toolRequest.name === candidateSkillCommand.functionName) {
-          skillCommand = candidateSkillCommand;
+      for (let candidateSkillTool of getSkillSourceTools(source)) {
+        if (toolRequest.name === candidateSkillTool.functionName) {
+          skillTool = candidateSkillTool;
           break findCommand;
         }
       }
     }
 
     let actionVerb = 'Apply';
-    if (skillCommand?.codeRef) {
+    if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
-        skillCommand?.codeRef,
+        skillTool?.codeRef,
         this.loaderService.loader,
       )) as { actionVerb: string };
       if (CommandKlass?.actionVerb) {
@@ -390,16 +390,16 @@ export default class MessageBuilder {
       }
     }
 
-    let requiresApproval = skillCommand?.requiresApproval ?? true;
+    let requiresApproval = skillTool?.requiresApproval ?? true;
 
     let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
       'm.relates_to'
     ]?.key || 'ready') as ToolCallStatus;
 
-    let messageCommand = new MessageTool(
+    let messageTool = new MessageTool(
       message,
       toolRequest,
-      skillCommand?.codeRef,
+      skillTool?.codeRef,
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
@@ -410,7 +410,7 @@ export default class MessageBuilder {
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
     );
-    return messageCommand;
+    return messageTool;
   }
 
   private buildMessageCodePatchResults(message: Message) {

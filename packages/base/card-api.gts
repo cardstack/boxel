@@ -23,7 +23,7 @@ import {
   CardContextName,
   CardError,
   CodeRef,
-  CommandContext,
+  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -121,6 +121,10 @@ import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
 import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
+import FileDefAtomTemplate from './default-templates/file-def-atom';
+import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
+import FileDefFittedTemplate from './default-templates/file-def-fitted';
+import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -344,7 +348,11 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  commandContext?: CommandContext;
+  toolContext?: ToolContext;
+  // Pre-rename spelling of `toolContext`. Realm content reads
+  // `@context.commandContext`; populated with the same value until no
+  // deployed content references it.
+  commandContext?: ToolContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
@@ -2999,14 +3007,10 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
-  static embedded: BaseDefComponent = class View extends Component<
-    typeof this
-  > {
-    <template>{{@model.name}}</template>
-  };
-  static fitted = this.embedded;
-  static isolated = this.embedded;
-  static atom = this.embedded;
+  static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = FileDefFittedTemplate;
+  static isolated: BaseDefComponent = FileDefIsolatedTemplate;
+  static atom: BaseDefComponent = FileDefAtomTemplate;
   static edit: BaseDefComponent = FileDefEditTemplate;
   // Default `markdown` fallback (CS-10784): inherits from FieldDef but
   // restated explicitly so this class's own slot is set rather than relying on
@@ -3280,16 +3284,16 @@ export class Theme extends CardDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getMenuItems](params);
-    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+    if (params.menuContext === 'interact' && params.toolContext && this.id) {
       menuItems = [
         ...menuItems,
         {
           label: 'Copy and Edit',
           action: async () => {
-            if (!params.commandContext || !this.id) {
+            if (!params.toolContext || !this.id) {
               return;
             }
-            let cmd = new CopyAndEditTool(params.commandContext);
+            let cmd = new CopyAndEditTool(params.toolContext);
             await cmd.execute({
               card: this,
             });
@@ -3300,7 +3304,7 @@ export class Theme extends CardDef {
         {
           label: 'Modify Theme via AI',
           action: async () => {
-            let cmd = new PatchThemeTool(params.commandContext);
+            let cmd = new PatchThemeTool(params.toolContext);
             await cmd.execute({
               cardId: this.id as unknown as string,
             });

@@ -56,75 +56,120 @@ function importStatementFor(title: string): string {
 class IndexComponent extends Component {
   <template>
     {{pageTitle 'Boxel Components'}}
-    <CardContainer
-      class='boxel-freestyle-guide-container'
-      @isThemed={{true}}
-      style={{this.theme.styles}}
-    >
-      <BasicDropdownWormhole />
-
-      <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
-      <FreestyleGuide
-        class='boxel-freestyle-guide'
-        @title='Boxel UI Components'
-        @subtitle='Living Component Documentation'
+    {{! data-theme sets the inherited --boxel-color-scheme signal (theme.css)
+        that the scoped theme stylesheet's dark container query reads, so it
+        must live on an ancestor of the themed CardContainer. }}
+    <div class='boxel-freestyle-mode-wrapper' data-theme={{this.mode}}>
+      <CardContainer
+        class='boxel-freestyle-guide-container'
+        @isThemed={{true}}
+        @themeCss={{this.theme.cssVariables}}
+        @themeScope='boxel-freestyle-guide'
       >
-        <BoxelContainer class='boxel-freestyle-theme-settings' @display='flex'>
-          <FieldContainer @label='Theme' @tag='label'>
-            <BoxelSelect
-              class='boxel-freestyle-theme-selector'
-              @placeholder='Select Theme'
-              @selected={{this.theme}}
-              @options={{this.themes}}
-              @onChange={{this.selectTheme}}
-              as |theme|
-            >
-              {{theme.name}}
-            </BoxelSelect>
-          </FieldContainer>
-          <FieldContainer @label='Cycle Themes' @tag='label'>
-            <Switch
-              @label='Cycle Themes'
-              @isEnabled={{this.isCycleThemesEnabled}}
-              @onChange={{this.toggleCycling}}
-            />
-          </FieldContainer>
-        </BoxelContainer>
-        <FreestyleSection @name='Icons' class='freestyle-components-section'>
-          <IconsGrid />
-        </FreestyleSection>
-        <FreestyleSection
-          @name='Components'
-          class='freestyle-components-section'
-          as |Section|
+        <BasicDropdownWormhole />
+
+        <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
+        <FreestyleGuide
+          class='boxel-freestyle-guide'
+          @title='Boxel UI Components'
+          @subtitle='Living Component Documentation'
         >
-          {{#each this.usageComponents key='title' as |c|}}
-            <Section.subsection @name={{formatComponentName c.title}}>
-              <BoxelContainer>
-                <div class='subsection-import'>
-                  <code
-                    class='subsection-import-code'
-                  >{{c.importStatement}}</code>
-                  <CopyButton
-                    @textToCopy={{c.importStatement}}
-                    @tooltipText='Copy import'
-                    @ariaLabel='Copy import statement'
-                    @size='small'
-                  />
-                </div>
-                <CardContainer
-                  class='subsection-card'
-                  @displayBoundaries={{true}}
+          <BoxelContainer
+            class='boxel-freestyle-theme-settings'
+            @display='flex'
+          >
+            <div class='boxel-freestyle-theme-row'>
+              <FieldContainer
+                class='boxel-freestyle-theme-field'
+                @inline={{true}}
+                @label='Theme'
+                @tag='label'
+              >
+                <BoxelSelect
+                  class='boxel-freestyle-theme-selector'
+                  @placeholder='Select Theme'
+                  @selected={{this.theme}}
+                  @options={{this.themes}}
+                  @onChange={{this.selectTheme}}
+                  as |theme|
                 >
-                  <c.component />
-                </CardContainer>
-              </BoxelContainer>
-            </Section.subsection>
-          {{/each}}
-        </FreestyleSection>
-      </FreestyleGuide>
-    </CardContainer>
+                  {{theme.name}}
+                </BoxelSelect>
+              </FieldContainer>
+              <FieldContainer @inline={{true}} @label='Dark Mode' @tag='label'>
+                <Switch
+                  @label='Dark Mode'
+                  @isEnabled={{this.isDarkMode}}
+                  @onChange={{this.toggleMode}}
+                />
+              </FieldContainer>
+            </div>
+            <FieldContainer @inline={{true}} @label='Cycle Themes' @tag='label'>
+              <Switch
+                @label='Cycle Themes'
+                @isEnabled={{this.isCycleThemesEnabled}}
+                @onChange={{this.toggleCycling}}
+              />
+            </FieldContainer>
+          </BoxelContainer>
+          <FreestyleSection @name='Icons' class='freestyle-components-section'>
+            <IconsGrid />
+          </FreestyleSection>
+          <FreestyleSection
+            @name='Components'
+            class='freestyle-components-section'
+            as |Section|
+          >
+            {{#each this.usageComponents key='title' as |c|}}
+              <Section.subsection @name={{formatComponentName c.title}}>
+                <BoxelContainer>
+                  <div class='subsection-import'>
+                    <code
+                      class='subsection-import-code'
+                    >{{c.importStatement}}</code>
+                    <CopyButton
+                      @textToCopy={{c.importStatement}}
+                      @tooltipText='Copy import'
+                      @ariaLabel='Copy import statement'
+                      @size='small'
+                    />
+                  </div>
+                  <CardContainer
+                    class='subsection-card'
+                    @displayBoundaries={{true}}
+                  >
+                    <c.component />
+                  </CardContainer>
+                </BoxelContainer>
+              </Section.subsection>
+            {{/each}}
+          </FreestyleSection>
+        </FreestyleGuide>
+      </CardContainer>
+    </div>
     <style scoped>
+      .boxel-freestyle-guide input:not(.boxel-input):not([type='checkbox']),
+      .boxel-freestyle-guide select:not(.boxel-select) {
+        background-color: var(--background);
+        color: var(--foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .boxel-freestyle-guide
+        input:not(.boxel-input):not([type='checkbox'])::placeholder {
+        color: var(--muted-foreground);
+      }
+      .boxel-freestyle-guide
+        input:not(.boxel-input):not([type='checkbox']):focus:focus-visible,
+      .boxel-freestyle-guide select:not(.boxel-select):focus:focus-visible {
+        outline: 1px solid var(--ring);
+      }
+      .boxel-freestyle-mode-wrapper {
+        /* Render native UI (select menus, scrollbars, form controls) in the
+           scheme the data-theme toggle resolves to via theme.css. */
+        color-scheme: var(--boxel-color-scheme, light);
+        background-color: var(--background);
+      }
       .boxel-freestyle-guide-container {
         border-radius: 0;
       }
@@ -137,8 +182,28 @@ class IndexComponent extends Component {
         right: var(--boxel-sp-4xl);
         width: min-content;
       }
+      .boxel-freestyle-theme-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
       .boxel-freestyle-theme-selector {
         min-width: 10rem;
+      }
+      @media (max-width: 1279px) {
+        /* At narrow widths the header no longer has room for the floating
+           settings box, so it flows in the content area instead. */
+        .boxel-freestyle-theme-settings {
+          position: static;
+          width: auto;
+          --boxel-container-gap: var(--boxel-sp-xs) var(--boxel-sp);
+          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+          border-bottom: 1px solid
+            color-mix(in oklab, var(--border) 60%, transparent);
+        }
+        .boxel-freestyle-theme-row {
+          flex-wrap: wrap;
+        }
       }
       .subsection-import {
         display: flex;
@@ -163,9 +228,6 @@ class IndexComponent extends Component {
       .subsection-card {
         background-color: var(--card);
         color: var(--card-foreground);
-      }
-      .FreestyleGuide {
-        display: grid;
       }
       .FreestyleUsage {
         --radius: var(--theme-radius);
@@ -197,22 +259,49 @@ class IndexComponent extends Component {
         color: color-mix(in oklab, var(--foreground) 60%, transparent);
       }
       .FreestyleGuide-body {
-        height: 100%;
-        overflow: hidden;
         background-color: inherit;
       }
       .FreestyleGuide-nav {
-        height: 100%;
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
         border-right-color: var(--sidebar-border);
+      }
+      @media (max-width: 599px) {
+        /* Below 600px ember-freestyle stacks the nav above the content;
+           cap its height and let the content column scroll instead. */
+        .FreestyleGuide-header {
+          padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
+        }
+        .FreestyleGuide-title {
+          font-size: 1.375rem;
+        }
+        .FreestyleGuide-nav {
+          position: static;
+          height: auto;
+          max-height: 40vh;
+          border-bottom: 1px solid var(--sidebar-border);
+        }
+        .FreestyleGuide-content {
+          flex: 1;
+          min-height: 0;
+          margin-top: 0;
+        }
+        .boxel-freestyle-theme-settings {
+          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp);
+        }
+        .FreestyleUsage-apiTable,
+        .FreestyleUsage-cssVarsTable {
+          display: block;
+          overflow-x: auto;
+        }
       }
       .FreestyleMenu-itemLink,
       .FreestyleMenu-submenuItemLink {
         color: inherit;
       }
       .FreestyleMenu-itemLink.active,
-      .FreestyleMenu-submenuItemLink.active {
+      .FreestyleMenu-submenuItemLink.active,
+      .FreestyleMenu-submenuItem.is-active > .FreestyleMenu-submenuItemLink {
         background-color: var(--sidebar-foreground);
         color: var(--sidebar);
         font-weight: normal;
@@ -227,10 +316,12 @@ class IndexComponent extends Component {
         color: var(--sidebar-foreground);
       }
       .FreestyleMenu-itemLink.active:hover,
-      .FreestyleMenu-submenuItemLink.active:hover {
+      .FreestyleMenu-submenuItemLink.active:hover,
+      .FreestyleMenu-submenuItem.is-active
+        > .FreestyleMenu-submenuItemLink:hover {
         background-color: color-mix(
           in oklab,
-          var(--sidebar-foreground) 90%,
+          var(--sidebar-foreground) 80%,
           transparent
         );
         color: var(--sidebar);
@@ -277,10 +368,14 @@ class IndexComponent extends Component {
       }
       .FreestyleUsage-preview {
         --radius: var(--theme-radius, var(--boxel-border-radius));
-
         color: var(--foreground, var(--boxel-dark));
         background-color: var(--background, var(--boxel-light));
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
+        overflow: hidden;
+      }
+      .FreestyleUsage-preview:after {
+        background: var(--secondary);
+        color: var(--secondary-foreground);
       }
       .FreestyleUsage-apiTable tr:nth-child(even),
       .FreestyleUsage-cssVarsTable tr:nth-child(even) {
@@ -308,6 +403,13 @@ class IndexComponent extends Component {
       .FreestyleUsage-cssVarsTable {
         margin-inline: unset;
       }
+      .FreestyleGuide-ctaIcon {
+        fill: var(--foreground);
+      }
+      .FreestyleUsageControls {
+        background: var(--popover);
+        color: var(--popover-foreground);
+      }
     </style>
   </template>
 
@@ -324,7 +426,12 @@ class IndexComponent extends Component {
   @service declare private router: RouterService;
 
   @tracked private theme?: Theme;
+  @tracked private mode: 'light' | 'dark' = 'light';
   @tracked private isCycleThemesEnabled = false;
+
+  private get isDarkMode() {
+    return this.mode === 'dark';
+  }
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -332,7 +439,11 @@ class IndexComponent extends Component {
     if (!queryParams) {
       return;
     }
-    let { cycleThemes, theme } = queryParams;
+    let { cycleThemes, mode, theme } = queryParams;
+
+    if (mode === 'dark') {
+      this.mode = 'dark';
+    }
 
     let currentTheme = this.themes.find((t) => t.name === theme);
     this.selectTheme(currentTheme);
@@ -347,6 +458,13 @@ class IndexComponent extends Component {
     this.theme = theme;
     this.router.replaceWith('index', {
       queryParams: { theme: this.theme?.name },
+    });
+  }
+
+  @action private toggleMode() {
+    this.mode = this.mode === 'dark' ? 'light' : 'dark';
+    this.router.replaceWith('index', {
+      queryParams: { mode: this.mode === 'dark' ? 'dark' : null },
     });
   }
 

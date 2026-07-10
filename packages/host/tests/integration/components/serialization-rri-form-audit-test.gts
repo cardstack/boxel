@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   identifyCard,
   PermissionsContextName,
   type Permissions,
@@ -51,7 +50,7 @@ module('Integration | serialization | RRI form audit', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('serializeCard output keys against an unmapped (test) realm', async function (assert) {

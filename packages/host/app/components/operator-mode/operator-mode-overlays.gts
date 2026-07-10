@@ -33,7 +33,7 @@ import {
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  type CommandContext,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 
 import {
@@ -85,7 +85,7 @@ export default class OperatorModeOverlays extends Overlays {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @consume(CommandContextName)
-  declare private commandContext: CommandContext;
+  declare private toolContext: ToolContext;
 
   get renderedCardsForOverlayActionsWithEvents() {
     return super
@@ -625,7 +625,7 @@ export default class OperatorModeOverlays extends Overlays {
         canEdit: this.realm.canWrite(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
-        commandContext: this.commandContext,
+        toolContext: this.toolContext,
       }) ?? [];
 
     // Delete and New Card of This Type don't make sense from an embedded field

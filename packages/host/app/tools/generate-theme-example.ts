@@ -69,7 +69,7 @@ export default class GenerateThemeExampleTool extends HostBaseTool<
       ),
     );
 
-    const oneShot = new OneShotLlmRequestTool(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.toolContext);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,

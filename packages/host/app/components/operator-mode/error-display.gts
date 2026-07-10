@@ -99,7 +99,7 @@ export default class ErrorDisplay
 
   private viewInCodeMode = dropTask(async () => {
     let switchSubmodeCommand = new SwitchSubmodeTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
     await switchSubmodeCommand.execute({
       submode: 'code',

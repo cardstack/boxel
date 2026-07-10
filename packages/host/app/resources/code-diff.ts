@@ -108,7 +108,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     }
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
 
     try {

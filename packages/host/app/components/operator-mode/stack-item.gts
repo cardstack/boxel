@@ -41,7 +41,7 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -105,7 +105,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
-    commandContext: CommandContext;
+    toolContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (
@@ -670,7 +670,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
-        commandContext: this.args.commandContext,
+        toolContext: this.args.toolContext,
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],

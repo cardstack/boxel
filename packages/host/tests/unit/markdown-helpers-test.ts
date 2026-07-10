@@ -3,7 +3,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -27,7 +27,7 @@ module('Unit | markdown-helpers | card link helpers', function (hooks) {
     loader = getService('loader-service').loader;
     let mod = await loader.import<
       typeof import('@cardstack/base/markdown-helpers')
-    >(`${baseRealm.url}markdown-helpers`);
+    >('@cardstack/base/markdown-helpers');
     markdownLinkForCard = mod.markdownLinkForCard;
     markdownLinksForCards = mod.markdownLinksForCards;
     markdownEmbedForCard = mod.markdownEmbedForCard;

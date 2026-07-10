@@ -13,7 +13,7 @@ import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-
 import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
 import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 import type {
-  CommandContext,
+  ToolContext,
   Format,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -51,7 +51,7 @@ type MenuContext =
 export type GetMenuItemParams = {
   canEdit: boolean;
   cardCrudFunctions: Partial<CardCrudFunctions>;
-  commandContext: CommandContext;
+  toolContext: ToolContext;
   format?: Format;
   useBaseTemplate?: boolean;
 } & MenuContext;
@@ -92,7 +92,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Copy as Markdown',
       action: () =>
-        new CopyCardAsMarkdownTool(params.commandContext).execute({
+        new CopyCardAsMarkdownTool(params.toolContext).execute({
           cardId,
         }),
       icon: ClipboardCopy,
@@ -170,13 +170,13 @@ export function getDefaultCardMenuItems(
       label: 'Copy to Workspace',
       action: async () => {
         const { newCardId } = await new CopyCardCommand(
-          params.commandContext,
+          params.toolContext,
         ).execute({
           sourceCard: card,
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
-        let showCardCommand = new ShowCardTool(params.commandContext);
+        let showCardCommand = new ShowCardTool(params.toolContext);
         await showCardCommand.execute({
           cardId: newCardId,
         });
@@ -190,7 +190,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Open in Interact Mode',
       action: () => {
-        new OpenInInteractModeTool(params.commandContext).execute({
+        new OpenInInteractModeTool(params.toolContext).execute({
           cardId,
           format: params.format === 'edit' ? 'edit' : 'isolated',
         });
@@ -203,7 +203,7 @@ export function getDefaultCardMenuItems(
     menuItems.push({
       label: 'Open in Code Mode',
       action: async () => {
-        await new SwitchSubmodeTool(params.commandContext).execute({
+        await new SwitchSubmodeTool(params.toolContext).execute({
           submode: 'code',
           codePath: cardId,
         });
@@ -224,7 +224,7 @@ export function getDefaultCardMenuItems(
           if (!targetRealm) {
             throw new Error('Unable to determine target realm from card');
           }
-          await new OpenCreateListingModalTool(params.commandContext).execute({
+          await new OpenCreateListingModalTool(params.toolContext).execute({
             codeRef,
             openCardIds: [cardId],
             targetRealm,
@@ -240,7 +240,7 @@ export function getDefaultCardMenuItems(
 
 function getSampleDataMenuItems(
   card: CardDef,
-  { commandContext }: Pick<GetMenuItemParams, 'commandContext'>,
+  { toolContext }: Pick<GetMenuItemParams, 'toolContext'>,
 ): MenuItemOptions[] {
   let cardId = card.id as unknown as string;
   let menuItems: MenuItemOptions[] = [];
@@ -248,7 +248,7 @@ function getSampleDataMenuItems(
     menuItems.push({
       label: `Fill in Sample Data with AI`,
       action: async () =>
-        await new PopulateWithSampleDataTool(commandContext).execute({
+        await new PopulateWithSampleDataTool(toolContext).execute({
           cardId: card.id,
         }),
       icon: Wand,
@@ -260,7 +260,7 @@ function getSampleDataMenuItems(
     menuItems.push({
       label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
       action: async () => {
-        await new GenerateExampleCardsTool(commandContext).execute({
+        await new GenerateExampleCardsTool(toolContext).execute({
           count: GENERATED_EXAMPLE_COUNT,
           codeRef: codeRef as ResolvedCodeRef,
           realm: card[realmURL]?.href,

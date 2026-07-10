@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseCardRef, baseRealm, baseRRI } from '@cardstack/runtime-common';
+import { baseCardRef, baseRRI } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -39,7 +39,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   const sampleCards: CardDocFiles = {

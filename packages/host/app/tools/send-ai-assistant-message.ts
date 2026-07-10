@@ -60,7 +60,7 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
       this.realm.canWrite(c.id),
     );
     let tools: Tool[] = await addPatchTools(
-      this.commandContext,
+      this.toolContext,
       patchableCards,
       cardAPI,
     );

@@ -1,0 +1,441 @@
+import { getOwner } from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+
+import { module, test } from 'qunit';
+
+import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common';
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import type { Loader } from '@cardstack/runtime-common/loader';
+
+import RealmService from '@cardstack/host/services/realm';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
+
+import {
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupOnSave,
+  testRealmInfo,
+  testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
+
+const decoder = new TextDecoder();
+
+module('Integration | Command | update-room-skills', function (hooks) {
+  setupRenderingTest(hooks);
+  setupWindowMock(hooks);
+
+  let loader: Loader;
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    loader = getService('loader-service').loader;
+  });
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+  });
+  setupLocalIndexing(hooks);
+  setupBaseRealm(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import('@cardstack/base/card-api'),
+  );
+
+  module('command metadata', function () {
+    test('has correct description and action verb', function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      assert.strictEqual(
+        command.description,
+        'Updates the enabled and disabled skills for a room',
+        'Command has correct description',
+      );
+      assert.strictEqual(
+        UpdateRoomSkillsTool.actionVerb,
+        'Update',
+        'Command has correct action verb',
+      );
+    });
+
+    test('getInputType returns UpdateRoomSkillsInput', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      const inputType = await command.getInputType();
+      assert.ok(inputType, 'Input type is defined');
+    });
+
+    test('getInputJsonSchema', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let loader = getService('loader-service').loader;
+      let mappings = await basicMappings(loader);
+      let cardAPI = await loader.import<typeof CardAPI>(
+        '@cardstack/base/card-api',
+      );
+      const inputSchema = await command.getInputJsonSchema(cardAPI, mappings);
+      assert.deepEqual(
+        inputSchema,
+        {
+          attributes: {
+            properties: {
+              roomId: { type: 'string' },
+              skillCardIdsToActivate: {
+                items: { type: 'string' },
+                type: 'array',
+              },
+              skillCardIdsToDeactivate: {
+                items: { type: 'string' },
+                type: 'array',
+              },
+            },
+            required: ['roomId'],
+            type: 'object',
+          },
+        },
+        'Input schema includes roomId and skill card id arrays',
+      );
+    });
+  });
+
+  let matrixRoomId: string;
+  module('run', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+
+export class DoThing extends Command {
+  static displayName = 'Test Command';
+    async getInputType() {
+    return undefined;
+  }
+}`,
+            'skill-with-commands.json': new Skill({
+              cardTitle: 'Skill with invalid command',
+              cardDescription: 'test',
+              instructions: 'test',
+              commands: [
+                new ToolField({
+                  codeRef: { module: '', name: '' },
+                  requiresApproval: false,
+                }),
+                new ToolField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+            'Skill/boxel-environment.json': new Skill({
+              title: 'Boxel Environment',
+              description: 'Test environment skill',
+              instructions: 'Test skill card for environment commands',
+              commands: [
+                new ToolField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+            // A skill expressed as a markdown file: `boxel.kind: skill`
+            // frontmatter carries the same command shape as a Skill card.
+            'skills/markdown-skill/SKILL.md': `---
+name: Markdown Skill
+description: A skill expressed as a markdown file
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '${testRealmURL}test-command.gts'
+        name: DoThing
+      requiresApproval: false
+---
+# Markdown Skill
+
+Instructions live in the markdown body.
+`,
+          },
+        }),
+      );
+      let matrixService = getService('matrix-service') as any;
+      await matrixService.ready;
+      matrixRoomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+    });
+    test('activates new skills and uploads command definitions', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillCardId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+        [skillCardId],
+        'skill added to enabled list',
+      );
+      assert.strictEqual(
+        skillsRoomState.disabledSkillCards.length,
+        0,
+        'no skills are disabled',
+      );
+      assert.ok(
+        skillsRoomState.toolDefinitions.length > 0,
+        'command definitions populated',
+      );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.ok(
+        [...uploadedContents.entries()].length > 1,
+        'skill and some command defs uploaded',
+      );
+      assert.strictEqual(
+        [...uploadedContents.values()]
+          .map((s) => JSON.parse(decoder.decode(s)))
+          .filter((json) => json.data?.type === 'card').length,
+        1,
+        'one skill card uploaded',
+      );
+    });
+
+    test('deactivates existing skills without reuploading cards', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
+      mockMatrixUtils.setRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        {
+          enabledSkillCards: [{ sourceUrl: skillCardId } as SerializedFile],
+          disabledSkillCards: [],
+          toolDefinitionFileDefs: [
+            { sourceUrl: 'command-def' } as SerializedFile,
+          ],
+        },
+      );
+
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [],
+        skillCardIdsToDeactivate: [skillCardId],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.strictEqual(
+        skillsRoomState.enabledSkillCards.length,
+        0,
+        'skill removed from enabled list',
+      );
+      assert.deepEqual(
+        skillsRoomState.disabledSkillCards.map((card: any) => card.sourceUrl),
+        [skillCardId],
+        'skill added to disabled list',
+      );
+      assert.strictEqual(
+        skillsRoomState.toolDefinitions.length,
+        0,
+        'command definitions cleared when no skills enabled',
+      );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.strictEqual(
+        [...uploadedContents.entries()].length,
+        0,
+        'no reuploads during deactivation',
+      );
+    });
+
+    test('reactivates skills already present in room', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillCardId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [],
+        skillCardIdsToDeactivate: [skillCardId],
+      });
+
+      let initiallyUploadedContents = [
+        ...mockMatrixUtils.getUploadedContents().values(),
+      ];
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillCardId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+        [skillCardId],
+        'skill moved from disabled to enabled',
+      );
+      assert.strictEqual(
+        skillsRoomState.disabledSkillCards.length,
+        0,
+        'skill removed from disabled list',
+      );
+      assert.ok(
+        skillsRoomState.toolDefinitions.length > 0,
+        'command definitions restored for reactivated skill',
+      );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.strictEqual(
+        [...uploadedContents.values()].length,
+        initiallyUploadedContents.length,
+        'no new uploads during reactivation',
+      );
+    });
+
+    test('skips invalid command definitions when uploading skills', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [`${testRealmURL}skill-with-commands`],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.strictEqual(
+        [...uploadedContents.entries()].length,
+        2,
+        'skill plus one command definitions were uploaded',
+      );
+      let commandDefJson = JSON.parse(
+        decoder.decode([...uploadedContents.values()][1]),
+      );
+      assert.deepEqual(
+        commandDefJson.codeRef.name,
+        'DoThing',
+        'only valid command definition is uploaded',
+      );
+    });
+
+    test('activates a skill markdown file and uploads its command definitions', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let skillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+        [skillId],
+        'skill markdown file added to enabled list (not dropped as a non-card)',
+      );
+      assert.strictEqual(
+        skillsRoomState.disabledSkillCards.length,
+        0,
+        'no skills are disabled',
+      );
+
+      let commandDefSourceUrls = skillsRoomState.toolDefinitions.map(
+        (def: any) => def.sourceUrl,
+      );
+      assert.deepEqual(
+        commandDefSourceUrls,
+        [`${testRealmURL}test-command.gts/DoThing`],
+        "the markdown skill's frontmatter command is uploaded as a command definition",
+      );
+    });
+
+    test('gathers commands from both a skill card and a skill markdown file', async function (assert) {
+      let command = new UpdateRoomSkillsTool(
+        getService('tool-service').toolContext,
+      );
+      let cardSkillId = `${testRealmURL}Skill/boxel-environment`;
+      let markdownSkillId = `${testRealmURL}skills/markdown-skill/SKILL.md`;
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [cardSkillId, markdownSkillId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skillsRoomState.enabledSkillCards
+          .map((card: any) => card.sourceUrl)
+          .sort(),
+        [cardSkillId, markdownSkillId].sort(),
+        'both the skill card and the skill markdown file are enabled',
+      );
+      // Both skills point at the same command; deduped by functionName to one.
+      assert.deepEqual(
+        skillsRoomState.toolDefinitions.map((def: any) => def.sourceUrl),
+        [`${testRealmURL}test-command.gts/DoThing`],
+        'the shared command is uploaded once across both skill sources',
+      );
+    });
+  });
+});

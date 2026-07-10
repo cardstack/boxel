@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { flattenPrerenderHtmlVisitMeta } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/prerenderer.ts';
 import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app.ts';
 
@@ -305,6 +306,69 @@ module(basename(import.meta.filename), function () {
         'req-xyz',
         'requestId present on same meta block',
       );
+    });
+
+    test('renderFormatsMs recorded on response.meta.diagnostics survives the timing stamp', function (assert) {
+      // The RenderRunner records per-format render timings directly onto
+      // `response.meta.diagnostics` as each html step completes; the
+      // Prerenderer's later timing stamp must merge around that block, not
+      // replace it — otherwise the per-format breakdown never reaches
+      // `prerendered_html.diagnostics`.
+      let renderFormatsMs = {
+        card: { isolated: 80, head: 3, atom: 2, markdown: 5 },
+        file: { isolated: 9 },
+      };
+      let response: FakeVisitResponse = {
+        meta: { diagnostics: { renderFormatsMs } },
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 4, renderMs: 99, waits: {} },
+        103,
+      );
+
+      let diagnostics = response.meta?.diagnostics;
+      assert.deepEqual(
+        diagnostics?.renderFormatsMs,
+        renderFormatsMs,
+        'per-format timings preserved through the timing stamp',
+      );
+      assert.strictEqual(
+        diagnostics?.renderElapsedMs,
+        99,
+        'server timing merged alongside the preserved breakdown',
+      );
+    });
+  });
+
+  module('flattenPrerenderHtmlVisitMeta', function () {
+    test('the visit HTTP id lands under prerenderHtmlRequestId, never requestId', function (assert) {
+      let flattened = flattenPrerenderHtmlVisitMeta({
+        requestId: 'render-req-1',
+        diagnostics: {
+          launchMs: 5,
+          renderElapsedMs: 100,
+          renderFormatsMs: { card: { isolated: 80 } },
+        },
+      });
+      assert.deepEqual(flattened, {
+        launchMs: 5,
+        renderElapsedMs: 100,
+        renderFormatsMs: { card: { isolated: 80 } },
+        prerenderHtmlRequestId: 'render-req-1',
+      });
+    });
+
+    test('returns undefined when there is nothing to persist', function (assert) {
+      assert.strictEqual(flattenPrerenderHtmlVisitMeta(undefined), undefined);
+      assert.strictEqual(flattenPrerenderHtmlVisitMeta({}), undefined);
+    });
+
+    test('a diagnostics-only meta (in-process caller, no HTTP id) flattens without a request id', function (assert) {
+      let flattened = flattenPrerenderHtmlVisitMeta({
+        diagnostics: { renderElapsedMs: 42 },
+      });
+      assert.deepEqual(flattened, { renderElapsedMs: 42 });
     });
   });
 });
