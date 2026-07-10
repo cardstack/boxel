@@ -26,9 +26,9 @@ import {
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import CardRenderer from '../card-renderer';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 import type { ModifierLike } from '@glint/template';
 

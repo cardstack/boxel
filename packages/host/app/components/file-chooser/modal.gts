@@ -35,9 +35,9 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import FileChooser, { type FileChooserRealm } from './panel';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Args: {};

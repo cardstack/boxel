@@ -36,7 +36,7 @@ import {
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { BROADCAST_REALM_EVENT } from '@cardstack/runtime-common/worker-request';
 import { encodeWorkerRequestIpc } from './lib/worker-request-forwarder.ts';
 import yargs from 'yargs';

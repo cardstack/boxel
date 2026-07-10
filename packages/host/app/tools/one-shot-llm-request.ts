@@ -4,9 +4,6 @@ import { isCardInstance, logger } from '@cardstack/runtime-common';
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import { prettifyMessages } from '../utils/prettify-messages';
@@ -20,6 +17,8 @@ import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 export default class OneShotLlmRequestTool extends HostBaseTool<
   typeof BaseToolModule.OneShotLLMRequestInput,

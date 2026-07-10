@@ -10,11 +10,10 @@ import {
 
 import type NetworkService from '@cardstack/host/services/network';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { getClass, getTypes } from './meta';
 
 import type { Model as ParentModel } from '../render';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export type Model = PrerenderTypes | RenderError | undefined;
 

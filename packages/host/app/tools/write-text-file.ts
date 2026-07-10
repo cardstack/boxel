@@ -2,14 +2,13 @@ import { service } from '@ember/service';
 
 import { rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
 import type { SaveType } from '../services/card-service';
 import type RealmService from '../services/realm';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class WriteTextFileTool extends HostBaseTool<
   typeof BaseToolModule.WriteTextFileInput,

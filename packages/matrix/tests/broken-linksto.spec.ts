@@ -33,7 +33,7 @@ test.describe('Broken linksTo tolerance', () => {
       realmURL,
       'pet.gts',
       `
-        import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+        import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
         export class Pet extends CardDef {
           @field firstName = contains(StringField);
           static embedded = class Embedded extends Component<typeof this> {
@@ -54,7 +54,7 @@ test.describe('Broken linksTo tolerance', () => {
       realmURL,
       'pet-person.gts',
       `
-        import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+        import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
         import { Pet } from './pet';
         export class PetPerson extends CardDef {
           @field firstName = contains(StringField);
@@ -188,7 +188,7 @@ test.describe('Broken linksTo tolerance', () => {
       realmURL,
       'pet.gts',
       `
-        import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+        import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
         export class Pet extends CardDef {
           @field firstName = contains(StringField);
           static embedded = class Embedded extends Component<typeof this> {
@@ -206,7 +206,7 @@ test.describe('Broken linksTo tolerance', () => {
       realmURL,
       'pet-person.gts',
       `
-        import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+        import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
         import { Pet } from './pet';
         export class PetPerson extends CardDef {
           @field firstName = contains(StringField);

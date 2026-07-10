@@ -8,10 +8,10 @@ import {
   generateJsonSchemaForCardType,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class GetCardTypeSchemaTool extends HostBaseTool<
   typeof BaseToolModule.CardTypeSchemaInput,

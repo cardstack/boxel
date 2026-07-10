@@ -35,8 +35,8 @@ const BASIC_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Basic extends CardDef {
     static displayName = 'Basic';
@@ -59,7 +59,7 @@ const BASIC_CARD_GTS = `
 // prerender pipeline captures `textContent` for format=markdown, so the exact
 // whitespace must round-trip.
 const WHITESPACE_CARD_GTS = `
-  import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+  import { Component, CardDef } from '@cardstack/base/card-api';
 
   export class Whitespace extends CardDef {
     static displayName = 'Whitespace';
@@ -85,8 +85,8 @@ const FIELD_DELEGATION_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class FieldDelegation extends CardDef {
     static displayName = 'FieldDelegation';
@@ -106,8 +106,8 @@ const MARKDOWN_FIELD_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
+  } from '@cardstack/base/card-api';
+  import MarkdownField from '@cardstack/base/markdown';
 
   export class PassThrough extends CardDef {
     static displayName = 'PassThrough';
@@ -127,8 +127,8 @@ const ESCAPE_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Escape extends CardDef {
     static displayName = 'Escape';
@@ -148,8 +148,8 @@ const FALLBACK_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Fallback extends CardDef {
     static displayName = 'Fallback';
@@ -172,8 +172,8 @@ const OVERRIDE_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Override extends CardDef {
     static displayName = 'Override';
@@ -197,8 +197,8 @@ const FRONTMATTER_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Frontmatter extends CardDef {
     static displayName = 'Frontmatter';
@@ -222,8 +222,8 @@ const NESTED_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class NestedChild extends CardDef {
     static displayName = 'NestedChild';
@@ -252,8 +252,8 @@ const CACHE_CARD_INITIAL_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Cache extends CardDef {
     static displayName = 'Cache';
@@ -270,8 +270,8 @@ const CACHE_CARD_UPDATED_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Cache extends CardDef {
     static displayName = 'Cache';

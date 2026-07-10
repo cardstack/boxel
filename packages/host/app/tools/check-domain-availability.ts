@@ -4,11 +4,10 @@ import { resolvePublishedRealmUrl } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Checks whether a custom published-realm subdomain is available to claim, and
 // reports the published-realm URL it would map to. Only custom Boxel Site

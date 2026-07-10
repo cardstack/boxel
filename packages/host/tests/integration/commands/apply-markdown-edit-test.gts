@@ -9,8 +9,6 @@ import { baseRealm, type Loader } from '@cardstack/runtime-common';
 import RealmService from '@cardstack/host/services/realm';
 import ApplyMarkdownEditTool from '@cardstack/host/tools/apply-markdown-edit';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -25,6 +23,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -116,8 +116,8 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
         mockMatrixUtils,
         contents: {
           'article.gts': `
-          import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-          import MarkdownField from "https://cardstack.com/base/markdown";
+          import { CardDef, field, contains } from "@cardstack/base/card-api";
+          import MarkdownField from "@cardstack/base/markdown";
 
           export class Article extends CardDef {
             static displayName = 'Article';

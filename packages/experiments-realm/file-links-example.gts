@@ -6,9 +6,9 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
-import { FileDef } from 'https://cardstack.com/base/file-api';
+import { FileDef } from '@cardstack/base/file-api';
 
 /**
  * Example card demonstrating the use of FileDef with linksTo and linksToMany.

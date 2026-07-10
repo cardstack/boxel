@@ -5,8 +5,8 @@ import {
   containsMany,
   StringField,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 
 import { BoxelDropdown, Menu, Button } from '@cardstack/boxel-ui/components';
 import { menuItemFunc } from '@cardstack/boxel-ui/helpers';

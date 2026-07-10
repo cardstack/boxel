@@ -1,5 +1,5 @@
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   FieldDef,
@@ -7,8 +7,8 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { Country } from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';

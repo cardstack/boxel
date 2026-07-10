@@ -38,10 +38,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   testRealmURL,
   testRRI,
@@ -75,6 +71,9 @@ import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -971,7 +970,7 @@ module('Integration | Store', function (hooks) {
       await testRealm.write(
         `boom-person.gts`,
         `
-        import { contains, field, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+        import { contains, field, CardDef, Component, StringField } from '@cardstack/base/card-api';
 
         export class BoomPerson extends CardDef {
           static displayName = 'Boom Person';
@@ -1599,8 +1598,8 @@ module('Integration | Store', function (hooks) {
         [
           'gallery.gts',
           `
-            import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-            import { FileDef } from "https://cardstack.com/base/file-api";
+            import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+            import { FileDef } from "@cardstack/base/file-api";
 
             export class Gallery extends CardDef {
               @field hero = linksTo(FileDef);
@@ -1755,8 +1754,8 @@ module('Integration | Store', function (hooks) {
         [
           'gallery.gts',
           `
-            import { CardDef, field, linksTo } from "https://cardstack.com/base/card-api";
-            import { FileDef } from "https://cardstack.com/base/file-api";
+            import { CardDef, field, linksTo } from "@cardstack/base/card-api";
+            import { FileDef } from "@cardstack/base/file-api";
 
             export class Gallery extends CardDef {
               @field hero = linksTo(FileDef);
@@ -2181,8 +2180,8 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `person.gts`,
       `
-      import { contains, field, Component, CardDef, } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      import { contains, field, Component, CardDef, } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       export class Person extends CardDef {
         @field name = contains(StringField);
@@ -2285,7 +2284,7 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `foo.gts`,
       `
-        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        import { contains, CardDef } from '@cardstack/base/card-api';
         export class Foo extends CardDef {}
       `.trim(),
     );
@@ -2322,7 +2321,7 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `foo.gts`,
       `
-        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        import { contains, CardDef } from '@cardstack/base/card-api';
         export class Foo extends CardDef {}
       `.trim(),
     );

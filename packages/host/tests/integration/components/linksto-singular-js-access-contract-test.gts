@@ -12,9 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
-
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -34,6 +31,9 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // The contract under test is the *userland* JS shape of `card.linkField`:
 // strict-equality, optional-chain, and raw-access semantics across all five

@@ -5,10 +5,10 @@ import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type { GetMenuItemParams } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { GetMenuItemParams } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 let getDefaultFileMenuItems: (
   file: FileDef,

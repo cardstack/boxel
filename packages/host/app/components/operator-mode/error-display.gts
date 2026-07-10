@@ -20,10 +20,10 @@ import type { DisplayedErrorProvider } from '@cardstack/host/services/error-disp
 import type ToolService from '@cardstack/host/services/tool-service';
 import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
-
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+
+import type { FileDef } from '@cardstack/base/file-api';
+import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLElement;

@@ -2,14 +2,13 @@ import { service } from '@ember/service';
 
 import { isCardInstance, rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import SendBotTriggerEventTool from './bot-requests/send-bot-trigger-event';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Local view of the boxel-catalog SubmissionWorkflowCard — that repo isn't cloned in boxel CI. (CS-11166)
 interface WorkflowCardView {

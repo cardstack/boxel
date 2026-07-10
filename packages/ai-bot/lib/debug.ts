@@ -2,7 +2,7 @@ import { setTitle } from './set-title.ts';
 import type OpenAI from 'openai';
 
 import { errorReporter } from './sentry.ts';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
   constructHistory,
   getPromptParts,

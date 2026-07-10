@@ -5,12 +5,12 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import type * as BrandGuideModule from 'https://cardstack.com/base/brand-guide';
-import type * as CardApiModule from 'https://cardstack.com/base/card-api';
-
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandGuideModule from '@cardstack/base/brand-guide';
+import type * as CardApiModule from '@cardstack/base/card-api';
 
 module('Integration | brand-guide | brand image attachments', function (hooks) {
   setupRenderingTest(hooks);

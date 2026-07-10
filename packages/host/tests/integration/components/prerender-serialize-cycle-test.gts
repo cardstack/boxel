@@ -93,7 +93,7 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
     loader.shimModule(`${testRealmURL}test-cards`, { Node });
     let api = (await loader.import(
       `${baseRealm.url}card-api`,
-    )) as typeof import('https://cardstack.com/base/card-api');
+    )) as typeof import('@cardstack/base/card-api');
 
     let a = new Node({ firstName: 'A-canonical' });
     let b = new Node({ firstName: 'B' });

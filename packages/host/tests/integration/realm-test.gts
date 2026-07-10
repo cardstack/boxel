@@ -21,9 +21,6 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as StringFieldMod from 'https://cardstack.com/base/string';
-
 import {
   testRealmURL,
   testRealmInfo,
@@ -50,6 +47,9 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as StringFieldMod from '@cardstack/base/string';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -3366,7 +3366,7 @@ module('Integration | realm', function (hooks) {
 
   test('requests do not contain entries that match patterns in ignore files', async function (assert) {
     const cardSource = `
-      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import { CardDef } from '@cardstack/base/card-api';
       export class Post extends CardDef {}
     `;
 

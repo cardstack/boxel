@@ -13,8 +13,8 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type NetworkService from '@cardstack/host/services/network';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Element: HTMLDivElement;

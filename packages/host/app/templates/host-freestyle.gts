@@ -36,12 +36,11 @@ import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import formatComponentName from '../helpers/format-component-name';
 
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type { CardContext } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 interface UsageComponent {

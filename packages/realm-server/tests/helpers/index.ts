@@ -82,7 +82,7 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer.ts';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app.ts';
 import { buildCreatePrerenderAuth } from '../../prerender/auth.ts';

@@ -8,7 +8,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardApi: typeof import('@cardstack/base/card-api');
 
 let loader: Loader;
 

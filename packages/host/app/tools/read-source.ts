@@ -2,11 +2,10 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class ReadSourceTool extends HostBaseTool<
   typeof BaseToolModule.ReadSourceInput,

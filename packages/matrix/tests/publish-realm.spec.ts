@@ -192,8 +192,8 @@ test.describe('Publish realm', () => {
       privateRealmURL,
       'secret-card.gts',
       `
-        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { CardDef, field, contains } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class SecretCard extends CardDef {
           @field name = contains(StringField);
@@ -220,8 +220,8 @@ test.describe('Publish realm', () => {
       defaultRealmURL,
       'dependent-card.gts',
       `
-        import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { SecretCard } from "${privateRealmURL}secret-card";
 
         export class DependentCard extends CardDef {
@@ -310,8 +310,8 @@ test.describe('Publish realm', () => {
       defaultRealmURL,
       'sentinel-card.gts',
       `
-        import { CardDef, Component, field, contains } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { CardDef, Component, field, contains } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class SentinelCard extends CardDef {
           @field value = contains(StringField);

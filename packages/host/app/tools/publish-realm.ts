@@ -9,12 +9,11 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import config from '@cardstack/host/config/environment';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 // Publishes a realm to one or more destinations (subdirectory Boxel Spaces or
 // custom domains) and reports per-target status. `_publish-realm` returns 202

@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import { handleDebugCommands } from '../lib/debug.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 

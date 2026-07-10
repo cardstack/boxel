@@ -2,7 +2,7 @@ import type {
   BaseDefConstructor,
   BaseInstanceType,
   CardStore,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import {
   type ResolvedCodeRef,
   isUrlLike,
@@ -13,7 +13,7 @@ import {
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
-import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
+import type { SerializeOpts } from '@cardstack/base/card-api';
 
 export function queryableValue(
   codeRef: ResolvedCodeRef | {} | undefined,

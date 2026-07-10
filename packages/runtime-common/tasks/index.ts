@@ -10,7 +10,7 @@ import type {
   VirtualNetwork,
 } from '../index.ts';
 import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';

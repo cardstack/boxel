@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { ensureTrailingSlash } from './paths.ts';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // Shared-secret authentication and wire contract for the realm-server
 // /_worker-request endpoint. A worker container's worker manager and the realm

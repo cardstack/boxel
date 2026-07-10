@@ -4,7 +4,7 @@ import {
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export class PersonCard extends CardDef {
   static displayName = 'Person';

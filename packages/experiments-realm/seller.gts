@@ -1,5 +1,5 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import StoreIcon from '@cardstack/boxel-icons/store';
 
 export class Seller extends CardDef {

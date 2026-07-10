@@ -13,8 +13,6 @@ import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-inde
 import type ToolService from '@cardstack/host/services/tool-service';
 import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   setupIntegrationTestRealm,
@@ -38,6 +36,8 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);

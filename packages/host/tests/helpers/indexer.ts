@@ -23,9 +23,9 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { testRealmURL } from './index';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const defaultIndexEntry = {
   generation: 1,

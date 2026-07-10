@@ -7,7 +7,7 @@ import {
   ImageDef,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
 
 /**

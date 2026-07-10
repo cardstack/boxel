@@ -14,11 +14,11 @@ import {
   linksToMany,
   Component,
   Theme,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
 
 import {
   Accordion,

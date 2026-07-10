@@ -3,13 +3,13 @@ import Service from '@ember/service';
 import window from 'ember-window-mock';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
-
 import {
   AiAssistantMessageDrafts,
   AiAssistantPendingSends,
   CurrentRoomIdPersistenceKey,
 } from '../utils/local-storage-keys';
+
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

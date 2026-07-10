@@ -25,8 +25,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const headPreviewWithDisallowedTagsSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreviewUnsafe extends CardDef {
     static displayName = 'Head Preview Unsafe';
@@ -46,8 +46,8 @@ const headPreviewWithDisallowedTagsSource = `
 `;
 
 const headPreviewCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';

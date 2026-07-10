@@ -1,11 +1,10 @@
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RecentFilesService from '../services/recent-files-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
   typeof BaseToolModule.UpdateCodePathWithSelectionInput

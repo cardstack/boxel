@@ -11,8 +11,6 @@ import RealmService from '@cardstack/host/services/realm';
 import type { SearchCardsByQueryTool as SearchCardsByQueryCommandType } from '@cardstack/host/tools/search-cards';
 import TransformCardsTool from '@cardstack/host/tools/transform-cards';
 
-import type * as CommandModule from 'https://cardstack.com/base/command';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -25,6 +23,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CommandModule from '@cardstack/base/command';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -61,9 +61,9 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let CommandModule: typeof import('https://cardstack.com/base/command');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let CommandModule: typeof import('@cardstack/base/command');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

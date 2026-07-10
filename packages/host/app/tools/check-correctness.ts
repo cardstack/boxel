@@ -9,8 +9,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
@@ -18,6 +16,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 

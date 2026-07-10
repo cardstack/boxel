@@ -16,11 +16,10 @@
 
 import { service } from '@ember/service';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class InstantiateCardTool extends HostBaseTool<
   typeof BaseToolModule.InstantiateCardInput,

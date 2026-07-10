@@ -8,9 +8,6 @@ import {
 
 import { isBaseInstance, realmURL } from '@cardstack/runtime-common/constants';
 
-import type { CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import SendAiAssistantMessageTool from './send-ai-assistant-message';
@@ -19,6 +16,8 @@ import type AiAssistantPanelService from '../services/ai-assistant-panel-service
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type { CardDef, FieldDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class PopulateWithSampleDataTool extends HostBaseTool<
   typeof BaseToolModule.CardIdCard,

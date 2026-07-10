@@ -59,13 +59,6 @@ import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import consumeContext from '../../helpers/consume-context';
 
 import { removeFileExtension } from '../../utils/card-search/types';
@@ -94,6 +87,8 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
+import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 

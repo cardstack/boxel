@@ -1,12 +1,12 @@
 import { getClass } from '@cardstack/runtime-common';
 
-import type { VisitCardsInput } from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import ReadSourceTool from './read-source';
 import { SearchCardsByQueryTool } from './search-cards';
 import WriteTextFileTool from './write-text-file';
+
+import type { VisitCardsInput } from '@cardstack/base/command';
 
 export default class TransformCardsTool extends HostBaseTool<
   typeof VisitCardsInput

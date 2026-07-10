@@ -18,10 +18,6 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as CommandModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import { Submodes } from '../components/submode-switcher';
 import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
@@ -44,6 +40,9 @@ import type ResetService from './reset';
 import type StoreService from './store';
 import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as CommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export interface SessionRoomData {
   roomId: string;

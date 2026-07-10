@@ -36,7 +36,7 @@ import { CardContextConsumer } from './field-component';
  *
  * Usage:
  * ```
- * import RichMarkdownField from 'https://cardstack.com/base/rich-markdown';
+ * import RichMarkdownField from '@cardstack/base/rich-markdown';
  *
  * class MyCard extends CardDef {
  *   @field body = contains(RichMarkdownField);

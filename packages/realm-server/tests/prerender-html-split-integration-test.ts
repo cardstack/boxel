@@ -16,9 +16,9 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 function makeFileSystem() {
   return {
     'person.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-      import NumberField from "https://cardstack.com/base/number";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "@cardstack/base/number";
 
       export class Person extends CardDef {
         @field firstName = contains(StringField);

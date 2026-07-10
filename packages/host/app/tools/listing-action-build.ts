@@ -1,8 +1,6 @@
 import type { Listing } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { devSkillId, skillCardURL } from '../lib/utils';
 
@@ -12,6 +10,8 @@ import SendAiAssistantMessageTool from './send-ai-assistant-message';
 import SetActiveLLMTool from './set-active-llm';
 import SwitchSubmodeTool from './switch-submode';
 import UpdateRoomSkillsTool from './update-room-skills';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class ListingActionBuildTool extends HostBaseTool<
   typeof BaseToolModule.ListingBuildInput

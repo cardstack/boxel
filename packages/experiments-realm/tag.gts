@@ -1,5 +1,5 @@
-import { Component } from 'https://cardstack.com/base/card-api';
-import TagCard from 'https://cardstack.com/base/tag';
+import { Component } from '@cardstack/base/card-api';
+import TagCard from '@cardstack/base/tag';
 
 import { BoxelTag } from '@cardstack/boxel-ui/components';
 import { getContrastColor } from '@cardstack/boxel-ui/helpers';

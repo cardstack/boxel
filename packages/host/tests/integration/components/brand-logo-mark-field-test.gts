@@ -10,13 +10,13 @@ import {
   type Loader,
 } from '@cardstack/runtime-common';
 
-import type * as BrandLogoModule from 'https://cardstack.com/base/brand-logo';
-import type * as CardApiModule from 'https://cardstack.com/base/card-api';
-
 import { provideConsumeContext } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandLogoModule from '@cardstack/base/brand-logo';
+import type * as CardApiModule from '@cardstack/base/card-api';
 
 module('Integration | brand-logo | MarkField edit', function (hooks) {
   setupRenderingTest(hooks);

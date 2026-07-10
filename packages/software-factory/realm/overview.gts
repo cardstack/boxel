@@ -6,7 +6,7 @@ import {
   type CardContext,
   type FieldsTypeFor,
   type PartialBaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   codeRef,

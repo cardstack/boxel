@@ -36,8 +36,8 @@ import {
   Component as CardComponent,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 
 class CounterWidget extends Component<{ Args: { start?: number } }> {
   @tracked count = this.args.start ?? 0;

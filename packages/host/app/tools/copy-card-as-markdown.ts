@@ -4,11 +4,10 @@ import { isTesting } from '@embroider/macros';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type NetworkService from '../services/network';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class CopyCardAsMarkdownTool extends HostBaseTool<
   typeof BaseToolModule.CardIdCard,

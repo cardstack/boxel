@@ -22,8 +22,8 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   let fs: Record<string, string | LooseSingleCardDocument> = {};
 
   fs['target.gts'] = `
-    import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export class Target extends CardDef {
       @field name = contains(StringField);
@@ -31,8 +31,8 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   `;
 
   fs['source.gts'] = `
-    import { contains, field, linksTo, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
     import { Target } from "./target";
 
     export class Source extends CardDef {

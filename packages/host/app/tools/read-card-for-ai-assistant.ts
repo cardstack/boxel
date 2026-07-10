@@ -2,14 +2,13 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class ReadCardForAssistantTool extends HostBaseTool<
   typeof BaseToolModule.CardIdCard,

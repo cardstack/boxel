@@ -6,7 +6,6 @@ import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
-  baseRealm,
   moduleFrom,
   getAncestor,
   SupportedMimeType,
@@ -18,16 +17,11 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type {
-  BaseDef,
-  Field,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type ResetService from '../services/reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, Field, FieldType } from '@cardstack/base/card-api';
 
 export type CodeRefType = CodeRef & {
   displayName: string;
@@ -124,7 +118,7 @@ export default class CardTypeService extends Service {
       this.moduleInfoCache.get(moduleURL.href) ??
       (await this.fetchModuleInfo(moduleURL));
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let { id: _remove, ...fields } = api.getFields(card, {
       includeComputeds: true,
     });

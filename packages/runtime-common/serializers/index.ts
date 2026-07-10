@@ -20,7 +20,7 @@ import type {
   BaseInstanceType,
   CardStore,
   DeserializeOpts,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export {
   DateSerializer,

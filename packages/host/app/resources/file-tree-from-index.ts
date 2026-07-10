@@ -17,9 +17,8 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import type StoreService from '../services/store';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('file-tree-from-index-resource:search-waiter');
 

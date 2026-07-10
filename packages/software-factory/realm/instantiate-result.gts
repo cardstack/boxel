@@ -5,10 +5,10 @@ import {
   contains,
   containsMany,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import CodeRefField from '@cardstack/base/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { ValidationResult } from './validation-result.gts';
 import {

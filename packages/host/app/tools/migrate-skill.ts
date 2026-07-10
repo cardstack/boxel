@@ -4,14 +4,13 @@ import { stringify as stringifyYaml } from 'yaml';
 
 import { rri, skillCardRef } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 // A single command in the migrated frontmatter — the same shape
 // `SkillFrontmatterField.tools` (a `containsMany(ToolField)`) parses back

@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
 import { isReady } from '../resources/file';
@@ -18,6 +16,7 @@ import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 interface FileInfo {
   exists: boolean;

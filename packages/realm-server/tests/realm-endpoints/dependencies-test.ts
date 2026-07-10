@@ -41,8 +41,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await testRealm.write(
       'dependencies-card.gts',
       `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class ResourceIndexCard extends CardDef {
           @field title = contains(StringField);
         }

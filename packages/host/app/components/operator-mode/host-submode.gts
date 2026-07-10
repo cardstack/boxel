@@ -29,13 +29,12 @@ import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
-import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
-
 import HostModeContent from '../host-mode/content';
 
 import SubmodeLayout from './submode-layout';
 
 import type { PublishError } from './publish-realm-modal';
+import type { ViewCardFn } from '@cardstack/base/card-api';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;

@@ -87,12 +87,6 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import {
@@ -126,6 +120,10 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type ToolService from './tool-service';
 import type { SearchResource } from '../resources/search';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -541,23 +539,23 @@ export default class StoreService extends Service implements StoreInterface {
   // error document ("what query fields were still pending").
   trackQueryLoad(
     load: Promise<unknown>,
-    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+    meta: import('@cardstack/base/card-api').QueryLoadMeta,
   ): (() => void) | void {
     return (
       this.store as unknown as {
         trackQueryLoad?: (
           l: Promise<unknown>,
-          m: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+          m: import('@cardstack/base/card-api').QueryLoadMeta,
         ) => (() => void) | void;
       }
     ).trackQueryLoad?.(load, meta);
   }
 
-  queryLoadsInFlight(): import('https://cardstack.com/base/card-api').QueryLoadInfo[] {
+  queryLoadsInFlight(): import('@cardstack/base/card-api').QueryLoadInfo[] {
     return (
       (
         this.store as unknown as {
-          queryLoadsInFlight?: () => import('https://cardstack.com/base/card-api').QueryLoadInfo[];
+          queryLoadsInFlight?: () => import('@cardstack/base/card-api').QueryLoadInfo[];
         }
       ).queryLoadsInFlight?.() ?? []
     );
@@ -606,14 +604,14 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
   recentQueryLoads(): Array<{
-    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+    meta: import('@cardstack/base/card-api').QueryLoadMeta;
     ms: number;
   }> {
     return (
       (
         this.store as unknown as {
           recentQueryLoads?: () => Array<{
-            meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+            meta: import('@cardstack/base/card-api').QueryLoadMeta;
             ms: number;
           }>;
         }

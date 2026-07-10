@@ -1,8 +1,5 @@
 import { service } from '@ember/service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
@@ -17,6 +14,8 @@ import OneShotLlmRequestTool from './one-shot-llm-request';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class GenerateThemeExampleTool extends HostBaseTool<
   typeof BaseToolModule.GenerateThemeExampleInput,

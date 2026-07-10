@@ -42,8 +42,8 @@ import {
   contains,
   containsMany,
   field,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';

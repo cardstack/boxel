@@ -23,12 +23,11 @@ import type {
 } from '@cardstack/host/services/markdown-embed-chooser';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
-
 import MarkdownEmbedPreviewPane from './pane';
 import TabPills from './tab-pills';
 
 import type EmbedFormatSelection from './format-selection';
+import type { CardDef, FileDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLDivElement;

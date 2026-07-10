@@ -624,6 +624,7 @@ export async function runGlintCheck(
           noUnusedParameters: false,
           types: ['qunit-dom', '@cardstack/local-types'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
             '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],

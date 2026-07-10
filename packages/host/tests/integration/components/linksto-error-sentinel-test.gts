@@ -12,13 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type {
-  RelationshipState,
-  RelationshipStatus,
-} from 'https://cardstack.com/base/card-api';
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
-
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -43,6 +36,13 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // A terminal sentinel never escapes the field getter — userland reads
 // `undefined` — so tests read the raw bucket entry to observe the planted

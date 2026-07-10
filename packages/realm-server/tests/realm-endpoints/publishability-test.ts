@@ -34,8 +34,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       realmURL,
       fileSystem: {
         'source-card.gts': `
-              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               import CreateAiAssistantRoomCommand from "@cardstack/boxel-host/commands/create-ai-assistant-room";
 
               // Ensure data: dependencies are ignored
@@ -120,8 +120,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           fileSystem: {
             'broken-card.gts': `
-        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { CardDef, field, contains } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         // Intentionally broken: references an undefined symbol
         export class BrokenCard extends CardDef {
@@ -232,8 +232,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
             fileSystem: {
               'secret-card.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecretCard extends CardDef {
             @field name = contains(StringField);
@@ -253,8 +253,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             field,
             linksTo,
             CardDef,
-          } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecretCard } from "${privateRealmURL}secret-card";
 
           export class SourceCard extends CardDef {
@@ -361,8 +361,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               },
               fileSystem: {
                 'secret-card.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecretCard extends CardDef {
             @field name = contains(StringField);
@@ -382,8 +382,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             field,
             linksTo,
             CardDef,
-          } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecretCard } from "${privateRealmURL}secret-card";
 
           export class HelperCard extends CardDef {
@@ -397,8 +397,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             field,
             linksTo,
             CardDef,
-          } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { HelperCard } from "./helper-card";
 
           export class SourceCard extends CardDef {
@@ -492,8 +492,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               },
               fileSystem: {
                 'secret-card.gts': `
-            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class SecretCard extends CardDef {
               @field name = contains(StringField);
@@ -513,8 +513,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               field,
               linksTo,
               CardDef,
-            } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             import { SecretCard } from "${remoteRealmURL}secret-card";
 
             export class SourceCard extends CardDef {
@@ -605,8 +605,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
             fileSystem: {
               'secret-card.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecretCard extends CardDef {
             @field name = contains(StringField);
@@ -626,8 +626,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             field,
             linksTo,
             CardDef,
-          } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecretCard } from "${privateRealmURL}secret-card";
 
           export class SourceCard extends CardDef {
@@ -675,8 +675,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           field,
           linksTo,
           CardDef,
-        } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { SourceCard } from "${sourceRealmURL}source-card";
 
         export class SecretCard extends CardDef {
@@ -727,8 +727,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
             fileSystem: {
               'secret-card.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecretCard extends CardDef {
             @field name = contains(StringField);
@@ -748,8 +748,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             field,
             linksTo,
             CardDef,
-          } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecretCard } from "${privateRealmURL}secret-card";
 
           export class SourceCard extends CardDef {

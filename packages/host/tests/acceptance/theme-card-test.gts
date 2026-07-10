@@ -210,8 +210,8 @@ module('Acceptance | theme-card-test', function (hooks) {
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let booleanMod: typeof import('https://cardstack.com/base/boolean');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let booleanMod: typeof import('@cardstack/base/boolean');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     booleanMod = await loader.import(`${baseRealm.url}boolean`);
 

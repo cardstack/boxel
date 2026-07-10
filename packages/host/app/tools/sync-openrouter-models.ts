@@ -8,12 +8,11 @@ import {
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const BATCH_SIZE = 20;

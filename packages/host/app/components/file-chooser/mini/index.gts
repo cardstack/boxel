@@ -9,9 +9,9 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import FileChooser, { type FileChooserRealm } from '../panel';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Element: HTMLDivElement;

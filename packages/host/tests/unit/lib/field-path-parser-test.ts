@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { FieldPathParser } from '@cardstack/host/lib/field-path-parser';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 module('Unit | Utility | field-path-parser', function () {
   module('parseFieldPath', function () {
@@ -279,7 +279,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['firstName'],
@@ -307,7 +307,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['address', 'street'],
@@ -326,7 +326,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['tags', '[0]'],
@@ -355,7 +355,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['products', '[1]', 'price'],
@@ -375,7 +375,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['pet'],
@@ -402,7 +402,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['pets'],
@@ -429,7 +429,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['pets', '[0]'],
@@ -457,7 +457,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['address', 'country'],
@@ -485,7 +485,7 @@ module('Unit | Utility | field-path-parser', function () {
       };
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['address', 'routes', '[0]'],
@@ -504,7 +504,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['nonExistent'],
@@ -524,7 +524,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['name', '[0]'],
@@ -543,7 +543,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['author', 'name'],
@@ -562,7 +562,7 @@ module('Unit | Utility | field-path-parser', function () {
       });
       const mockCardType = {
         isCardDef: true,
-      } as unknown as typeof import('https://cardstack.com/base/card-api').CardDef;
+      } as unknown as typeof import('@cardstack/base/card-api').CardDef;
 
       const result = await FieldPathParser.validatedFieldPath(
         ['friends', '[0]', 'name'],

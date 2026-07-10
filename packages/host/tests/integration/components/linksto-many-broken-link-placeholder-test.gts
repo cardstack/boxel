@@ -12,8 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -35,6 +33,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
 const MANGO_URL = `${testRealmURL}Pet/mango`;
@@ -296,9 +296,9 @@ module(
         'pets.0': { links: { self: GHOST_URL } },
       });
 
-      let api = await loader.import<
-        typeof import('https://cardstack.com/base/card-api')
-      >(`${baseRealm.url}card-api`);
+      let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+        `${baseRealm.url}card-api`,
+      );
       let PersonComponent = api.getComponent(person);
 
       let renderCount = 0;

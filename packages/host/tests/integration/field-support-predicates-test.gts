@@ -4,12 +4,12 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
-
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 let loader: Loader;
 let isNotLoadedValue: (typeof FieldSupportModule)['isNotLoadedValue'];

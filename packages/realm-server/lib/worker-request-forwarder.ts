@@ -4,7 +4,7 @@ import {
   postWorkerRequest,
   type WorkerRequestBody,
 } from '@cardstack/runtime-common/worker-request';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 const log = logger('worker-manager');

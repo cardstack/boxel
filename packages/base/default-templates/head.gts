@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import type { BaseDef, CardDef } from '../card-api';
-import type BrandGuide from 'https://cardstack.com/base/brand-guide';
+import type BrandGuide from '@cardstack/base/brand-guide';
 
 export default class DefaultHeadTemplate extends GlimmerComponent<{
   Args: {

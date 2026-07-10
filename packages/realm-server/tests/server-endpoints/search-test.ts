@@ -48,8 +48,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     // `(type, id)` across the combined `included`.
     let realmFileSystem: Record<string, LooseSingleCardDocument | string> = {
       'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field firstName = contains(StringField);

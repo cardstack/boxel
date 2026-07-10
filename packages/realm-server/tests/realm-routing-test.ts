@@ -21,7 +21,7 @@ function makeRoutingFixture(): Record<
 > {
   return {
     'white-paper.gts': `
-      import { CardDef, Component } from "https://cardstack.com/base/card-api";
+      import { CardDef, Component } from "@cardstack/base/card-api";
       export class WhitePaper extends CardDef {
         static displayName = 'White Paper';
         static isolated = class Isolated extends Component<typeof this> {

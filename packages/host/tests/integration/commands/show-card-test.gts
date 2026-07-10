@@ -19,8 +19,6 @@ import type { OperatorModeState } from '@cardstack/host/services/operator-mode-s
 import RealmService from '@cardstack/host/services/realm';
 import ShowCardTool from '@cardstack/host/tools/show-card';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -34,6 +32,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -155,8 +155,8 @@ module('Integration | Command | show-card', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
 
           export class Person extends CardDef {
             static displayName = 'Person';
@@ -170,8 +170,8 @@ module('Integration | Command | show-card', function (hooks) {
           }
         `,
           'pet.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
 
           export class Pet extends CardDef {
             static displayName = 'Pet';

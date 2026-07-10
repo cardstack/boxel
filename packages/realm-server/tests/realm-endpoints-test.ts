@@ -63,7 +63,7 @@ import type {
   RealmEvent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -414,7 +414,7 @@ module(basename(import.meta.filename), function () {
         field,
         Component,
         FieldDef,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
       import { Country } from './country';
 
       export class TranspileTestField extends FieldDef {

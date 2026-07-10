@@ -16,8 +16,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import cmContext from '@cardstack/host/lib/codemirror-context';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -37,6 +35,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { BaseDef } from '@cardstack/base/card-api';
 
 let loader: Loader;
 

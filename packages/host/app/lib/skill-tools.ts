@@ -1,11 +1,10 @@
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-
 import { isSkillCard } from './file-def-manager';
 
 import type StoreService from '../services/store';
+import type { MarkdownDef } from '@cardstack/base/markdown-file-def';
+import type * as SkillModule from '@cardstack/base/skill';
 
 // A skill is either a `Skill` card (commands on `Skill.commands`) or a
 // markdown file whose `boxel.kind: skill` frontmatter rehydrates as a

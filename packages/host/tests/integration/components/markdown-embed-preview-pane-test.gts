@@ -30,7 +30,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 // The base-realm helper below exports `CardDef` as a value (for defining test
 // card classes); import the instance *type* separately for annotations.
-import type { CardDef as CardDefInstance } from 'https://cardstack.com/base/card-api';
 
 import {
   setupIntegrationTestRealm,
@@ -46,6 +45,8 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefInstance } from '@cardstack/base/card-api';
 
 const PaneBox: TOC<{ Blocks: { default: [] } }> = <template>
   <div class='pane-box'>

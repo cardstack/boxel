@@ -1,11 +1,11 @@
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
 
 import GetCardTool from './get-card';
 import PatchFieldsTool from './patch-fields';
 import SendRequestViaProxyTool from './send-request-via-proxy';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 const escapeForTag = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

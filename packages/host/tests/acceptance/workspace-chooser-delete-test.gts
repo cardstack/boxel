@@ -74,7 +74,7 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
             },
           },
         },
-        'person.gts': `import { CardDef } from "https://cardstack.com/base/card-api";
+        'person.gts': `import { CardDef } from "@cardstack/base/card-api";
 
 export class Person extends CardDef {}
 `,

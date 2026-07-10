@@ -38,8 +38,8 @@ const testRealmURL = new URL('http://127.0.0.1:4445/test/');
 
 const REALM_FILES: Record<string, string> = {
   'widgets/gadget/gadget.gts': `
-import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 import { formatLabel } from '../shared/format-utils';
 import { WidgetPart } from './parts/widget-part';
 
@@ -86,7 +86,7 @@ export function formatLabel(value: string) { return value.toUpperCase(); }
   }),
   // --- everything below must NOT be ingested ---
   'standalone/clock.gts': `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class Clock extends CardDef {
   static displayName = 'Clock';
 }
@@ -233,7 +233,7 @@ describe('realm ingest-card (integration)', () => {
       path.join(localDir, 'widgets/gadget/gadget.gts'),
       'utf8',
     );
-    expect(gadget).toContain(`from 'https://cardstack.com/base/card-api'`);
+    expect(gadget).toContain(`from '@cardstack/base/card-api'`);
     expect(fs.existsSync(path.join(localDir, 'base'))).toBe(false);
     expect(fs.existsSync(path.join(localDir, 'card-api.gts'))).toBe(false);
   });

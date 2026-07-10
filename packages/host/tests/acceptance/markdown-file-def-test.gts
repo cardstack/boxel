@@ -251,7 +251,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'pet.gts': `
-            import { CardDef, Component, contains, field, StringField } from 'https://cardstack.com/base/card-api';
+            import { CardDef, Component, contains, field, StringField } from '@cardstack/base/card-api';
             export class Pet extends CardDef {
               static displayName = 'Pet';
               @field name = contains(StringField);

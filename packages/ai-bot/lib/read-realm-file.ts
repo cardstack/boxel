@@ -1,7 +1,7 @@
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
-import type { Tool } from 'https://cardstack.com/base/matrix-event';
+import type { Tool } from '@cardstack/base/matrix-event';
 import type {
   ChatCompletion,
   ChatCompletionMessageToolCall,

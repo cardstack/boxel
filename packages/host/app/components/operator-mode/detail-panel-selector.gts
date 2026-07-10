@@ -22,7 +22,7 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface SelectorItemOptions {
   action: Function;

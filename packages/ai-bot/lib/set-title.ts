@@ -8,7 +8,7 @@ import type {
   EncodedCommandRequest,
   CodePatchResultContent,
   CardMessageContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,

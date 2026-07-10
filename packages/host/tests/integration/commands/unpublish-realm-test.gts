@@ -9,8 +9,6 @@ import { baseRealm, type Loader } from '@cardstack/runtime-common';
 import RealmService from '@cardstack/host/services/realm';
 import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -23,6 +21,8 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BaseToolModule from '@cardstack/base/command';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

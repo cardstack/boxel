@@ -17,8 +17,8 @@ const SOURCE_GTS = `import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TranspiledCheck extends CardDef {
   static displayName = 'Transpiled Check';

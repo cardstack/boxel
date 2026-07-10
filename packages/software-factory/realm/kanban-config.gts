@@ -1,5 +1,5 @@
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
 
 import { IssueOptionField } from './issue-option.gts';
 

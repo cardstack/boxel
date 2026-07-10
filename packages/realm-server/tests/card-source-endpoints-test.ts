@@ -35,7 +35,7 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { isEqual } from 'lodash-es';
 
 module(basename(import.meta.filename), function () {
@@ -841,8 +841,8 @@ module(basename(import.meta.filename), function () {
             let response = await request
               .post('/test-card.gts')
               .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringField from 'https://cardstack.com/base/string';
+                import { contains, field, CardDef } from '@cardstack/base/card-api';
+                import StringField from '@cardstack/base/string';
 
                 export class TestCard extends CardDef {
                   @field field1 = contains(StringField);
@@ -890,8 +890,8 @@ module(basename(import.meta.filename), function () {
             let response = await request
               .post('/test-card.gts')
               .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringField from 'https://cardstack.com/base/string';
+                import { contains, field, CardDef } from '@cardstack/base/card-api';
+                import StringField from '@cardstack/base/string';
 
                 export class TestCard extends CardDef {
                   @field field1 = contains(StringField);

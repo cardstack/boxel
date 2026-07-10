@@ -26,6 +26,12 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "https://cardstack.com/base/*": [
         "../base/*.gts",
         "../base/*.ts",

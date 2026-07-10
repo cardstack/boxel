@@ -263,8 +263,8 @@ module(basename(import.meta.filename), function () {
               [
                 'gallery.gts',
                 `
-                import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import { FileDef } from "https://cardstack.com/base/file-api";
+                import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import { FileDef } from "@cardstack/base/file-api";
 
                 export class Gallery extends CardDef {
                   @field hero = linksTo(FileDef);
@@ -379,8 +379,8 @@ module(basename(import.meta.filename), function () {
             [
               'tag.gts',
               `
-                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
 
                 export class Tag extends CardDef {
                   @field label = contains(StringField);
@@ -395,8 +395,8 @@ module(basename(import.meta.filename), function () {
             [
               'article.gts',
               `
-                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Tag } from "./tag";
 
                 export class Article extends CardDef {
@@ -521,9 +521,9 @@ module(basename(import.meta.filename), function () {
               [
                 'skill-card.gts',
                 `
-                  import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                  import StringField from "https://cardstack.com/base/string";
-                  import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+                  import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                  import StringField from "@cardstack/base/string";
+                  import { MarkdownDef } from "@cardstack/base/markdown-file-def";
 
                   export class SkillCard extends CardDef {
                     @field cardTitle = contains(StringField);
@@ -620,8 +620,8 @@ module(basename(import.meta.filename), function () {
             [
               'query-person-finder.gts',
               `
-                import { CardDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryPersonFinder extends CardDef {
@@ -712,8 +712,8 @@ module(basename(import.meta.filename), function () {
             [
               'query-person-finder-nested.gts',
               `
-                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryLinksField extends FieldDef {
@@ -4219,9 +4219,9 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'skill-card.gts': `
-              import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+              import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import { MarkdownDef } from "@cardstack/base/markdown-file-def";
 
               export class SkillCard extends CardDef {
                 @field cardTitle = contains(StringField);
@@ -4317,8 +4317,8 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { CardDef, field, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
 
               export class Person extends CardDef {
                 @field name = contains(StringField);
@@ -4347,7 +4347,7 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'favorite-finder.gts': `
-              import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+              import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
               import { Person } from "${providerRealmURL}person";
 
               export class FavoriteLookup extends CardDef {

@@ -36,8 +36,6 @@ import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
-import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
-
 import {
   setupLocalIndexing,
   addSkillToAiAssistant,
@@ -77,6 +75,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
 
+import type { BoxelContext } from '@cardstack/base/matrix-event';
+
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
@@ -98,8 +98,8 @@ async function waitForSessionPreparationToFinish(
   });
 }
 
-let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+let countryDefinition = `import { field, contains, CardDef } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   export class Country extends CardDef {
     static displayName = 'Country';
     @field name = contains(StringField);
@@ -414,8 +414,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'person.gts': { Person },
         'pet.gts': { Pet },
         'broken-card.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           import { BrokenField } from './does-not-exist';
           export class BrokenCard extends CardDef {
             static displayName = 'Broken Card';
@@ -465,7 +465,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           friends: [mangoPet],
         }),
         'plant.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
           export class Plant extends CardDef {
             static displayName = "Plant";
             @field commonName = contains(StringField);

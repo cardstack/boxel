@@ -4,7 +4,7 @@ import {
   Component,
   linksTo,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { SprintTaskStatusField, Project } from './sprint-task';
 import LayoutKanbanIcon from '@cardstack/boxel-icons/layout-kanban';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';

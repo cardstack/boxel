@@ -1,7 +1,7 @@
 import type {
   BaseDefConstructor,
   BaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export function queryableValue(val: any): boolean {
   return asBoolean(val);

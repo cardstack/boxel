@@ -19,8 +19,6 @@ import {
 import { fileTreeFromIndex } from '@cardstack/host/resources/file-tree-from-index';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   testRRI,
@@ -37,6 +35,8 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 module('Integration | store search public API', function (hooks) {
   setupRenderingTest(hooks);

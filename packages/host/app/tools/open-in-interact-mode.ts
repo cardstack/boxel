@@ -2,11 +2,10 @@ import { service } from '@ember/service';
 
 import type { Format } from '@cardstack/runtime-common';
 
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class OpenInInteractModeTool extends HostBaseTool<
   typeof BaseToolModule.ShowCardInput

@@ -10,8 +10,8 @@ import {
 
 import { CardStoreWithErrors } from '@cardstack/host/services/render-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 const prefix = '@test-prefix/';
 const targetRealm = 'http://test-realm/test/';

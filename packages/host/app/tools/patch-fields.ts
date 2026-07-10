@@ -7,9 +7,6 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -17,6 +14,8 @@ import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 interface Configuration {
   cardType: typeof CardDef;
@@ -76,7 +75,7 @@ export default class PatchFieldsTool extends HostBaseTool<
   ): Promise<ValidateFieldPathResult> {
     // Load card-api dynamically to get getFields function
     const cardApi = await this.loaderService.loader.import<
-      typeof import('https://cardstack.com/base/card-api')
+      typeof import('@cardstack/base/card-api')
     >('https://cardstack.com/base/card-api');
 
     return FieldPathParser.validatedFieldPath(
@@ -218,7 +217,7 @@ export default class PatchFieldsTool extends HostBaseTool<
 
     if (configuredCardType) {
       const cardApi = await loaderForSchema.import<
-        typeof import('https://cardstack.com/base/card-api')
+        typeof import('@cardstack/base/card-api')
       >('https://cardstack.com/base/card-api');
       const cardFields = cardApi.getFields(configuredCardType, {
         usedLinksToFieldsOnly: false,

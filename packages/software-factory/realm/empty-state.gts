@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { type CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import { type CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 
 import { Pill } from '@cardstack/boxel-ui/components';
 

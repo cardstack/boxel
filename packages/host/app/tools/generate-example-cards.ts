@@ -10,9 +10,6 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseToolModule from 'https://cardstack.com/base/command';
-
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
@@ -32,6 +29,8 @@ import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class GenerateExampleCardsTool extends HostBaseTool<
   typeof BaseToolModule.CreateInstancesInput,
