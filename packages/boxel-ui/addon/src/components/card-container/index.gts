@@ -51,7 +51,10 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
       {{#if @themeCss}}
         {{! template-lint-disable require-scoped-style  }}
-        <style>
+        {{! data-boxel-theme-style marks this as a dedupable theme stylesheet;
+            the attribute survives serialization, so prerendered fragments
+            stay recognizable when re-inserted }}
+        <style data-boxel-theme-style>
           {{themeScopedCss @themeScope @themeCss}}
         </style>
         {{! template-lint-enable require-scoped-style  }}

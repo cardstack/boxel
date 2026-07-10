@@ -1111,7 +1111,10 @@ export class ThemeDashboard extends GlimmerComponent<{
       >
         {{#if @themeCss}}
           {{! template-lint-disable require-scoped-style }}
-          <style>
+          {{! data-boxel-theme-style marks this as a dedupable theme
+              stylesheet; the attribute survives serialization, so prerendered
+              fragments stay recognizable when re-inserted }}
+          <style data-boxel-theme-style>
             {{themeScopedCss this.themeScopeId @themeCss}}
           </style>
           {{! template-lint-enable require-scoped-style }}

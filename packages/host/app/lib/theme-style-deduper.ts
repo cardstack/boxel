@@ -6,17 +6,17 @@
 // and disables the redundant copies, promoting a survivor whenever the
 // active copy leaves the DOM or its content changes.
 //
+// Theme stylesheets are recognized by the `data-boxel-theme-style` attribute
+// their emitters stamp on the <style> tag, rather than by sniffing the CSS
+// text (whose leading output varies — a dark-only theme starts with
+// `@container`, not the scope selector). The attribute serializes with the
+// element, so prerendered fragments stay recognizable when re-inserted.
+//
 // It disables via the `disabled` property (not an attribute), so serializing
 // a container's HTML — which is how prerendered fragments are captured —
 // still yields the full stylesheet.
 
-const THEME_SCOPE_SELECTOR_PREFIX = '[data-boxel-theme-scope=';
-
-function isThemeStyle(el: HTMLStyleElement): boolean {
-  return (
-    el.textContent?.trimStart().startsWith(THEME_SCOPE_SELECTOR_PREFIX) ?? false
-  );
-}
+const THEME_STYLE_SELECTOR = 'style[data-boxel-theme-style]';
 
 export class ThemeStyleDeduper {
   #observer: MutationObserver | undefined;
@@ -41,10 +41,10 @@ export class ThemeStyleDeduper {
     this.#observer?.disconnect();
     this.#observer = undefined;
     if (this.#doc) {
-      for (let el of this.#doc.querySelectorAll('style')) {
-        if (isThemeStyle(el)) {
-          el.disabled = false;
-        }
+      for (let el of this.#doc.querySelectorAll<HTMLStyleElement>(
+        THEME_STYLE_SELECTOR,
+      )) {
+        el.disabled = false;
       }
     }
     this.#doc = undefined;
@@ -70,11 +70,10 @@ export class ThemeStyleDeduper {
       return;
     }
     let seen = new Set<string>();
-    for (let el of this.#doc.querySelectorAll('style')) {
-      if (!isThemeStyle(el)) {
-        continue;
-      }
-      let key = el.textContent!;
+    for (let el of this.#doc.querySelectorAll<HTMLStyleElement>(
+      THEME_STYLE_SELECTOR,
+    )) {
+      let key = el.textContent ?? '';
       let redundant = seen.has(key);
       seen.add(key);
       if (el.disabled !== redundant) {
