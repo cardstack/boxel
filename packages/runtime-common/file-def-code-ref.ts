@@ -1,4 +1,4 @@
-import { baseRealm, baseFileRef } from './constants.ts';
+import { baseFileRef, baseRRI } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -7,7 +7,7 @@ import type { VirtualNetwork } from './virtual-network.ts';
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
 function baseModule(name: string): RealmResourceIdentifier {
-  return `${baseRealm.url}${name}` as RealmResourceIdentifier;
+  return baseRRI(name);
 }
 
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {

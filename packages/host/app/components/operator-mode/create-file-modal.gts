@@ -32,23 +32,23 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  specRef,
-  chooseCard,
-  baseRealm,
   baseRealmRRI,
-  RealmPaths,
+  baseRRI,
+  chooseCard,
   Deferred,
-  SupportedMimeType,
-  maybeRelativeReference,
   GetCardContextName,
   isCardInstance,
+  maybeRelativeReference,
+  RealmPaths,
+  specRef,
+  SupportedMimeType,
+  type CardErrorJSONAPI,
   type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
-  type ResolvedCodeRef,
-  type CardErrorJSONAPI,
   type RealmIdentifier,
   type RealmResourceIdentifier,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
@@ -544,7 +544,7 @@ export default class CreateFileModal extends Component<Signature> {
       case 'field-definition':
         return config.defaultFieldSpecId;
       default:
-        return `${baseRealm.url}types/card`;
+        return baseRRI('types/card');
     }
   }
 

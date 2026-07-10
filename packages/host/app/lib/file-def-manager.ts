@@ -5,16 +5,15 @@ import { service } from '@ember/service';
 import { md5 } from 'super-fast-md5';
 
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  baseRealm,
   codeRefWithAbsoluteIdentifier,
   getClass,
   getToolDefinitions,
   inferContentType,
-  SupportedMimeType,
   relativeTo,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -317,7 +316,7 @@ export default class FileDefManagerImpl
         let { default: Base64ImageField } =
           await this.loaderService.loader.import<{
             default: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
+          }>('@cardstack/base/base64-image');
         let serialization = await this.cardService.serializeCard(card, {
           omitFields: [Base64ImageField],
           ...opts,

@@ -8,11 +8,11 @@ import { scheduleOnce } from '@ember/runloop';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
-  baseRealm,
-  trimJsonExtension,
+  baseRRI,
   maybeRelativeReference,
   resolveRRIReference,
   rri,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
 import {
   type BfmRefRange,
@@ -684,10 +684,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         // Resolve the directive's raw ref (which may be relative to the field's
         // base URL) to an absolute URL. The chooser loads the preview via
         // `store.get`, which can't resolve a relative specifier on its own.
-        url: resolveUrl(
-          ref.url,
-          this.args.cardReferenceBaseUrl,
-        ),
+        url: resolveUrl(ref.url, this.args.cardReferenceBaseUrl),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
       });
@@ -893,7 +890,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
               return {
                 filter: {
                   in: { url: urls },
-                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                  on: { module: baseRRI('card-api'), name: 'FileDef' },
                 },
               };
             }),
