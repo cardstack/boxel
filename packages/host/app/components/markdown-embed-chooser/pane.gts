@@ -15,6 +15,7 @@ import type {
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { serializeBfmRef } from '@cardstack/runtime-common/bfm-card-references';
+import { maybeRelativeReference } from '@cardstack/runtime-common/url';
 
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
 
@@ -49,6 +50,9 @@ interface Signature {
     // across both tabs so the choice survives a tab switch; this pane is a pure
     // view over it plus the resolved target.
     selection: EmbedFormatSelection;
+    // The editing document's own URL. The ref is relativized against it so the
+    // serialized directive is `../`-relative, matching the format-picker path.
+    documentBaseUrl?: string;
     // Receives the serialized BFM directive when the CTA is clicked. The host
     // owns actual cursor insertion.
     onInsert: (bfm: string) => void;
@@ -76,7 +80,19 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     if (!url) {
       return '';
     }
-    return serializeBfmRef(this.args.refType, url, {
+    // Relativize against the editing document's URL so the inserted ref is
+    // `../`-relative — the same math the codemirror format-picker path uses.
+    // Falls back to the absolute URL when there's no base or it can't parse.
+    let ref = url;
+    let base = this.args.documentBaseUrl;
+    if (base) {
+      try {
+        ref = maybeRelativeReference(new URL(url), new URL(base), undefined);
+      } catch {
+        // Keep the absolute URL.
+      }
+    }
+    return serializeBfmRef(this.args.refType, ref, {
       kind: this.args.selection.kind,
       size: this.args.selection.sizeSpecifier,
     });

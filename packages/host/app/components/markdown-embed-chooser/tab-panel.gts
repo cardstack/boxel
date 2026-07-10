@@ -16,7 +16,6 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   isCardErrorJSONAPI,
-  RealmPaths,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -25,6 +24,8 @@ import {
   fileNameFromUrl,
 } from '@cardstack/runtime-common/bfm-card-references';
 
+import { maybeRelativeReference } from '@cardstack/runtime-common/url';
+
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
 
@@ -32,7 +33,6 @@ import type {
   MarkdownEmbedInitialTarget,
   MarkdownEmbedRefType,
 } from '@cardstack/host/services/markdown-embed-chooser';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
@@ -62,6 +62,10 @@ interface Signature {
     // (The pane's format seed comes from the shared `@selection`, which the
     // modal seeds from this same target.)
     initialTarget?: MarkdownEmbedInitialTarget;
+    // The editing document's own URL. The label and the inserted ref are both
+    // relativized against it, so a fallback URL label reads as `../Type/id` —
+    // the same form the pane serializes into the directive.
+    documentBaseUrl?: string;
     // Fired when the user clicks "Remove" in `current` mode. The modal
     // resolves its deferred with `{ remove: true }`.
     onRemove?: () => void;
@@ -77,8 +81,6 @@ interface Signature {
 // Replace flips it back to the chooser so the user can swap in a new ref.
 export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   @service declare private store: StoreService;
-  @service
-  declare private operatorModeStateService: OperatorModeStateService;
 
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
@@ -139,28 +141,18 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   }
 
   // When the label falls back to showing a raw URL (a broken ref, or a card
-  // with no title), collapse it to a realm-relative path if it lives in the
-  // realm the user currently has open — a shorter, less noisy label than the
-  // absolute URL. References outside the current realm keep their full URL.
+  // with no title), relativize it against the editing document's own URL —
+  // yielding the `../Type/id` form the pane serializes into the directive, so
+  // the label matches what gets inserted. Falls back to the absolute URL when
+  // there's no base or either URL can't be parsed.
   private toDisplayUrl(url: string): string {
-    if (!url) return url;
-    let realmURL: string | undefined;
+    let base = this.args.documentBaseUrl;
+    if (!url || !base) return url;
     try {
-      realmURL = this.operatorModeStateService.realmURL;
+      return maybeRelativeReference(new URL(url), new URL(base), undefined);
     } catch {
-      realmURL = undefined;
+      return url;
     }
-    if (!realmURL) return url;
-    try {
-      let paths = new RealmPaths(new URL(realmURL));
-      let parsed = new URL(url);
-      if (paths.inRealm(parsed)) {
-        return paths.local(parsed);
-      }
-    } catch {
-      // Malformed URL or outside the realm — fall back to the absolute URL.
-    }
-    return url;
   }
 
   @action
@@ -328,6 +320,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             @target={{this.selectedTarget}}
             @refType={{@refType}}
             @selection={{@selection}}
+            @documentBaseUrl={{@documentBaseUrl}}
             @onInsert={{this.handleInsert}}
             @ctaLabelOverride={{this.ctaLabelOverride}}
             @brokenUrl={{this.brokenUrl}}

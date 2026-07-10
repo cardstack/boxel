@@ -664,7 +664,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._embedPopoverOpen = false;
     let result;
     try {
-      result = await chooseMarkdownEmbed({ defaultTab });
+      result = await chooseMarkdownEmbed({
+        defaultTab,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
+      });
     } catch (e) {
       // Bridge not registered (e.g. card running outside the host) — silently
       // no-op so the toolbar click doesn't blow up the editor.
@@ -691,6 +694,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         url: ref.url,
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
       });
     } catch (e) {
       console.warn('markdown-embed chooser unavailable', e);

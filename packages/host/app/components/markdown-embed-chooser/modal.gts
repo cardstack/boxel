@@ -65,6 +65,12 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
     return this.markdownEmbedChooser.currentRequest;
   }
 
+  // The editing document's own URL, threaded to both tabs so the chooser
+  // relativizes the picked ref against it (matching the format-picker path).
+  private get documentBaseUrl(): string | undefined {
+    return this.request?.documentBaseUrl;
+  }
+
   // Seeds for the shared format selection. `Tabs` owns the actual
   // `EmbedFormatSelection` instance — it lives inside the `{{#if this.request}}`
   // block, so it's created once per chooser invocation (seeded here from the
@@ -158,6 +164,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @onInsert={{this.handleInsertCard}}
                 @selection={{selection}}
                 @initialTarget={{this.cardInitialTarget}}
+                @documentBaseUrl={{this.documentBaseUrl}}
                 @onRemove={{this.handleRemove}}
               />
             </:cards>
@@ -169,6 +176,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @onInsert={{this.handleInsertFile}}
                 @selection={{selection}}
                 @initialTarget={{this.fileInitialTarget}}
+                @documentBaseUrl={{this.documentBaseUrl}}
                 @onRemove={{this.handleRemove}}
               />
             </:files>

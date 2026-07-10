@@ -193,10 +193,13 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     let docText = editorEl
       ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()
       : undefined;
+    // The picked Pet lives in a sibling directory to the edited Note, so the
+    // inserted ref is relativized against the document — `../Pet/mango` — the
+    // same form the `/`-search format-picker path produces.
     assert.strictEqual(
       docText,
-      `:card[${mangoId}]`,
-      'source carries the inserted inline atom directive',
+      `:card[../Pet/mango]`,
+      'source carries the inserted inline atom directive, relativized to the document',
     );
   });
 

@@ -273,10 +273,13 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     ) as MarkdownEmbedChooserService;
     // A card URL that isn't in the realm — the preload can't resolve it.
     let brokenUrl = `${testRealmURL}books/ghost`;
+    // The editing document sits in a sibling directory, so the broken ref
+    // relativizes against it to a `../`-relative label.
     let pending = svc.editEmbed({
       refType: 'card',
       url: brokenUrl,
       sizeSpec: 'embedded',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
     });
     await waitFor('[data-test-markdown-embed-chooser-modal]');
 
@@ -304,16 +307,16 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
       )
       .exists('the current-target tile renders for the broken preload');
-    // The label falls back to the ref (no title to show). The ref lives in the
-    // currently-open realm (testRealmURL), so it collapses to its realm-
-    // relative path rather than the absolute URL.
+    // The label falls back to the ref (no title to show). It relativizes
+    // against the editing document's URL, so it reads as the `../`-relative
+    // path — the same form the pane serializes into the directive.
     assert
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
       )
       .hasText(
-        'books/ghost',
-        'an in-realm broken ref labels as its realm-relative path',
+        '../books/ghost',
+        'a broken ref labels as its document-relative path',
       );
     assert
       .dom('[data-test-markdown-embed-chooser-remove]')
@@ -326,7 +329,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     await pending;
   });
 
-  test('a broken ref outside the current realm keeps its full URL as the label', async function (assert) {
+  test('a broken ref in a different realm than the document keeps its full URL as the label', async function (assert) {
     await render(
       <template>
         <HostContextProvider>
@@ -338,13 +341,15 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     let svc = getService(
       'markdown-embed-chooser',
     ) as MarkdownEmbedChooserService;
-    // A broken ref in the base realm — not the currently-open realm
-    // (testRealmURL), so the realm-relative collapse must not apply.
+    // A broken ref in the base realm while the editing document lives in the
+    // test realm — the two are in different namespaces, so the ref can't be
+    // relativized and keeps its absolute URL.
     let brokenUrl = `${baseRealm.url}ghost-card`;
     let pending = svc.editEmbed({
       refType: 'card',
       url: brokenUrl,
       sizeSpec: 'embedded',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
     });
     await waitFor(
       '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
@@ -354,7 +359,10 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
       )
-      .hasText(brokenUrl, 'an out-of-realm broken ref keeps its absolute URL');
+      .hasText(
+        brokenUrl,
+        'a broken ref in another realm keeps its absolute URL',
+      );
 
     svc.resolve(undefined);
     await pending;
@@ -462,6 +470,53 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       result,
       { refType: 'card', url: mango, bfm: `:card[${mango}]` },
       'resolves with the serialized BFM directive for the picked card',
+    );
+  });
+
+  test('a picked card serializes a document-relative ref when a base URL is supplied', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // The editing document lives in a sibling directory (`posts/`) to the
+    // picked card (`books/`), so the inserted ref collapses to `../books/mango`
+    // — matching the codemirror format-picker insertion path. The `url` in the
+    // result stays absolute (it's metadata; only the `bfm` ref is relativized).
+    let pending = svc.chooseCardOrFile({
+      defaultTab: 'card',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+    );
+
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    let result = await pending;
+    assert.deepEqual(
+      result,
+      { refType: 'card', url: mango, bfm: `:card[../books/mango]` },
+      'resolves with a document-relative BFM ref while keeping url absolute',
     );
   });
 
