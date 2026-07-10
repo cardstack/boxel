@@ -60,7 +60,8 @@ const roundMs = (ms: number) => Math.round(ms * 100) / 100;
 // Slowest-N-at/over-the-floor pruning for the per-field timings. Keys stay
 // in descending-cost order (string-keyed objects preserve insertion order),
 // so the persisted JSON reads as a ranking. An ancestor's inclusive time is
-// >= any descendant's, so every kept entry's parent chain is kept with it.
+// >= any descendant's, so a kept entry's parent chain sorts at or above it
+// and survives with it (barring an exact-tie at the cut-off).
 function pruneSearchDocFieldsMs(
   fieldsMs: Record<string, number>,
 ): Record<string, number> | undefined {

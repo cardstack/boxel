@@ -28,6 +28,7 @@ import {
   FieldDef,
   Component,
   StringField,
+  getDataBucket,
   searchDocFromFields,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -1230,8 +1231,29 @@ module('Integration | searchable search doc', function (hooks) {
     return (await store.get(id)) as CardDefType;
   }
 
+  // A store-resident instance can arrive with its link fields already
+  // materialized, in which case the generator has no load to perform (and
+  // correctly records none). Reset a link slot to its unloaded wire state so
+  // the walk drives the load itself — the state an indexing visit starts
+  // from.
+  function unloadLink(
+    instance: CardDefType,
+    fieldName: string,
+    reference: string | string[],
+  ) {
+    getDataBucket(instance).set(
+      fieldName,
+      Array.isArray(reference)
+        ? reference.map((r) => ({ type: 'not-loaded', reference: r }))
+        : { type: 'not-loaded', reference },
+    );
+  }
+
   test('per-field timings are keyed by dotted path and include expanded link targets; link loads carry path + target', async function (assert) {
     let instance = await loadInstance(`${testRealmURL}ArticleDeep/d1`);
+    let author = await loadInstance(authorUrl);
+    unloadLink(instance, 'author', authorUrl);
+    unloadLink(author, 'agent', agentUrl);
     let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
     let doc = await searchDocFromFields(instance, undefined, timings);
 
@@ -1276,6 +1298,10 @@ module('Integration | searchable search doc', function (hooks) {
 
   test('a plural field accumulates under one path key and records one load per slot', async function (assert) {
     let instance = await loadInstance(`${testRealmURL}Team/valid`);
+    unloadLink(instance, 'members', [
+      `${testRealmURL}Author/au1`,
+      `${testRealmURL}Author/au2`,
+    ]);
     let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
     await searchDocFromFields(instance, undefined, timings);
 
@@ -1301,6 +1327,7 @@ module('Integration | searchable search doc', function (hooks) {
 
   test('collector channels are opt-in', async function (assert) {
     let instance = await loadInstance(`${testRealmURL}ArticleSelf/s1`);
+    unloadLink(instance, 'author', authorUrl);
 
     let fieldsOnly: SearchDocTimings = { fieldsMs: {} };
     await searchDocFromFields(instance, undefined, fieldsOnly);
