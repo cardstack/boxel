@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // Per-row render diagnostics for the prerendered-HTML channel. The
