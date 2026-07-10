@@ -121,6 +121,10 @@ import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
 import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
+import FileDefAtomTemplate from './default-templates/file-def-atom';
+import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
+import FileDefFittedTemplate from './default-templates/file-def-fitted';
+import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -2999,14 +3003,10 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
-  static embedded: BaseDefComponent = class View extends Component<
-    typeof this
-  > {
-    <template>{{@model.name}}</template>
-  };
-  static fitted = this.embedded;
-  static isolated = this.embedded;
-  static atom = this.embedded;
+  static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = FileDefFittedTemplate;
+  static isolated: BaseDefComponent = FileDefIsolatedTemplate;
+  static atom: BaseDefComponent = FileDefAtomTemplate;
   static edit: BaseDefComponent = FileDefEditTemplate;
   // Default `markdown` fallback (CS-10784): inherits from FieldDef but
   // restated explicitly so this class's own slot is set rather than relying on
