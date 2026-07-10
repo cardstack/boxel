@@ -29,25 +29,23 @@ class StubRealmService extends RealmService {
   }
 }
 
-module(
-  'Integration | tools | add-field-to-card-definition',
-  function (hooks) {
-    setupRenderingTest(hooks);
-    setupLocalIndexing(hooks);
-    let mockMatrixUtils = setupMockMatrix(hooks);
+module('Integration | tools | add-field-to-card-definition', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
-    hooks.beforeEach(function (this: RenderingTestContext) {
-      getOwner(this)!.register('service:realm', StubRealmService);
-    });
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
 
-    setupRealmCacheTeardown(hooks);
+  setupRealmCacheTeardown(hooks);
 
-    hooks.beforeEach(async function () {
-      await withCachedRealmSetup(async () =>
-        setupIntegrationTestRealm({
-          mockMatrixUtils,
-          contents: {
-            'person.gts': `
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
           import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
           import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
@@ -55,38 +53,38 @@ module(
             @field firstName = contains(StringField);
           }
         `,
-          },
-          realmURL: 'http://test-realm/test/',
-        }),
-      );
+        },
+        realmURL: 'http://test-realm/test/',
+      }),
+    );
+  });
+
+  test('adds a field to a card definition', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
+      toolService.toolContext,
+    );
+
+    await addFieldToCardDefinitionCommand.execute({
+      cardDefinitionToModify: {
+        module: rri('http://test-realm/test/person'),
+        name: 'Person',
+      },
+      fieldName: 'lastName',
+      fieldDefinitionType: 'field',
+      fieldRef: {
+        module: rri('@cardstack/base/string'),
+        name: 'default',
+      },
+      fieldType: 'contains',
     });
-
-    test('adds a field to a card definition', async function (assert) {
-      let toolService = getService('tool-service');
-      let cardService = getService('card-service');
-      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
-        toolService.toolContext,
-      );
-
-      await addFieldToCardDefinitionCommand.execute({
-        cardDefinitionToModify: {
-          module: rri('http://test-realm/test/person'),
-          name: 'Person',
-        },
-        fieldName: 'lastName',
-        fieldDefinitionType: 'field',
-        fieldRef: {
-          module: rri('@cardstack/base/string'),
-          name: 'default',
-        },
-        fieldType: 'contains',
-      });
-      let response = (
-        await cardService.getSource(new URL('person.gts', testRealmURL))
-      ).content;
-      assert.strictEqual(
-        response,
-        `
+    let response = (
+      await cardService.getSource(new URL('person.gts', testRealmURL))
+    ).content;
+    assert.strictEqual(
+      response,
+      `
           import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
           import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
@@ -95,46 +93,46 @@ module(
             @field lastName = contains(StringField);
           }
         `,
-        'lastName field was added to the card definition',
-      );
-    });
+      'lastName field was added to the card definition',
+    );
+  });
 
-    test('can add a computed field', async function (assert) {
-      let toolService = getService('tool-service');
-      let cardService = getService('card-service');
-      let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
-        toolService.toolContext,
-      );
+  test('can add a computed field', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
+      toolService.toolContext,
+    );
 
-      await addFieldToCardDefinitionCommand.execute({
-        cardDefinitionToModify: {
-          module: rri('http://test-realm/test/person'),
-          name: 'Person',
-        },
-        fieldName: 'rapName',
-        fieldDefinitionType: 'field',
-        fieldType: 'contains',
-        fieldRef: {
-          module: rri('@cardstack/base/string'),
-          name: 'default',
-        },
-        incomingRelativeTo: undefined,
-        outgoingRelativeTo: undefined,
-        outgoingRealmURL: undefined,
-        computedFieldFunctionSourceCode: `
+    await addFieldToCardDefinitionCommand.execute({
+      cardDefinitionToModify: {
+        module: rri('http://test-realm/test/person'),
+        name: 'Person',
+      },
+      fieldName: 'rapName',
+      fieldDefinitionType: 'field',
+      fieldType: 'contains',
+      fieldRef: {
+        module: rri('@cardstack/base/string'),
+        name: 'default',
+      },
+      incomingRelativeTo: undefined,
+      outgoingRelativeTo: undefined,
+      outgoingRealmURL: undefined,
+      computedFieldFunctionSourceCode: `
           function () {
             let prefix = this.firstName.length > 5 ? 'Big' : 'Lil';
             let nickname = this.firstName.toUpperCase();
             return \`\${prefix} \${nickname}\`;
           }`,
-      });
+    });
 
-      let response = (
-        await cardService.getSource(new URL('person.gts', testRealmURL))
-      ).content;
-      assert.strictEqual(
-        response,
-        `
+    let response = (
+      await cardService.getSource(new URL('person.gts', testRealmURL))
+    ).content;
+    assert.strictEqual(
+      response,
+      `
           import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
           import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
@@ -149,8 +147,7 @@ module(
             });
           }
         `,
-        'computed field was added to the card definition',
-      );
-    });
-  },
-);
+      'computed field was added to the card definition',
+    );
+  });
+});
