@@ -1552,14 +1552,17 @@ module(basename(import.meta.filename), function () {
 
         assert.notOk(result.response.card?.error, 'prerender succeeds');
         let diagnostics = result.response.meta?.diagnostics;
-        assert.ok(
-          typeof diagnostics?.searchDocSettleMs === 'number' &&
-            diagnostics.searchDocSettleMs >= 0,
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettleMs,
+          'number',
           `searchDocSettleMs is stamped, got: ${diagnostics?.searchDocSettleMs}`,
         );
         assert.ok(
-          typeof diagnostics?.searchDocSettlePasses === 'number' &&
-            diagnostics.searchDocSettlePasses >= 2,
+          (diagnostics?.searchDocSettleMs ?? -1) >= 0,
+          `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettlePasses ?? 0) >= 2,
           `searchDocSettlePasses counts at least the two stability passes, got: ${diagnostics?.searchDocSettlePasses}`,
         );
         if (diagnostics?.searchDocFieldsMs !== undefined) {

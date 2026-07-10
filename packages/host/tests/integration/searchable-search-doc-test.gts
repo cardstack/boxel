@@ -1237,9 +1237,14 @@ module('Integration | searchable search doc', function (hooks) {
 
     let fieldsMs = timings.fieldsMs!;
     for (let path of ['title', 'author', 'author.agent']) {
+      assert.strictEqual(
+        typeof fieldsMs[path],
+        'number',
+        `fieldsMs['${path}'] is a number, got: ${fieldsMs[path]}`,
+      );
       assert.ok(
-        typeof fieldsMs[path] === 'number' && fieldsMs[path] >= 0,
-        `fieldsMs['${path}'] is a non-negative number, got: ${fieldsMs[path]}`,
+        fieldsMs[path] >= 0,
+        `fieldsMs['${path}'] is non-negative, got: ${fieldsMs[path]}`,
       );
     }
     assert.ok(
