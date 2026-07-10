@@ -1313,11 +1313,11 @@ export class RealmIndexQueryEngine {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
-        // A file link (the URL carries a file extension; card ids never do)
-        // is requested with the file-meta mime so the serving realm returns
-        // the index-enriched document — consumers rely on index-derived
-        // attributes like a markdown skill's `kind`, which the card-mime
-        // fallback for file paths omits.
+        // A file link (the URL ends in a known FileDef extension; card ids
+        // never do) is requested with the file-meta mime so the serving
+        // realm returns the index-enriched document — consumers rely on
+        // index-derived attributes like a markdown skill's `kind`, which
+        // the card-mime fallback for file paths omits.
         let accept = urlNamesFile(new URL(url))
           ? SupportedMimeType.FileMeta
           : SupportedMimeType.CardJson;
@@ -1608,10 +1608,11 @@ export class RealmIndexQueryEngine {
             | typeof CardResourceType
             | typeof FileMetaResourceType
             | undefined;
-          // Card ids never carry a file extension, so the URL itself says
-          // whether the link targets a file. That also corrects stale index
-          // payloads which record file relationships as type "card" (or omit
-          // the type) when linked files were indexed after instances.
+          // Card ids never end in a known FileDef extension, so the URL
+          // itself says whether the link targets a file. That also corrects
+          // stale index payloads which record file relationships as type
+          // "card" (or omit the type) when linked files were indexed after
+          // instances.
           let expectsFileMeta =
             relationshipType === FileMetaResourceType || urlNamesFile(linkURL);
           let expectsCard =

@@ -83,12 +83,14 @@ function extensionOf(url: URL): string {
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }
 
-// Whether a URL names a file rather than a card. Card ids never carry a
-// file extension (an instance's `.json` is stripped from its id), so an
-// extension on the last path segment is a reliable tell that the URL
-// targets a file.
+// Whether a URL names a file rather than a card, judged by a known FileDef
+// extension on the last path segment. Card ids never end in one (an
+// instance's `.json` is stripped from its id) — but a bare "has a dot"
+// check would misfire on card ids that legitimately contain dots (e.g. a
+// `ModelConfiguration/claude-sonnet-4.6` instance), so only registered
+// file extensions count.
 export function urlNamesFile(url: URL): boolean {
-  return extensionOf(url) !== '';
+  return extensionOf(url) in FILEDEF_CODE_REF_BY_EXTENSION;
 }
 
 export function resolveFileDefCodeRef(

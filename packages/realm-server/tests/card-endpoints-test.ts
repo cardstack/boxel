@@ -4213,6 +4213,27 @@ boxel:
   kind: skill
 ---
 # Cross-realm instructions`,
+            'model.gts': `
+              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+
+              export class Model extends CardDef {
+                @field cardTitle = contains(StringField);
+              }
+            `,
+            'model-4.6.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Model 4.6',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./model'),
+                    name: 'Model',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -4230,8 +4251,29 @@ boxel:
               export class SkillCard extends CardDef {
                 @field cardTitle = contains(StringField);
                 @field instructionsSource = linksTo(MarkdownDef);
+                @field model = linksTo(CardDef);
               }
             `,
+            'skill-with-model.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Skill with dotted model link',
+                },
+                relationships: {
+                  model: {
+                    links: {
+                      self: `${providerRealmURL}model-4.6`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
             'skill.json': {
               data: {
                 attributes: {
@@ -4309,6 +4351,33 @@ boxel:
         linkedFile?.attributes?.kind,
         'skill',
         'cross-realm file-meta carries index-derived attributes',
+      );
+    });
+
+    test('serves a card linking to a cross-realm card whose id contains a dot', async function (assert) {
+      // Card ids may legitimately contain dots (e.g. a versioned
+      // ModelConfiguration). The file-link detection keys on known FileDef
+      // extensions, so ".6" must not classify this link as a file.
+      let response = await consumerRequest
+        .get('/skill-with-model')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let included = doc.included ?? [];
+      let linkedCard = included.find(
+        (resource) => resource.id === `${providerRealmURL}model-4.6`,
+      );
+      assert.ok(linkedCard, 'includes the cross-realm dotted-id card');
+      assert.strictEqual(
+        linkedCard?.attributes?.cardTitle,
+        'Model 4.6',
+        'the dotted-id link resolves as a card, not a file',
       );
     });
   });
