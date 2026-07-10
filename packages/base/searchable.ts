@@ -229,16 +229,17 @@ async function searchableQueryableValue(
     let isDeclaredLink =
       (field!.fieldType === 'linksTo' || field!.fieldType === 'linksToMany') &&
       !field!.computeVia;
+    let fieldPath = path === '' ? fieldName : `${path}.${fieldName}`;
+    // Inclusive per-field timing: starts before the field read — a
+    // computed's computeVia runs inside peekAtField — and covers the nested
+    // recursion and link loads below, so a slow leaf surfaces together with
+    // every ancestor on its path. Guarded on the collector so an
+    // uninstrumented walk pays no timer calls.
+    let fieldStart = timings?.fieldsMs ? performance.now() : 0;
     let rawValue =
       isDeclaredLink && !getDataBucket(value).has(fieldName)
         ? null
         : peekAtField(value, fieldName);
-    let fieldPath = path === '' ? fieldName : `${path}.${fieldName}`;
-    // Inclusive per-field timing: covers this field's whole evaluation —
-    // nested recursion and link loads included — so a slow leaf surfaces
-    // together with every ancestor on its path. Guarded on the collector so
-    // an uninstrumented walk pays no timer calls.
-    let fieldStart = timings?.fieldsMs ? performance.now() : 0;
     switch (field!.fieldType) {
       case 'contains': {
         entries.push([

@@ -103,13 +103,17 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
-// One performed load of a searchable link target during search-doc
-// generation. `path` is the dotted field path (from the indexed card's root)
-// of the `linksTo` / `linksToMany` field that owns the link; `target` is the
-// resolved (absolute) URL that was loaded. A `linksToMany` field produces one
-// entry per loaded slot, all sharing the field's `path` and distinguished by
-// `target`. Only actual loads are represented — a target already resident in
-// the store records a near-zero entry that the persistence floor drops.
+// One performed load of a link target during search-doc production. `path`
+// is the dotted field path (from the indexed card's root) of the `linksTo` /
+// `linksToMany` field that owns the link; `target` is the resolved
+// (absolute) URL that was loaded. A `linksToMany` field produces one entry
+// per loaded slot, all sharing the field's `path` and distinguished by
+// `target`. A load fired through a field getter — a computed reading a link
+// loads via the getter's lazy path, not the generator's targeted loading —
+// carries an empty `path`, since the store observing it can't name the
+// owning field. Only actual loads are represented — a target already
+// resident in the store records a near-zero entry that the persistence
+// floor drops.
 export interface SearchDocLinkLoad {
   path: string;
   target: string;

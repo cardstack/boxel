@@ -57,11 +57,11 @@ const SEARCH_DOC_TIMING_MAX_ENTRIES = 20;
 
 const roundMs = (ms: number) => Math.round(ms * 100) / 100;
 
-// Slowest-N-at/over-the-floor pruning for the per-field timings. Keys stay
-// in descending-cost order (string-keyed objects preserve insertion order),
-// so the persisted JSON reads as a ranking. An ancestor's inclusive time is
-// >= any descendant's, so a kept entry's parent chain sorts at or above it
-// and survives with it (barring an exact-tie at the cut-off).
+// Slowest-N-at/over-the-floor pruning for the per-field timings. Rank by
+// value when reading — jsonb normalizes key order, so the persisted object
+// carries no ordering. An ancestor's inclusive time is >= any descendant's,
+// so a kept entry's parent chain makes the cut with it (barring an
+// exact-tie at the cut-off).
 function pruneSearchDocFieldsMs(
   fieldsMs: Record<string, number>,
 ): Record<string, number> | undefined {
@@ -86,6 +86,37 @@ function pruneSearchDocLinkLoads(
     .slice(0, SEARCH_DOC_TIMING_MAX_ENTRIES)
     .map((load) => ({ ...load, ms: roundMs(load.ms) }));
   return kept.length > 0 ? kept : undefined;
+}
+
+// Multiset diff over the store's bounded completed-load histories: the
+// entries present in `after` beyond their multiplicity in `before`. Used to
+// attribute loads the settle loop fired through field getters (a computed
+// reading a link loads via `lazilyLoadLink`, not via the generator's
+// targeted loading) — those loads land in the store's history but never
+// pass through the generator's collector. The histories keep only the
+// slowest entries, so a load evicted by slower siblings goes unreported;
+// what survives is by construction the part worth attributing. Exported for
+// unit testing.
+export function newLoadEntries(
+  before: Array<{ url: string; ms: number }>,
+  after: Array<{ url: string; ms: number }>,
+): Array<{ url: string; ms: number }> {
+  let seen = new Map<string, number>();
+  for (let { url, ms } of before) {
+    let key = `${url}|${ms}`;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  let fresh: Array<{ url: string; ms: number }> = [];
+  for (let entry of after) {
+    let key = `${entry.url}|${entry.ms}`;
+    let count = seen.get(key) ?? 0;
+    if (count > 0) {
+      seen.set(key, count - 1);
+    } else {
+      fresh.push(entry);
+    }
+  }
+  return fresh;
 }
 
 // The base module whose generator produces every search doc. Recorded as a
@@ -147,7 +178,16 @@ export default class RenderMetaRoute extends Route<Model> {
     // timed generation below finds everything resident). The collector
     // gathers one entry per performed load across all passes — a target
     // loads on the first pass that reaches it and is a resident hit
-    // afterward — for the `searchDocLinkLoads` diagnostic.
+    // afterward — for the `searchDocLinkLoads` diagnostic. Loads the passes
+    // fire indirectly through field getters (a computed reading a link)
+    // bypass the generator's collector, so the store's completed-load
+    // histories are snapshotted around the loop and their delta is folded
+    // in — with an empty `path`, since the store can't name the owning
+    // field.
+    let recentLoadsBefore = [
+      ...this.store.recentCardDocLoads(),
+      ...this.store.recentFileMetaLoads(),
+    ];
     let settleLinkLoads: SearchDocLinkLoad[] = [];
     let settleStart = performance.now();
     let settlePasses = await this.#settleSearchableLoads(
@@ -156,6 +196,10 @@ export default class RenderMetaRoute extends Route<Model> {
       settleLinkLoads,
     );
     let searchDocSettleMs = performance.now() - settleStart;
+    let getterFiredLoads = newLoadEntries(recentLoadsBefore, [
+      ...this.store.recentCardDocLoads(),
+      ...this.store.recentFileMetaLoads(),
+    ]).map(({ url, ms }) => ({ path: '', target: url, ms }));
 
     // Union the render route's captured deps with a fresh snapshot: the
     // settle loop above loaded links through the tracked getter (each a
@@ -281,9 +325,17 @@ export default class RenderMetaRoute extends Route<Model> {
     let searchDocFieldsMs = pruneSearchDocFieldsMs(
       searchDocTimings.fieldsMs ?? {},
     );
-    let searchDocLinkLoads = pruneSearchDocLinkLoads([
+    // A target the generator loaded directly also lands in the store's
+    // history; keep the generator's entry (it carries the field path) and
+    // drop the store's duplicate.
+    let targetedLoads = [
       ...settleLinkLoads,
       ...(searchDocTimings.linkLoads ?? []),
+    ];
+    let targetedUrls = new Set(targetedLoads.map(({ target }) => target));
+    let searchDocLinkLoads = pruneSearchDocLinkLoads([
+      ...targetedLoads,
+      ...getterFiredLoads.filter(({ target }) => !targetedUrls.has(target)),
     ]);
     let diagnostics: PrerenderMetaDiagnostics = {
       ...(passSnapshot
