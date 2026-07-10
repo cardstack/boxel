@@ -41,7 +41,7 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -105,7 +105,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
-    commandContext: CommandContext;
+    commandContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (

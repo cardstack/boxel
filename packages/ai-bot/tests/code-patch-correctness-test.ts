@@ -10,8 +10,8 @@ import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import {
-  decodeCommandRequest,
-  type CommandRequest,
+  decodeToolRequest,
+  type ToolRequest,
 } from '@cardstack/runtime-common/commands';
 
 module('code patch correctness helpers', () => {
@@ -82,10 +82,10 @@ module('code patch correctness helpers', () => {
       'Should request correctness checks for each file and card',
     );
     let decodedRequests = encodedRequests.map((request: any) =>
-      decodeCommandRequest(request),
+      decodeToolRequest(request),
     );
     let fileRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'file',
     );
     assert.ok(fileRequest, 'Should include a file correctness request');
@@ -109,7 +109,7 @@ module('code patch correctness helpers', () => {
       'File correctness check request should describe the file that changed',
     );
     let cardRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'card',
     );
     assert.ok(cardRequest, 'Should include a card correctness request');
@@ -152,11 +152,11 @@ module('code patch correctness helpers', () => {
     let [event] = client.getSentEvents();
     let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
     let decodedRequests = encodedRequests.map((request: any) =>
-      decodeCommandRequest(request),
+      decodeToolRequest(request),
     );
 
     let fileRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'file',
     );
     assert.strictEqual(
@@ -171,7 +171,7 @@ module('code patch correctness helpers', () => {
     );
 
     let cardRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'card',
     );
     assert.strictEqual(

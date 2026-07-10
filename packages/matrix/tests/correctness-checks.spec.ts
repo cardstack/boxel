@@ -99,7 +99,7 @@ test.describe('Correctness Checks', () => {
     );
 
     // Simulate a correctness check message from the AI bot (same approach as commands.spec.ts)
-    let commandRequests = [
+    let toolRequests = [
       {
         id: commandRequestId,
         name: 'checkCorrectness',
@@ -130,7 +130,7 @@ test.describe('Correctness Checks', () => {
             agentId,
           },
         },
-        [APP_BOXEL_TOOL_REQUESTS_KEY]: commandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
       },
     );
 
@@ -154,34 +154,34 @@ test.describe('Correctness Checks', () => {
     ).toContainText('Check correctness');
 
     // Verify the command result event was dispatched with correct data
-    let commandResultEvent: any;
+    let toolResultEvent: any;
     await expect(async () => {
       let events = await getRoomEvents(username, password, roomId);
-      commandResultEvent = events.find(
+      toolResultEvent = events.find(
         (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
-      expect(commandResultEvent).toBeDefined();
+      expect(toolResultEvent).toBeDefined();
     }).toPass();
 
     // Verify the command result has the correct structure
-    expect(commandResultEvent!.content.msgtype).toStrictEqual(
+    expect(toolResultEvent!.content.msgtype).toStrictEqual(
       APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
+    expect(toolResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
       APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.key).toStrictEqual(
+    expect(toolResultEvent!.content['m.relates_to']?.key).toStrictEqual(
       'applied',
     );
-    expect(commandResultEvent!.content.commandRequestId).toStrictEqual(
+    expect(toolResultEvent!.content.commandRequestId).toStrictEqual(
       commandRequestId,
     );
 
     // Verify the result contains a CorrectnessResultCard FileDef
     let commandResultData =
-      typeof commandResultEvent!.content.data === 'string'
-        ? JSON.parse(commandResultEvent!.content.data)
-        : commandResultEvent!.content.data;
+      typeof toolResultEvent!.content.data === 'string'
+        ? JSON.parse(toolResultEvent!.content.data)
+        : toolResultEvent!.content.data;
     expect(commandResultData.card).toBeDefined();
     expect(commandResultData.card.contentType).toStrictEqual(
       'application/vnd.card+json',
@@ -632,7 +632,7 @@ ${brokenModuleContent}
       description: string,
       expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
     ) {
-      let commandRequests = [
+      let toolRequests = [
         {
           id: commandRequestId,
           name: 'checkCorrectness',
@@ -663,7 +663,7 @@ ${brokenModuleContent}
               agentId,
             },
           },
-          [APP_BOXEL_TOOL_REQUESTS_KEY]: commandRequests,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
         },
       );
 
@@ -675,21 +675,21 @@ ${brokenModuleContent}
         .locator(`[data-test-apply-state="${expectedApplyState}"]`)
         .waitFor();
 
-      let commandResultEvent: any;
+      let toolResultEvent: any;
       await expect(async () => {
         let events = await getRoomEvents(username, password, roomId);
-        commandResultEvent = events.find(
+        toolResultEvent = events.find(
           (e: any) =>
             e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
             e.content.commandRequestId === commandRequestId,
         );
-        expect(commandResultEvent).toBeDefined();
+        expect(toolResultEvent).toBeDefined();
       }).toPass();
 
       let commandResultData =
-        typeof commandResultEvent!.content.data === 'string'
-          ? JSON.parse(commandResultEvent!.content.data)
-          : commandResultEvent!.content.data;
+        typeof toolResultEvent!.content.data === 'string'
+          ? JSON.parse(toolResultEvent!.content.data)
+          : toolResultEvent!.content.data;
       expect(commandResultData.card).toBeDefined();
       expect(commandResultData.card.url).toBeDefined();
 

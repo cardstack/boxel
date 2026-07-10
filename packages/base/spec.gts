@@ -35,7 +35,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  type CommandContext,
+  type ToolContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { eq, not, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
@@ -68,7 +68,7 @@ import {
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
 class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
-  constructor(commandContext: CommandContext) {
+  constructor(commandContext: ToolContext) {
     super(commandContext);
   }
   protected get prompt() {
@@ -98,7 +98,7 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
 }
 
 class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsTool {
-  constructor(commandContext: CommandContext) {
+  constructor(commandContext: ToolContext) {
     super(commandContext);
   }
   protected getPrompt(count: number) {

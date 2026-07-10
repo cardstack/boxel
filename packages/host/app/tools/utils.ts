@@ -5,7 +5,7 @@ import {
   isToolResultEventType,
   isToolResultRelType,
   decodeCommandRequest,
-  type CommandContext,
+  type ToolContext,
   type ToolRequest,
 } from '@cardstack/runtime-common';
 
@@ -31,7 +31,7 @@ import type {
 } from '@cardstack/base/matrix-event';
 
 export async function waitForMatrixEvent(
-  commandContext: CommandContext,
+  commandContext: ToolContext,
   roomId: string,
   callback: (matrixEvents: MatrixEvent[]) => boolean,
   options: { timeoutMs?: number } = {},
@@ -63,7 +63,7 @@ export async function waitForMatrixEvent(
 }
 
 export async function waitForCompletedCommandRequest(
-  commandContext: CommandContext,
+  commandContext: ToolContext,
   roomId: string,
   commandRequestPredicate: (toolRequest: Partial<ToolRequest>) => boolean,
   options: { timeoutMs?: number; afterEventId?: string } = {},
@@ -119,7 +119,7 @@ export async function waitForCompletedCommandRequest(
 }
 
 export async function addPatchTools(
-  commandContext: CommandContext,
+  commandContext: ToolContext,
   patchableCards: CardDef[],
   cardAPI: typeof CardAPI,
 ): Promise<Tool[]> {
@@ -140,7 +140,7 @@ export async function addPatchTools(
 }
 
 export async function waitForRealmState(
-  commandContext: CommandContext,
+  commandContext: ToolContext,
   realmId: string,
   predicate: (ev: RealmEventContent | undefined) => boolean,
   options: { timeoutMs?: number; keepRealmSubscription?: boolean } = {},

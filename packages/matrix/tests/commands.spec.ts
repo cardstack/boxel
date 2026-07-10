@@ -138,7 +138,7 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
-  test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
+  test(`applying a command dispatches a ToolResultEvent if command is successful`, async ({
     page,
   }) => {
     const { username, password, credentials } =
@@ -218,14 +218,14 @@ test.describe('Commands', () => {
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
-      let commandResultEvent = (events as any).find(
+      let toolResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
-      await expect(commandResultEvent).toBeDefined();
+      await expect(toolResultEvent).toBeDefined();
     }).toPass();
   });
 
-  test(`applying a search command dispatches a result event if command is succesful and result is returned`, async ({
+  test(`applying a search command dispatches a result event if command is successful and result is returned`, async ({
     page,
   }) => {
     const { username, password, credentials } =
@@ -274,7 +274,7 @@ test.describe('Commands', () => {
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
-      let commandResultEvent = (events as any).find(
+      let toolResultEvent = (events as any).find(
         (e: any) =>
           e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content?.msgtype === APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE &&
@@ -284,11 +284,11 @@ test.describe('Commands', () => {
           e.content?.['m.relates_to']?.key === 'applied' &&
           e.content?.['m.relates_to']?.event_id === messageEvent?.event_id,
       );
-      await expect(commandResultEvent).toBeDefined();
+      await expect(toolResultEvent).toBeDefined();
       let commandResultData =
-        typeof commandResultEvent.content.data === 'string'
-          ? JSON.parse(commandResultEvent.content.data)
-          : commandResultEvent.content.data;
+        typeof toolResultEvent.content.data === 'string'
+          ? JSON.parse(toolResultEvent.content.data)
+          : toolResultEvent.content.data;
       await expect(commandResultData.card).toBeDefined();
     }).toPass();
   });

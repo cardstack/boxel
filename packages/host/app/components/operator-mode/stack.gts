@@ -9,7 +9,7 @@ import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardCrudFunctionsContextName,
-  type CommandContext,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -38,7 +38,7 @@ interface Signature {
     editCard: EditCardFn;
     saveCard: SaveCardFn;
     deleteCard: DeleteCardFn;
-    commandContext: CommandContext;
+    commandContext: ToolContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],

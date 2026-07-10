@@ -2,8 +2,8 @@ import type {
   CardMessageEvent,
   CardMessageContent,
   CodePatchResultEvent,
-  CommandResultEvent,
-  EncodedCommandRequest,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
   RealmServerEvent,
@@ -61,7 +61,7 @@ export async function constructHistory(
     // make a copy of the event
     let event = { ...rawEvent } as
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | RealmServerEvent
       | MessageEvent; // Typescript could have inferred this from the line above
@@ -111,11 +111,10 @@ export async function constructHistory(
           // carried, and drop the legacy key so the merged view has a single
           // source of truth.
           content[APP_BOXEL_TOOL_REQUESTS_KEY] = (
-            getToolRequests<Partial<EncodedCommandRequest>>(content) ?? []
+            getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
           ).concat(
-            getToolRequests<Partial<EncodedCommandRequest>>(
-              continuationContent,
-            ) ?? [],
+            getToolRequests<Partial<EncodedToolRequest>>(continuationContent) ??
+              [],
           );
           delete content[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY];
           event.origin_server_ts = continuationEvent.origin_server_ts;

@@ -5,7 +5,7 @@ import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_TOOL_REQUESTS_KEY,
@@ -57,21 +57,21 @@ function chunkWithReasoning(
 }
 
 function snapshotWithToolCall(
-  commandRequest: Partial<CommandRequest>,
+  toolRequest: Partial<ToolRequest>,
 ): ChatCompletionSnapshot {
   let toolCall = {
     type: 'function',
   } as any;
-  if (commandRequest.arguments) {
+  if (toolRequest.arguments) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.arguments = JSON.stringify(commandRequest.arguments);
+    toolCall.function.arguments = JSON.stringify(toolRequest.arguments);
   }
-  if (commandRequest.name) {
+  if (toolRequest.name) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.name = commandRequest.name;
+    toolCall.function.name = toolRequest.name;
   }
-  if (commandRequest.id) {
-    toolCall.id = commandRequest.id;
+  if (toolRequest.id) {
+    toolCall.id = toolRequest.id;
   }
   return {
     choices: [
