@@ -1,7 +1,6 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type {
   Realm,
   IndexedInstance,
@@ -57,7 +56,7 @@ module('Integration | searchable search doc', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {

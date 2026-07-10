@@ -34,7 +34,7 @@ export default class SearchGoogleImagesTool extends HostBaseTool<
       const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}&start=${startIndex}&cx=064501294a5c9430a`;
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
-        this.commandContext,
+        this.toolContext,
       );
 
       const result = await sendRequestViaProxyCommand.execute({

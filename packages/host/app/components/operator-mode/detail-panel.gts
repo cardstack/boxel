@@ -455,7 +455,7 @@ export default class DetailPanel extends Component<Signature> {
 
   @action private async createListing() {
     const command = new OpenCreateListingModalTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {

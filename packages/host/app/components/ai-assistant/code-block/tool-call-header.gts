@@ -32,7 +32,7 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
 
   <template>
     <header class={{cn 'code-block-header' compact=@isCompact}}>
-      <div class='command-description'>{{@commandDescription}}</div>
+      <div class='tool-description'>{{@commandDescription}}</div>
       <div class='actions'>
         {{#unless @hideCodeActions}}
           {{#if @isDisplayingCode}}
@@ -49,7 +49,7 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
           {{/if}}
         {{/unless}}
         <ApplyButton
-          class='command-action'
+          class='tool-action'
           @actionVerb={{@actionVerb}}
           @isCompact={{@isCompact}}
           @state={{@toolCallState}}
@@ -81,14 +81,14 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
         padding: 2px 0;
         background-color: transparent;
       }
-      .command-description {
+      .tool-description {
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         line-height: 1.5em;
         text-wrap: pretty;
         overflow-wrap: break-word;
       }
-      .code-block-header.compact .command-description {
+      .code-block-header.compact .tool-description {
         order: 2;
         flex: 1;
         min-width: 0;
@@ -107,7 +107,7 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
         display: contents;
         margin-left: 0;
       }
-      .command-action {
+      .tool-action {
         margin-left: var(--boxel-sp-5xs);
       }
     </style>

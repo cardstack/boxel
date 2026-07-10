@@ -99,7 +99,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   @tracked isExecuting = false;
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get finalSkillsRealmURL() {
@@ -239,8 +239,8 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       return;
     }
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is not available. Open this card inside the host app.';
       return;
@@ -270,7 +270,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
     this.errorMessage = null;
 
     try {
-      let command = new UpdateRoomSkillsTool(commandContext);
+      let command = new UpdateRoomSkillsTool(toolContext);
       await command.execute({
         roomId,
         skillCardIdsToActivate,

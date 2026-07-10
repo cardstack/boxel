@@ -4,11 +4,7 @@ import { click, fillIn } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  PermissionsContextName,
-  type Loader,
-} from '@cardstack/runtime-common';
+import { PermissionsContextName, type Loader } from '@cardstack/runtime-common';
 
 import { provideConsumeContext } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -32,7 +28,7 @@ module('Integration | card-info | thumbnail picker edit', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     let cardApiModule = await loader.import<typeof CardApiModule>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     CardDef = cardApiModule.CardDef;
     CardInfoField = cardApiModule.CardInfoField;

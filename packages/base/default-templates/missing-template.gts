@@ -87,8 +87,8 @@ export default class MissingTemplate extends GlimmerComponent<{
       return;
     }
     let moduleId = moduleFrom(ref);
-    let commandContext = this.args.context?.commandContext;
-    await new SwitchSubmodeTool(commandContext!).execute({
+    let toolContext = this.args.context?.toolContext;
+    await new SwitchSubmodeTool(toolContext!).execute({
       codePath: moduleId,
       submode: 'code',
     });

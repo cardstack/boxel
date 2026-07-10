@@ -1,7 +1,6 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -36,7 +35,7 @@ module('Integration | loading', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -73,7 +72,7 @@ module('Integration | loading', function (hooks) {
   });
 
   test('Cards attempting to import boxel icon that does not exist renders a 404 icon instead', async function (assert) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
     let { createFromSerialized } = cardApi;
     let doc = {
       data: {

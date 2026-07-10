@@ -107,7 +107,7 @@ const DEFAULT_CARD_CONTEXT: Partial<CardContext> = {
   cardComponentModifier: class NoOpModifier extends Modifier<any> {
     modify() {}
   },
-  commandContext: undefined,
+  toolContext: undefined,
 };
 
 export default class RenderedMarkdown extends Component<Signature> {

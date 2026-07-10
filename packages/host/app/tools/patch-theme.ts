@@ -39,7 +39,7 @@ export default class PatchThemeTool extends HostBaseTool<
         ? linkedSkill.id
         : undefined;
 
-    let useAssistant = new UseAiAssistantTool(this.commandContext);
+    let useAssistant = new UseAiAssistantTool(this.toolContext);
     return await useAssistant.execute({
       roomId: 'new',
       openRoom: true,

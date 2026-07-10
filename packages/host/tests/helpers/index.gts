@@ -16,7 +16,6 @@ import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
-  baseRealm,
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
@@ -1448,7 +1447,7 @@ export async function saveCard(
   store?: CardStore,
   realmURL?: RealmIdentifier,
 ) {
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  let api = await loader.import<CardAPI>('@cardstack/base/card-api');
   let doc = api.serializeCard(instance, {});
   doc.data.id = id;
   if (realmURL) {
@@ -1521,7 +1520,7 @@ export function setupCardTest(hooks: NestedHooks): {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(hooks, async () =>
     (getService('loader-service') as any).loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     ),
   );
   return {
@@ -2015,7 +2014,7 @@ export async function addSkillToAiAssistant(
   }
 
   let command = new UpdateRoomSkillsTool(
-    getService('tool-service').commandContext,
+    getService('tool-service').toolContext,
   );
   await command.execute({
     roomId: resolvedRoomId,
@@ -2067,7 +2066,7 @@ export async function addSkillToAiAssistant(
         snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
       disabledSkillCards:
         snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
-      commandDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
+      toolDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(
@@ -2141,7 +2140,7 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       disabledSkillCards:
         roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
         null,
-      commandDefinitionsCount:
+      toolDefinitionsCount:
         roomData?.skillsConfig?.toolDefinitionFileDefs?.length ?? null,
       roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
       roomResourceCommandCount: roomResource?.tools?.length ?? null,

@@ -76,9 +76,7 @@ export default class GenerateExampleCardsTool extends HostBaseTool<
       }),
     );
 
-    let sendMessageCommand = new SendAiAssistantMessageTool(
-      this.commandContext,
-    );
+    let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
 
     await sendMessageCommand.execute({
       roomId: this.matrixService.currentRoomId,
@@ -158,7 +156,7 @@ export class GenerateExampleCardsOneShotTool extends HostBaseTool<
       }),
     );
 
-    const oneShot = new OneShotLlmRequestTool(this.commandContext);
+    const oneShot = new OneShotLlmRequestTool(this.toolContext);
     const attachedFileIdentifiers = buildAttachedFileURLs(input.codeRef.module);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,

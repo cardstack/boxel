@@ -517,7 +517,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   private createSpecTask = task(async (ref: ResolvedCodeRef) => {
     try {
       const createSpecCommand = new CreateSpecTool(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
       );
       let currentRealm = this.operatorModeStateService.realmURL;
       const result = await createSpecCommand.execute({

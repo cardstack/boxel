@@ -26,7 +26,7 @@ export default class ValidateRealmTool extends HostBaseTool<
     let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
     let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
-      this.commandContext,
+      this.toolContext,
     ).execute();
 
     if (!realmIdentifiers.includes(realmIdentifier)) {

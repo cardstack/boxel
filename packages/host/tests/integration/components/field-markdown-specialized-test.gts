@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import {
   BigIntegerField,
@@ -65,39 +65,39 @@ module('Integration | field markdown specialized', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     AddressField = (
-      await loader.import<typeof AddressFieldModule>(`${baseRealm.url}address`)
+      await loader.import<typeof AddressFieldModule>('@cardstack/base/address')
     ).default;
     ColorField = (
-      await loader.import<typeof ColorFieldModule>(`${baseRealm.url}color`)
+      await loader.import<typeof ColorFieldModule>('@cardstack/base/color')
     ).default;
     CoordinateField = (
       await loader.import<typeof CoordinateFieldModule>(
-        `${baseRealm.url}coordinate`,
+        '@cardstack/base/coordinate',
       )
     ).default;
     CountryField = (
-      await loader.import<typeof CountryFieldModule>(`${baseRealm.url}country`)
+      await loader.import<typeof CountryFieldModule>('@cardstack/base/country')
     ).default;
     DateRangeField = (
       await loader.import<typeof DateRangeFieldModule>(
-        `${baseRealm.url}date-range-field`,
+        '@cardstack/base/date-range-field',
       )
     ).default;
     LLMModelField = (
       await loader.import<typeof LLMModelFieldModule>(
-        `${baseRealm.url}llm-model`,
+        '@cardstack/base/llm-model',
       )
     ).default;
     PercentageField = (
       await loader.import<typeof PercentageFieldModule>(
-        `${baseRealm.url}percentage`,
+        '@cardstack/base/percentage',
       )
     ).default;
     UrlField = (
-      await loader.import<typeof UrlFieldModule>(`${baseRealm.url}url`)
+      await loader.import<typeof UrlFieldModule>('@cardstack/base/url')
     ).default;
     WebsiteField = (
-      await loader.import<typeof WebsiteFieldModule>(`${baseRealm.url}website`)
+      await loader.import<typeof WebsiteFieldModule>('@cardstack/base/website')
     ).default;
   });
 

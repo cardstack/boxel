@@ -217,7 +217,7 @@ export default class RoomMessage extends Component<Signature> {
       >
         {{#each this.message.tools as |command|}}
           <RoomMessageTool
-            @messageCommand={{command}}
+            @messageTool={{command}}
             @roomResource={{@roomResource}}
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}

@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -56,7 +55,7 @@ module('Integration | message service subscription', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   setupRealmCacheTeardown(hooks);

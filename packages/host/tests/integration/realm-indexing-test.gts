@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
-  baseRealm,
   baseRealmRRI,
   baseCardRef,
   ensureTrailingSlash,
@@ -118,7 +117,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function getInstance(

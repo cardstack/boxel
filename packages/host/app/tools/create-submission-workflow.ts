@@ -71,7 +71,7 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
     // Create the Matrix room first so its id can be persisted on the workflow
     // card — the retry flow reads roomId off the card to re-emit the bot
     // trigger event without losing the original conversation.
-    let useAiAssistantCommand = new UseAiAssistantTool(this.commandContext);
+    let useAiAssistantCommand = new UseAiAssistantTool(this.toolContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
       roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
@@ -142,11 +142,11 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
       throw err;
     }
 
-    await new OpenInInteractModeTool(this.commandContext).execute({
+    await new OpenInInteractModeTool(this.toolContext).execute({
       cardId: workflowCardId,
     });
 
-    await new SendBotTriggerEventTool(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.toolContext).execute({
       roomId,
       realm,
       type: 'pr-listing-create',

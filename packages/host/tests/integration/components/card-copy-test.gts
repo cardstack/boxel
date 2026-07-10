@@ -69,7 +69,7 @@ module('Integration | card-copy', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let loggedInAs = '@testuser:localhost';
@@ -114,8 +114,8 @@ module('Integration | card-copy', function (hooks) {
     };
     let cardApi: typeof import('@cardstack/base/card-api');
     let string: typeof import('@cardstack/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;

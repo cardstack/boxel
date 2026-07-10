@@ -100,13 +100,13 @@ export function commandData<
     const state = new CommandExecutionState<
       CardResultType extends CardDefConstructor ? CardResultType : never
     >();
-    let commandContext = parent.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = parent.args.context?.toolContext;
+    if (!toolContext) {
       state.setError(new Error('no context'));
       return state;
     }
 
-    const command = new commandClass(commandContext);
+    const command = new commandClass(toolContext);
 
     state.setLoading();
     (executeArgs ? command.execute(executeArgs()) : command.execute())

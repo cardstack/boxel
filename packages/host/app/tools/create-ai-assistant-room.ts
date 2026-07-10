@@ -156,9 +156,9 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
       ...enabled.sources,
       ...disabled.sources,
     ].flatMap((source) => getSkillSourceTools(source));
-    let commandFileDefs: FileDef[] = [];
+    let toolFileDefs: FileDef[] = [];
     if (toolDefinitionFileDefs.length) {
-      commandFileDefs = await matrixService.uploadToolDefinitions(
+      toolFileDefs = await matrixService.uploadToolDefinitions(
         matrixService.getUniqueToolDefinitions(toolDefinitionFileDefs),
       );
     }
@@ -203,7 +203,7 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
               disabledSkillCards: disabled.fileDefs.map((fileDef) =>
                 fileDef.serialize(),
               ),
-              toolDefinitions: commandFileDefs.map((commandFileDef) =>
+              toolDefinitions: toolFileDefs.map((commandFileDef) =>
                 commandFileDef.serialize(),
               ),
             },

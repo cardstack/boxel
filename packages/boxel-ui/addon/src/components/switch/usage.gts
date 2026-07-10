@@ -66,14 +66,5 @@ export default class SwitchUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
     </div>
-    <style scoped>
-      :deep(.FreestyleUsage-preview) {
-        background-color: var(--boxel-light);
-      }
-
-      :deep(.FreestyleUsage-preview input) {
-        border: none;
-      }
-    </style>
   </template>
 }

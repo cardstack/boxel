@@ -85,7 +85,7 @@ export default class OperatorModeOverlays extends Overlays {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @consume(CommandContextName)
-  declare private commandContext: ToolContext;
+  declare private toolContext: ToolContext;
 
   get renderedCardsForOverlayActionsWithEvents() {
     return super
@@ -625,7 +625,7 @@ export default class OperatorModeOverlays extends Overlays {
         canEdit: this.realm.canWrite(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
-        commandContext: this.commandContext,
+        toolContext: this.toolContext,
       }) ?? [];
 
     // Delete and New Card of This Type don't make sense from an embedded field

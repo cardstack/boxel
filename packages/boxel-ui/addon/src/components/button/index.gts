@@ -308,16 +308,16 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
 
       .kind-primary-dark {
-        /* inverted background and foreground */
-        --boxel-button-color: var(--foreground, var(--boxel-dark));
-        --boxel-button-text-color: var(--background, var(--boxel-light));
+        /* always dark */
+        --boxel-button-color: var(--boxel-dark);
+        --boxel-button-text-color: var(--boxel-light);
       }
       .kind-primary-dark:not(:disabled):hover,
       .kind-primary-dark:not(:disabled):active {
         --boxel-button-color: color-mix(
           in oklab,
-          var(--foreground, var(--boxel-dark)) 85%,
-          transparent
+          var(--boxel-dark) 80%,
+          var(--boxel-light)
         );
       }
 

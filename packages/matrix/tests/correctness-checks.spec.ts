@@ -149,9 +149,9 @@ test.describe('Correctness Checks', () => {
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
     // Verify the command description is displayed
-    await expect(
-      commandContainer.locator('.command-description'),
-    ).toContainText('Check correctness');
+    await expect(commandContainer.locator('.tool-description')).toContainText(
+      'Check correctness',
+    );
 
     // Verify the command result event was dispatched with correct data
     let toolResultEvent: any;
