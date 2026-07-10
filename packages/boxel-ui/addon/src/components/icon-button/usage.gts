@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { cn, eq } from '../../helpers.ts';
+import { cn, eq } from '../../helpers.gts';
 import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import IconPlus from '../../icons/icon-plus.gts';
 import type { Icon } from '../../icons/types.ts';

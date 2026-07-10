@@ -13,9 +13,9 @@
     "test": "tests"
   },
   "scripts": {
-    "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
-    "build:js": "rollup --config",
-    "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false",
+    "build": "echo 'noop'",
+    "build:js": "echo 'noop'",
+    "build:types": "echo 'noop'",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint .",
@@ -124,11 +124,8 @@
     "version": 2
   },
   "exports": {
-    "./*": {
-      "types": "./declarations/*.d.ts",
-      "default": "./dist/*.js"
-    },
-    "./styles/*.css": "./dist/styles/*.css",
+    "./*.css": "./src/*.css",
+    "./*": "./src/*.gts",
     "./addon-main.js": "./addon-main.cjs"
   },
   "files": [

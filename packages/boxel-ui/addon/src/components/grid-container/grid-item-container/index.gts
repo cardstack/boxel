@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { type FittedFormatId } from '../../../helpers.ts';
+import { type FittedFormatId } from '../../../helpers.gts';
 import FittedCardContainer from '../../fitted-card-container/index.gts';
 
 export interface GridItemContainerSignature {
