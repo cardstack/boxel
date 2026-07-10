@@ -929,7 +929,7 @@ export class ${className} extends ${exportName} {
       );
     }
     let { newCardId } = await new CopyCardToRealmTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,

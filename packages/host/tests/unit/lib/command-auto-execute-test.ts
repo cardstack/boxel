@@ -2,10 +2,10 @@ import { module, test } from 'qunit';
 
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
-  isAutoExecutableCommand,
+  isAutoExecutableTool,
 } from '@cardstack/host/lib/tool-auto-execute';
 
-type AutoExecCommandInput = Parameters<typeof isAutoExecutableCommand>[0];
+type AutoExecCommandInput = Parameters<typeof isAutoExecutableTool>[0];
 
 function cmd(
   name: string | undefined,
@@ -18,7 +18,7 @@ function cmd(
 module('Unit | Lib | tool-auto-execute', function () {
   test('check-correctness commands auto-execute regardless of mode or approval flag', function (assert) {
     assert.true(
-      isAutoExecutableCommand(
+      isAutoExecutableTool(
         cmd(CHECK_CORRECTNESS_COMMAND_NAME, true),
         'ask',
         true,
@@ -26,7 +26,7 @@ module('Unit | Lib | tool-auto-execute', function () {
       'checkCorrectness in ask mode with requiresApproval=true still auto-executes',
     );
     assert.true(
-      isAutoExecutableCommand(
+      isAutoExecutableTool(
         cmd(CHECK_CORRECTNESS_COMMAND_NAME, true),
         undefined,
         true,
@@ -37,25 +37,25 @@ module('Unit | Lib | tool-auto-execute', function () {
 
   test('commands with requiresApproval=false auto-execute', function (assert) {
     assert.true(
-      isAutoExecutableCommand(cmd('searchCard', false), 'ask', true),
+      isAutoExecutableTool(cmd('searchCard', false), 'ask', true),
       'requiresApproval=false bypasses approval even in ask mode',
     );
   });
 
   test('act mode auto-executes commands that would otherwise require approval', function (assert) {
     assert.true(
-      isAutoExecutableCommand(cmd('patchCardInstance', true), 'act', true),
+      isAutoExecutableTool(cmd('patchCardInstance', true), 'act', true),
       'patchCardInstance in act mode auto-executes',
     );
   });
 
   test('ask mode with requiresApproval=true does not auto-execute', function (assert) {
     assert.false(
-      isAutoExecutableCommand(cmd('patchCardInstance', true), 'ask', true),
+      isAutoExecutableTool(cmd('patchCardInstance', true), 'ask', true),
       'manual approval is required in ask mode',
     );
     assert.false(
-      isAutoExecutableCommand(cmd('patchCardInstance', true), undefined, true),
+      isAutoExecutableTool(cmd('patchCardInstance', true), undefined, true),
       'manual approval is required when mode is unknown',
     );
   });
@@ -65,19 +65,11 @@ module('Unit | Lib | tool-auto-execute', function () {
     // in the timeline but must never execute them, even in act mode or with
     // requiresApproval=false.
     assert.false(
-      isAutoExecutableCommand(
-        cmd('readRealmFile', false, 'ai-bot'),
-        'act',
-        true,
-      ),
+      isAutoExecutableTool(cmd('readRealmFile', false, 'ai-bot'), 'act', true),
       'executedBy overrides requiresApproval=false',
     );
     assert.false(
-      isAutoExecutableCommand(
-        cmd('readRealmFile', true, 'ai-bot'),
-        'act',
-        true,
-      ),
+      isAutoExecutableTool(cmd('readRealmFile', true, 'ai-bot'), 'act', true),
       'executedBy overrides act mode',
     );
   });
@@ -86,11 +78,7 @@ module('Unit | Lib | tool-auto-execute', function () {
     // The guard matches ai-bot's own executor explicitly, not any value — a
     // command executed by the host (or any other actor) is evaluated normally.
     assert.true(
-      isAutoExecutableCommand(
-        cmd('patchCardInstance', true, 'host'),
-        'act',
-        true,
-      ),
+      isAutoExecutableTool(cmd('patchCardInstance', true, 'host'), 'act', true),
       "executedBy: 'host' does not short-circuit; act mode still auto-executes",
     );
   });
@@ -102,7 +90,7 @@ module('Unit | Lib | tool-auto-execute', function () {
     // branches. UI callers rely on this so the manual approval bar / per-
     // command Apply button stay clickable for non-current-agent commands.
     assert.false(
-      isAutoExecutableCommand(
+      isAutoExecutableTool(
         cmd(CHECK_CORRECTNESS_COMMAND_NAME, true),
         'act',
         false,
@@ -110,11 +98,11 @@ module('Unit | Lib | tool-auto-execute', function () {
       'checkCorrectness from another agent does not auto-execute',
     );
     assert.false(
-      isAutoExecutableCommand(cmd('searchCard', false), 'act', false),
+      isAutoExecutableTool(cmd('searchCard', false), 'act', false),
       'requiresApproval=false from another agent does not auto-execute',
     );
     assert.false(
-      isAutoExecutableCommand(cmd('patchCardInstance', true), 'act', false),
+      isAutoExecutableTool(cmd('patchCardInstance', true), 'act', false),
       'act mode from another agent does not auto-execute',
     );
   });

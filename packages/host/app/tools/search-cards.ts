@@ -42,7 +42,7 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
     if (input.type) {
       filter.type = input.type;
     }
-    return new SearchCardsByQueryTool(this.commandContext).execute({
+    return new SearchCardsByQueryTool(this.toolContext).execute({
       query: {
         filter: filter as Filter,
       },

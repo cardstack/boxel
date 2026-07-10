@@ -180,7 +180,7 @@ export default class CreateListingModal extends Component<Signature> {
     // specifiers, so the catalog file isn't independently buildable. Going
     // through the loader is the only path that resolves both correctly.
     let module = await this.loaderService.loader.import<{
-      default: new (commandContext: ToolContext) => {
+      default: new (toolContext: ToolContext) => {
         execute: (input: {
           codeRef: ResolvedCodeRef;
           targetRealm: string;
@@ -194,7 +194,7 @@ export default class CreateListingModal extends Component<Signature> {
     let ListingCreateCommand = module.default;
 
     let result = await new ListingCreateCommand(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     ).execute({
       codeRef,
       targetRealm,

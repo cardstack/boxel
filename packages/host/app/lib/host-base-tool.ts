@@ -13,9 +13,9 @@ export default abstract class HostBaseTool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > extends Command<CardInputType, CardResultType> {
-  constructor(commandContext: ToolContext) {
-    super(commandContext);
-    setOwner(this, getOwner(commandContext)!);
+  constructor(toolContext: ToolContext) {
+    super(toolContext);
+    setOwner(this, getOwner(toolContext)!);
   }
 
   @service declare protected loaderService: LoaderService;

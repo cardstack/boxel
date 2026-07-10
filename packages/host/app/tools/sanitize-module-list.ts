@@ -59,13 +59,13 @@ export default class SanitizeModuleListTool extends HostBaseTool<
 
         // Only allow modules that belong to a realm we can read
         const { realmIdentifier } = await new GetRealmOfResourceIdentifierTool(
-          this.commandContext,
+          this.toolContext,
         ).execute({ resourceIdentifier: dep });
         if (!realmIdentifier) {
           return null;
         }
         const { canRead } = await new CanReadRealmTool(
-          this.commandContext,
+          this.toolContext,
         ).execute({ realmIdentifier });
         return canRead ? dep : null;
       }),

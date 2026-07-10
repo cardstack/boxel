@@ -57,7 +57,7 @@ export default class CopyAndEditTool extends HostBaseTool<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let copyCardCommand = new CopyCardToRealmTool(this.commandContext);
+    let copyCardCommand = new CopyCardToRealmTool(this.toolContext);
     let { newCardId } = await copyCardCommand.execute({
       sourceCard: input.card,
       targetRealm,

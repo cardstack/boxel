@@ -223,7 +223,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
-        commandContext: this.toolService.commandContext,
+        toolContext: this.toolService.toolContext,
         format: this.format,
       }) || [],
     );

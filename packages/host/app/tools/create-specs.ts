@@ -226,7 +226,7 @@ export default class CreateSpecTool extends HostBaseTool<
     if (autoGenerateReadme && !createdSpecRes.spec.readMe) {
       // we populate the readme when is not already set even when spec is already created
       let generateReadmeSpecCommand = new GenerateReadmeSpecTool(
-        this.commandContext,
+        this.toolContext,
       );
       await generateReadmeSpecCommand.execute({
         spec: createdSpecRes.spec,

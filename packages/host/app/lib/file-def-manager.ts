@@ -355,13 +355,13 @@ export default class FileDefManagerImpl
     }
 
     // Create the command defs to get the json schema
-    let commandDefinitionSchemas: ToolDefinitionSchema[] = [];
+    let toolDefinitionSchemas: ToolDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
 
-    for (let commandDef of toolDefinitionFileDefs) {
+    for (let toolDef of toolDefinitionFileDefs) {
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
-        commandDef.codeRef,
-        commandDef[relativeTo],
+        toolDef.codeRef,
+        toolDef[relativeTo],
         undefined,
         this.network.virtualNetwork,
       ) as ResolvedCodeRef;
@@ -369,8 +369,8 @@ export default class FileDefManagerImpl
         absoluteCodeRef,
         this.loaderService.loader,
       );
-      const command = new Command(this.toolService.commandContext);
-      const name = commandDef.functionName;
+      const command = new Command(this.toolService.toolContext);
+      const name = toolDef.functionName;
       const schema: ToolDefinitionSchema = {
         codeRef: absoluteCodeRef,
         tool: {
@@ -394,12 +394,12 @@ export default class FileDefManagerImpl
           },
         },
       };
-      commandDefinitionSchemas.push(schema);
+      toolDefinitionSchemas.push(schema);
     }
 
     // Upload each command definition schema as a file
     let fileDefs = await Promise.all(
-      commandDefinitionSchemas.map(async (schema) => {
+      toolDefinitionSchemas.map(async (schema) => {
         const name = schema.tool.function.name;
         const content = JSON.stringify(schema);
         const contentHash = await this.getContentHash(content);

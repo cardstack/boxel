@@ -18,7 +18,7 @@ export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 // satisfy one of the three branches below. Callers that don't track
 // agents (e.g. unit tests) can pass `true` to focus on the other
 // conditions.
-export function isAutoExecutableCommand(
+export function isAutoExecutableTool(
   command: Pick<MessageTool, 'name' | 'requiresApproval' | 'executedBy'>,
   activeLLMMode: LLMMode | undefined,
   isOwnedByCurrentAgent: boolean,

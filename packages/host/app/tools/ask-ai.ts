@@ -28,11 +28,9 @@ export default class AskAiTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.AskAiInput,
   ): Promise<BaseToolModule.AskAiOutput> {
-    let createRoomCommand = new CreateAiAssistantRoomTool(this.commandContext);
-    let openRoomCommand = new OpenAiAssistantRoomTool(this.commandContext);
-    let sendMessageCommand = new SendAiAssistantMessageTool(
-      this.commandContext,
-    );
+    let createRoomCommand = new CreateAiAssistantRoomTool(this.toolContext);
+    let openRoomCommand = new OpenAiAssistantRoomTool(this.toolContext);
+    let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
 
     let [skillIds, openCards] = await Promise.all([
       this.matrixService.loadDefaultSkills('code') || Promise.resolve([]),

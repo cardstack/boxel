@@ -60,9 +60,7 @@ export default class PopulateWithSampleDataTool extends HostBaseTool<
       throw new Error(`Could not load card: ${card.message}`);
     }
 
-    let sendMessageCommand = new SendAiAssistantMessageTool(
-      this.commandContext,
-    );
+    let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
 
     await sendMessageCommand.execute({
       roomId: this.matrixService.currentRoomId,

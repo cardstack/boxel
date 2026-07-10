@@ -65,9 +65,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
 
     // Only send message if prompt is provided
     if (input.prompt && input.prompt.trim() !== '') {
-      let sendMessageCommand = new SendAiAssistantMessageTool(
-        this.commandContext,
-      );
+      let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
       let sendMessageResult = await sendMessageCommand.execute({
         roomId,
         prompt: input.prompt,
@@ -103,7 +101,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
 
     // Create a new room if no roomId is provided and no current room exists
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
-      this.commandContext,
+      this.toolContext,
     );
     let createRoomResult = await createAIAssistantRoomCommand.execute({
       name: input.roomName,
@@ -117,7 +115,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   ): Promise<void> {
     if (input.openRoom) {
       let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
-        this.commandContext,
+        this.toolContext,
       );
       await openAiAssistantRoomCommand.execute({
         roomId,
@@ -141,7 +139,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
       return;
     }
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(this.commandContext);
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(this.toolContext);
     await updateRoomSkillsCommand.execute({
       roomId,
       skillCardIdsToActivate: [...skillCardIds],
@@ -180,7 +178,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
     roomId: string,
   ): Promise<void> {
     if (input.llmModel) {
-      let setActiveLLMCommand = new SetActiveLLMTool(this.commandContext);
+      let setActiveLLMCommand = new SetActiveLLMTool(this.toolContext);
       await setActiveLLMCommand.execute({
         roomId,
         model: input.llmModel,

@@ -1,0 +1,119 @@
+import { getOwner } from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import RealmService from '@cardstack/host/services/realm';
+import SetUserSystemCardTool from '@cardstack/host/tools/set-user-system-card';
+
+import {
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  testRealmInfo,
+  testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
+
+module('Integration | tools | set-user-system-card', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
+
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
+  });
+
+  test('sets the system card account data', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardTool(toolService.toolContext);
+
+    let systemCardId = `${testRealmURL}SystemCard/default`;
+
+    await command.execute({
+      cardId: systemCardId,
+    });
+
+    assert.deepEqual(mockMatrixUtils.getSystemCardAccountData(), {
+      id: systemCardId,
+    });
+  });
+
+  test('clears system card account data when cardId is empty', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardTool(toolService.toolContext);
+
+    // First set a system card
+    let systemCardId = `${testRealmURL}SystemCard/default`;
+    await command.execute({
+      cardId: systemCardId,
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: systemCardId },
+      'system card is set',
+    );
+
+    // Clear it with empty cardId
+    await command.execute({
+      cardId: '',
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: undefined },
+      'system card is cleared with empty string',
+    );
+  });
+
+  test('clears system card account data when cardId is omitted', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new SetUserSystemCardTool(toolService.toolContext);
+
+    // First set a system card
+    let systemCardId = `${testRealmURL}SystemCard/default`;
+    await command.execute({
+      cardId: systemCardId,
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: systemCardId },
+      'system card is set',
+    );
+
+    // Clear it by omitting cardId
+    await command.execute({});
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: undefined },
+      'system card is cleared when cardId is omitted',
+    );
+  });
+});

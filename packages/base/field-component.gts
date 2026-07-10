@@ -86,7 +86,7 @@ const DEFAULT_CARD_CONTEXT = {
     modify() {}
   },
   actions: undefined,
-  commandContext: undefined,
+  toolContext: undefined,
   getCard: () => {},
   getCards: () => {},
   getCardCollection: () => {},

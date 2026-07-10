@@ -36,7 +36,7 @@ export default class ListingActionBuildTool extends HostBaseTool<
     const prompt = `Generate .gts card definition for "${listing.name}" implementing all requirements from the attached listing specification. Then preview the final code in playground panel.`;
 
     const { roomId } = await new CreateAiAssistantRoomTool(
-      this.commandContext,
+      this.toolContext,
     ).execute({
       name: `Build ${listing.name}`,
     });
@@ -48,29 +48,29 @@ export default class ListingActionBuildTool extends HostBaseTool<
     ];
 
     if (roomId) {
-      await new SetActiveLLMTool(this.commandContext).execute({
+      await new SetActiveLLMTool(this.toolContext).execute({
         roomId,
         model: DEFAULT_CODING_LLM,
         mode: 'act',
       });
 
-      await new UpdateRoomSkillsTool(this.commandContext).execute({
+      await new UpdateRoomSkillsTool(this.toolContext).execute({
         roomId,
         skillCardIdsToActivate: defaultSkills,
       });
 
-      await new SwitchSubmodeTool(this.commandContext).execute({
+      await new SwitchSubmodeTool(this.toolContext).execute({
         submode: 'code',
         codePath: `${realmUrl}index.json`,
       });
 
-      await new SendAiAssistantMessageTool(this.commandContext).execute({
+      await new SendAiAssistantMessageTool(this.toolContext).execute({
         roomId,
         prompt,
         attachedCards: [listing],
       });
 
-      await new OpenAiAssistantRoomTool(this.commandContext).execute({
+      await new OpenAiAssistantRoomTool(this.toolContext).execute({
         roomId,
       });
     }

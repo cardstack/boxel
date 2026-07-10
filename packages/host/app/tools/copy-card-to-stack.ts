@@ -39,7 +39,7 @@ export default class CopyCardToStackTool extends HostBaseTool<
     if (!realmToCopyTo) {
       throw new Error('Cannot determine target realm to copy card to');
     }
-    let copyCardToRealmCommand = new CopyCardToRealmTool(this.commandContext);
+    let copyCardToRealmCommand = new CopyCardToRealmTool(this.toolContext);
     return await copyCardToRealmCommand.execute({
       sourceCard: input.sourceCard,
       targetRealm: realmToCopyTo,
