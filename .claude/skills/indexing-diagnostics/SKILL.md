@@ -1131,7 +1131,7 @@ A large `searchDocMs` with **no** `searchDocFieldsMs` entries means no single fi
 ### What Mode J can't tell you
 
 - **Nothing below the field grain.** A hot leaf field's time is one number; profiling inside its `computeVia` is Mode H territory.
-- **Older rows predate the detail.** Rows indexed before these fields shipped have neither block; absence there means "not measured", not "fast". Check `indexedAt`.
+- **A row can predate the instrumentation.** A row whose producing host build didn't emit these fields carries none of them; absence means "not measured", not "fast". Check `indexedAt` against when the realm was last reindexed.
 - **The bounded lists drop the tail.** Entries below the floor (or beyond the slowest 20) aren't persisted; the aggregates (`searchDocSettleMs`, `searchDocMs`) still carry the total, so the un-itemized remainder is the difference.
 
 ## Field-by-field reading
