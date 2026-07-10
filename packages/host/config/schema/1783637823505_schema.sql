@@ -131,6 +131,7 @@
    is_deleted BOOLEAN,
    error_doc BLOB,
    rendered_at,
+   diagnostics BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -152,6 +153,7 @@
    error_doc BLOB,
    rendered_at,
    job_id INTEGER,
+   diagnostics BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

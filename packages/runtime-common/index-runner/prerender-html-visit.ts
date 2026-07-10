@@ -2,6 +2,7 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
+  flattenPrerenderHtmlVisitMeta,
   isCardResource,
   jobIdentity,
   logger,
@@ -320,6 +321,13 @@ async function visitForPrerenderedHtml({
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   });
 
+  // The visit's render diagnostics (launch/wait timings, render elapsed,
+  // per-format render timings, `prerenderHtmlRequestId`). One visit produces
+  // both the instance and the file rendering of a URL, so the same blob
+  // lands on both rows — mirroring how the fused pass stamps one merged
+  // blob on both of a URL's `boxel_index` rows.
+  let diagnostics = flattenPrerenderHtmlVisitMeta(response.meta);
+
   if (parsedCardResource) {
     let card = response.card;
     let cardError = card?.error ?? response.pageUnusableError;
@@ -343,6 +351,7 @@ async function visitForPrerenderedHtml({
           ...error,
           deps: uniqueDeps(error.deps, card?.deps ?? undefined, metaModuleDeps),
         },
+        ...(diagnostics ? { diagnostics } : {}),
       });
       stats.instanceErrors++;
     } else {
@@ -357,6 +366,7 @@ async function visitForPrerenderedHtml({
         // The render route's settle-time dependency snapshot — what the
         // format renders actually pulled in (scoped-CSS URLs included).
         deps: card.deps ?? [],
+        ...(diagnostics ? { diagnostics } : {}),
       });
       stats.instancesIndexed++;
     }
@@ -378,6 +388,7 @@ async function visitForPrerenderedHtml({
         ...error,
         deps: uniqueDeps(error.deps, response.fileExtract?.deps),
       },
+      ...(diagnostics ? { diagnostics } : {}),
     });
     stats.fileErrors++;
   } else {
@@ -390,6 +401,7 @@ async function visitForPrerenderedHtml({
       fittedHtml: fileRender.fittedHTML,
       markdown: fileRender.markdown,
       deps: response.fileExtract?.deps ?? [],
+      ...(diagnostics ? { diagnostics } : {}),
     });
     stats.filesIndexed++;
   }

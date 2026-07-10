@@ -564,6 +564,7 @@ export async function rebuildWorkingIndexFromIndex(
              generation,
              is_deleted,
              error_doc,
+             diagnostics,
              rendered_at
            )
            SELECT
@@ -582,6 +583,7 @@ export async function rebuildWorkingIndexFromIndex(
              generation,
              is_deleted,
              error_doc,
+             diagnostics,
              rendered_at
            FROM prerendered_html`,
         );

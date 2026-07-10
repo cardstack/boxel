@@ -68,6 +68,7 @@ const PRERENDERED_HTML_MUTABLE_COLUMNS = [
   'is_deleted',
   'error_doc',
   'rendered_at',
+  'diagnostics',
   'job_id',
 ];
 
@@ -212,11 +213,22 @@ export interface PrerenderedHtmlEntry {
   atomHtml?: string | null;
   markdown?: string | null;
   deps: string[];
+  // The prerender-html visit's render diagnostics (launch/wait timings,
+  // render elapsed, per-format render timings, `prerenderHtmlRequestId`).
+  // Persisted onto `prerendered_html.diagnostics` — the render-channel
+  // analog of `InstanceEntry.diagnostics`, populated for successful rows
+  // too so operators can retrospectively answer "why did this rendering
+  // take N seconds?".
+  diagnostics?: Diagnostics;
 }
 
 export interface PrerenderedHtmlErrorEntry {
   type: 'instance-error' | 'file-error';
   error: SerializedError;
+  // See PrerenderedHtmlEntry.diagnostics: the failing render's own
+  // breakdown. Also mirrored onto `error_doc.diagnostics` at write time,
+  // matching the `boxel_index` error-row pattern.
+  diagnostics?: Diagnostics;
 }
 
 // The invalidation set an index pass threads to its `prerender_html` job:
@@ -974,6 +986,7 @@ export class Batch {
       'realm_url',
       'is_deleted',
       'error_doc',
+      'diagnostics',
       'rendered_at',
       'job_id',
     ].map((c) => [c]);
@@ -994,6 +1007,7 @@ export class Batch {
           this.realmURL.href,
           true, // is_deleted
           null, // error_doc — a tombstone clears any prior render error
+          null, // diagnostics — likewise cleared; they described the render this tombstone hides
           now,
           jobIdValue,
         ].map((v) => [param(v)]),
@@ -1062,6 +1076,7 @@ export class Batch {
           deps,
           last_known_good_deps: deps,
           error_doc: null,
+          diagnostics: entry.diagnostics ?? null,
         };
         break;
       }
@@ -1072,7 +1087,23 @@ export class Batch {
           url,
           type,
         );
-        let errorDoc = this.normalizeErrorDoc(entry.error, url);
+        // The column is the canonical home for the failing render's
+        // diagnostics; the copy on `error_doc.diagnostics` mirrors the
+        // `boxel_index` error-row pattern so error-doc consumers read one
+        // shape on both channels. Unlike the HTML columns below, the
+        // diagnostics are NOT taken from the last-known-good production
+        // row — they describe this failing render.
+        let errorDoc = this.normalizeErrorDoc(
+          {
+            ...entry.error,
+            ...(entry.diagnostics
+              ? {
+                  diagnostics: entry.diagnostics as Record<string, unknown>,
+                }
+              : {}),
+          },
+          url,
+        );
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,
@@ -1090,6 +1121,7 @@ export class Batch {
           ],
           last_known_good_deps: production?.last_known_good_deps ?? null,
           error_doc: errorDoc,
+          diagnostics: entry.diagnostics ?? null,
         };
         break;
       }
@@ -1468,13 +1500,16 @@ export class Batch {
   // Dual-write: project `boxel_index_working` rows onto `prerendered_html_working`
   // for the given URLs. During the fused indexing pass `boxel_index_working`
   // holds the HTML (the read path still reads it); this mirrors it onto the
-  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`) and
-  // the last-known-good HTML preserved through error cycles, with `rendered_at`
-  // seeded from the source row's `indexed_at`. Called from `applyBatchUpdates`
-  // over the whole invalidation set just before the production swap, so the
-  // projection is complete for every promoted row. Deriving from the
-  // already-persisted row reuses the error-path last-known-good merge that
-  // `updateEntry` computed and avoids re-serializing the HTML through JS.
+  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`),
+  // the last-known-good HTML preserved through error cycles, and the row's
+  // `diagnostics` (a fused pass produces one combined index+render blob, so
+  // the projection carries that whole blob rather than a render-only split),
+  // with `rendered_at` seeded from the source row's `indexed_at`. Called from
+  // `applyBatchUpdates` over the whole invalidation set just before the
+  // production swap, so the projection is complete for every promoted row.
+  // Deriving from the already-persisted row reuses the error-path
+  // last-known-good merge that `updateEntry` computed and avoids
+  // re-serializing the HTML through JS.
   private async syncPrerenderedHtmlFromWorking(urls: string[]): Promise<void> {
     if (urls.length === 0) {
       return;
@@ -1490,13 +1525,13 @@ export class Batch {
            url, file_alias, realm_url, type,
            fitted_html, embedded_html, atom_html, head_html, isolated_html,
            markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, rendered_at, job_id
+           generation, is_deleted, error_doc, diagnostics, rendered_at, job_id
          )
          SELECT
            url, file_alias, realm_url, type,
            fitted_html, embedded_html, atom_html, head_html, isolated_html,
            markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, indexed_at, job_id
+           generation, is_deleted, error_doc, diagnostics, indexed_at, job_id
          FROM boxel_index_working WHERE`,
         ...every([
           ['realm_url =', param(this.realmURL.href)],
