@@ -65,7 +65,7 @@ export const StarryNight = `:root {
   --destructive: oklch(0.5280 0.1200 357.1130);
   --destructive-foreground: oklch(0.9097 0.1440 95.1120);
   --border: oklch(0.3072 0.0287 281.7681);
-  --input: oklch(0.4815 0.1178 263.3758);
+  --input: oklch(0.6896 0.0714 234.0387);
   --ring: oklch(0.9097 0.1440 95.1120);
   --chart-1: oklch(0.4815 0.1178 263.3758);
   --chart-2: oklch(0.9097 0.1440 95.1120);
