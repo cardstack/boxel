@@ -617,7 +617,14 @@ export default class ToolService extends Service {
     }
   }
 
+  // Pre-rename spelling of `toolContext`: realm content constructs tools with
+  // `getService('tool-service').commandContext` (and via the command-service
+  // registration alias). Stays until no deployed content references it.
   get commandContext(): ToolContext {
+    return this.toolContext;
+  }
+
+  get toolContext(): ToolContext {
     let result = {
       [ToolContextStamp]: true,
     };
@@ -701,11 +708,11 @@ export default class ToolService extends Service {
           toolCodeRef,
           this.loaderService.loader,
         )) as { new (context: ToolContext): Command<any, any> };
-        toolToRun = new ToolConstructor(this.commandContext);
+        toolToRun = new ToolConstructor(this.toolContext);
       }
 
       if (!toolToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-        toolToRun = new CheckCorrectnessTool(this.commandContext);
+        toolToRun = new CheckCorrectnessTool(this.toolContext);
       }
 
       if (toolToRun) {
@@ -801,7 +808,7 @@ export default class ToolService extends Service {
     let toolInstance: GenericCommand | undefined;
 
     if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-      toolInstance = new CheckCorrectnessTool(this.commandContext);
+      toolInstance = new CheckCorrectnessTool(this.toolContext);
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
@@ -812,13 +819,13 @@ export default class ToolService extends Service {
       if (!ToolConstructor) {
         error = `No command for the name "${command.name}" was found`;
       } else {
-        toolInstance = new ToolConstructor(this.commandContext);
+        toolInstance = new ToolConstructor(this.toolContext);
       }
     }
 
     if (toolInstance && !error) {
       let loader = (
-        getOwner(this.commandContext)!.lookup(
+        getOwner(this.toolContext)!.lookup(
           'service:loader-service',
         ) as LoaderService
       ).loader;
@@ -925,7 +932,7 @@ export default class ToolService extends Service {
     let finalFileIdentifier: string | undefined;
 
     try {
-      let patchCodeCommand = new PatchCodeTool(this.commandContext);
+      let patchCodeCommand = new PatchCodeTool(this.toolContext);
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileIdentifier: fileUrl,

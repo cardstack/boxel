@@ -62,7 +62,7 @@ module('Integration | tools | send-bot-trigger-event', function (hooks) {
     });
     let toolService = getService('tool-service');
 
-    let command = new SendBotTriggerEventTool(toolService.commandContext);
+    let command = new SendBotTriggerEventTool(toolService.toolContext);
     await command.execute({
       roomId,
       type: 'pr-listing-create',

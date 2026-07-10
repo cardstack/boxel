@@ -13,18 +13,18 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
 
   @action
   async createRoom() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) return;
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) return;
 
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
-      commandContext,
+      toolContext,
     );
     let { roomId } = await createAIAssistantRoomCommand.execute({
       name: `Chat with ${this.modelId}`,
     });
 
     let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
-      commandContext,
+      toolContext,
     );
     await openAiAssistantRoomCommand.execute({
       roomId,
@@ -37,10 +37,10 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
   async setLLM() {
     if (!this.currentRoomId) return;
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) return;
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) return;
 
-    let setActiveLLMCommand = new SetActiveLLMTool(commandContext);
+    let setActiveLLMCommand = new SetActiveLLMTool(toolContext);
 
     await setActiveLLMCommand.execute({
       model: this.modelId,

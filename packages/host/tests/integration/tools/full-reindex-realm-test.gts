@@ -83,7 +83,7 @@ module('Integration | tools | full-reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new FullReindexRealmTool(toolService.commandContext);
+    let command = new FullReindexRealmTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     assert.false(
@@ -158,7 +158,7 @@ module('Integration | tools | full-reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new FullReindexRealmTool(toolService.commandContext);
+    let command = new FullReindexRealmTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -178,7 +178,7 @@ module('Integration | tools | full-reindex-realm', function (hooks) {
 
   test('description explains forced full reindex semantics', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new FullReindexRealmTool(toolService.commandContext);
+    let command = new FullReindexRealmTool(toolService.toolContext);
 
     assert.true(
       command.description.includes('every file in the realm is revisited'),

@@ -68,7 +68,7 @@ module('Integration | tools | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalTool(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.toolContext);
 
     await command.execute({
       codeRef: {
@@ -94,7 +94,7 @@ module('Integration | tools | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalTool(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.toolContext);
 
     await command.execute({
       codeRef: {
@@ -126,7 +126,7 @@ module('Integration | tools | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalTool(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.toolContext);
 
     await command.execute({
       codeRef: {
@@ -147,7 +147,7 @@ module('Integration | tools | open-create-listing-modal', function (hooks) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreateListingModalTool(toolService.commandContext);
+    let command = new OpenCreateListingModalTool(toolService.toolContext);
 
     await command.execute({
       codeRef: {

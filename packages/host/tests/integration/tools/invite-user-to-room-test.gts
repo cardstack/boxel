@@ -63,7 +63,7 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
     let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new InviteUserToRoomTool(toolService.commandContext);
+    let command = new InviteUserToRoomTool(toolService.toolContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',
@@ -89,7 +89,7 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
     });
     let toolService = getService('tool-service');
 
-    let command = new InviteUserToRoomTool(toolService.commandContext);
+    let command = new InviteUserToRoomTool(toolService.toolContext);
     await command.execute({
       roomId,
       userId: 'submissionbot',

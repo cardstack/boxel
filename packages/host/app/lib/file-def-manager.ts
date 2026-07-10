@@ -369,7 +369,7 @@ export default class FileDefManagerImpl
         absoluteCodeRef,
         this.loaderService.loader,
       );
-      const command = new Command(this.toolService.commandContext);
+      const command = new Command(this.toolService.toolContext);
       const name = toolDef.functionName;
       const schema: ToolDefinitionSchema = {
         codeRef: absoluteCodeRef,

@@ -90,7 +90,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -148,7 +148,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('can patch a containsMany field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -206,7 +206,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('patching a containsMany field with a shorter array fully replaces it (no stale trailing items)', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -254,7 +254,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('patching a polymorphic containsMany field clears stale field metadata', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -318,7 +318,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('can patch a linksTo field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -382,7 +382,7 @@ module('Integration | tools | patch-instance', function (hooks) {
 
   test<TestContextWithSave>('can patch a linksToMany field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -448,7 +448,7 @@ module('Integration | tools | patch-instance', function (hooks) {
     let storeService = getService('store');
     let cardId = `${testRealmURL}Person/hassan`;
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },
@@ -536,7 +536,7 @@ module('Integration | tools | patch-instance', function (hooks) {
     await store.add(andrea, { realm: testRealmURL, doNotPersist: true });
 
     let patchInstanceCommand = new PatchCardInstanceTool(
-      toolService.commandContext,
+      toolService.toolContext,
       {
         cardType: PersonDef,
       },

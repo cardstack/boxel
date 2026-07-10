@@ -174,7 +174,7 @@ module('Acceptance | Tools tests', function (hooks) {
           topic: 'unset topic',
           participants: input.participants,
         });
-        let saveCardCommand = new SaveCardTool(this.commandContext);
+        let saveCardCommand = new SaveCardTool(this.toolContext);
         let savedMeeting = await saveCardCommand.execute({
           card: meeting,
           realm: testRealmURL,
@@ -182,13 +182,13 @@ module('Acceptance | Tools tests', function (hooks) {
         savedMeetingCardId = savedMeeting?.id;
 
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
-          this.commandContext,
+          this.toolContext,
         );
         let { roomId } = await createAIAssistantRoomCommand.execute({
           name: 'AI Assistant Room',
         });
         let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
-          this.commandContext,
+          this.toolContext,
         );
         let { eventId } = await sendAiAssistantMessageCommand.execute({
           roomId,
@@ -197,19 +197,19 @@ module('Acceptance | Tools tests', function (hooks) {
         });
 
         await waitForCompletedCommandRequest(
-          this.commandContext,
+          this.toolContext,
           roomId,
           (toolRequest) => toolRequest.name === 'patchCardInstance',
           { afterEventId: eventId },
         );
 
         await waitForRealmState(
-          this.commandContext,
+          this.toolContext,
           testRealmURL,
           () => meeting.topic === input.topic,
         );
 
-        let showCardCommand = new ShowCardTool(this.commandContext);
+        let showCardCommand = new ShowCardTool(this.toolContext);
         await showCardCommand.execute({
           cardId: meeting.id,
         });
@@ -240,18 +240,16 @@ module('Acceptance | Tools tests', function (hooks) {
       static actionVerb = 'Search';
       async getInputType() {
         return new SearchCardsByTypeAndTitleTool(
-          this.commandContext,
+          this.toolContext,
         ).getInputType();
       }
       protected async run(
         input: SearchCardsByTypeAndTitleInput,
       ): Promise<undefined> {
-        let searchCommand = new SearchCardsByTypeAndTitleTool(
-          this.commandContext,
-        );
+        let searchCommand = new SearchCardsByTypeAndTitleTool(this.toolContext);
         let searchResult = await searchCommand.execute(input);
         if (searchResult.cardIds.length > 0) {
-          let showCardCommand = new ShowCardTool(this.commandContext);
+          let showCardCommand = new ShowCardTool(this.toolContext);
           await showCardCommand.execute({
             cardId: searchResult.cardIds[0],
           });
@@ -302,12 +300,12 @@ module('Acceptance | Tools tests', function (hooks) {
 
       static isolated = class Isolated extends Component<typeof this> {
         runScheduleMeetingCommand = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
+          let toolContext = this.args.context?.toolContext;
+          if (!toolContext) {
             console.error('No command context found');
             return;
           }
-          let scheduleMeeting = new ScheduleMeetingCommand(commandContext);
+          let scheduleMeeting = new ScheduleMeetingCommand(toolContext);
           setOwner(scheduleMeeting, getOwner(this)!);
           await scheduleMeeting.execute({
             topic: 'Meeting with Hassan',
@@ -316,14 +314,14 @@ module('Acceptance | Tools tests', function (hooks) {
         };
 
         runOpenAiAssistantRoomCommand = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
+          let toolContext = this.args.context?.toolContext;
+          if (!toolContext) {
             console.error('No command context found');
             return;
           }
 
           let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
-            commandContext,
+            toolContext,
           );
           await openAiAssistantRoomCommand.execute({
             roomId: getRoomIds().pop()!,
@@ -331,13 +329,13 @@ module('Acceptance | Tools tests', function (hooks) {
         };
 
         runMaybeBoomCommandViaAiAssistant = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
+          let toolContext = this.args.context?.toolContext;
+          if (!toolContext) {
             console.error('No command context found');
             return;
           }
           let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
-            commandContext,
+            toolContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'AI Assistant Room',
@@ -348,7 +346,7 @@ module('Acceptance | Tools tests', function (hooks) {
             ],
           });
           let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
-            commandContext,
+            toolContext,
           );
           await sendAiAssistantMessageCommand.execute({
             prompt: "Let's find out if it will boom",

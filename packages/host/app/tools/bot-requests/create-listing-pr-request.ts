@@ -45,7 +45,7 @@ export default class CreateListingPRRequestTool extends HostBaseTool<
       listingSummary = listing.summary ?? undefined;
     }
 
-    let useAiAssistantCommand = new UseAiAssistantTool(this.commandContext);
+    let useAiAssistantCommand = new UseAiAssistantTool(this.toolContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
       roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
@@ -60,7 +60,7 @@ export default class CreateListingPRRequestTool extends HostBaseTool<
 
     let submittedBy = this.matrixService.userId ?? undefined;
 
-    await new SendBotTriggerEventTool(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.toolContext).execute({
       roomId,
       realm,
       type: 'pr-listing-create',

@@ -26,7 +26,7 @@ export default class TransformCardsTool extends HostBaseTool<
 
   protected async run(input: VisitCardsInput): Promise<undefined> {
     let { cardIds } = await new SearchCardsByQueryTool(
-      this.commandContext,
+      this.toolContext,
     ).execute({
       query: input.query,
     });
@@ -35,17 +35,17 @@ export default class TransformCardsTool extends HostBaseTool<
       this.loaderService.loader,
     );
     let visitPromises = cardIds.map(async (cardId: string) => {
-      let readSourceCommand = new ReadSourceTool(this.commandContext);
+      let readSourceCommand = new ReadSourceTool(this.toolContext);
       let { content } = await readSourceCommand.execute({
         path: cardId + '.json',
       });
 
-      let { json } = await new CommandClass(this.commandContext).execute({
+      let { json } = await new CommandClass(this.toolContext).execute({
         json: JSON.parse(content),
       });
 
       let updatedContent = JSON.stringify(json, null, 2);
-      let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
+      let writeTextFileCommand = new WriteTextFileTool(this.toolContext);
       return writeTextFileCommand.execute({
         content: updatedContent,
         path: cardId + '.json',

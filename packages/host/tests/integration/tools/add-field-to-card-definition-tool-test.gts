@@ -65,7 +65,7 @@ module(
       let toolService = getService('tool-service');
       let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       await addFieldToCardDefinitionCommand.execute({
@@ -103,7 +103,7 @@ module(
       let toolService = getService('tool-service');
       let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       await addFieldToCardDefinitionCommand.execute({

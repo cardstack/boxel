@@ -87,7 +87,7 @@ export default class RetrySubmissionWorkflowTool extends HostBaseTool<
     );
 
     try {
-      await new SendBotTriggerEventTool(this.commandContext).execute({
+      await new SendBotTriggerEventTool(this.toolContext).execute({
         roomId,
         realm: listingRealm,
         type: 'pr-listing-retry',

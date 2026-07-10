@@ -71,7 +71,7 @@ module(
     test('returns the list of available realm identifiers', async function (assert) {
       let toolService = getService('tool-service');
       let command = new GetAvailableRealmIdentifiersTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
       let result = await command.execute();
       assert.deepEqual(result.realmIdentifiers, [

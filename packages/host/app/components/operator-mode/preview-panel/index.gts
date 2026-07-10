@@ -152,7 +152,7 @@ export default class PreviewPanel extends Component<Signature> {
         canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
-        commandContext: this.toolService.commandContext,
+        toolContext: this.toolService.toolContext,
       }),
     );
   }

@@ -52,14 +52,14 @@ module('Integration | tools | search', function (hooks) {
   }) {
     let toolService = getService('tool-service');
     let searchCommand = new SearchCardsByTypeAndTitleTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
     return searchCommand.execute(input);
   }
 
   function runQuerySearch(query: Query) {
     let toolService = getService('tool-service');
-    let searchCommand = new SearchCardsByQueryTool(toolService.commandContext);
+    let searchCommand = new SearchCardsByQueryTool(toolService.toolContext);
     return searchCommand.execute({ query });
   }
 

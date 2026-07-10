@@ -88,7 +88,7 @@ export class Task extends CardDef {
 
   test('lint-fixes contents before returning them', async function (assert) {
     let toolService = getService('tool-service');
-    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
 
     // Set up a custom lintStub that verifies the filename header
     adapter.lintStub = async (
@@ -156,7 +156,7 @@ export class Task extends CardDef {
     assert.expect(7);
 
     let toolService = getService('tool-service');
-    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
     let operatorModeStateService = getService('operator-mode-state-service');
     let cardService = getService('card-service');
 
@@ -228,7 +228,7 @@ ${REPLACE_MARKER}`;
 
   test('allows empty search and replace blocks via patch-code for new files', async function (assert) {
     let toolService = getService('tool-service');
-    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
     let emptyFileUrl = `${testRealmURL}empty.gts`;
 
     adapter.lintStub = async (request: Request): Promise<LintResult> => {
@@ -255,7 +255,7 @@ ${REPLACE_MARKER}`;
 
   test('skips linting for non-gts/ts files', async function (assert) {
     let toolService = getService('tool-service');
-    let patchCodeCommand = new PatchCodeTool(toolService.commandContext);
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
 
     adapter.lintStub = async () => {
       assert.ok(false, 'lint should not run for json files');

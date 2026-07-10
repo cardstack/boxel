@@ -60,10 +60,17 @@ export abstract class Tool<
   name: string = this.constructor.name;
   description = '';
 
-  protected readonly commandContext: ToolContext;
+  protected readonly toolContext: ToolContext;
 
-  constructor(commandContext: ToolContext) {
-    this.commandContext = commandContext;
+  constructor(toolContext: ToolContext) {
+    this.toolContext = toolContext;
+  }
+
+  // Pre-rename spelling of `toolContext`. Realm-content tool classes read
+  // `this.commandContext` inside run(); it stays until the content window
+  // confirms nothing does.
+  protected get commandContext(): ToolContext {
+    return this.toolContext;
   }
 
   async execute(): Promise<CardInstance<CardResultType>>;

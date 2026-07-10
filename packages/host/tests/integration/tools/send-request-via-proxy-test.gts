@@ -188,7 +188,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('successfully sends request and returns JSON response', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput();
@@ -209,7 +209,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('successfully sends request and returns text response', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -230,7 +230,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
 
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -263,7 +263,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
 
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -287,7 +287,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles 4xx error responses from external API', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -311,7 +311,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles 5xx error responses from external API', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -335,7 +335,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles realm server errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -355,7 +355,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles network errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -378,7 +378,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
     for (const method of methods) {
       const toolService = getService('tool-service');
       const requestForwardCommand = new SendRequestViaProxyTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       const input = createMockSendRequestViaProxyInput({ method });
@@ -404,7 +404,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
     for (const testCase of testCases) {
       const toolService = getService('tool-service');
       const requestForwardCommand = new SendRequestViaProxyTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       const input = createMockSendRequestViaProxyInput({
@@ -428,7 +428,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles large response data', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -456,7 +456,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
 
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -473,7 +473,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles empty request body', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({
@@ -490,7 +490,7 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
   test('handles null/undefined headers', async function (assert) {
     const toolService = getService('tool-service');
     const requestForwardCommand = new SendRequestViaProxyTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
 
     const input = createMockSendRequestViaProxyInput({

@@ -1759,7 +1759,7 @@ export default class Room extends Component<Signature> {
 
   private updateSkillIsActiveTask = task(
     async (isActive: boolean, skillCardId?: string) => {
-      await new UpdateRoomSkillsTool(this.toolService.commandContext).execute({
+      await new UpdateRoomSkillsTool(this.toolService.toolContext).execute({
         roomId: this.args.roomId,
         skillCardIdsToActivate: isActive ? [skillCardId!] : [],
         skillCardIdsToDeactivate: isActive ? [] : [skillCardId!],
@@ -1809,7 +1809,7 @@ export default class Room extends Component<Signature> {
 
   private attachSkillTask = task(async (cardId: string) => {
     let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
 
     await updateRoomSkillsCommand.execute({

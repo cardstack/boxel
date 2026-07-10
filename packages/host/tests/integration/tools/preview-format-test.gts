@@ -110,7 +110,7 @@ module('Integration | Command | preview-format', function (hooks) {
       }),
     );
 
-    command = new PreviewFormatTool(getService('tool-service').commandContext);
+    command = new PreviewFormatTool(getService('tool-service').toolContext);
   });
 
   test('switches to code submode and sets up preview', async function (assert) {

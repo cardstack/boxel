@@ -130,7 +130,7 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
 
   function runSync() {
     let toolService = getService('tool-service');
-    let command = new SyncOpenRouterModelsTool(toolService.commandContext);
+    let command = new SyncOpenRouterModelsTool(toolService.toolContext);
     return command.execute({ realmIdentifier: testRealmURL });
   }
 

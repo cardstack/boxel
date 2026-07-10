@@ -57,7 +57,7 @@ module('Integration | tools | get-default-writable-realm', function (hooks) {
 
   test('returns realm path when a default writable realm exists', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new GetDefaultWritableRealmTool(toolService.commandContext);
+    let command = new GetDefaultWritableRealmTool(toolService.toolContext);
     let result = await command.execute();
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
@@ -71,7 +71,7 @@ module('Integration | tools | get-default-writable-realm', function (hooks) {
       configurable: true,
     });
     let toolService = getService('tool-service');
-    let command = new GetDefaultWritableRealmTool(toolService.commandContext);
+    let command = new GetDefaultWritableRealmTool(toolService.toolContext);
     let result = await command.execute();
     assert.strictEqual(result.realmIdentifier, '');
   });

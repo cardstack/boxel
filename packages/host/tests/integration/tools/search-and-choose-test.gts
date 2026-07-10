@@ -142,9 +142,7 @@ export class ContextCard extends CardDef {
     );
 
     const toolService = getService('tool-service');
-    searchAndChooseCommand = new SearchAndChooseTool(
-      toolService.commandContext,
-    );
+    searchAndChooseCommand = new SearchAndChooseTool(toolService.toolContext);
   });
 
   test('LLM index selection uses sourceContextCodeRef as context', async function (assert) {

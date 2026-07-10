@@ -41,7 +41,7 @@ module(
               ...args: any[]
             ) => HostBaseTool<any, any>;
             let command = new TypedCommandClass(
-              getService('tool-service').commandContext,
+              getService('tool-service').toolContext,
             );
             const inputSchema = await command.getInputJsonSchema(
               cardAPI,

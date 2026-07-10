@@ -195,7 +195,7 @@ export default class RoomMessageTool extends Component<Signature> {
           activeRealmURL: this.activeRealmURL,
           canEditActiveRealm: this.canEditActiveRealm,
         },
-        commandContext: this.toolService.commandContext,
+        toolContext: this.toolService.toolContext,
       }) ?? [];
     return toMenuItems(menuItems);
   }

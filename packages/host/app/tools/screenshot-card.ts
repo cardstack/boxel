@@ -129,9 +129,7 @@ export default class ScreenshotCardTool extends HostBaseTool<
     // promotes the PNG into a PngDef / ImageDef card automatically.
     let filename = `${generateFilenameFromCard(cardURL)}.png`;
     let filePath = `Screenshots/${filename}`;
-    let writeResult = await new WriteBinaryFileTool(
-      this.commandContext,
-    ).execute({
+    let writeResult = await new WriteBinaryFileTool(this.toolContext).execute({
       path: filePath,
       realm: cardRealm,
       base64Content: attrs.base64,

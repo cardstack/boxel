@@ -141,9 +141,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('migrates a Skill card with commands into a SKILL.md', async function (assert) {
-    let commandContext = getService('tool-service').commandContext;
+    let toolContext = getService('tool-service').toolContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillTool(commandContext);
+    let command = new MigrateSkillTool(toolContext);
 
     let result = await command.execute({ realm: testRealmURL });
 
@@ -185,9 +185,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('omits boxel.tools when the skill has none', async function (assert) {
-    let commandContext = getService('tool-service').commandContext;
+    let toolContext = getService('tool-service').toolContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillTool(commandContext);
+    let command = new MigrateSkillTool(toolContext);
 
     await command.execute({ realm: testRealmURL });
 
@@ -203,9 +203,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('reports skills with no instructions instead of writing an empty file', async function (assert) {
-    let commandContext = getService('tool-service').commandContext;
+    let toolContext = getService('tool-service').toolContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillTool(commandContext);
+    let command = new MigrateSkillTool(toolContext);
 
     let result = await command.execute({ realm: testRealmURL });
 
@@ -224,9 +224,9 @@ export class DoThingQuietly extends Command {
   });
 
   test('skips existing targets unless overwrite is set', async function (assert) {
-    let commandContext = getService('tool-service').commandContext;
+    let toolContext = getService('tool-service').toolContext;
     let cardService = getService('card-service');
-    let command = new MigrateSkillTool(commandContext);
+    let command = new MigrateSkillTool(toolContext);
 
     let first = await command.execute({ realm: testRealmURL });
     assert.strictEqual(

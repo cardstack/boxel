@@ -90,9 +90,7 @@ module('Integration | tools | invalidate-realm-identifiers', function (hooks) {
   test('calls realm endpoint with expected auth header and payload', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let command = new InvalidateRealmIdentifiersTool(
-      toolService.commandContext,
-    );
+    let command = new InvalidateRealmIdentifiersTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     let result = await command.execute({
@@ -153,9 +151,7 @@ module('Integration | tools | invalidate-realm-identifiers', function (hooks) {
   test('throws when realm invalidation endpoint returns non-204', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let command = new InvalidateRealmIdentifiersTool(
-      toolService.commandContext,
-    );
+    let command = new InvalidateRealmIdentifiersTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';

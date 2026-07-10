@@ -76,7 +76,7 @@ module('Integration | tools | cancel-indexing-job', function (hooks) {
   test('calls realm endpoint with expected auth header', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let command = new CancelIndexingJobTool(toolService.commandContext);
+    let command = new CancelIndexingJobTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     let result = await command.execute({

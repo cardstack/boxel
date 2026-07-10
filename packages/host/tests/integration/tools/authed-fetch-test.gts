@@ -84,7 +84,7 @@ module('Integration | tools | authed-fetch', function (hooks) {
       text: async () => JSON.stringify({ data: 'hello' }),
     };
     let toolService = getService('tool-service');
-    let command = new AuthedFetchTool(toolService.commandContext);
+    let command = new AuthedFetchTool(toolService.toolContext);
     let result = await command.execute({
       url: 'https://example.com/api/resource',
     });
@@ -100,7 +100,7 @@ module('Integration | tools | authed-fetch', function (hooks) {
       text: async () => 'not found',
     };
     let toolService = getService('tool-service');
-    let command = new AuthedFetchTool(toolService.commandContext);
+    let command = new AuthedFetchTool(toolService.toolContext);
     let result = await command.execute({
       url: 'https://example.com/api/missing',
     });

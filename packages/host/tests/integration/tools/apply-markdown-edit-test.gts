@@ -171,9 +171,7 @@ module('Integration | tools | apply-markdown-edit', function (hooks) {
       }),
     );
 
-    command = new ApplyMarkdownEditTool(
-      getService('tool-service').commandContext,
-    );
+    command = new ApplyMarkdownEditTool(getService('tool-service').toolContext);
   });
 
   test('can apply requested content change', async function (assert) {

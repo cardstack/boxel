@@ -44,9 +44,7 @@ module('Integration | tools | open-workspace', function (hooks) {
       submode: 'interact',
       workspaceChooserOpened: true,
     });
-    let openWorkspaceCommand = new OpenWorkspaceTool(
-      toolService.commandContext,
-    );
+    let openWorkspaceCommand = new OpenWorkspaceTool(toolService.toolContext);
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await openWorkspaceCommand.execute({
       realmIdentifier: testRealmURL,

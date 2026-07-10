@@ -242,7 +242,7 @@ module('Integration | tools | transform-cards', function (hooks) {
 
   test('transforms all cards matching a query', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     await transformCommand.execute({
       query: {
@@ -264,7 +264,7 @@ module('Integration | tools | transform-cards', function (hooks) {
       // @ts-expect-error tsconfig paths not resolved for dynamic import()
       '@cardstack/host/tools/search-cards'
     )) as { SearchCardsByQueryTool: typeof SearchCardsByQueryCommandType };
-    let searchCommand = new SearchCardsByQueryTool(toolService.commandContext);
+    let searchCommand = new SearchCardsByQueryTool(toolService.toolContext);
     let { cardIds } = await searchCommand.execute({
       query: {
         filter: {
@@ -292,7 +292,7 @@ module('Integration | tools | transform-cards', function (hooks) {
 
   test('transforms specific cards using title filter', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     await transformCommand.execute({
       query: {
@@ -331,7 +331,7 @@ module('Integration | tools | transform-cards', function (hooks) {
 
   test('transforms Pet cards with different command', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     await transformCommand.execute({
       query: {
@@ -374,7 +374,7 @@ module('Integration | tools | transform-cards', function (hooks) {
 
   test('handles empty search results gracefully', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     // Search for non-existent cards
     await transformCommand.execute({
@@ -395,7 +395,7 @@ module('Integration | tools | transform-cards', function (hooks) {
 
   test('preserves JSON structure while transforming', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     // Get original structure first
     let networkService = getService('network');
@@ -444,7 +444,7 @@ module('Integration | tools | transform-cards', function (hooks) {
   // Skipped because we don't have the ability to capture command errors in the current test setup
   skip('handles malformed command references gracefully', async function (assert) {
     let toolService = getService('tool-service');
-    let transformCommand = new TransformCardsTool(toolService.commandContext);
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
 
     try {
       await transformCommand.execute({

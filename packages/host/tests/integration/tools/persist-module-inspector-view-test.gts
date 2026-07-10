@@ -70,9 +70,7 @@ module('Integration | tools | persist-module-inspector-view', function (hooks) {
 
   test('persists the module inspector view selection', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new PersistModuleInspectorViewTool(
-      toolService.commandContext,
-    );
+    let command = new PersistModuleInspectorViewTool(toolService.toolContext);
     let result = await command.execute({
       codePath: `${testRealmURL}my-module.gts`,
       moduleInspectorView: 'schema',

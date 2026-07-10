@@ -69,7 +69,7 @@ module('Integration | tools | execute-atomic-operations', function (hooks) {
       'atomic:results': [{ id: 'card-1' }, { id: 'card-2' }],
     };
     let toolService = getService('tool-service');
-    let command = new ExecuteAtomicOperationsTool(toolService.commandContext);
+    let command = new ExecuteAtomicOperationsTool(toolService.toolContext);
     let result = await command.execute({
       realmIdentifier: testRealmURL,
       operations: [{ op: 'add', path: 'card-1' }] as any,
@@ -82,7 +82,7 @@ module('Integration | tools | execute-atomic-operations', function (hooks) {
       errors: [{ detail: 'Something went wrong' }],
     };
     let toolService = getService('tool-service');
-    let command = new ExecuteAtomicOperationsTool(toolService.commandContext);
+    let command = new ExecuteAtomicOperationsTool(toolService.toolContext);
     try {
       await command.execute({
         realmIdentifier: testRealmURL,

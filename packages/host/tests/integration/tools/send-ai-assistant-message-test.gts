@@ -64,7 +64,7 @@ module('Integration | tools | send-ai-assistant-message', function (hooks) {
     let toolService = getService('tool-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageTool(
-      toolService.commandContext,
+      toolService.toolContext,
     );
     await sendAiAssistantMessageCommand.execute({
       roomId,

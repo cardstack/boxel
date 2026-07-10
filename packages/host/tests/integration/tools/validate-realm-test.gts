@@ -58,14 +58,14 @@ module('Integration | tools | validate-realm', function (hooks) {
 
   test('returns normalized realm URL for a valid realm', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ValidateRealmTool(toolService.commandContext);
+    let command = new ValidateRealmTool(toolService.toolContext);
     let result = await command.execute({ realmIdentifier: testRealmURL });
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
   test('throws error for an invalid realm URL', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ValidateRealmTool(toolService.commandContext);
+    let command = new ValidateRealmTool(toolService.toolContext);
     try {
       await command.execute({
         realmIdentifier: 'https://invalid.example.com/realm/',

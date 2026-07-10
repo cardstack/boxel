@@ -74,7 +74,7 @@ module('Integration | tools | create-listing-pr-request', function (hooks) {
     let toolService = getService('tool-service');
     let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new CreateListingPRRequestTool(toolService.commandContext);
+    let command = new CreateListingPRRequestTool(toolService.toolContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
@@ -130,7 +130,7 @@ module('Integration | tools | create-listing-pr-request', function (hooks) {
     let matrixService = getService('matrix-service') as MatrixService;
     let previousCurrentRoomId = matrixService.currentRoomId;
 
-    let command = new CreateListingPRRequestTool(toolService.commandContext);
+    let command = new CreateListingPRRequestTool(toolService.toolContext);
     await command.execute({
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,

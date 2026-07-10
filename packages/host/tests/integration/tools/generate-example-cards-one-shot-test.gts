@@ -92,7 +92,7 @@ export class TestCard extends CardDef {
 
       const toolService = getService('tool-service');
       generateExampleCommand = new GenerateExampleCardsOneShotTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
     });
 

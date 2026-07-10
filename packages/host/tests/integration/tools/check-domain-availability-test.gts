@@ -80,7 +80,7 @@ module('Integration | tools | check-domain-availability', function (hooks) {
 
   function makeCommand() {
     let toolService = getService('tool-service');
-    return new CheckDomainAvailabilityTool(toolService.commandContext);
+    return new CheckDomainAvailabilityTool(toolService.toolContext);
   }
 
   test('reports an available custom subdomain, deriving the URL from the server hostname', async function (assert) {

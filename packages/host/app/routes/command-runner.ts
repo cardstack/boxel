@@ -115,7 +115,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     return model;
   }
 
-  get commandContext(): ToolContext {
+  get toolContext(): ToolContext {
     let result = {
       [ToolContextStamp]: true,
     } as ToolContext;
@@ -137,7 +137,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
         throw new Error('Command not found for provided CodeRef');
       }
 
-      let toolInstance = new ToolConstructor(this.commandContext);
+      let toolInstance = new ToolConstructor(this.toolContext);
       let resultCard: CardDef | undefined;
       if (toolInput) {
         resultCard = await toolInstance.execute(toolInput);

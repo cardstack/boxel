@@ -128,7 +128,7 @@ module('Integration | tools | bot-registration', function (hooks) {
 
   test('register-bot returns botRegistrationId', async function (assert) {
     let toolService = getService('tool-service');
-    let registerBotCommand = new RegisterBotTool(toolService.commandContext);
+    let registerBotCommand = new RegisterBotTool(toolService.toolContext);
 
     let result = await registerBotCommand.execute({
       username: '@testuser:localhost',
@@ -140,10 +140,8 @@ module('Integration | tools | bot-registration', function (hooks) {
   test('unregister-bot removes the bot registration', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let registerBotCommand = new RegisterBotTool(toolService.commandContext);
-    let unregisterBotCommand = new UnregisterBotTool(
-      toolService.commandContext,
-    );
+    let registerBotCommand = new RegisterBotTool(toolService.toolContext);
+    let unregisterBotCommand = new UnregisterBotTool(toolService.toolContext);
 
     let registerResult = await registerBotCommand.execute({
       username: '@testuser:localhost',

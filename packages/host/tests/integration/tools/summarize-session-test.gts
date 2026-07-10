@@ -171,9 +171,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('successfully summarizes a conversation with project help content', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     // Create a room with project-related conversation
     const roomId = await createRoomWithHistory('Project Help Room', [
@@ -203,9 +201,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('successfully summarizes a conversation with cards and files', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     // Create a room with card and file discussion
     const roomId = await createRoomWithHistory('Card Discussion Room', [
@@ -235,9 +231,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('handles empty room gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     // Create an empty room
     const roomId = createAndJoinRoom({
@@ -255,9 +249,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('handles API errors gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     // Create a room with error-triggering content
     const roomId = await createRoomWithHistory('Error Room', [
@@ -283,9 +275,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('handles room not found gracefully', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     const input = createMockSummarizeSessionInput('non-existent-room-id');
 
@@ -306,9 +296,7 @@ module('Integration | tools | summarize-session', function (hooks) {
 
   test('includes conversation context in summary request', async function (assert) {
     const toolService = getService('tool-service');
-    const summarizeCommand = new SummarizeSessionTool(
-      toolService.commandContext,
-    );
+    const summarizeCommand = new SummarizeSessionTool(toolService.toolContext);
 
     // Create a room with specific conversation
     const roomId = await createRoomWithHistory('Context Room', [

@@ -136,7 +136,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
   test('creates a new room when no roomId is provided', async function (assert) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room!',
       roomName: 'My Test Room',
@@ -177,7 +177,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello, existing room!',
       roomId,
@@ -212,7 +212,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached cards!',
       roomId,
@@ -238,7 +238,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
   test('handles "new" as roomId to create new room', async function (assert) {
     let initialRoomCount = Object.keys(getRoomIds()).length;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     let result = await aiAssistantCommand.execute({
       prompt: 'Hello, new room with "new"!',
       roomId: 'new',
@@ -276,7 +276,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
 
     let clientGeneratedId = 'unique-client-id-123';
     await aiAssistantCommand.execute({
@@ -317,7 +317,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       name: 'room-with-llm-model',
     });
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with custom LLM!',
       roomId,
@@ -346,7 +346,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
     const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
     const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill cards!',
       roomId,
@@ -384,7 +384,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       (event) => event.type === 'm.room.message',
     ).length;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       roomId,
       skillCards: [skillCard1, skillCard2],
@@ -420,7 +420,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       name: 'room-with-skill-ids',
     });
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with skill card IDs!',
       roomId,
@@ -447,7 +447,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       name: 'room-with-attached-card-ids',
     });
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached card IDs!',
       roomId,
@@ -487,9 +487,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
         assert.strictEqual(input.roomId, roomId, 'Room ID should match');
       };
 
-      let aiAssistantCommand = new UseAiAssistantTool(
-        toolService.commandContext,
-      );
+      let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
       await aiAssistantCommand.execute({
         prompt: 'Hello, open this room!',
         roomId,
@@ -513,7 +511,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
 
     const fileURLs = [`${testRealmURL}file1.gts`, `${testRealmURL}file2.gts`];
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached files!',
       roomId,
@@ -547,7 +545,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
     const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with open cards!',
       roomId,
@@ -574,7 +572,7 @@ module('Integration | tools | ai-assistant', function (hooks) {
       name: 'room-for-llm-mode-test',
     });
 
-    let aiAssistantCommand = new UseAiAssistantTool(toolService.commandContext);
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
 
     // Test setting LLM mode to 'act'
     await aiAssistantCommand.execute({

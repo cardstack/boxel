@@ -56,7 +56,7 @@ module('Integration | tools | store-add', function (hooks) {
 
   test('adds a card document to the store and returns a CardDef', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new StoreAddTool(toolService.commandContext);
+    let command = new StoreAddTool(toolService.toolContext);
     let result = await command.execute({
       document: {
         data: {

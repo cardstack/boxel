@@ -54,7 +54,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
 
   test('copies file to target realm', async function (assert) {
     let toolService = getService('tool-service');
-    let copyFileCommand = new CopyFileToRealmTool(toolService.commandContext);
+    let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
 
     let result = await copyFileCommand.execute({
       sourceFileIdentifier: `${testRealmURL}hello.txt`,
@@ -75,7 +75,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
 
   test('handles filename conflicts by creating non-conflicting name', async function (assert) {
     let toolService = getService('tool-service');
-    let copyFileCommand = new CopyFileToRealmTool(toolService.commandContext);
+    let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
 
     // First, copy hello.txt to test2 realm so there is a conflict on the second copy
     await copyFileCommand.execute({
@@ -115,7 +115,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
       submode: 'interact',
     });
 
-    let copyFileCommand = new CopyFileToRealmTool(toolService.commandContext);
+    let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
 
     let result = await copyFileCommand.execute({
       sourceFileIdentifier: `${testRealmURL}hello.txt`,
@@ -124,7 +124,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
 
     assert.ok(result.newFileIdentifier, 'new file URL is returned');
 
-    let showFileCommand = new ShowFileTool(toolService.commandContext);
+    let showFileCommand = new ShowFileTool(toolService.toolContext);
     await showFileCommand.execute({
       fileIdentifier: result.newFileIdentifier,
     });
@@ -143,7 +143,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
 
   test('errors when user does not have write permissions to target realm', async function (assert) {
     let toolService = getService('tool-service');
-    let copyFileCommand = new CopyFileToRealmTool(toolService.commandContext);
+    let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
 
     let realmService = getService('realm');
     realmService.logout();

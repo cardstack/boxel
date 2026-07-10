@@ -152,9 +152,7 @@ module('Integration | tools | search-google-images', function (hooks) {
 
   test('successfully searches Google Images and returns results', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesTool(
-      toolService.commandContext,
-    );
+    const searchCommand = new SearchGoogleImagesTool(toolService.toolContext);
 
     const input = {
       query: 'test images',
@@ -256,9 +254,7 @@ module('Integration | tools | search-google-images', function (hooks) {
 
   test('uses default maxResults when not provided', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesTool(
-      toolService.commandContext,
-    );
+    const searchCommand = new SearchGoogleImagesTool(toolService.toolContext);
 
     const input = {
       query: 'test images',
@@ -273,9 +269,7 @@ module('Integration | tools | search-google-images', function (hooks) {
 
   test('limits maxResults to 10', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesTool(
-      toolService.commandContext,
-    );
+    const searchCommand = new SearchGoogleImagesTool(toolService.toolContext);
 
     const input = {
       query: 'test images',
@@ -295,9 +289,7 @@ module('Integration | tools | search-google-images', function (hooks) {
 
   test('supports pagination with startIndex parameter', async function (assert) {
     const toolService = getService('tool-service');
-    const searchCommand = new SearchGoogleImagesTool(
-      toolService.commandContext,
-    );
+    const searchCommand = new SearchGoogleImagesTool(toolService.toolContext);
 
     const input = {
       query: 'test images',

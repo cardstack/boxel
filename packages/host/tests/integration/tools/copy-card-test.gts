@@ -105,7 +105,7 @@ module('Integration | tools | copy-card', function (hooks) {
   module('CopyCardToRealmTool', function () {
     test('copies card to target realm', async function (assert) {
       let toolService = getService('tool-service');
-      let copyCardCommand = new CopyCardToRealmTool(toolService.commandContext);
+      let copyCardCommand = new CopyCardToRealmTool(toolService.toolContext);
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
       let targetRealm = testRealm2URL;
@@ -148,7 +148,7 @@ module('Integration | tools | copy-card', function (hooks) {
 
     test('errors when user does not have write permissions to target realm', async function (assert) {
       let toolService = getService('tool-service');
-      let copyCardCommand = new CopyCardToRealmTool(toolService.commandContext);
+      let copyCardCommand = new CopyCardToRealmTool(toolService.toolContext);
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
       let targetRealm = testRealm2URL;
@@ -184,7 +184,7 @@ module('Integration | tools | copy-card', function (hooks) {
     test('copies card to stack when valid targetStackIndex is provided', async function (assert) {
       let toolService = getService('tool-service');
       let copyCardToStackCommand = new CopyCardToStackTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;
@@ -239,7 +239,7 @@ module('Integration | tools | copy-card', function (hooks) {
     test('errors when targetStackIndex does not exist', async function (assert) {
       let toolService = getService('tool-service');
       let copyCardToStackCommand = new CopyCardToStackTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
 
       let sourceCardUrl = `${testRealmURL}Pet/mango`;

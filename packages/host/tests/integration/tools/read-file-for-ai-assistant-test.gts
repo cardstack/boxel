@@ -57,7 +57,7 @@ module('Integration | tools | read-file-for-ai-assistant', function (hooks) {
   test('read file', async function (assert) {
     let toolService = getService('tool-service');
 
-    let command = new ReadFileForAiAssistantCommand(toolService.commandContext);
+    let command = new ReadFileForAiAssistantCommand(toolService.toolContext);
     let result = await command.execute({
       fileIdentifier: `${testRealmURL}files/test.txt`,
     });

@@ -83,7 +83,7 @@ module('Integration | tools | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmTool(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     assert.false(
@@ -154,7 +154,7 @@ module('Integration | tools | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmTool(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -176,7 +176,7 @@ module('Integration | tools | reindex-realm', function (hooks) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
     let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmTool(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.toolContext);
     let realmURL = new URL('test/', realmServer.url).href;
 
     await command.execute({
@@ -208,7 +208,7 @@ module('Integration | tools | reindex-realm', function (hooks) {
 
   test('description explains lighter reindex semantics', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new ReindexRealmTool(toolService.commandContext);
+    let command = new ReindexRealmTool(toolService.toolContext);
 
     assert.true(
       command.description.includes('lighter/default mode'),

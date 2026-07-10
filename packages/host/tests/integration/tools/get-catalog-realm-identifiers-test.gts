@@ -65,9 +65,7 @@ module('Integration | tools | get-catalog-realm-identifiers', function (hooks) {
 
   test('returns the list of catalog realm identifiers', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new GetCatalogRealmIdentifiersTool(
-      toolService.commandContext,
-    );
+    let command = new GetCatalogRealmIdentifiersTool(toolService.toolContext);
     let result = await command.execute();
     assert.deepEqual(result.realmIdentifiers, ['https://example.com/catalog/']);
   });

@@ -16,9 +16,7 @@ module('Integration | tools | apply-search-replace-block', function (hooks) {
 
   test('handles basic search and replace pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `import {
   contains,
@@ -72,9 +70,7 @@ export class Task extends CardDef {
 
   test('handles multiple occurrences of the search pattern, only replacing the first', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class BlogPost extends CardDef {
   @field cardTitle = contains(StringField);
@@ -136,9 +132,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 
   test('handles search pattern with whitespace differences', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `export class Product extends CardDef {
   static displayName = 'Product';
@@ -174,9 +168,7 @@ ${REPLACE_MARKER}`;
 
   test('handles no match found', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `export class Review extends CardDef {
   static displayName = 'Review';
@@ -217,9 +209,7 @@ ${REPLACE_MARKER}`;
   // Skipping this test for now as throwing errors causes issues
   skip('handles malformed search/replace block', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `export class Contact extends CardDef {
   static displayName = 'Contact';
@@ -254,9 +244,7 @@ ${REPLACE_MARKER}`;
 
   test('handles search with additional context for clarity', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class WeatherDisplay extends Component<typeof Weather> {
   <template>
@@ -320,9 +308,7 @@ ${REPLACE_MARKER}`;
 
   test('handles different indentation in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class ContactCard extends CardDef {
   static displayName = 'Contact Card';
@@ -416,9 +402,7 @@ class CardTemplate extends Component<typeof ContactCard> {
 
   test('handles tabs vs spaces in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     // File uses spaces for indentation
     const fileContent = `export class Task extends CardDef {
@@ -471,9 +455,7 @@ ${REPLACE_MARKER}`;
 
   test('handles spurious blank lines in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class UserProfile extends CardDef {
   static displayName = 'User Profile';
@@ -531,9 +513,7 @@ ${REPLACE_MARKER}`;
 
   test('handles spurious blank lines in the middle of the search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class UserProfile extends CardDef {
   static displayName = 'User Profile';
@@ -590,9 +570,7 @@ ${REPLACE_MARKER}`;
 
   test('handles carriage return differences in search pattern', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     // File uses LF line endings
     const fileContent = `class ProductCard extends CardDef {
@@ -634,9 +612,7 @@ ${REPLACE_MARKER}`;
 
   test('handles trailing whitespace differences', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class BookingForm extends Component<typeof Booking> {
   <template>
@@ -700,9 +676,7 @@ ${REPLACE_MARKER}`;
 
   test('it applies search/replace block when replace block is empty', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `class Task extends CardDef {
   static displayName = 'Task';
@@ -730,9 +704,7 @@ ${REPLACE_MARKER}`;
 
   test('it allows empty search and replace blocks on empty content', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = '';
     const codeBlock = `${SEARCH_MARKER}
@@ -749,9 +721,7 @@ ${REPLACE_MARKER}`;
 
   test('it rejects empty search blocks on non-empty content', async function (assert) {
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `export class Task extends CardDef {
   static displayName = 'Task';
@@ -782,9 +752,7 @@ ${REPLACE_MARKER}`;
     // marker; applying the block must strip it rather than write it into the
     // file as a trailing line of box-drawing characters.
     let toolService = getService('tool-service');
-    let applyCommand = new ApplySearchReplaceBlockTool(
-      toolService.commandContext,
-    );
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
 
     const fileContent = `{ "old": true }`;
     const codeBlock = `${SEARCH_MARKER}

@@ -48,7 +48,7 @@ export function getDefaultFileMenuItems(
       menuItems.push({
         label: 'Copy as Markdown',
         action: () =>
-          new CopyCardAsMarkdownTool(params.commandContext).execute({
+          new CopyCardAsMarkdownTool(params.toolContext).execute({
             cardId: fileDefInstanceId,
           }),
         icon: ClipboardCopy,
@@ -59,7 +59,7 @@ export function getDefaultFileMenuItems(
       menuItems.push({
         label: 'Open in Code Mode',
         action: async () => {
-          await new SwitchSubmodeTool(params.commandContext).execute({
+          await new SwitchSubmodeTool(params.toolContext).execute({
             submode: 'code',
             codePath: fileDefInstanceId,
           });
@@ -89,13 +89,13 @@ export function getDefaultFileMenuItems(
       label: 'Copy to Workspace',
       action: async () => {
         let { newFileIdentifier } = await new CopyFileToRealmTool(
-          params.commandContext,
+          params.toolContext,
         ).execute({
           sourceFileIdentifier: fileDefInstance.sourceUrl,
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
-        await new ShowFileTool(params.commandContext).execute({
+        await new ShowFileTool(params.toolContext).execute({
           fileIdentifier: newFileIdentifier,
         });
       },
@@ -108,7 +108,7 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Open in Interact Mode',
       action: () => {
-        new OpenInInteractModeTool(params.commandContext).execute({
+        new OpenInInteractModeTool(params.toolContext).execute({
           cardId: fileDefInstanceId,
           format: params.format === 'edit' ? 'edit' : 'isolated',
         });
@@ -120,7 +120,7 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Open in Code Mode',
       action: async () => {
-        await new SwitchSubmodeTool(params.commandContext).execute({
+        await new SwitchSubmodeTool(params.toolContext).execute({
           submode: 'code',
           codePath: fileDefInstanceId,
         });

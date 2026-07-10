@@ -31,13 +31,13 @@ class StubRealmService extends RealmService {
 module('Integration | tools | commands-calling', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
-  let commandContext: CommandContext;
+  let toolContext: CommandContext;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
 
     let toolService = getService('tool-service');
-    commandContext = toolService.commandContext;
+    toolContext = toolService.toolContext;
   });
 
   test('can be called with a card as input', async function (assert) {
@@ -65,7 +65,7 @@ module('Integration | tools | commands-calling', function (hooks) {
         });
       }
     }
-    let exampleCommand = new ExampleCommand(commandContext);
+    let exampleCommand = new ExampleCommand(toolContext);
 
     const InputType = await exampleCommand.getInputType();
     let input = new InputType({
@@ -101,7 +101,7 @@ module('Integration | tools | commands-calling', function (hooks) {
         });
       }
     }
-    let exampleCommand = new ExampleCommand(commandContext);
+    let exampleCommand = new ExampleCommand(toolContext);
     let output = await exampleCommand.execute({
       inputField1: 'World',
       inputField2: '!',
@@ -134,7 +134,7 @@ module('Integration | tools | commands-calling', function (hooks) {
         });
       }
     }
-    let exampleCommand = new ExampleCommand(commandContext);
+    let exampleCommand = new ExampleCommand(toolContext);
 
     let output = await exampleCommand.execute({
       inputField1: 'World',
@@ -167,7 +167,7 @@ module('Integration | tools | commands-calling', function (hooks) {
         });
       }
     }
-    let exampleCommand = new ExampleCommand(commandContext);
+    let exampleCommand = new ExampleCommand(toolContext);
 
     let output = await exampleCommand.execute({
       inputField1: 'World',
@@ -195,7 +195,7 @@ module('Integration | tools | commands-calling', function (hooks) {
         });
       }
     }
-    let exampleCommand = new ExampleCommand(commandContext);
+    let exampleCommand = new ExampleCommand(toolContext);
 
     let output = await exampleCommand.execute();
     assert.strictEqual(output.outputField, 'Hello');

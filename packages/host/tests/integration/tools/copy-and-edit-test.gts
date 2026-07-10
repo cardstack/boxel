@@ -209,7 +209,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: childCard,
     });
@@ -266,7 +266,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: originalTheme,
     });
@@ -303,7 +303,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       ),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: childCard,
     });
@@ -328,7 +328,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: simpleCard,
     });
@@ -373,7 +373,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: childCard,
     });
@@ -419,7 +419,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: remoteChild,
     });
@@ -477,7 +477,7 @@ module('Integration | tools | copy-and-edit', function (hooks) {
       }),
     );
 
-    let command = new CopyAndEditTool(toolService.commandContext);
+    let command = new CopyAndEditTool(toolService.toolContext);
     await command.execute({
       card: remoteChild,
     });

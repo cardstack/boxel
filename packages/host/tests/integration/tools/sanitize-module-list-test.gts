@@ -73,7 +73,7 @@ module('Integration | tools | sanitize-module-list', function (hooks) {
 
   test('filters out global URLs and keeps realm modules', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new SanitizeModuleListTool(toolService.commandContext);
+    let command = new SanitizeModuleListTool(toolService.toolContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
@@ -89,7 +89,7 @@ module('Integration | tools | sanitize-module-list', function (hooks) {
 
   test('deduplicates modules by normalized URL', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new SanitizeModuleListTool(toolService.commandContext);
+    let command = new SanitizeModuleListTool(toolService.toolContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
@@ -106,7 +106,7 @@ module('Integration | tools | sanitize-module-list', function (hooks) {
   test('excludes modules from unreadable realms', async function (assert) {
     readableRealms = new Set([testRealmURL]);
     let toolService = getService('tool-service');
-    let command = new SanitizeModuleListTool(toolService.commandContext);
+    let command = new SanitizeModuleListTool(toolService.toolContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,

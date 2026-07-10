@@ -58,7 +58,7 @@ module('Integration | tools | instantiate-card', function (hooks) {
 
   test('valid card with instance data passes instantiation', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new InstantiateCardTool(toolService.commandContext);
+    let command = new InstantiateCardTool(toolService.toolContext);
 
     let InputType = await command.getInputType();
     let instanceDoc = {
@@ -88,7 +88,7 @@ module('Integration | tools | instantiate-card', function (hooks) {
 
   test('valid card with no instance data passes instantiation', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new InstantiateCardTool(toolService.commandContext);
+    let command = new InstantiateCardTool(toolService.toolContext);
 
     let InputType = await command.getInputType();
     let input = new InputType({
@@ -105,7 +105,7 @@ module('Integration | tools | instantiate-card', function (hooks) {
 
   test('containsMany field with non-array value fails instantiation', async function (assert) {
     let toolService = getService('tool-service');
-    let command = new InstantiateCardTool(toolService.commandContext);
+    let command = new InstantiateCardTool(toolService.toolContext);
 
     let InputType = await command.getInputType();
     // Provide a string instead of an array for the containsMany field.

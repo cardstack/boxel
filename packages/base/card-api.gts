@@ -348,6 +348,10 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
+  toolContext?: ToolContext;
+  // Pre-rename spelling of `toolContext`. Realm content reads
+  // `@context.commandContext`; populated with the same value until no
+  // deployed content references it.
   commandContext?: ToolContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
@@ -3280,16 +3284,16 @@ export class Theme extends CardDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getMenuItems](params);
-    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+    if (params.menuContext === 'interact' && params.toolContext && this.id) {
       menuItems = [
         ...menuItems,
         {
           label: 'Copy and Edit',
           action: async () => {
-            if (!params.commandContext || !this.id) {
+            if (!params.toolContext || !this.id) {
               return;
             }
-            let cmd = new CopyAndEditTool(params.commandContext);
+            let cmd = new CopyAndEditTool(params.toolContext);
             await cmd.execute({
               card: this,
             });
@@ -3300,7 +3304,7 @@ export class Theme extends CardDef {
         {
           label: 'Modify Theme via AI',
           action: async () => {
-            let cmd = new PatchThemeTool(params.commandContext);
+            let cmd = new PatchThemeTool(params.toolContext);
             await cmd.execute({
               cardId: this.id as unknown as string,
             });

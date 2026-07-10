@@ -73,7 +73,7 @@ module(
       realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
       let toolService = getService('tool-service');
       let command = new GetRealmOfResourceIdentifierTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
       let result = await command.execute({
         resourceIdentifier: `${testRealmURL}some-card`,
@@ -85,7 +85,7 @@ module(
       realmOfURLMap = new Map();
       let toolService = getService('tool-service');
       let command = new GetRealmOfResourceIdentifierTool(
-        toolService.commandContext,
+        toolService.toolContext,
       );
       let result = await command.execute({
         resourceIdentifier: 'https://unknown.example.com/card',

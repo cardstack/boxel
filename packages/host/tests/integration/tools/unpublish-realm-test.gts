@@ -93,7 +93,7 @@ module('Integration | tools | unpublish-realm', function (hooks) {
 
   function makeCommand() {
     let toolService = getService('tool-service');
-    return new UnpublishRealmTool(toolService.commandContext);
+    return new UnpublishRealmTool(toolService.toolContext);
   }
 
   test('unpublishes an explicit published-realm URL', async function (assert) {
