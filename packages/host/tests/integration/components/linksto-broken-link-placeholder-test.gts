@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   CardCrudFunctionsContextName,
   PermissionsContextName,
   type LooseCardResource,
@@ -138,7 +137,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Realm holds Person/Pet plus one real Pet (`Pet/mango`); `Pet/ghost` is
@@ -348,7 +347,7 @@ module(
       });
 
       let api = await loader.import<typeof import('@cardstack/base/card-api')>(
-        `${baseRealm.url}card-api`,
+        '@cardstack/base/card-api',
       );
       let PersonComponent = api.getComponent(person);
 

@@ -8,7 +8,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   RealmPaths,
-  baseRealm,
   createResponse,
   hasExecutableExtension,
   Deferred,
@@ -146,7 +145,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
 
     let cardApi = await this.#loader.import<CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     for (let { content, url } of this.#potentialModulesAndInstances) {
       if (cardApi.isCard(content)) {
@@ -261,7 +260,7 @@ export class TestRealmAdapter implements RealmAdapter {
       fileRefContent = value;
     } else if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
-        `${baseRealm.url}card-api`,
+        '@cardstack/base/card-api',
       );
       if (cardApi.isCard(value)) {
         let doc = cardApi.serializeCard(value, {});

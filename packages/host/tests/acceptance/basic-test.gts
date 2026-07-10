@@ -3,8 +3,6 @@ import { click, find, visit, waitFor } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
@@ -39,12 +37,12 @@ module('Acceptance | basic tests', function (hooks) {
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('@cardstack/base/card-api')
-    >(`${baseRealm.url}card-api`);
+    >('@cardstack/base/card-api');
     let { default: StringField } = await loader.import<
       typeof import('@cardstack/base/string')
-    >(`${baseRealm.url}string`);
+    >('@cardstack/base/string');
     let { Spec } = await loader.import<typeof import('@cardstack/base/spec')>(
-      `${baseRealm.url}spec`,
+      '@cardstack/base/spec',
     );
 
     class Index extends CardDef {

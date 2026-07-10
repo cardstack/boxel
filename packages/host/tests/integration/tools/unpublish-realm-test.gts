@@ -4,7 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
 import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
@@ -77,7 +77,7 @@ module('Integration | tools | unpublish-realm', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loader = getService('loader-service').loader;
     PublishTarget = (
-      await loader.import<typeof BaseToolModule>(`${baseRealm.url}command`)
+      await loader.import<typeof BaseToolModule>('@cardstack/base/command')
     ).PublishTarget;
     unpublishShouldFail = false;
     unpublishedURLs = [];

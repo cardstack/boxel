@@ -9,8 +9,6 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
@@ -53,10 +51,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('@cardstack/base/card-api')
-    >(`${baseRealm.url}card-api`);
+    >('@cardstack/base/card-api');
     let { default: StringField } = await loader.import<
       typeof import('@cardstack/base/string')
-    >(`${baseRealm.url}string`);
+    >('@cardstack/base/string');
 
     class Pet extends CardDef {
       static displayName = 'Pet';

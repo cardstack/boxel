@@ -9,7 +9,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRRI, baseRealm } from '@cardstack/runtime-common';
+import { baseRRI } from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import {
@@ -125,7 +125,7 @@ module('Integration | markdown skill search', function (hooks) {
     // rehydrates as its concrete subclass on read rather than the declared base.
     let loader = getService('loader-service').loader;
     let { SkillFrontmatterField } = await loader.import<any>(
-      `${baseRealm.url}skill-frontmatter-field`,
+      '@cardstack/base/skill-frontmatter-field',
     );
     let store = getService('store');
     let url = `${testRealmURL}skills/realm-sync/SKILL.md`;

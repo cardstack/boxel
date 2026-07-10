@@ -1,7 +1,5 @@
 import { getService } from '@universal-ember/test-support';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import type * as Base64ImageFieldModule from '@cardstack/base/base64-image';
 import type * as BigIntegerModule from '@cardstack/base/big-integer';
 import type * as BooleanFieldModule from '@cardstack/base/boolean';
@@ -203,169 +201,169 @@ async function initialize() {
   let loader = getService('loader-service').loader;
 
   StringField = (
-    await loader.import<typeof StringFieldModule>(`${baseRealm.url}string`)
+    await loader.import<typeof StringFieldModule>('@cardstack/base/string')
   ).default;
 
   NumberField = (
-    await loader.import<typeof NumberFieldModule>(`${baseRealm.url}number`)
+    await loader.import<typeof NumberFieldModule>('@cardstack/base/number')
   ).default;
 
   DateField = (
-    await loader.import<typeof DateFieldModule>(`${baseRealm.url}date`)
+    await loader.import<typeof DateFieldModule>('@cardstack/base/date')
   ).default;
 
   DateTimeField = (
-    await loader.import<typeof DateTimeFieldModule>(`${baseRealm.url}datetime`)
+    await loader.import<typeof DateTimeFieldModule>('@cardstack/base/datetime')
   ).default;
 
   ColorField = (
-    await loader.import<typeof ColorFieldModule>(`${baseRealm.url}color`)
+    await loader.import<typeof ColorFieldModule>('@cardstack/base/color')
   ).default;
 
   DatetimeStampField = (
     await loader.import<typeof DatetimeStampFieldModule>(
-      `${baseRealm.url}datetime-stamp`,
+      '@cardstack/base/datetime-stamp',
     )
   ).default;
 
   DateRangeField = (
     await loader.import<typeof DateRangeFieldModule>(
-      `${baseRealm.url}date-range-field`,
+      '@cardstack/base/date-range-field',
     )
   ).default;
 
   DayField = (
-    await loader.import<typeof DayFieldModule>(`${baseRealm.url}date/day`)
+    await loader.import<typeof DayFieldModule>('@cardstack/base/date/day')
   ).default;
 
   MonthField = (
-    await loader.import<typeof MonthFieldModule>(`${baseRealm.url}date/month`)
+    await loader.import<typeof MonthFieldModule>('@cardstack/base/date/month')
   ).default;
 
   MonthDayField = (
     await loader.import<typeof MonthDayFieldModule>(
-      `${baseRealm.url}date/month-day`,
+      '@cardstack/base/date/month-day',
     )
   ).default;
 
   MonthYearField = (
     await loader.import<typeof MonthYearFieldModule>(
-      `${baseRealm.url}date/month-year`,
+      '@cardstack/base/date/month-year',
     )
   ).default;
 
   YearField = (
-    await loader.import<typeof YearFieldModule>(`${baseRealm.url}date/year`)
+    await loader.import<typeof YearFieldModule>('@cardstack/base/date/year')
   ).default;
 
   WeekField = (
-    await loader.import<typeof WeekFieldModule>(`${baseRealm.url}date/week`)
+    await loader.import<typeof WeekFieldModule>('@cardstack/base/date/week')
   ).default;
 
   QuarterField = (
     await loader.import<typeof QuarterFieldModule>(
-      `${baseRealm.url}date/quarter`,
+      '@cardstack/base/date/quarter',
     )
   ).default;
 
   TimeField = (
-    await loader.import<typeof TimeFieldModule>(`${baseRealm.url}time`)
+    await loader.import<typeof TimeFieldModule>('@cardstack/base/time')
   ).default;
 
   TimeRangeField = (
     await loader.import<typeof TimeRangeFieldModule>(
-      `${baseRealm.url}time/time-range`,
+      '@cardstack/base/time/time-range',
     )
   ).default;
 
   DurationField = (
     await loader.import<typeof DurationFieldModule>(
-      `${baseRealm.url}time/duration`,
+      '@cardstack/base/time/duration',
     )
   ).default;
 
   RelativeTimeField = (
     await loader.import<typeof RelativeTimeFieldModule>(
-      `${baseRealm.url}time/relative-time`,
+      '@cardstack/base/time/relative-time',
     )
   ).default;
 
   EmailField = (
-    await loader.import<typeof EmailFieldModule>(`${baseRealm.url}email`)
+    await loader.import<typeof EmailFieldModule>('@cardstack/base/email')
   ).default;
 
   Base64ImageField = (
     await loader.import<typeof Base64ImageFieldModule>(
-      `${baseRealm.url}base64-image`,
+      '@cardstack/base/base64-image',
     )
   ).default;
 
   CodeRefField = (
-    await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)
+    await loader.import<typeof CodeRefModule>('@cardstack/base/code-ref')
   ).default;
 
-  ToolField = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
+  ToolField = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .ToolField;
 
   BigIntegerField = (
-    await loader.import<typeof BigIntegerModule>(`${baseRealm.url}big-integer`)
+    await loader.import<typeof BigIntegerModule>('@cardstack/base/big-integer')
   ).default;
 
   EthereumAddressField = (
     await loader.import<typeof EthereumAddressModule>(
-      `${baseRealm.url}ethereum-address`,
+      '@cardstack/base/ethereum-address',
     )
   ).default;
 
   BooleanField = (
-    await loader.import<typeof BooleanFieldModule>(`${baseRealm.url}boolean`)
+    await loader.import<typeof BooleanFieldModule>('@cardstack/base/boolean')
   ).default;
 
   MarkdownField = (
-    await loader.import<typeof MarkdownFieldModule>(`${baseRealm.url}markdown`)
+    await loader.import<typeof MarkdownFieldModule>('@cardstack/base/markdown')
   ).default;
 
   TextAreaField = (
-    await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
+    await loader.import<typeof TextAreaFieldModule>('@cardstack/base/text-area')
   ).default;
 
   RealmField = (
-    await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
+    await loader.import<typeof RealmFieldModule>('@cardstack/base/realm')
   ).default;
 
   RichMarkdownField = (
     await loader.import<typeof RichMarkdownModule>(
-      `${baseRealm.url}rich-markdown`,
+      '@cardstack/base/rich-markdown',
     )
   ).RichMarkdownField;
 
   PhoneNumberField = (
     await loader.import<typeof PhoneNumberFieldModule>(
-      `${baseRealm.url}phone-number`,
+      '@cardstack/base/phone-number',
     )
   ).default;
 
   CardsGrid = (
-    await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
+    await loader.import<typeof CardsGridModule>('@cardstack/base/cards-grid')
   ).CardsGrid;
 
-  Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
+  Skill = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .Skill;
 
   ModelConfiguration = (
-    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+    await loader.import<typeof SystemCardModule>('@cardstack/base/system-card')
   ).ModelConfiguration;
 
   SystemCard = (
-    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+    await loader.import<typeof SystemCardModule>('@cardstack/base/system-card')
   ).SystemCard;
 
   FileDef = (
-    await loader.import<typeof FileApiModule>(`${baseRealm.url}file-api`)
+    await loader.import<typeof FileApiModule>('@cardstack/base/file-api')
   ).FileDef;
 
   cardAPI = await loader.import<typeof CardAPIModule>(
-    `${baseRealm.url}card-api`,
+    '@cardstack/base/card-api',
   );
 
   ({
@@ -404,13 +402,13 @@ async function initialize() {
   // The searchable-driven generator lives in its own base module, not on
   // card-api (so it stays out of every card's dependency closure).
   searchDocFromFields = (
-    await loader.import<typeof SearchableModule>(`${baseRealm.url}searchable`)
+    await loader.import<typeof SearchableModule>('@cardstack/base/searchable')
   ).searchDocFromFields;
 
-  enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
+  enumField = (await loader.import<typeof EnumModule>('@cardstack/base/enum'))
     .default;
   const enumModule = await loader.import<typeof EnumModule>(
-    `${baseRealm.url}enum`,
+    '@cardstack/base/enum',
   );
   enumOptions = enumModule.enumOptions;
   enumValues = enumModule.enumValues;

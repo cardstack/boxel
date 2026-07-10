@@ -16,7 +16,6 @@ import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
-  baseRealm,
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
@@ -1448,7 +1447,7 @@ export async function saveCard(
   store?: CardStore,
   realmURL?: RealmIdentifier,
 ) {
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  let api = await loader.import<CardAPI>('@cardstack/base/card-api');
   let doc = api.serializeCard(instance, {});
   doc.data.id = id;
   if (realmURL) {
@@ -1521,7 +1520,7 @@ export function setupCardTest(hooks: NestedHooks): {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(hooks, async () =>
     (getService('loader-service') as any).loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     ),
   );
   return {
