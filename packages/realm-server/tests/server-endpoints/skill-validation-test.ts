@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { rri, type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   realmServerSecretSeed,
   setupPermissionedRealmCached,
@@ -31,7 +31,7 @@ function skillDoc(
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/skill',
+          module: rri('https://cardstack.com/base/skill'),
           name: 'Skill',
         },
       },
