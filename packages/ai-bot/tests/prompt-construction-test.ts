@@ -7551,7 +7551,7 @@ module('markdown skill commands', (hooks) => {
     assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
   });
 
-  test('getTools reads definitions from the pre-rename toolDefinitionFileDefs state key', async () => {
+  test('getTools reads definitions from the pre-rename commandDefinitions state key', async () => {
     const { eventList, enabledSkills } =
       skillsRoomFixture('commandDefinitions');
     const tools = await getTools(

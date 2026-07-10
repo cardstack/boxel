@@ -331,23 +331,23 @@ function allCheckCorrectnessToolsHaveResults(
   history: DiscreteMatrixEvent[],
 ): boolean {
   let lastEventWithCheckCorrectnessRequests = findLast(history, (event) => {
-    return getCheckCorrectnessCommandRequests(event).length > 0;
+    return getCheckCorrectnessToolRequests(event).length > 0;
   });
 
   if (!lastEventWithCheckCorrectnessRequests) {
     return true;
   }
 
-  let checkCommandRequests = getCheckCorrectnessCommandRequests(
+  let checkToolRequests = getCheckCorrectnessToolRequests(
     lastEventWithCheckCorrectnessRequests,
   );
-  if (checkCommandRequests.length === 0) {
+  if (checkToolRequests.length === 0) {
     return true;
   }
 
   let startIndex = history.indexOf(lastEventWithCheckCorrectnessRequests);
   let subsequentEvents = history.slice(startIndex + 1);
-  return checkCommandRequests.every((request) => {
+  return checkToolRequests.every((request) => {
     return subsequentEvents.some((event) =>
       isTerminalToolResultEventFor(event, request.id!),
     );
@@ -376,7 +376,7 @@ function shouldPromptCheckCorrectnessSummary(
   return lastNonResultEvent.sender === aiBotUserId;
 }
 
-function getCheckCorrectnessCommandRequests(
+function getCheckCorrectnessToolRequests(
   event: DiscreteMatrixEvent,
 ): ToolRequest[] {
   if (!event || event.type !== 'm.room.message') {
@@ -1032,7 +1032,7 @@ function isCheckCorrectnessToolResultEvent(
   if (!sourceEvent) {
     return false;
   }
-  let checkRequests = getCheckCorrectnessCommandRequests(sourceEvent);
+  let checkRequests = getCheckCorrectnessToolRequests(sourceEvent);
   if (checkRequests.length === 0) {
     return false;
   }
@@ -1323,7 +1323,7 @@ function findCheckCorrectnessToolRequest(
   commandRequestId: string,
 ): ToolRequest | undefined {
   for (let event of history) {
-    let requests = getCheckCorrectnessCommandRequests(event);
+    let requests = getCheckCorrectnessToolRequests(event);
     let match = requests.find((request) => request.id === commandRequestId);
     if (match) {
       return match;

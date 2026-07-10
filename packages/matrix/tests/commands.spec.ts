@@ -138,7 +138,7 @@ test.describe('Commands', () => {
     expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
-  test(`applying a command dispatches a ToolResultEvent if command is succesful`, async ({
+  test(`applying a command dispatches a ToolResultEvent if command is successful`, async ({
     page,
   }) => {
     const { username, password, credentials } =
@@ -225,7 +225,7 @@ test.describe('Commands', () => {
     }).toPass();
   });
 
-  test(`applying a search command dispatches a result event if command is succesful and result is returned`, async ({
+  test(`applying a search command dispatches a result event if command is successful and result is returned`, async ({
     page,
   }) => {
     const { username, password, credentials } =

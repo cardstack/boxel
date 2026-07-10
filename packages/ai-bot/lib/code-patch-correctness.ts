@@ -21,7 +21,7 @@ export async function publishCodePatchCorrectnessMessage(
   client: MatrixClient,
 ) {
   let body = '';
-  let toolRequests = buildCheckCorrectnessCommandRequests(summary);
+  let toolRequests = buildCheckCorrectnessToolRequests(summary);
   let baseContent = {
     body,
     msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
@@ -52,7 +52,7 @@ export async function publishCodePatchCorrectnessMessage(
   await client.sendEvent(summary.roomId, 'm.room.message', content);
 }
 
-export function buildCheckCorrectnessCommandRequests(
+export function buildCheckCorrectnessToolRequests(
   summary: PendingCodePatchCorrectnessCheck,
 ): Partial<ToolRequest>[] {
   let requests: Partial<ToolRequest>[] = [];
