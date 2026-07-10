@@ -223,7 +223,7 @@ export default class ModalContainer extends Component<Signature> {
         padding: 0 var(--boxel-sp-5xs);
         border-radius: var(--boxel-border-radius-xs, 4px);
         background: rgb(0 0 0 / 35%);
-        color: #939393;
+        color: var(--boxel-450, #939393);
         font-family: inherit;
         font-size: 0.9em;
         line-height: 1.5;
