@@ -4197,7 +4197,6 @@ module(basename(import.meta.filename), function () {
     // surfacing as an HTTP 500.
     const providerRealmURL = 'http://127.0.0.1:5531/test/';
     const consumerRealmURL = 'http://127.0.0.1:5532/test/';
-    let providerRequest: RealmRequest;
     let consumerRequest: RealmRequest;
 
     setupPermissionedRealmsCached(hooks, {
@@ -4258,10 +4257,6 @@ boxel:
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
-        providerRequest = withRealmPath(
-          supertest(latestRealms[0].realmHttpServer),
-          new URL(providerRealmURL),
-        );
         consumerRequest = withRealmPath(
           supertest(latestRealms[1].realmHttpServer),
           new URL(consumerRealmURL),
@@ -4314,28 +4309,6 @@ boxel:
         linkedFile?.attributes?.kind,
         'skill',
         'cross-realm file-meta carries index-derived attributes',
-      );
-    });
-
-    test('serves index-enriched file-meta for a card-mime request on a file URL', async function (assert) {
-      let response = await providerRequest
-        .get('/instructions.md')
-        .set('Accept', 'application/vnd.card+json');
-
-      assert.strictEqual(
-        response.status,
-        200,
-        `HTTP 200 status: ${response.text}`,
-      );
-      assert.strictEqual(
-        response.body.data?.type,
-        'file-meta',
-        'a card-mime request for a file path returns a file-meta document',
-      );
-      assert.strictEqual(
-        response.body.data?.attributes?.kind,
-        'skill',
-        'the document is index-enriched, not built from the raw file alone',
       );
     });
   });

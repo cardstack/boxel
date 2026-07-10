@@ -77,13 +77,25 @@ export function isFileDefCodeRef(
   return false;
 }
 
+function extensionOf(url: URL): string {
+  let name = url.pathname.split('/').pop() ?? '';
+  let dot = name.lastIndexOf('.');
+  return dot <= 0 ? '' : name.slice(dot).toLowerCase();
+}
+
+// Whether a URL names a file rather than a card. Card ids never carry a
+// file extension (an instance's `.json` is stripped from its id), so an
+// extension on the last path segment is a reliable tell that the URL
+// targets a file.
+export function urlNamesFile(url: URL): boolean {
+  return extensionOf(url) !== '';
+}
+
 export function resolveFileDefCodeRef(
   fileURL: URL,
   virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
-  let name = fileURL.pathname.split('/').pop() ?? '';
-  let dot = name.lastIndexOf('.');
-  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
+  let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;

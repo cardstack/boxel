@@ -59,6 +59,7 @@ import {
   CardError,
   responseWithError,
   formattedError,
+  stringifyErrorForLog,
   unsupportedMediaType,
   type SerializedError,
 } from './error.ts';
@@ -171,7 +172,7 @@ import type {
   FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -2128,11 +2129,12 @@ export class Realm {
           },
         );
         settled.catch((err: unknown) => {
-          let message = err instanceof Error ? err.message : String(err);
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Deferred indexing chain failed for ${this.url}: ${message}`,
+            `Deferred indexing chain failed for ${this.url} (urls: ${urls
+              .map((u) => u.href)
+              .join(', ')}): ${stringifyErrorForLog(err)}`,
           );
         });
       }
@@ -2626,12 +2628,8 @@ export class Realm {
           );
         },
         (err: unknown) => {
-          let detail =
-            err instanceof Error
-              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              : String(err);
           this.#log.error(
-            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${stringifyErrorForLog(err)}`,
           );
         },
       );
@@ -4347,37 +4345,6 @@ export class Realm {
     return await this.#adapter.exists(localPath);
   }
 
-  // File-meta response for a file path, preferring the index-enriched
-  // document: consumers rely on index-derived attributes (e.g. a markdown
-  // skill only counts as a skill when its file-meta carries `kind:
-  // 'skill'`). Falls back to the raw-file form when the file isn't indexed.
-  // Serves both the file-meta route and card-mime requests that turn out to
-  // target files, such as cross-realm file links fetched by loadLinks; the
-  // response is labeled with the mime the route was matched on, and callers
-  // discriminate the payload via `data.type`.
-  private async fileMetaResponse(
-    requestContext: RequestContext,
-    localPath: LocalPath,
-    responseContentType: SupportedMimeType,
-  ): Promise<Response | undefined> {
-    let fileEntry = await this.#realmIndexQueryEngine.file(
-      this.paths.fileURL(localPath),
-    );
-    if (fileEntry) {
-      return await this.fileMetaDocumentFromIndex(
-        requestContext,
-        localPath,
-        fileEntry,
-        responseContentType,
-      );
-    }
-    return await this.fileMetaDocument(
-      requestContext,
-      localPath,
-      responseContentType,
-    );
-  }
-
   private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
@@ -4441,7 +4408,6 @@ export class Realm {
     requestContext: RequestContext,
     localPath: LocalPath,
     fileEntry: IndexedFile,
-    responseContentType: SupportedMimeType = SupportedMimeType.FileMeta,
   ): Promise<Response> {
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
@@ -4527,7 +4493,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': responseContentType,
+          'content-type': SupportedMimeType.FileMeta,
         },
       },
       requestContext,
@@ -4542,7 +4508,17 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    let fileResponse = await this.fileMetaResponse(
+    let fileEntry = await this.#realmIndexQueryEngine.file(
+      this.paths.fileURL(localPath),
+    );
+    if (fileEntry) {
+      return await this.fileMetaDocumentFromIndex(
+        requestContext,
+        localPath,
+        fileEntry,
+      );
+    }
+    let fileResponse = await this.fileMetaDocument(
       requestContext,
       localPath,
       SupportedMimeType.FileMeta,
@@ -5182,7 +5158,7 @@ export class Realm {
             // document so the caller receives valid JSON it can
             // discriminate via `data.type === 'file-meta'` — instead of
             // raw binary bytes that crash a downstream `response.json()`.
-            let fileMeta = await this.fileMetaResponse(
+            let fileMeta = await this.fileMetaDocument(
               requestContext,
               localPath,
               SupportedMimeType.CardJson,
@@ -5232,7 +5208,7 @@ export class Realm {
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          let fileMeta = await this.fileMetaResponse(
+          let fileMeta = await this.fileMetaDocument(
             requestContext,
             localPath,
             SupportedMimeType.CardJson,
