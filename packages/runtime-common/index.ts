@@ -505,9 +505,12 @@ export interface Diagnostics
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
-  // the blob lands in: `boxel_index.diagnostics` carries `requestId` (plus
-  // this field on rows a fused pass wrote), `prerendered_html.diagnostics`
-  // carries only this field. Absent for in-process callers.
+  // the blob lands in. A split-pipeline write puts `requestId` on
+  // `boxel_index.diagnostics` and this field on
+  // `prerendered_html.diagnostics`; a fused pass produces one combined blob
+  // — both ids, when each visit was its own HTTP request — which lands on
+  // `boxel_index` and is projected as-is onto `prerendered_html`. Absent
+  // for in-process callers.
   prerenderHtmlRequestId?: string;
   // Frontmatter YAML that wouldn't parse during file extraction. The row
   // still indexes (body-only); this is the only indexed signal that the
