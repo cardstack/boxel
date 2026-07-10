@@ -54,12 +54,9 @@ chases each segment's `fieldOrCard` code ref) and tagging plural segments with
 `[]` in the traveled path:
 
 - `handleFieldArity` — if the walk crossed a plural segment, ANDs the
-  predicate with the **query-path confinement predicate**:
-  `tableValuedTree(…).fullkey LIKE '$.friends[%].bestFriend.name'`. This is
-  what pins `json_tree()`'s recursive expansion to exactly the intended path
-  (see the worked example in the comment above `handleFieldArity`).
-  `usePluralContainer` trims the trailing `[]` so null checks target the array
-  container itself; `pluralValue` supplies the JSON-null-aware comparison.
+  predicate with the **query-path anchor** that confines `json_tree()`'s
+  recursive expansion to exactly the intended path. This is the engine's most
+  nuanced mechanism — see the dedicated section below.
 - `handleFieldQuery` — builds the left accessor. The forward (`enter`) walk
   detects the first plural hop and switches the whole left side to the tree
   alias; only if no plural was hit does the backward (`exit`) walk assemble
@@ -83,6 +80,80 @@ become `$n` binds; table-valued nodes dedupe into a map (`each_<column>`,
 `CROSS JOIN LATERAL …` clauses spliced into the FROM clause at the
 `__TABLE_VALUED_FUNCTIONS__` placeholder; `dbExpression` nodes pick their
 pg/sqlite branch.
+
+## Plural paths: `json_tree` and the query-path anchor
+
+`->`/`->>` navigation cannot cross an array of unknown length, so any path
+that traverses a plural field routes through a `json_tree` table function.
+SQLite's is built-in; Postgres's `jsonb_tree(data, root_path)` is a custom
+recursive-CTE function (defined in the initial migration in
+`packages/postgres/migrations/`) returning `(fullkey, jsonb_value,
+text_value, level)` — deliberately emitting the **same `fullkey` dialect**
+as SQLite (`$.friends[0].bestFriend.name`: array hops bracketed, object hops
+dotted). That shared dialect is what lets one anchor pattern serve both
+adapters.
+
+Worked example — `friends` is `linksToMany`, filter
+`{ eq: { 'friends.bestFriend.name': 'Mango' } }`:
+
+1. The pass-1 walk tags plural segments, yielding the traveled path
+   `friends[].bestFriend.name`, and roots the tree at the smallest prefix
+   containing the fan-out: `trimPathAtFirstPluralField` → `$.friends`.
+2. `json_tree` enumerates **every** node beneath that root — one row each for
+   `$.friends`, `$.friends[0]`, `$.friends[0].name`,
+   `$.friends[0].bestFriend`, `$.friends[0].bestFriend.name`,
+   `$.friends[1]`… A value predicate alone (`tree.text_value = $1`) would
+   therefore match 'Mango' appearing _anywhere_ under `$.friends` — a
+   friend's own `name`, a nickname field, any depth.
+3. `handleFieldArity` ANDs the **anchor**: `tree.fullkey LIKE
+'$.friends[%].bestFriend.name'` — the traveled path with each `[]`
+   rewritten to `[%]` (`convertBracketsToWildCards`), so any array index
+   passes but the key sequence must match exactly. The conjunction reads:
+   "∃ a tree row at exactly this path shape whose value matches".
+
+```sql
+SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc
+FROM boxel_index AS i
+CROSS JOIN LATERAL jsonb_tree(i.search_doc, '$.friends') AS friends0_tree
+WHERE (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+  AND ( friends0_tree.text_value = $1                            -- value
+        AND friends0_tree.fullkey LIKE '$.friends[%].bestFriend.name' ) -- anchor
+GROUP BY i.url
+```
+
+**One alias, two references.** The left side (`handleFieldQuery` emits
+`tree.text_value`) and the anchor (`handleFieldArity` emits `tree.fullkey`)
+both create `tableValuedTree(column, rootPath, fieldPath, …)` nodes, and pass
+2 dedupes them by `tree_<column>_<fieldPath>` — so they collapse into a
+single `CROSS JOIN LATERAL` and are guaranteed to test the **same tree row**.
+This is why `handleFieldQuery` computes its `rootPluralPath` to line up with
+`handleFieldArity`'s: if the two emitted different `(column, fieldPath)`
+pairs they would get separate joins, and the anchor would no longer confine
+the value test.
+
+**Consequences of that dedup key** (the full dotted field path):
+
+- Two predicates on the _same_ path share one alias and evaluate per tree
+  row: `every` of `friends.name = 'Mango'` and `friends.name = 'Ringo'`
+  matches nothing, even for a card that has both friends — the same
+  exists-one-element behavior as the shared `types` alias (next section).
+- Predicates on _different_ leaf paths get separate tree functions and fan
+  out as a cartesian product: `friends.name = 'Mango' AND friends.age = 5`
+  means "some friend named Mango AND some friend aged 5" — **not necessarily
+  the same friend**. Element-correlated predicates across a plural hop are
+  not expressible today.
+
+**Null checks anchor at the container** (`usePluralContainer`). For
+`eq`/`in`/`contains` null on a path whose leaf is plural, there may be no
+element rows at all, so the anchor is redirected at the array node itself:
+`trimTrailingBrackets` drops the trailing `[]` (interior plurals keep their
+`[%]`), and the tree's seed row — `jsonb_tree` emits the root node as its
+first row — is what the anchor then matches. The comparison switches from
+text extraction to `pluralValue`: `tree.jsonb_value = 'null'::jsonb` (JSON
+null; adjustSQL rewrites this to `tree.value IS NULL` for SQLite). This is
+also what `FieldQuery.useJsonBValue` selects: `jsonb_value` for these
+JSON-typed comparisons, `text_value` for string predicates (SQLite maps both
+to `json_tree`'s single `.value` column).
 
 ## The two-adapter split
 
@@ -141,9 +212,10 @@ NULL (`dualReadColumn`), and the effective error state spans both channels
 
 ## The client-parity contract
 
-`runtime-common/instance-filter-matcher.ts` is this engine's client-side
+`packages/runtime-common/instance-filter-matcher.ts` is this engine's client-side
 mirror: the host's live search (`SearchResource.displayedInstances` in
-`host/app/resources/search.ts`) evaluates the same `Filter`/`Sort` against
+`packages/host/app/resources/search.ts`) evaluates the same `Filter`/`Sort`
+against
 hydrated instances for immediate results, then reconciles the server response
 — and it **removes** a server result that evaluates locally to `no-match`
 (only `unresolvable` is trusted to the server). Therefore:
