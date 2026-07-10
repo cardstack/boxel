@@ -27,7 +27,7 @@ import {
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
-import { isAutoExecutableCommand } from '@cardstack/host/lib/tool-auto-execute';
+import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -47,7 +47,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomResource: RoomResource;
-    messageCommand: MessageTool;
+    messageTool: MessageTool;
     roomId: string;
     runCommand: () => void;
     isError?: boolean;
@@ -65,7 +65,7 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   private get previewCommandCode() {
-    let { name, arguments: payload } = this.args.messageCommand;
+    let { name, arguments: payload } = this.args.messageTool;
     return JSON.stringify({ name, payload }, null, 2);
   }
 
@@ -77,7 +77,7 @@ export default class RoomMessageTool extends Component<Signature> {
     if (this.didFailCorrectnessCheck) {
       return 'applied-with-error';
     }
-    let status = this.args.messageCommand?.status;
+    let status = this.args.messageTool?.status;
     // Mirror the Accept All bar fix: for any command the host will
     // auto-execute (checkCorrectness, requiresApproval=false, LLM mode
     // 'act'), present the applying spinner immediately on message-landed
@@ -95,12 +95,12 @@ export default class RoomMessageTool extends Component<Signature> {
 
   private get willAutoExecute() {
     let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
-      this.args.messageCommand.eventId,
+      this.args.messageTool.eventId,
     );
     let isOwnedByCurrentAgent =
-      this.args.messageCommand.message.agentId === this.matrixService.agentId;
-    return isAutoExecutableCommand(
-      this.args.messageCommand,
+      this.args.messageTool.message.agentId === this.matrixService.agentId;
+    return isAutoExecutableTool(
+      this.args.messageTool,
       activeMode,
       isOwnedByCurrentAgent,
     );
@@ -109,8 +109,8 @@ export default class RoomMessageTool extends Component<Signature> {
   @use private toolResultCard = resource(() => {
     let initialState = { card: undefined } as { card: CardDef | undefined };
     let state = new TrackedObject(initialState);
-    if (this.args.messageCommand.toolResultFileDef) {
-      this.args.messageCommand.getCommandResultCard().then((card) => {
+    if (this.args.messageTool.toolResultFileDef) {
+      this.args.messageTool.getCommandResultCard().then((card) => {
         state.card = card;
       });
     }
@@ -119,13 +119,13 @@ export default class RoomMessageTool extends Component<Signature> {
 
   private get isDisplayingCode() {
     return this.args.roomResource.isDisplayingCode(
-      this.args.messageCommand.toolRequest as ToolRequest,
+      this.args.messageTool.toolRequest as ToolRequest,
     );
   }
 
   private toggleViewCode = () => {
     this.args.roomResource.toggleViewCode(
-      this.args.messageCommand.toolRequest as ToolRequest,
+      this.args.messageTool.toolRequest as ToolRequest,
     );
   };
 
@@ -161,7 +161,7 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   private get shouldDisplayResultCard() {
-    let commandName = this.args.messageCommand.name ?? '';
+    let commandName = this.args.messageTool.name ?? '';
     return (
       !!this.toolResultCard.card &&
       commandName !== 'checkCorrectness' &&
@@ -170,7 +170,7 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   private get didFailCorrectnessCheck() {
-    if (this.args.messageCommand.name !== 'checkCorrectness') {
+    if (this.args.messageTool.name !== 'checkCorrectness') {
       return false;
     }
     let card = this.toolResultCard.card as
@@ -218,7 +218,7 @@ export default class RoomMessageTool extends Component<Signature> {
 
   @cached
   private get failedToolState() {
-    let toolRequest = this.args.messageCommand.toolRequest as ToolRequest;
+    let toolRequest = this.args.messageTool.toolRequest as ToolRequest;
     if (!toolRequest.id) {
       return undefined;
     }
@@ -227,13 +227,13 @@ export default class RoomMessageTool extends Component<Signature> {
 
   private get invalidToolCallState() {
     return (
-      this.args.messageCommand.status === 'invalid' &&
-      !!this.args.messageCommand.failureReason
+      this.args.messageTool.status === 'invalid' &&
+      !!this.args.messageTool.failureReason
     );
   }
 
   private get commandDescription() {
-    return this.args.messageCommand.description ?? 'Preparing tool call...';
+    return this.args.messageTool.description ?? 'Preparing tool call...';
   }
 
   private get hasFailedState() {
@@ -249,12 +249,12 @@ export default class RoomMessageTool extends Component<Signature> {
         is-failed=(bool this.hasFailedState)
         compact=@isCompact
       }}
-      data-test-tool-call-id={{@messageCommand.toolRequest.id}}
+      data-test-tool-call-id={{@messageTool.toolRequest.id}}
       ...attributes
     >
       {{#if @isStreaming}}
         <CodeBlock
-          class={{cn 'command-code-block' compact=@isCompact}}
+          class={{cn 'tool-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-tool-call-card-idle={{not
@@ -265,7 +265,7 @@ export default class RoomMessageTool extends Component<Signature> {
           <codeBlock.commandHeader
             @commandDescription={{this.commandDescription}}
             @action={{@runCommand}}
-            @actionVerb={{@messageCommand.actionVerb}}
+            @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @isCompact={{@isCompact}}
             @toolCallState='preparing'
@@ -273,7 +273,7 @@ export default class RoomMessageTool extends Component<Signature> {
         </CodeBlock>
       {{else}}
         <CodeBlock
-          class={{cn 'command-code-block' compact=@isCompact}}
+          class={{cn 'tool-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
@@ -283,9 +283,9 @@ export default class RoomMessageTool extends Component<Signature> {
           as |codeBlock|
         >
           <codeBlock.commandHeader
-            @commandDescription={{@messageCommand.description}}
+            @commandDescription={{@messageTool.description}}
             @action={{@runCommand}}
-            @actionVerb={{@messageCommand.actionVerb}}
+            @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @toolCallState={{this.applyButtonState}}
             @isCompact={{@isCompact}}
@@ -303,28 +303,28 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{else if this.invalidToolCallState}}
           <Alert @type='warning' as |Alert|>
-            <Alert.Messages @messages={{array @messageCommand.failureReason}} />
+            <Alert.Messages @messages={{array @messageTool.failureReason}} />
             <Alert.Action @action={{@runCommand}} @actionName='Try Anyway' />
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
           <CardContainer
             @displayBoundaries={{false}}
-            class='command-result-card-preview'
+            class='tool-result-card-preview'
             data-test-tool-result-container
           >
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.commandResultCardForRendering}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-              class='command-result-card-header'
+              class='tool-result-card-header'
               data-test-tool-result-header
             />
             <CardRenderer
               @card={{this.commandResultCardForRendering}}
               @format='embedded'
               @displayContainer={{false}}
-              data-test-boxel-command-result
+              data-test-boxel-tool-call-result
             />
           </CardContainer>
         {{/if}}
@@ -335,17 +335,17 @@ export default class RoomMessageTool extends Component<Signature> {
       .room-message-tool > * + * {
         margin-top: var(--boxel-sp-xs);
       }
-      .command-result-card-preview {
+      .tool-result-card-preview {
         margin-top: var(--boxel-sp);
       }
-      .command-result-card-header {
+      .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);
         --boxel-label-font-size: var(--boxel-font-size-xs);
         --boxel-label-line-height: calc(15 / 11);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }
-      .command-result-card-header :deep(.content) {
+      .tool-result-card-header :deep(.content) {
         gap: 0;
       }
     </style>

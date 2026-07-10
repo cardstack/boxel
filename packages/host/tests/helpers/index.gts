@@ -2067,7 +2067,7 @@ export async function addSkillToAiAssistant(
         snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
       disabledSkillCards:
         snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
-      commandDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
+      toolDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(
@@ -2141,7 +2141,7 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       disabledSkillCards:
         roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
         null,
-      commandDefinitionsCount:
+      toolDefinitionsCount:
         roomData?.skillsConfig?.toolDefinitionFileDefs?.length ?? null,
       roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
       roomResourceCommandCount: roomResource?.tools?.length ?? null,

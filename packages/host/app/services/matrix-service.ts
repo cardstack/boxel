@@ -1421,10 +1421,10 @@ export default class MatrixService extends Service {
     if (validCommandDefinitions.length === 0) {
       return [];
     }
-    let commandFileDefs = await this.client.uploadToolDefinitions(
+    let toolFileDefs = await this.client.uploadToolDefinitions(
       validCommandDefinitions,
     );
-    return commandFileDefs;
+    return toolFileDefs;
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {

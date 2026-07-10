@@ -52,24 +52,24 @@ export class ToolField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='command-compact'>
-        <CommandIcon class='command-icon' />
-        <div class='command-info'>
-          <div class='command-title'>{{@model.cardTitle}}</div>
-          <div class='command-meta'>
+      <div class='tool-compact'>
+        <CommandIcon class='tool-icon' />
+        <div class='tool-info'>
+          <div class='tool-title'>{{@model.cardTitle}}</div>
+          <div class='tool-meta'>
             <code
-              class='command-path'
+              class='tool-path'
             >{{@model.codeRef.module}}/{{@model.codeRef.name}}</code>
           </div>
           {{#if @model.requiresApproval}}
             <div>
-              <Pill class='command-label'>Requires Approval</Pill>
+              <Pill class='tool-label'>Requires Approval</Pill>
             </div>
           {{/if}}
         </div>
       </div>
       <style scoped>
-        .command-compact {
+        .tool-compact {
           --muted-color: color-mix(in lab, var(--muted) 60%, var(--foreground));
           display: flex;
           gap: var(--boxel-sp-3xs);
@@ -79,11 +79,11 @@ export class ToolField extends FieldDef {
           border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: var(--radius, var(--boxel-border-radius));
         }
-        .command-icon {
+        .tool-icon {
           color: var(--muted-color, var(--boxel-400));
           flex-shrink: 0;
         }
-        .command-info {
+        .tool-info {
           flex: 1;
           min-width: 0;
           display: flex;
@@ -92,19 +92,19 @@ export class ToolField extends FieldDef {
           padding-left: var(--boxel-sp-2xs);
           border-left: 3px solid var(--muted-color, var(--boxel-400));
         }
-        .command-title {
+        .tool-title {
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;
         }
-        .command-meta {
+        .tool-meta {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground, var(--boxel-700));
         }
-        .command-path {
+        .tool-path {
           word-break: break-all;
         }
-        .command-label {
+        .tool-label {
           font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--boxel-lsp-lg);
         }

@@ -103,7 +103,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       params.nonce,
     );
     let command = parseCommandParam(request?.command);
-    let commandInput = parseCommandInputValue(request?.input);
+    let toolInput = parseCommandInputValue(request?.input);
 
     if (!command) {
       model.status = 'error';
@@ -111,7 +111,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       return model;
     }
 
-    void this.#runCommand(model, command, commandInput);
+    void this.#runCommand(model, command, toolInput);
     return model;
   }
 
@@ -126,7 +126,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   async #runCommand(
     model: CommandRunState,
     command: ResolvedCodeRef,
-    commandInput: Record<string, unknown> | undefined,
+    toolInput: Record<string, unknown> | undefined,
   ) {
     try {
       let ToolConstructor = (await getClass(
@@ -137,12 +137,12 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
         throw new Error('Command not found for provided CodeRef');
       }
 
-      let commandInstance = new ToolConstructor(this.commandContext);
+      let toolInstance = new ToolConstructor(this.commandContext);
       let resultCard: CardDef | undefined;
-      if (commandInput) {
-        resultCard = await commandInstance.execute(commandInput);
+      if (toolInput) {
+        resultCard = await toolInstance.execute(toolInput);
       } else {
-        resultCard = await commandInstance.execute();
+        resultCard = await toolInstance.execute();
       }
 
       model.cardResult = resultCard ?? null;
