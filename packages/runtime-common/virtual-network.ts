@@ -493,6 +493,24 @@ export class VirtualNetwork {
         return response;
       }
     }
+    // A URL mapping can exist purely as an alias for a realm that is
+    // mounted at its real (served) URL — the mapping keeps content that
+    // references the alias resolvable. In that case the real→virtual
+    // remap above points away from the mounted handler, so when the
+    // remapped request matched nothing, retry with the original request
+    // before giving up.
+    if (internalRequest.url !== request.url) {
+      if (onMappedRequest) {
+        onMappedRequest(request);
+      }
+      for (let handler of this.handlers) {
+        let response = await handler(request);
+        if (response) {
+          this.mapRedirectionURL(response);
+          return response;
+        }
+      }
+    }
     return new Response(undefined, { status: 404 });
   }
 
