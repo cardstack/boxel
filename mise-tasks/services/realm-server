@@ -104,7 +104,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   \
   --path='../base' \
   --username='base_realm' \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \
   \
   ${START_CATALOG:+--path='../catalog/contents'} \
@@ -141,4 +141,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl="${REALM_BASE_URL}/base/" \
   2>&1 | "$LOG_TEE" realm-server
