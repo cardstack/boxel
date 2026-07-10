@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   percySnapshot,
@@ -212,8 +212,8 @@ module('Acceptance | theme-card-test', function (hooks) {
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('@cardstack/base/card-api');
     let booleanMod: typeof import('@cardstack/base/boolean');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    booleanMod = await loader.import(`${baseRealm.url}boolean`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    booleanMod = await loader.import('@cardstack/base/boolean');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: BooleanField } = booleanMod;

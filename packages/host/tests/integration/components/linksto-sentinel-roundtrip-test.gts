@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
@@ -127,7 +126,7 @@ module(
       provideConsumeContext(PermissionsContextName, permissions);
       loader = getService('loader-service').loader;
       let fieldSupport = await loader.import<typeof FieldSupportModule>(
-        `${baseRealm.url}field-support`,
+        '@cardstack/base/field-support',
       );
       isLinkNotFound = fieldSupport.isLinkNotFound;
       isNotLoadedValue = fieldSupport.isNotLoadedValue;
@@ -135,7 +134,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Realm holds the module and one real Pet (`Pet/mango`), but never

@@ -4,8 +4,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -35,9 +33,9 @@ module('Acceptance | code submode | file def navigation', function (hooks) {
     let string: typeof import('@cardstack/base/string');
     let fileApi: typeof import('@cardstack/base/file-api');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    fileApi = await loader.import('@cardstack/base/file-api');
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;

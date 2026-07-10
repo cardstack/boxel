@@ -16,7 +16,6 @@ import type {
   Permissions,
 } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   fields,
   isSingleCardDocument,
   localId,
@@ -116,7 +115,7 @@ module('Integration | serialization', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can deserialize field', async function (assert) {

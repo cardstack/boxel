@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import {
   CardDef,
@@ -77,70 +77,70 @@ module('Integration | field markdown domain', function (hooks) {
     loader = getService('loader-service').loader;
     BrandFunctionalPalette = (
       await loader.import<typeof BrandFunctionalPaletteModule>(
-        `${baseRealm.url}brand-functional-palette`,
+        '@cardstack/base/brand-functional-palette',
       )
     ).default;
     let brandLogoModule = await loader.import<typeof BrandLogoModule>(
-      `${baseRealm.url}brand-logo`,
+      '@cardstack/base/brand-logo',
     );
     BrandLogo = brandLogoModule.default;
     MarkField = brandLogoModule.MarkField;
     CSSValueField = (
       await loader.import<typeof CSSValueFieldModule>(
-        `${baseRealm.url}css-value`,
+        '@cardstack/base/css-value',
       )
     ).default;
     CsvFileDef = (
       await loader.import<typeof CsvFileDefModule>(
-        `${baseRealm.url}csv-file-def`,
+        '@cardstack/base/csv-file-def',
       )
     ).CsvFileDef;
     GtsFileDef = (
       await loader.import<typeof GtsFileDefModule>(
-        `${baseRealm.url}gts-file-def`,
+        '@cardstack/base/gts-file-def',
       )
     ).GtsFileDef;
     ImageDef = (
       await loader.import<typeof ImageFileDefModule>(
-        `${baseRealm.url}image-file-def`,
+        '@cardstack/base/image-file-def',
       )
     ).ImageDef;
     JsonFileDef = (
       await loader.import<typeof JsonFileDefModule>(
-        `${baseRealm.url}json-file-def`,
+        '@cardstack/base/json-file-def',
       )
     ).JsonFileDef;
     MarkdownDef = (
       await loader.import<typeof MarkdownFileDefModule>(
-        `${baseRealm.url}markdown-file-def`,
+        '@cardstack/base/markdown-file-def',
       )
     ).MarkdownDef;
     ResponseField = (
       await loader.import<typeof ResponseFieldModule>(
-        `${baseRealm.url}response-field`,
+        '@cardstack/base/response-field',
       )
     ).default;
     StructuredTheme = (
       await loader.import<typeof StructuredThemeModule>(
-        `${baseRealm.url}structured-theme`,
+        '@cardstack/base/structured-theme',
       )
     ).default;
     let themeVarsModule = await loader.import<typeof StructuredThemeVarsModule>(
-      `${baseRealm.url}structured-theme-variables`,
+      '@cardstack/base/structured-theme-variables',
     );
     ThemeVarField = themeVarsModule.default;
     ThemeTypographyField = themeVarsModule.ThemeTypographyField;
     TextFileDef = (
       await loader.import<typeof TextFileDefModule>(
-        `${baseRealm.url}text-file-def`,
+        '@cardstack/base/text-file-def',
       )
     ).TextFileDef;
     TsFileDef = (
-      await loader.import<typeof TsFileDefModule>(`${baseRealm.url}ts-file-def`)
+      await loader.import<typeof TsFileDefModule>('@cardstack/base/ts-file-def')
     ).TsFileDef;
     TypographyField = (
       await loader.import<typeof TypographyFieldModule>(
-        `${baseRealm.url}typography`,
+        '@cardstack/base/typography',
       )
     ).default;
   });

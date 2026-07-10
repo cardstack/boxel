@@ -16,7 +16,6 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
-  baseRealm,
   localId,
   baseCardRef,
   realmURL,
@@ -95,7 +94,7 @@ module('Integration | Store', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -154,7 +153,7 @@ module('Integration | Store', function (hooks) {
     BoomPersonDef = BoomPerson;
     loaderService = getService('loader-service');
     loader = loaderService.loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
+    api = await loader.import('@cardstack/base/card-api');
     storeService = getService('store');
     operatorModeStateService = getService('operator-mode-state-service');
     cardStore = (storeService as any).store as CardStore;

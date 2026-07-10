@@ -4,7 +4,7 @@ import { settled, type RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
 import ApplyMarkdownEditTool from '@cardstack/host/tools/apply-markdown-edit';
@@ -73,7 +73,7 @@ module('Integration | tools | apply-markdown-edit', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

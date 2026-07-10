@@ -7,7 +7,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   CardContextName,
   PermissionsContextName,
   type CommandContext,
@@ -77,7 +76,7 @@ module('Integration | components | realm field', function (hooks) {
 
   setupCardLogs(hooks, async () => {
     return await getService('loader-service').loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
   });
 

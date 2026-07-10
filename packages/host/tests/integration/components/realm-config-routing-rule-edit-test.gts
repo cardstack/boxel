@@ -46,12 +46,12 @@ module(
     ) {
       let loader = getService('loader-service').loader;
       let cardApi: typeof import('@cardstack/base/card-api') =
-        await loader.import(`${baseRealm.url}card-api`);
+        await loader.import('@cardstack/base/card-api');
       let string: typeof import('@cardstack/base/string') = await loader.import(
-        `${baseRealm.url}string`,
+        '@cardstack/base/string',
       );
       let cardsGrid: typeof import('@cardstack/base/cards-grid') =
-        await loader.import(`${baseRealm.url}cards-grid`);
+        await loader.import('@cardstack/base/cards-grid');
 
       let { field, contains, CardDef } = cardApi;
       let { default: StringField } = string;
@@ -269,7 +269,7 @@ module(
       // rather than the context fallback.
       let cardApi: typeof import('@cardstack/base/card-api') = await getService(
         'loader-service',
-      ).loader.import(`${baseRealm.url}card-api`);
+      ).loader.import('@cardstack/base/card-api');
 
       await setupIntegrationTestRealm({
         mockMatrixUtils,

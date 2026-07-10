@@ -4,7 +4,7 @@ import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred, VirtualNetwork } from '@cardstack/runtime-common';
+import { Deferred, VirtualNetwork } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -196,7 +196,7 @@ module('Integration | field configuration', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class ColorField extends FieldDef {

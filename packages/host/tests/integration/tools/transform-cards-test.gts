@@ -4,7 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Command } from '@cardstack/runtime-common';
+import { Command } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -50,7 +50,7 @@ module('Integration | tools | transform-cards', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -65,9 +65,9 @@ module('Integration | tools | transform-cards', function (hooks) {
     let string: typeof import('@cardstack/base/string');
     let CommandModule: typeof import('@cardstack/base/command');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    CommandModule = await loader.import(`${baseRealm.url}command`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    CommandModule = await loader.import('@cardstack/base/command');
 
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;

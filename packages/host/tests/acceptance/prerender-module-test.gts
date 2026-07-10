@@ -5,7 +5,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   baseRealmRRI,
   rri,
   trimExecutableExtension,
@@ -207,7 +206,7 @@ module('Acceptance | prerender | module', function (hooks) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
     let cardApi: typeof import('@cardstack/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
 
     let { field, contains, CardDef, StringField } = cardApi;
     class Shimmed extends CardDef {

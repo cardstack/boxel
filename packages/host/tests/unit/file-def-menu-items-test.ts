@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -27,7 +27,7 @@ module('Unit | FileDef menu items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}file-api`);
+    let mod: any = await loader.import('@cardstack/base/file-api');
     getDefaultFileMenuItems = mod.getDefaultFileMenuItems;
   });
 

@@ -16,8 +16,6 @@ import { visit } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import { setupMockMatrix } from './mock-matrix';
 import { setupApplicationTest } from './setup';
 
@@ -54,9 +52,9 @@ export function registerShardWarmup() {
       let loader = loaderService.loader;
       // Prime the loader with the most commonly imported base-realm modules
       // so subsequent real tests don't pay the import cost.
-      await loader.import(`${baseRealm.url}card-api`);
-      await loader.import(`${baseRealm.url}string`);
-      await loader.import(`${baseRealm.url}spec`);
+      await loader.import('@cardstack/base/card-api');
+      await loader.import('@cardstack/base/string');
+      await loader.import('@cardstack/base/spec');
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
