@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 // Partial expression index correlating a prerender_html job back to the
 // indexing pass that spawned it (the spawningJobId its args carry). The
 // Grafana indexing dashboard resolves a prerender_job_id per displayed
