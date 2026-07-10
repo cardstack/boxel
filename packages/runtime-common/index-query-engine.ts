@@ -276,6 +276,12 @@ function flipPolarity(polarity: FilterPolarity): FilterPolarity {
   return polarity === 'positive' ? 'negated' : 'positive';
 }
 
+// Architectural guidance for this module — the two-pass compilation pipeline,
+// the Postgres/SQLite dual-adapter constraints, the semantics of table-valued
+// fan-out, and the parity contract with the client-side
+// `instance-filter-matcher.ts` — lives in
+// `.claude/skills/index-query-engine/SKILL.md`. Read it before changing how
+// queries compile or adding a filter operator / synthetic search-doc key.
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
