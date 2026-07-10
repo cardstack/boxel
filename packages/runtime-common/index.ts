@@ -441,6 +441,12 @@ export interface ModulePrerenderModel {
   createdAt: number;
   deps: string[];
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
+  // Every export name of the module, not just the card/field definitions
+  // that `definitions` records. Lets callers validate a codeRef whose export
+  // is not a BaseDef (e.g. a skill command class) without importing the
+  // module themselves. Absent on error responses and on responses from hosts
+  // that predate this field.
+  exports?: string[];
   error?: ErrorEntry;
 }
 

@@ -1,0 +1,270 @@
+import type Koa from 'koa';
+import {
+  IndexQueryEngine,
+  RealmPaths,
+  SupportedMimeType,
+  fetchUserPermissions,
+  skillCardRef,
+  systemInitiatedPriority,
+  type ModuleRenderResponse,
+  type Realm,
+  type RealmPermissions,
+} from '@cardstack/runtime-common';
+import {
+  sendResponseForBadRequest,
+  sendResponseForSystemError,
+  setContextResponse,
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { isAuthorizedToViewMonitoring } from '../utils/monitoring.ts';
+import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
+
+// CS-11093: monitoring endpoint that validates every skill in a realm still
+// resolves. Motivated by a staging incident where a host command module was
+// renamed and every skill referencing the old path silently broke the AI
+// assistant — API health checks stayed green because the failure only
+// surfaced when a browser tried to import the stale module. Each command
+// codeRef's module is imported via the prerenderer (a real host in headless
+// Chrome, with the same shims and virtual network a user's browser has), so
+// a module this endpoint passes is one the deployed host can actually load.
+
+interface SkillCommandFailure {
+  skill: string;
+  module: string;
+  name: string;
+  error: string;
+}
+
+export default function handleSkillValidation({
+  dbAdapter,
+  definitionLookup,
+  prerenderer,
+  realmSecretSeed,
+  realmServerSecretSeed,
+  reconciler,
+  serverURL,
+  virtualNetwork,
+}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let createPrerenderAuth = buildCreatePrerenderAuth(
+    realmSecretSeed,
+    serverURL,
+  );
+  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    if (
+      !(await isAuthorizedToViewMonitoring(ctxt.request, realmServerSecretSeed))
+    ) {
+      return setContextResponse(
+        ctxt,
+        new Response('Unauthorized', { status: 401 }),
+      );
+    }
+    if (!prerenderer) {
+      await sendResponseForSystemError(
+        ctxt,
+        'Prerenderer is not configured on this realm server',
+      );
+      return;
+    }
+    let realmPath = ctxt.URL.searchParams.get('realm')?.replace(/\/$/, '');
+    if (!realmPath) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'Request missing "realm" query param',
+      );
+      return;
+    }
+    // Same resolution + registry gate as handle-reindex: `realm=` may be a
+    // path relative to this server or an absolute URL, and only URLs present
+    // in the realm registry mount, so this opens no SSRF surface.
+    let realmURLObj: URL;
+    try {
+      realmURLObj = new RealmPaths(new URL(serverURL)).directoryURL(realmPath);
+    } catch (e: any) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `invalid "realm" value: ${e.message}`,
+      );
+      return;
+    }
+    let realm: Realm | undefined;
+    try {
+      realm = await reconciler.lookupOrMount(realmURLObj.href);
+    } catch (e: any) {
+      await sendResponseForSystemError(ctxt, e.message);
+      return;
+    }
+    if (!realm) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `realm ${realmURLObj.href} does not exist on this server`,
+      );
+      return;
+    }
+
+    let indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      definitionLookup,
+      virtualNetwork,
+    );
+    let skills: { id: string; commands: CommandRef[] }[];
+    try {
+      let { cards } = await indexQueryEngine.searchCards(
+        new URL(realm.url),
+        { filter: { type: skillCardRef } },
+        {},
+      );
+      skills = cards.map((card) => ({
+        id: card.id!,
+        commands: commandRefsFor(card),
+      }));
+    } catch (e: any) {
+      await sendResponseForSystemError(
+        ctxt,
+        `unable to search for skills in realm ${realm.url}: ${e.message}`,
+      );
+      return;
+    }
+
+    let failures: SkillCommandFailure[];
+    try {
+      failures = await validateCommandModules({
+        skills,
+        realm,
+        dbAdapter,
+        prerenderer,
+        createPrerenderAuth,
+      });
+    } catch (e: any) {
+      await sendResponseForSystemError(
+        ctxt,
+        `unable to validate skill modules in realm ${realm.url}: ${e.message}`,
+      );
+      return;
+    }
+
+    let commandCount = skills.reduce((sum, s) => sum + s.commands.length, 0);
+    return setContextResponse(
+      ctxt,
+      new Response(
+        JSON.stringify({
+          data: {
+            type: 'skill-validation',
+            id: realm.url,
+            attributes: {
+              status: failures.length === 0 ? 'pass' : 'fail',
+              skillsChecked: skills.length,
+              commandsChecked: commandCount,
+              failures,
+            },
+          },
+        }),
+        {
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+      ),
+    );
+  };
+}
+
+interface CommandRef {
+  module: string;
+  name: string;
+}
+
+function commandRefsFor(card: {
+  id?: string;
+  attributes?: Record<string, any>;
+}): CommandRef[] {
+  let commands: any[] = card.attributes?.commands ?? [];
+  let refs: CommandRef[] = [];
+  for (let command of commands) {
+    let codeRef = command?.codeRef;
+    if (!codeRef?.module || !codeRef?.name) {
+      continue;
+    }
+    let module = codeRef.module as string;
+    // AbsoluteCodeRefField serializes absolute refs (URL or registered
+    // package form like @cardstack/boxel-host/...), but guard against
+    // hand-authored relative refs anyway.
+    if (module.startsWith('.') && card.id) {
+      module = new URL(module, card.id).href;
+    }
+    refs.push({ module, name: codeRef.name });
+  }
+  return refs;
+}
+
+async function validateCommandModules({
+  skills,
+  realm,
+  dbAdapter,
+  prerenderer,
+  createPrerenderAuth,
+}: {
+  skills: { id: string; commands: CommandRef[] }[];
+  realm: Realm;
+  dbAdapter: CreateRoutesArgs['dbAdapter'];
+  prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
+  createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
+}): Promise<SkillCommandFailure[]> {
+  let modules = new Set<string>();
+  for (let skill of skills) {
+    for (let command of skill.commands) {
+      modules.add(command.module);
+    }
+  }
+  if (modules.size === 0) {
+    return [];
+  }
+
+  let owner = await realm.getRealmOwnerUsername();
+  let permissions = await fetchUserPermissions(dbAdapter, { userId: owner });
+  let auth = createPrerenderAuth(owner, permissions);
+
+  // One prerender per unique module; the prerender server's admission
+  // control paces concurrent renders, and system priority keeps this
+  // monitoring sweep from starving user-initiated work.
+  let responses = new Map<string, ModuleRenderResponse>();
+  await Promise.all(
+    [...modules].map(async (module) => {
+      responses.set(
+        module,
+        await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realm.url,
+          realm: realm.url,
+          url: module,
+          auth,
+          priority: systemInitiatedPriority,
+        }),
+      );
+    }),
+  );
+
+  let failures: SkillCommandFailure[] = [];
+  for (let skill of skills) {
+    for (let { module, name } of skill.commands) {
+      let response = responses.get(module)!;
+      if (response.status === 'error') {
+        failures.push({
+          skill: skill.id,
+          module,
+          name,
+          error:
+            response.error?.error?.message ?? `unable to load module ${module}`,
+        });
+      } else if (response.exports && !response.exports.includes(name)) {
+        failures.push({
+          skill: skill.id,
+          module,
+          name,
+          error: `module ${module} has no export "${name}"`,
+        });
+      }
+    }
+  }
+  return failures;
+}

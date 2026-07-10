@@ -30,6 +30,7 @@ import {
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
+import handleSkillValidation from './handlers/handle-skill-validation.ts';
 import handleReindex from './handlers/handle-reindex.ts';
 import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
@@ -169,6 +170,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
+  // CS-11093: monitoring endpoint validating that every skill's command
+  // codeRefs still resolve in the deployed host. Self-authenticated with
+  // the monitoring token, same as /_queue-status.
+  router.get('/_skill-validation', handleSkillValidation(args));
   router.post(
     '/_run-command',
     jwtMiddleware(args.realmSecretSeed),
