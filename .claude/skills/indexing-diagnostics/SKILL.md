@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -13,6 +13,7 @@ Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on th
 - **Which cards have broken links** — enumerate cards with a broken `linksTo` / `linksToMany` target straight from the column; those cards index cleanly, so `diagnostics.brokenLinks` is the only indexed signal. See [Mode E](#mode-e--enumerate-cards-with-broken-links).
 - **Whether module pre-warm is effective** — confirm the pre-warm phase populates the definition cache under a key the indexer / on-demand reads actually hit (not a silent no-op), using the `definition-cache-key` hit/miss log channel. This one isn't about the `diagnostics` column — it reads the logs. See [Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss).
 - **Why an in-render `_search` was slow to come back** — when a render stalls in `waiting-stability` waiting on a query-backed `linksTo` / `linksToMany` search (the `boxel_index.diagnostics` shows it client-side as `queryLoadsInFlight` aging) but the SQL is fast, attribute the realm-server's request→response time across its stages (parse / SQL / loadLinks / serialize) and tell handler-time from queued-before-handler / event-loop saturation. Log-based, keyed by the correlation id. See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
+- **A search doc that was slow to build** — attribute a slow index visit inside the search-doc build itself: the settle loop's link loads (`searchDocSettleMs`, per target in `searchDocLinkLoads`) vs the field walk (`searchDocMs`, per dotted field path in `searchDocFieldsMs`). See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).
 
 The first three read from the same `diagnostics` column; the difference is the query you start with. Modes F and G are log-based.
 
@@ -20,7 +21,7 @@ The first three read from the same `diagnostics` column; the difference is the q
 
 Six places, all correlated:
 
-1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `computedCalls`/`computedCacheHits`) and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
+1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`) and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
 2. **`prerendered_html.diagnostics` (and `prerendered_html_working.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
 3. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
 4. **`error_doc.diagnostics`** — derived copy of the same table's `diagnostics`, written only for error rows: an index error's copy rides `boxel_index.error_doc`, a render error's rides `prerendered_html.error_doc` (an instance's effective error is the union of the two). Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
@@ -42,10 +43,10 @@ When wrapping a query below into the staging/prod form, run it through the `psql
 
 A URL is produced by two prerender visits on two channels, and each visit's diagnostics follow its writes:
 
-| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the search-doc build (`serializeMs`, `searchDocMs`, `computedCalls`/`computedCacheHits`), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`.                                                                                                                         |
-| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain). HTTP id: `prerenderHtmlRequestId`. |
+| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the search-doc build (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, the per-field `searchDocFieldsMs` and per-link-load `searchDocLinkLoads` detail, `computedCalls`/`computedCacheHits`), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`. |
+| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain). HTTP id: `prerenderHtmlRequestId`.       |
 
 So "why was indexing this card slow?" and "why was rendering this card slow?" are separately answerable per row: the index cost is `boxel_index.diagnostics`, the render cost is `prerendered_html.diagnostics`, and inside the render cost `renderFormatsMs` names the format that dominated (a slow `isolated` template vs a `fitted` render fanning out across many ancestors).
 
@@ -223,6 +224,7 @@ SELECT
   (diagnostics->>'computedCacheHits')::int                 AS cache_hits,
   (diagnostics->>'serializeMs')::numeric                   AS serialize_ms,
   (diagnostics->>'searchDocMs')::numeric                   AS search_doc_ms,
+  (diagnostics->>'searchDocSettleMs')::numeric             AS settle_ms,
   (diagnostics->>'renderElapsedMs')::int                   AS render_ms
 FROM boxel_index
 WHERE realm_url = 'https://localhost:4201/user/your-realm/'
@@ -230,6 +232,8 @@ WHERE realm_url = 'https://localhost:4201/user/your-realm/'
 ORDER BY (diagnostics->>'computedCalls')::int DESC NULLS LAST
 LIMIT 20;
 ```
+
+For any row this surfaces, [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution) drills inside its search-doc cost — which field, which link load.
 
 ## Mode C — a worker job is stuck or got rejected
 
@@ -1047,6 +1051,89 @@ Lines are FireLens-wrapped (`{"log":"…"}`); pull `.log`. Strip everything afte
 - If `pausedStack` is starved AND `--prof` shows the time in opaque native frames with no JS attribution, the peg is inside a native builtin — the frame names it, but the _why_ needs reading that builtin's inputs (e.g. a pathological regex / string).
 - It's a CPU-peg mode. A render that's idle-waiting (`mainThreadResponsive=true`, `cpuTopFrames (idle)`, a long-pending fetch) is a **data stall** — Mode A's `pendingFetches` / Mode G, not this.
 
+## Mode J — a search doc was slow to build (per-field / per-link attribution)
+
+The index visit's cost is dominated by search-doc assembly, and its diagnostics split that assembly into two disjoint phases, each with per-item detail:
+
+1. **The settle loop** (`searchDocSettleMs`, `searchDocSettlePasses`) — the passes that drive the card's searchable-path link loads (and the links its contained/computed fields read) to quiescence. This is where link targets actually load; the per-target breakdown is `searchDocLinkLoads` (`{ path, target, ms }`, dotted `linksTo`/`linksToMany` field path + loaded URL).
+2. **The timed searchDoc walk** (`searchDocMs`) — evaluation of the card's fields against the now-settled store. The per-field breakdown is `searchDocFieldsMs`, keyed by dotted field path with **inclusive** times (a parent includes its children, so the keys read as a drill-down to the slow leaf).
+
+Both detail blocks are bounded — the slowest 20 entries at ≥ 1 ms — so a typical ~1 ms search doc persists neither, and their absence on a slow row is itself a signal (see step 3).
+
+**Step 1 — find the rows whose search-doc build dominates.**
+
+```sql
+SELECT
+  url,
+  (diagnostics->>'searchDocSettleMs')::numeric   AS settle_ms,
+  (diagnostics->>'searchDocSettlePasses')::int   AS passes,
+  (diagnostics->>'searchDocMs')::numeric         AS search_doc_ms,
+  (diagnostics->>'serializeMs')::numeric         AS serialize_ms,
+  (diagnostics->>'renderElapsedMs')::int         AS render_ms
+FROM boxel_index
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
+  AND diagnostics->>'searchDocSettleMs' IS NOT NULL
+ORDER BY (diagnostics->>'searchDocSettleMs')::numeric
+       + (diagnostics->>'searchDocMs')::numeric DESC NULLS LAST
+LIMIT 20;
+```
+
+`settle_ms + search_doc_ms` ≈ the row's search-doc production cost. Which of the two dominates picks the next step: settle-dominated → step 2 (loads), searchDoc-dominated → step 3 (fields).
+
+**Step 2 — settle-dominated: which link loads were slow.**
+
+```sql
+-- Fan out the per-load entries for one row, slowest first.
+SELECT
+  ll->>'path'           AS field_path,
+  ll->>'target'         AS target_url,
+  (ll->>'ms')::numeric  AS ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'searchDocLinkLoads') AS ll
+WHERE i.url = '<card-url>' AND i.type = 'instance'
+ORDER BY ms DESC;
+
+-- Or realm-wide: which TARGETS are slow to load across many owners'
+-- search docs (one slow shared card taxes every card that makes it
+-- searchable).
+SELECT
+  ll->>'target'                 AS target_url,
+  count(*)                      AS owners,
+  max((ll->>'ms')::numeric)     AS worst_ms,
+  avg((ll->>'ms')::numeric)     AS avg_ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.diagnostics->'searchDocLinkLoads') AS ll
+WHERE i.realm_url = 'https://localhost:4201/user/your-realm/'
+GROUP BY 1
+ORDER BY worst_ms DESC
+LIMIT 20;
+```
+
+Read the shape: one very slow entry = one slow target (a cross-realm link? a target whose own realm is slow? — Mode G if the load is a `_search`-backed path, the target realm's own logs otherwise); many moderate entries under one `path` = a wide `linksToMany` route fanning out (is that `searchable` depth actually needed?). A high `passes` count with moderate per-load times means a deep chain — each pass unlocks one more hop, so depth costs serial round-trips even when each load is fine.
+
+**Step 3 — searchDoc-dominated: which fields were expensive to evaluate.**
+
+```sql
+-- Hot fields for one row, slowest first. Keys are dotted paths from the
+-- indexed card's root; a parent's time includes its children's, so read
+-- the deepest hot key as the culprit and its ancestors as the route to it.
+SELECT key AS field_path, value::numeric AS ms
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_each_text(i.diagnostics->'searchDocFieldsMs')
+WHERE i.url = '<card-url>' AND i.type = 'instance'
+ORDER BY value::numeric DESC;
+```
+
+Cross-check against `searchDocLinkLoads`: a hot field path **with** a matching load entry was waiting on the load (fix the load); a hot field path **without** one was expensive to compute — a `computeVia` doing real work per read (correlate with `computedCalls`, and see the computed-field-hot-path row in [Classify in one pass](#classify-in-one-pass)).
+
+A large `searchDocMs` with **no** `searchDocFieldsMs` entries means no single field crossed the 1 ms floor — death by a thousand cheap fields (very wide cards, big containsMany arrays) rather than one hot path. That's a card-shape problem, not a single-field bug.
+
+### What Mode J can't tell you
+
+- **Nothing below the field grain.** A hot leaf field's time is one number; profiling inside its `computeVia` is Mode H territory.
+- **Older rows predate the detail.** Rows indexed before these fields shipped have neither block; absence there means "not measured", not "fast". Check `indexedAt`.
+- **The bounded lists drop the tail.** Entries below the floor (or beyond the slowest 20) aren't persisted; the aggregates (`searchDocSettleMs`, `searchDocMs`) still carry the total, so the un-itemized remainder is the difference.
+
 ## Field-by-field reading
 
 `diagnostics` carries `RenderTimeoutDiagnostics` (defined in `packages/runtime-common/index.ts`) plus `invalidationId` / `indexedAt` / `requestId`. Every render-side field is optional — absent means the hook wasn't available in that build or the page died before the capture could read it.
@@ -1175,13 +1262,48 @@ Lines are FireLens-wrapped (`{"log":"…"}`); pull `.log`. Strip everything afte
                                  // contains-many / links-to field does this).
   "serializeMs": 42.1,           // host-side wall-clock of `serializeCard(instance, {
                                  // includeComputeds: true })` for this card.
-  "searchDocMs": 18.3            // host-side wall-clock of `searchDoc(instance)` for
+  "searchDocMs": 18.3,           // host-side wall-clock of `searchDoc(instance)` for
                                  // this card. Sum with `serializeMs` to get the host's
                                  // contribution to `renderElapsedMs`. Pairs with
                                  // `computedCalls` so you can normalize: a card with
                                  // `computedCalls=500, searchDocMs=80` is ~6 calls/ms
                                  // — a sign of a hot compute that may be worth a
                                  // dependency-aware skip.
+  "searchDocSettleMs": 812.4,    // host-side wall-clock of the searchable load-settle
+                                 // loop that runs BEFORE the timed searchDoc walk. This
+                                 // is where the card's searchable link targets actually
+                                 // load — by the time `searchDocMs` is measured they're
+                                 // resident — so link-load cost lives here, not inside
+                                 // `searchDocMs`. Attributed per target by
+                                 // `searchDocLinkLoads`.
+  "searchDocSettlePasses": 3,    // settle passes until the store's load generation held
+                                 // steady. Each pass loads one more dependency-depth
+                                 // wave (a deeper searchable hop, a computed's link), so
+                                 // a high count = a deep link/computed chain. Capped at
+                                 // 20 (a warning is logged at the cap).
+  "searchDocFieldsMs": {         // per-field inclusive evaluation timings from the timed
+                                 // searchDoc walk, keyed by dotted field path from the
+                                 // indexed card's root. A parent's time includes its
+                                 // children's, so the drill-down to the slow leaf reads
+                                 // straight off the keys. Bounded: slowest 20 fields at
+                                 // >= 1 ms; a typical ~1 ms search doc records nothing.
+                                 // A large `searchDocMs` with NO entries = death by a
+                                 // thousand cheap fields, not one hot path.
+    "policies": 14.2,
+    "policies.premiumTotal": 13.8
+  },
+  "searchDocLinkLoads": [        // slowest searchable link-target loads performed while
+                                 // producing this row's search doc (settle passes + any
+                                 // the timed walk still did). `path` = the dotted
+                                 // linksTo / linksToMany field path; `target` = the
+                                 // loaded URL (a linksToMany records one entry per slot,
+                                 // same path, different target). Same bounding as
+                                 // `searchDocFieldsMs`. Separates "linked instance slow
+                                 // to load" (an entry here) from "field expensive to
+                                 // compute" (a hot `searchDocFieldsMs` path with no
+                                 // matching load entry).
+    { "path": "author", "target": "https://realm.example/Author/1", "ms": 640.1 }
+  ]
 }
 ```
 
@@ -1199,6 +1321,7 @@ All ms values are server-observed walltime.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
 - `computedCalls` + `computedCacheHits` together represent total compute pressure on the render.meta pass. The split tells you how much duplicate work the pass-scoped memo absorbed — a 1:0 ratio means every field was read once, a 1:5 ratio means the cards re-read each computed five extra times (typical for cards where many sibling fields share a computed input). `searchDocMs` + `serializeMs` are the host's contribution to `renderElapsedMs`; comparing `computedCalls / (searchDocMs + serializeMs)` across cards finds the slow-per-call computes that are worth profiling.
+- `searchDocSettleMs` is disjoint from `searchDocMs`: the settle loop runs first and performs the link loads; the timed searchDoc walk then runs against a settled store. So "producing this row's search doc" cost ≈ `searchDocSettleMs + searchDocMs`, and a slow row splits cleanly: settle-dominated → loading (read `searchDocLinkLoads` for which target), searchDoc-dominated → evaluation (read `searchDocFieldsMs` for which field). The retained `searchDocFieldsMs` entries are inclusive-time dotted paths — the top-level entries (no dot) sum to ≈ `searchDocMs` on a hot-path card; the deeper keys under a hot top-level key are the drill-down, not additional cost.
 
 Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 
@@ -1221,7 +1344,8 @@ Walk the fields top-down. The _first_ positive signal wins; stop there.
 | `renderStage` = `waiting-stability` with empty in-flight arrays                                                                                                                                                                                       | **Render stall**                                                             | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays                                                                                                                                                               | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `blockedTimerSummary` populated                                                                                                                                                                                                                       | **Supplementary**                                                            | Tells you which timer-driven code is fighting the render. Not a root cause on its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `computedCalls` large (e.g. > 1000) AND `searchDocMs + serializeMs` ≈ `renderElapsedMs`                                                                                                                                                               | **Computed-field hot path**                                                  | The render.meta traversal itself is the bottleneck, not data loads or browser stalls. Look at `computedCalls / (searchDocMs + serializeMs)` — > ~5 calls/ms is fast, < ~1 call/ms means a few slow `computeVia` functions dominate. Inspect the card class for aggregate computeds that scan a `linksToMany` relation on every read (Portfolio-over-Policies style) and consider hoisting the scan into a shared rollup or adding `computeDeps` so the field can be skipped when its inputs don't change. The pass-scoped memo already eliminates duplicate reads in one traversal (visible in `computedCacheHits`); further wins require structural changes to the card.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `computedCalls` large (e.g. > 1000) AND `searchDocMs + serializeMs` ≈ `renderElapsedMs`                                                                                                                                                               | **Computed-field hot path**                                                  | The render.meta traversal itself is the bottleneck, not data loads or browser stalls. Look at `computedCalls / (searchDocMs + serializeMs)` — > ~5 calls/ms is fast, < ~1 call/ms means a few slow `computeVia` functions dominate. `searchDocFieldsMs` names the field: its dotted-path keys rank the walk's hot paths, so instead of inspecting the card class blind you start at the top entry (see [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution)). Consider hoisting an aggregate computed's scan into a shared rollup or adding `computeDeps` so the field can be skipped when its inputs don't change. The pass-scoped memo already eliminates duplicate reads in one traversal (visible in `computedCacheHits`); further wins require structural changes to the card.                                                                                                                                                                                                                                                                                                                                        |
+| `searchDocSettleMs` large (≫ `searchDocMs`)                                                                                                                                                                                                           | **Search-doc link-load stall**                                               | The index visit spent its time loading the card's searchable link targets, not evaluating fields. `searchDocLinkLoads` names the slow target(s) per dotted field path — one very slow entry is one slow linksTo target (is its realm slow? cross-realm?); many moderate entries are a fan-out (a wide `linksToMany` route — consider whether the `searchable` annotation needs that depth). A high `searchDocSettlePasses` alongside means a deep chain: each pass unlocks one more hop. See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### Special cases
 

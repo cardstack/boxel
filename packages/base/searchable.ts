@@ -6,6 +6,7 @@ import {
   primitive,
   relativeTo,
   routesForField,
+  type SearchDocTimings,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import {
@@ -56,6 +57,12 @@ export async function searchDocFromFields(
   // owner — whether or not the render happened to load it (a `{ id }`-only link
   // contributes none, since its target's data is not in the doc).
   dependencies: Set<string> = new Set(),
+  // Optional timing collector, filled in place as the walk runs (so entries
+  // recorded before a mid-walk throw survive): per-field inclusive
+  // evaluation wall-clock keyed by dotted path, and one entry per link-
+  // target load performed. Each sub-collector is opt-in and raw — the
+  // caller bounds and rounds before persisting.
+  timings?: SearchDocTimings,
 ): Promise<Record<string, any>> {
   let routes = seedSearchableRoutes(
     instance.constructor as unknown as typeof BaseDef,
@@ -67,6 +74,8 @@ export async function searchDocFromFields(
     [],
     getStore(instance),
     dependencies,
+    '',
+    timings,
   )) as Record<string, any>;
 }
 
@@ -167,6 +176,10 @@ async function searchableQueryableValue(
   // must still load against the owner's store.
   store: CardStore,
   dependencies: Set<string>,
+  // Dotted field path from the indexed card's root down to `value` ('' at
+  // the root); keys the `timings` entries.
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any> {
   if (primitive in fieldCard) {
     // Delegate to the field's own queryableValue. The default handles
@@ -220,6 +233,12 @@ async function searchableQueryableValue(
       isDeclaredLink && !getDataBucket(value).has(fieldName)
         ? null
         : peekAtField(value, fieldName);
+    let fieldPath = path === '' ? fieldName : `${path}.${fieldName}`;
+    // Inclusive per-field timing: covers this field's whole evaluation —
+    // nested recursion and link loads included — so a slow leaf surfaces
+    // together with every ancestor on its path. Guarded on the collector so
+    // an uninstrumented walk pays no timer calls.
+    let fieldStart = timings?.fieldsMs ? performance.now() : 0;
     switch (field!.fieldType) {
       case 'contains': {
         entries.push([
@@ -231,6 +250,8 @@ async function searchableQueryableValue(
             nextStack,
             store,
             dependencies,
+            fieldPath,
+            timings,
           ),
         ]);
         break;
@@ -255,6 +276,8 @@ async function searchableQueryableValue(
             nextStack,
             store,
             dependencies,
+            fieldPath,
+            timings,
           );
           if (v != null) {
             items.push(v);
@@ -276,6 +299,8 @@ async function searchableQueryableValue(
             store,
             makeAbsoluteURL,
             dependencies,
+            fieldPath,
+            timings,
           ),
         ]);
         break;
@@ -292,10 +317,18 @@ async function searchableQueryableValue(
             store,
             makeAbsoluteURL,
             dependencies,
+            fieldPath,
+            timings,
           ),
         ]);
         break;
       }
+    }
+    if (timings?.fieldsMs) {
+      // Accumulate rather than assign: a plural field's items (and a card
+      // re-entered on another branch) all land under one path key.
+      timings.fieldsMs[fieldPath] =
+        (timings.fieldsMs[fieldPath] ?? 0) + (performance.now() - fieldStart);
     }
   }
   return Object.fromEntries(entries);
@@ -314,6 +347,8 @@ async function searchableLink(
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
   dependencies: Set<string>,
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any> {
   if (rawValue == null) {
     return null;
@@ -347,7 +382,13 @@ async function searchableLink(
     // getter. The store can't `toURL` a relative string, which would otherwise
     // degrade an expandable searchable link to `{ id }`.
     let resolvedRef = makeAbsoluteURL(rawValue.reference);
+    let loadStart = timings?.linkLoads ? performance.now() : 0;
     let result = await loadSearchableTarget(store, resolvedRef);
+    timings?.linkLoads?.push({
+      path,
+      target: resolvedRef,
+      ms: performance.now() - loadStart,
+    });
     if (result.status === 'broken') {
       // Plant the terminal sentinel on the owner's field so `getBrokenLinks`
       // (which reads terminal sentinels from the data bucket) records this
@@ -374,6 +415,8 @@ async function searchableLink(
     stack,
     store,
     dependencies,
+    path,
+    timings,
   );
 }
 
@@ -390,6 +433,8 @@ async function searchableLinksToMany(
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
   dependencies: Set<string>,
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any[] | null> {
   // A whole-field sentinel (errored/unresolved plural) is not iterable; treat
   // as empty, same as `LinksToMany.queryableValue`.
@@ -423,7 +468,13 @@ async function searchableLinksToMany(
     if (isNotLoadedValue(item)) {
       // Resolve a relative reference before the load — see `searchableLink`.
       let resolvedRef = makeAbsoluteURL(item.reference);
+      let loadStart = timings?.linkLoads ? performance.now() : 0;
       let result = await loadSearchableTarget(store, resolvedRef);
+      timings?.linkLoads?.push({
+        path,
+        target: resolvedRef,
+        ms: performance.now() - loadStart,
+      });
       if (result.status === 'broken') {
         // Plant the sentinel into the failed slot so `getBrokenLinks` records
         // this broken searchable element (see `searchableLink`). Assign through
@@ -449,6 +500,8 @@ async function searchableLinksToMany(
       stack,
       store,
       dependencies,
+      path,
+      timings,
     );
     if (expanded != null) {
       out.push(

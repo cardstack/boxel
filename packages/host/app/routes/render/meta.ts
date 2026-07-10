@@ -15,6 +15,8 @@ import {
   relationshipEntries,
   realmURL,
   snapshotRuntimeDependencies,
+  type SearchDocLinkLoad,
+  type SearchDocTimings,
   type SingleCardDocument,
   type PrerenderMeta,
   type PrerenderMetaDiagnostics,
@@ -45,6 +47,45 @@ const computePerfLog = logger('host:computed-perf');
 // pathological graph can't loop forever.
 const SEARCHABLE_SETTLE_MAX_PASSES = 20;
 const SEARCHABLE_SETTLE_REQUIRED_STABLE_PASSES = 2;
+
+// Persistence bounds for the per-field / per-link-load search-doc timings.
+// The raw collectors are unbounded; only the slowest entries at/over the
+// floor land on the row, so a typical ~1 ms search doc records nothing and
+// a wide card can't bloat its diagnostics blob.
+const SEARCH_DOC_TIMING_FLOOR_MS = 1;
+const SEARCH_DOC_TIMING_MAX_ENTRIES = 20;
+
+const roundMs = (ms: number) => Math.round(ms * 100) / 100;
+
+// Slowest-N-at/over-the-floor pruning for the per-field timings. Keys stay
+// in descending-cost order (string-keyed objects preserve insertion order),
+// so the persisted JSON reads as a ranking. An ancestor's inclusive time is
+// >= any descendant's, so every kept entry's parent chain is kept with it.
+function pruneSearchDocFieldsMs(
+  fieldsMs: Record<string, number>,
+): Record<string, number> | undefined {
+  let kept = Object.entries(fieldsMs)
+    .filter(([, ms]) => ms >= SEARCH_DOC_TIMING_FLOOR_MS)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, SEARCH_DOC_TIMING_MAX_ENTRIES);
+  return kept.length > 0
+    ? Object.fromEntries(kept.map(([path, ms]) => [path, roundMs(ms)]))
+    : undefined;
+}
+
+// Same pruning for link-target loads. The floor also drops the near-zero
+// entries recorded when a target was already resident in the store, so what
+// survives is the loads that actually cost something.
+function pruneSearchDocLinkLoads(
+  linkLoads: SearchDocLinkLoad[],
+): SearchDocLinkLoad[] | undefined {
+  let kept = linkLoads
+    .filter(({ ms }) => ms >= SEARCH_DOC_TIMING_FLOOR_MS)
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, SEARCH_DOC_TIMING_MAX_ENTRIES)
+    .map((load) => ({ ...load, ms: roundMs(load.ms) }));
+  return kept.length > 0 ? kept : undefined;
+}
 
 // The base module whose generator produces every search doc. Recorded as a
 // dependency of the meta output directly (see the deps union below) rather
@@ -99,7 +140,21 @@ export default class RenderMetaRoute extends Route<Model> {
     // visit, or an HTML render sharing this tab), the first pass finds every
     // target resident and `store.loaded()` resolves immediately — there is
     // nothing left to wait for.
-    await this.#settleSearchableLoads(instance, searchable);
+    //
+    // Link-load cost lives HERE: the settle passes perform the actual
+    // target loads (each load registers its instance in the store, so the
+    // timed generation below finds everything resident). The collector
+    // gathers one entry per performed load across all passes — a target
+    // loads on the first pass that reaches it and is a resident hit
+    // afterward — for the `searchDocLinkLoads` diagnostic.
+    let settleLinkLoads: SearchDocLinkLoad[] = [];
+    let settleStart = performance.now();
+    let settlePasses = await this.#settleSearchableLoads(
+      instance,
+      searchable,
+      settleLinkLoads,
+    );
+    let searchDocSettleMs = performance.now() - settleStart;
 
     // Union the render route's captured deps with a fresh snapshot: the
     // settle loop above loaded links through the tracked getter (each a
@@ -193,9 +248,15 @@ export default class RenderMetaRoute extends Route<Model> {
     // not itself load that target.
     let searchDocStart = performance.now();
     let searchableDeps = new Set<string>();
+    // Per-field evaluation timings come from this timed walk (link loads
+    // settled above, so it measures evaluation, not loading); any load the
+    // walk still performs — a settle that hit its pass cap, a race — joins
+    // the settle passes' entries.
+    let searchDocTimings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
     let searchDoc: Record<string, any> = await searchable.searchDocFromFields(
       instance,
       searchableDeps,
+      searchDocTimings,
     );
     let searchDocMs = performance.now() - searchDocStart;
     if (searchableDeps.size > 0) {
@@ -216,6 +277,13 @@ export default class RenderMetaRoute extends Route<Model> {
     // `cardTitle` computed already present in the search doc.
     searchDoc._title = searchDoc.cardTitle;
 
+    let searchDocFieldsMs = pruneSearchDocFieldsMs(
+      searchDocTimings.fieldsMs ?? {},
+    );
+    let searchDocLinkLoads = pruneSearchDocLinkLoads([
+      ...settleLinkLoads,
+      ...(searchDocTimings.linkLoads ?? []),
+    ]);
     let diagnostics: PrerenderMetaDiagnostics = {
       ...(passSnapshot
         ? {
@@ -223,8 +291,12 @@ export default class RenderMetaRoute extends Route<Model> {
             computedCacheHits: passSnapshot.cacheHits,
           }
         : {}),
-      serializeMs: Math.round(serializeMs * 100) / 100,
-      searchDocMs: Math.round(searchDocMs * 100) / 100,
+      serializeMs: roundMs(serializeMs),
+      searchDocMs: roundMs(searchDocMs),
+      searchDocSettleMs: roundMs(searchDocSettleMs),
+      searchDocSettlePasses: settlePasses,
+      ...(searchDocFieldsMs ? { searchDocFieldsMs } : {}),
+      ...(searchDocLinkLoads ? { searchDocLinkLoads } : {}),
     };
 
     // Record broken `linksTo` / `linksToMany` targets as searchable
@@ -249,7 +321,7 @@ export default class RenderMetaRoute extends Route<Model> {
       }
     }
     computePerfLog.debug(
-      `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
+      `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs} searchDocSettleMs=${diagnostics.searchDocSettleMs} searchDocSettlePasses=${diagnostics.searchDocSettlePasses}`,
     );
 
     return {
@@ -273,12 +345,19 @@ export default class RenderMetaRoute extends Route<Model> {
   // discarded (a throwaway dependency set); the authoritative generation runs
   // afterward against the settled store. See the call site for why this is
   // needed and how it composes with the /render template settle.
+  //
+  // Returns the number of passes run. Each performed link-target load is
+  // recorded into `linkLoads` (the collector fills incrementally, so loads
+  // recorded before a swallowed mid-walk throw survive); a searchable build
+  // that predates the collector parameter simply leaves it empty.
   async #settleSearchableLoads(
     instance: CardDef,
     searchable: Awaited<ReturnType<CardService['getSearchable']>>,
-  ): Promise<void> {
+    linkLoads: SearchDocLinkLoad[],
+  ): Promise<number> {
     let observedGeneration = this.store.loadGeneration;
     let stablePasses = 0;
+    let timings: SearchDocTimings = { linkLoads };
     for (let pass = 0; pass < SEARCHABLE_SETTLE_MAX_PASSES; pass++) {
       // A computed that reads a not-yet-loaded link (e.g.
       // `this.author.firstName`) throws on the first pass — the getter fires
@@ -288,7 +367,7 @@ export default class RenderMetaRoute extends Route<Model> {
       // target. A genuine (non-load-race) failure resurfaces in the
       // authoritative generation the caller runs after this settles.
       try {
-        await searchable.searchDocFromFields(instance);
+        await searchable.searchDocFromFields(instance, undefined, timings);
       } catch {
         // intentionally ignored during settle — see above
       }
@@ -296,7 +375,7 @@ export default class RenderMetaRoute extends Route<Model> {
       let nextGeneration = this.store.loadGeneration;
       if (nextGeneration === observedGeneration) {
         if (++stablePasses >= SEARCHABLE_SETTLE_REQUIRED_STABLE_PASSES) {
-          return;
+          return pass + 1;
         }
       } else {
         observedGeneration = nextGeneration;
@@ -306,6 +385,7 @@ export default class RenderMetaRoute extends Route<Model> {
     computePerfLog.warn(
       `render.meta searchable settle for ${instance.id} did not reach a stable load generation within ${SEARCHABLE_SETTLE_MAX_PASSES} passes; proceeding with the current store state`,
     );
+    return SEARCHABLE_SETTLE_MAX_PASSES;
   }
 }
 
