@@ -1,5 +1,5 @@
 import Maximize from '@cardstack/boxel-icons/maximize';
-import type { MenuDivider } from '@cardstack/boxel-u./helpers.gts';
+import type { MenuDivider } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
