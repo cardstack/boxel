@@ -363,6 +363,8 @@ const ALL_TEST_FILES: string[] = [
   './skip-query-backed-expansion-test',
   './worker-request-signature-test',
   './worker-request-forwarder-test',
+  './worker-reader-test',
+  './realm-index-updater-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

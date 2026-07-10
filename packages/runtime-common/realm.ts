@@ -59,6 +59,7 @@ import {
   CardError,
   responseWithError,
   formattedError,
+  stringifyErrorForLog,
   unsupportedMediaType,
   type SerializedError,
 } from './error.ts';
@@ -2128,11 +2129,12 @@ export class Realm {
           },
         );
         settled.catch((err: unknown) => {
-          let message = err instanceof Error ? err.message : String(err);
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Deferred indexing chain failed for ${this.url}: ${message}`,
+            `Deferred indexing chain failed for ${this.url} (urls: ${urls
+              .map((u) => u.href)
+              .join(', ')}): ${stringifyErrorForLog(err)}`,
           );
         });
       }
@@ -2626,12 +2628,8 @@ export class Realm {
           );
         },
         (err: unknown) => {
-          let detail =
-            err instanceof Error
-              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              : String(err);
           this.#log.error(
-            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${stringifyErrorForLog(err)}`,
           );
         },
       );
