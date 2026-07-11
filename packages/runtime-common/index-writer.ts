@@ -930,6 +930,21 @@ export class Batch {
       },
     );
 
+    // On the fused path there is no separate `prerender_html` job, so the
+    // entry's HTML half lands on the prerendered_html channel here, in the
+    // same visit that produced it. (A split-mode index batch writes no HTML
+    // at all — its spawned `prerender_html` job owns that channel.) The HTML
+    // half goes first: the boxel_index_working row is the resume marker
+    // (`loadResumedRows` skips URLs it finds), so writing it last means a
+    // crash between the two writes re-visits the URL rather than resuming a
+    // row whose rendering never landed.
+    if (!this.#splitPrerenderHtml) {
+      await this.writePrerenderedHtmlRow(
+        url,
+        prerenderedHtmlEntryFrom(entry, diagnostics),
+      );
+    }
+
     await this.#query([
       ...upsert(
         'boxel_index_working',
@@ -938,17 +953,6 @@ export class Batch {
         valueExpressions,
       ),
     ]);
-
-    // On the fused path there is no separate `prerender_html` job, so the
-    // entry's HTML half lands on the prerendered_html channel here, in the
-    // same visit that produced it. (A split-mode index batch writes no HTML
-    // at all — its spawned `prerender_html` job owns that channel.)
-    if (!this.#splitPrerenderHtml) {
-      await this.writePrerenderedHtmlRow(
-        url,
-        prerenderedHtmlEntryFrom(entry, diagnostics),
-      );
-    }
   }
 
   // Seed a prerenderHtmlOnly batch's invalidation set from the changes the

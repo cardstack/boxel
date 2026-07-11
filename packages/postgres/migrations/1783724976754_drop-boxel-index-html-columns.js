@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // `prerendered_html` / `prerendered_html_working` are the sole home of
