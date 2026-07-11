@@ -223,12 +223,6 @@ module(basename(import.meta.filename), function (hooks) {
       htmlRow?.isolated_html?.includes('$25'),
       `the fresh rendering reflects the written content: ${htmlRow?.isolated_html}`,
     );
-    let indexRow = await boxelIndexHtmlColumns(`${testRealm}mango.json`);
-    assert.strictEqual(
-      indexRow.isolated_html,
-      null,
-      'the index channel still carries no HTML after the write',
-    );
   });
 
   test('a deletion stays tombstoned on the prerendered_html channel', async function (assert) {

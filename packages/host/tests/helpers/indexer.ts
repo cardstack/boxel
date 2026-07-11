@@ -252,20 +252,35 @@ export async function setupIndex(
 
   // Each fixture row's HTML/markdown half lands on `prerendered_html(_working)`
   // — the sole home of rendered output — with `rendered_at` seeded from the
-  // row's `indexed_at` (or the shared insert time). `icon_html` stays on
-  // `boxel_index`.
+  // row's `indexed_at` (or the shared insert time). A row that carries no
+  // rendering fields gets no `prerendered_html` row: it is indexed but not
+  // yet rendered, exactly as a row awaiting its render job reads in
+  // production. `icon_html` stays on `boxel_index`.
   if (options.prerenderedHtml !== false) {
-    let toPrerenderedRow = (row: Record<string, unknown>) => ({
-      ...row,
-      rendered_at: row.rendered_at ?? row.indexed_at ?? now,
-    });
+    let renderingFields = [
+      'isolated_html',
+      'head_html',
+      'embedded_html',
+      'fitted_html',
+      'atom_html',
+      'markdown',
+    ];
+    let renderedRows = (rows: Record<string, unknown>[]) =>
+      rows
+        .filter((row) =>
+          renderingFields.some((field) => row[field] !== undefined),
+        )
+        .map((row) => ({
+          ...row,
+          rendered_at: row.rendered_at ?? row.indexed_at ?? now,
+        }));
     await insertRows(
       client,
       'prerendered_html_working',
       await tableExpressions(
         client,
         'prerendered_html_working',
-        normalizedWorkingRows.map(toPrerenderedRow),
+        renderedRows(normalizedWorkingRows),
       ),
     );
     await insertRows(
@@ -274,7 +289,7 @@ export async function setupIndex(
       await tableExpressions(
         client,
         'prerendered_html',
-        normalizedProductionRows.map(toPrerenderedRow),
+        renderedRows(normalizedProductionRows),
       ),
     );
   }
