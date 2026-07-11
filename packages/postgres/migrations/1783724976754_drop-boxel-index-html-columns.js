@@ -63,8 +63,12 @@ exports.down = (pgm) => {
     });
   }
   for (let table of TABLES) {
+    // Drop before create rather than IF NOT EXISTS: a failed CONCURRENTLY
+    // build leaves an INVALID index that still exists, which IF NOT EXISTS
+    // would skip forever on a re-run.
+    pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS ${table}_markdown_fts_idx;`);
     pgm.sql(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS ${table}_markdown_fts_idx
+      CREATE INDEX CONCURRENTLY ${table}_markdown_fts_idx
         ON ${table}
         USING GIN (to_tsvector('english', markdown_search_text(markdown)));
     `);

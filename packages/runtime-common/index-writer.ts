@@ -701,8 +701,9 @@ export class Batch {
       return valueExpressions;
     });
     if (!columns) {
-      // Source realm has no prerendered HTML to overlay (e.g. never rendered);
-      // the `boxel_index` projection already filled the working rows.
+      // Source realm has no prerendered HTML to copy (e.g. never rendered);
+      // the destination reads as unrendered and the catch-up sweep enqueues
+      // its renders.
       return;
     }
 
@@ -1565,7 +1566,10 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          trimExecutableExtension(rri(id)),
+          // The same file_alias form `updateEntry` writes, so a tombstone
+          // upsert doesn't swap the row's alias to a `.json`-suffixed
+          // variant that alias-keyed lookups (`urlsMatchingSeed*`) miss.
+          trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
           this.generation,
           this.realmURL.href,
