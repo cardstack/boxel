@@ -16,6 +16,7 @@ import {
   type CardResource,
   type Expression,
   type BoxelIndexTable,
+  type PrerenderedHtmlTable,
   type RealmGenerationsTable,
   trimExecutableExtension,
   query,
@@ -81,10 +82,22 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
 }
 
 // we can relax the resource here since we will be asserting an ID when we
-// setup the index
+// setup the index. A fixture row carries both channels' data in one flat
+// object: the index half lands on `boxel_index(_working)` and the HTML half
+// (the prerendered_html columns picked in below) lands on
+// `prerendered_html(_working)` — setupIndex splits them by each table's
+// column list.
 type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
   pristine_doc: LooseCardResource | null;
-};
+} & Pick<
+    PrerenderedHtmlTable,
+    | 'isolated_html'
+    | 'head_html'
+    | 'embedded_html'
+    | 'fitted_html'
+    | 'atom_html'
+    | 'markdown'
+  >;
 
 // `loader_epoch` has a database default, so fixture rows may omit it;
 // setupIndex fills in the no-epoch-yet sentinel at insert time.
@@ -106,12 +119,11 @@ export type TestIndexRow =
 
 export interface SetupIndexOptions {
   // When `false`, `setupIndex` seeds only `boxel_index(_working)` and leaves
-  // `prerendered_html(_working)` empty. The default projects the HTML/markdown
-  // columns and generation onto `prerendered_html(_working)` — mirroring the
-  // production backfill + dual-write — so tests read HTML/markdown through the
-  // real `prerendered_html` path rather than the transitional `boxel_index`
-  // fallback. Only a test that manages `prerendered_html` rows itself (to
-  // exercise the fallback vs the mirror) needs to opt out.
+  // `prerendered_html(_working)` empty — the "indexed but not yet rendered"
+  // state. The default seeds a `prerendered_html(_working)` row per fixture
+  // row carrying the fixture's HTML/markdown half, so tests read HTML through
+  // the real `prerendered_html` path. Only a test that manages
+  // `prerendered_html` rows itself needs to opt out.
   prerenderedHtml?: boolean;
 }
 
@@ -193,18 +205,18 @@ export async function setupIndex(
     }
   }
   let now = Date.now();
-  let workingIndexedCardsExpressions = await indexedCardsExpressions({
-    indexRows: workingRows,
-    now,
+  let normalizedWorkingRows = await normalizeIndexRows(workingRows, now);
+  let normalizedProductionRows = await normalizeIndexRows(productionRows, now);
+  let workingIndexedCardsExpressions = await tableExpressions(
     client,
-    columnSourceTable: 'boxel_index_working',
-  });
-  let productionIndexedCardsExpressions = await indexedCardsExpressions({
-    indexRows: productionRows,
-    now,
+    'boxel_index_working',
+    normalizedWorkingRows,
+  );
+  let productionIndexedCardsExpressions = await tableExpressions(
     client,
-    columnSourceTable: 'boxel_index',
-  });
+    'boxel_index',
+    normalizedProductionRows,
+  );
   let versionExpressions = versionRows.map((r) =>
     asExpressions({
       loader_epoch: '0',
@@ -212,44 +224,12 @@ export async function setupIndex(
     } satisfies RealmGenerationsTable),
   );
 
-  if (workingIndexedCardsExpressions.length > 0) {
-    await query(
-      client,
-      [
-        `INSERT INTO boxel_index_working`,
-        ...addExplicitParens(
-          separatedByCommas(workingIndexedCardsExpressions[0].nameExpressions),
-        ),
-        'VALUES',
-        ...separatedByCommas(
-          workingIndexedCardsExpressions.map((row) =>
-            addExplicitParens(separatedByCommas(row.valueExpressions)),
-          ),
-        ),
-      ] as Expression,
-      coerceTypes,
-    );
-  }
-  if (productionIndexedCardsExpressions.length > 0) {
-    await query(
-      client,
-      [
-        `INSERT INTO boxel_index`,
-        ...addExplicitParens(
-          separatedByCommas(
-            productionIndexedCardsExpressions[0].nameExpressions,
-          ),
-        ),
-        'VALUES',
-        ...separatedByCommas(
-          productionIndexedCardsExpressions.map((row) =>
-            addExplicitParens(separatedByCommas(row.valueExpressions)),
-          ),
-        ),
-      ] as Expression,
-      coerceTypes,
-    );
-  }
+  await insertRows(
+    client,
+    'boxel_index_working',
+    workingIndexedCardsExpressions,
+  );
+  await insertRows(client, 'boxel_index', productionIndexedCardsExpressions);
 
   if (versionExpressions.length > 0) {
     await query(
@@ -270,90 +250,68 @@ export async function setupIndex(
     );
   }
 
+  // Each fixture row's HTML/markdown half lands on `prerendered_html(_working)`
+  // — the sole home of rendered output — with `rendered_at` seeded from the
+  // row's `indexed_at` (or the shared insert time). `icon_html` stays on
+  // `boxel_index`.
   if (options.prerenderedHtml !== false) {
-    if (workingIndexedCardsExpressions.length > 0) {
-      await projectPrerenderedHtml(client, 'working');
-    }
-    if (productionIndexedCardsExpressions.length > 0) {
-      await projectPrerenderedHtml(client, 'production');
-    }
+    let toPrerenderedRow = (row: Record<string, unknown>) => ({
+      ...row,
+      rendered_at: row.rendered_at ?? row.indexed_at ?? now,
+    });
+    await insertRows(
+      client,
+      'prerendered_html_working',
+      await tableExpressions(
+        client,
+        'prerendered_html_working',
+        normalizedWorkingRows.map(toPrerenderedRow),
+      ),
+    );
+    await insertRows(
+      client,
+      'prerendered_html',
+      await tableExpressions(
+        client,
+        'prerendered_html',
+        normalizedProductionRows.map(toPrerenderedRow),
+      ),
+    );
   }
 }
 
-// Project the HTML/markdown columns (and generation) of the `boxel_index(_working)`
-// rows onto `prerendered_html(_working)`, matching the production backfill +
-// dual-write (`IndexWriter.syncPrerenderedHtmlFromWorking`): same column mapping,
-// `indexed_at` seeds `rendered_at`, and `icon_html` stays on `boxel_index`. The
-// SELECT covers every row in the source table — in a freshly-seeded test DB
-// those are exactly the rows `setupIndex` just wrote — and the upsert keeps the
-// projection idempotent. This lets tests read HTML/markdown through the real
-// `prerendered_html` path — the path that remains once the `boxel_index` HTML
-// columns and the dual-read fallback are dropped.
-async function projectPrerenderedHtml(
+async function insertRows(
   client: DBAdapter,
-  table: 'working' | 'production',
+  table: string,
+  rows: ReturnType<typeof asExpressions>[],
 ) {
-  let source = table === 'working' ? 'boxel_index_working' : 'boxel_index';
-  let target =
-    table === 'working' ? 'prerendered_html_working' : 'prerendered_html';
-  // `job_id` exists only on the working tables.
-  let jobIdColumn = table === 'working' ? ', job_id' : '';
-  let mutableColumns = [
-    'file_alias',
-    'fitted_html',
-    'embedded_html',
-    'atom_html',
-    'head_html',
-    'isolated_html',
-    'markdown',
-    'deps',
-    'last_known_good_deps',
-    'generation',
-    'is_deleted',
-    'error_doc',
-    'diagnostics',
-    'rendered_at',
-    ...(table === 'working' ? ['job_id'] : []),
-  ];
+  if (rows.length === 0) {
+    return;
+  }
   await query(
     client,
     [
-      `INSERT INTO ${target} (
-         url, file_alias, realm_url, type,
-         fitted_html, embedded_html, atom_html, head_html, isolated_html,
-         markdown, deps, last_known_good_deps,
-         generation, is_deleted, error_doc, diagnostics, rendered_at${jobIdColumn}
-       )
-       SELECT
-         url, file_alias, realm_url, type,
-         fitted_html, embedded_html, atom_html, head_html, isolated_html,
-         markdown, deps, last_known_good_deps,
-         generation, is_deleted, error_doc, diagnostics, indexed_at${jobIdColumn}
-       FROM ${source}
-       WHERE 1=1
-       ON CONFLICT ON CONSTRAINT ${target}_pkey DO UPDATE SET ` +
-        mutableColumns.map((name) => `${name}=EXCLUDED.${name}`).join(', '),
+      `INSERT INTO ${table}`,
+      ...addExplicitParens(separatedByCommas(rows[0].nameExpressions)),
+      'VALUES',
+      ...separatedByCommas(
+        rows.map((row) =>
+          addExplicitParens(separatedByCommas(row.valueExpressions)),
+        ),
+      ),
     ] as Expression,
     coerceTypes,
   );
 }
 
-async function indexedCardsExpressions({
-  indexRows,
-  now,
-  client,
-  columnSourceTable,
-}: {
-  indexRows: TestIndexRow[];
-  now: number;
-  client: DBAdapter;
-  // Which table's column list to drive the dataObject projection. The
-  // default `boxel_index` is missing columns that exist only on
-  // `boxel_index_working` (e.g. `job_id`); when the caller is building
-  // expressions for a working-table insert, those columns must be
-  // preserved.
-  columnSourceTable?: 'boxel_index' | 'boxel_index_working';
-}) {
+// Normalize the fixture shapes (raw row / card / {card, data}) into flat row
+// objects carrying both channels' data. `tableExpressions` projects a table's
+// own columns out of a normalized row, so one row seeds its
+// `boxel_index(_working)` half and its `prerendered_html(_working)` half.
+async function normalizeIndexRows(
+  indexRows: TestIndexRow[],
+  now: number,
+): Promise<Record<string, unknown>[]> {
   return await Promise.all(
     indexRows.map(async (r) => {
       let row: Pick<RelaxedBoxelIndexTable, 'url'> &
@@ -389,26 +347,36 @@ async function indexedCardsExpressions({
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
 
-      let valuesToInsert: { [key: string]: unknown } = {
+      return {
         ...defaultIndexEntry,
         ...row,
       };
-      let columnNames = await client.getColumnNames(
-        columnSourceTable ?? 'boxel_index',
-      );
-
-      // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
-      // that the order of the columns in the insert statement is consistent for all types of resources
-      // that get passed into setupIndex.
-      let dataObject = Object.fromEntries(
-        columnNames.map((column) => [column, valuesToInsert[column]]),
-      );
-
-      return asExpressions(dataObject, {
-        jsonFields: [...Object.entries(coerceTypes)]
-          .filter(([_, type]) => type === 'JSON')
-          .map(([column]) => column),
-      });
     }),
   );
+}
+
+async function tableExpressions(
+  client: DBAdapter,
+  table:
+    | 'boxel_index'
+    | 'boxel_index_working'
+    | 'prerendered_html'
+    | 'prerendered_html_working',
+  rows: Record<string, unknown>[],
+) {
+  let columnNames = await client.getColumnNames(table);
+  return rows.map((row) => {
+    // Make sure all table columns are present in the data object, even if
+    // their value is undefined. This is to assure that the order of the
+    // columns in the insert statement is consistent for all types of
+    // resources that get passed into setupIndex.
+    let dataObject = Object.fromEntries(
+      columnNames.map((column) => [column, row[column]]),
+    );
+    return asExpressions(dataObject, {
+      jsonFields: [...Object.entries(coerceTypes)]
+        .filter(([_, type]) => type === 'JSON')
+        .map(([column]) => column),
+    });
+  });
 }

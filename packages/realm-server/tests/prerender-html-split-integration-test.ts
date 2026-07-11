@@ -117,39 +117,14 @@ module(basename(import.meta.filename), function (hooks) {
     )) as unknown as PrerenderHtmlJobRow[];
   }
 
-  async function boxelIndexHtmlColumns(url: string) {
-    let rows = (await testDbAdapter.execute(
-      `select isolated_html, embedded_html, markdown, icon_html from boxel_index where url = $1 and type = 'instance'`,
-      { bind: [url] },
-    )) as {
-      isolated_html: string | null;
-      embedded_html: Record<string, string> | null;
-      markdown: string | null;
-      icon_html: string | null;
-    }[];
-    return rows[0];
-  }
-
-  test('the index pass writes no HTML into boxel_index; reads serve the prerendered_html channel', async function (assert) {
-    let indexRow = await boxelIndexHtmlColumns(`${testRealm}mango.json`);
-    assert.strictEqual(
-      indexRow.isolated_html,
-      null,
-      'the index channel carries no isolated HTML',
-    );
-    assert.strictEqual(
-      indexRow.embedded_html,
-      null,
-      'the index channel carries no embedded HTML',
-    );
-    assert.strictEqual(
-      indexRow.markdown,
-      null,
-      'the index channel carries no markdown',
-    );
+  test('the index pass renders the icon onto boxel_index; HTML serves from the prerendered_html channel', async function (assert) {
+    let [indexRow] = (await testDbAdapter.execute(
+      `select icon_html from boxel_index where url = $1 and type = 'instance'`,
+      { bind: [`${testRealm}mango.json`] },
+    )) as { icon_html: string | null }[];
     assert.ok(
       indexRow.icon_html,
-      'the icon renders in the index visit and stays on boxel_index',
+      'the icon renders in the index visit and lives on boxel_index',
     );
 
     let generation = await currentRealmGeneration(testDbAdapter, realm.url);

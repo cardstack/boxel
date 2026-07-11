@@ -205,10 +205,14 @@ resolved by the shim in this module's `getField` fallback. `eq: null` on such
 a key compiles to `IS NULL`, which _matches_ rows that lack the key — mind
 that when a key is stamped on only some row kinds.
 
-**Dual-read.** Reads LEFT JOIN `prerendered_html` (`ph`) 1:1 on the primary
-key; a present `ph` row is authoritative for HTML/markdown columns even when
-NULL (`dualReadColumn`), and the effective error state spans both channels
-(`effectiveHasError`). The join never fans out the `GROUP BY`.
+**The HTML channel.** Reads LEFT JOIN `prerendered_html` (`ph`) 1:1 on the
+primary key; `ph` is the sole home of rendered output — the HTML formats,
+markdown (the FTS `matches` predicate reads `ph.markdown`), the deps carrying
+scoped-CSS URLs, and the rendering generation. A row with no `ph` row reads
+them as NULL: no rendering exists yet, so it has no full-text membership
+either. `icon_html` stays on `boxel_index` (the icon renders in the index
+visit). The effective error state spans both channels (`effectiveHasError`).
+The join never fans out the `GROUP BY`.
 
 ## The client-parity contract
 

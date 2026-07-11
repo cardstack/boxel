@@ -249,9 +249,7 @@ export async function visitFileForIndexing({
   // or when there is nothing for it to render. In split mode
   // (`batch.splitPrerenderHtml`) it is skipped entirely: HTML runs on its
   // own channel in the `prerender_html` job, and this index pass writes
-  // only the search-doc half (the HTML columns land NULL on
-  // `boxel_index_working`, which the dual-read never serves when a
-  // `prerendered_html` row exists).
+  // only the search-doc half.
   let htmlResponse: RenderVisitResponse | undefined;
   let htmlFileData = indexResponse.fileExtract?.resource
     ? { resource: indexResponse.fileExtract.resource, fileDefCodeRef }

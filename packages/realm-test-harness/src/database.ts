@@ -391,20 +391,15 @@ export async function rewriteClonedRealmServerUrls(
                error_doc = replace(error_doc::text, $1, $2)::jsonb,
                deps = replace(deps::text, $1, $2)::jsonb,
                types = replace(types::text, $1, $2)::jsonb,
-               isolated_html = replace(isolated_html, $1, $2),
-               embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
-               atom_html = replace(atom_html, $1, $2),
-               fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
                display_names = replace(display_names::text, $1, $2)::jsonb,
                icon_html = replace(icon_html, $1, $2),
-               head_html = replace(head_html, $1, $2),
                last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb`,
           [fromURL, toURL],
         );
 
-        // prerendered_html carries the same URL-bearing HTML/deps columns as
-        // boxel_index (dual-written); rewrite them so a cloned harness DB stays
-        // consistent with the rewritten realm-server URL.
+        // prerendered_html holds the URL-bearing HTML/deps columns; rewrite
+        // them so a cloned harness DB stays consistent with the rewritten
+        // realm-server URL.
         for (let table of ['prerendered_html', 'prerendered_html_working']) {
           await client.query(
             `UPDATE ${table}
@@ -505,16 +500,11 @@ export async function rebuildWorkingIndexFromIndex(
              deps,
              types,
              icon_html,
-             isolated_html,
              indexed_at,
              is_deleted,
              last_modified,
-             embedded_html,
-             atom_html,
-             fitted_html,
              display_names,
              resource_created_at,
-             head_html,
              has_error,
              last_known_good_deps
            )
@@ -530,16 +520,11 @@ export async function rebuildWorkingIndexFromIndex(
              deps,
              types,
              icon_html,
-             isolated_html,
              indexed_at,
              is_deleted,
              last_modified,
-             embedded_html,
-             atom_html,
-             fitted_html,
              display_names,
              resource_created_at,
-             head_html,
              has_error,
              last_known_good_deps
            FROM boxel_index`,
