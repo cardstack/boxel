@@ -1633,7 +1633,10 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          trimExecutableExtension(rri(id)),
+          // The same file_alias form the live prerendered_html writes use, so
+          // alias-keyed consumers (e.g. the itemsThatReference deps scan) see
+          // one alias per URL whether the row is live or tombstoned.
+          trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
           this.generation,
           this.realmURL.href,
