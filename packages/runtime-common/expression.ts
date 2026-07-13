@@ -11,6 +11,7 @@ export type Expression = (
   | TableValuedEach
   | TableValuedTree
   | JsonContains
+  | TypesContains
   | DBSpecificExpression
 )[];
 
@@ -94,6 +95,19 @@ export interface JsonContains {
   value: Param;
 }
 
+// Self-contained membership test: does the JSON array in `column` contain
+// `key`? Rendered per adapter (Postgres `@>`, SQLite `json_each` EXISTS).
+// Unlike a `jsonb_array_elements_text` cross join — which fans a row out into
+// one row per array element and so gives a type condition exists-one-element
+// semantics that miscompose under AND/NOT — this is a single per-row scalar
+// predicate, so type conditions compose correctly (a real `NOT` exclusion, an
+// AND intersection) and no GROUP BY is needed to recollapse the fan-out.
+export interface TypesContains {
+  kind: 'types-contains';
+  column: string;
+  key: string;
+}
+
 export interface FieldArity {
   type: CodeRef;
   path: string;
@@ -111,6 +125,7 @@ export type CardExpression = (
   | TableValuedEach
   | TableValuedTree
   | JsonContains
+  | TypesContains
   | JsonContainsQuery
   | FieldQuery
   | FieldValue
@@ -218,6 +233,14 @@ export function jsonContainsQuery(
     path,
     type,
     value,
+  };
+}
+
+export function typesContains(key: string, column = 'i.types'): TypesContains {
+  return {
+    kind: 'types-contains',
+    column,
+    key,
   };
 }
 
@@ -539,6 +562,26 @@ export function expressionToSql(
         (value[dbAdapterKind] ?? value.param ?? null) as JSONTypes.Value,
       );
       return [column, '@>', param(nested as JSONTypes.Object), '::jsonb']
+        .map(renderElement)
+        .join(' ');
+    } else if (element.kind === 'types-contains') {
+      // Per-row array membership. COALESCE keeps a NULL/absent `types` array a
+      // definite FALSE (not SQL NULL) at positive polarity, so an enclosing
+      // `NOT (...)` keeps rows whose types never indexed rather than dropping
+      // them — the fan-out approach eliminated those rows before WHERE ran.
+      let { column, key } = element;
+      if (dbAdapterKind === 'sqlite') {
+        return [
+          'EXISTS (SELECT 1 FROM json_each(COALESCE(',
+          column,
+          `, '[]')) WHERE value =`,
+          param(key),
+          ')',
+        ]
+          .map(renderElement)
+          .join(' ');
+      }
+      return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
         .map(renderElement)
         .join(' ');
     } else {

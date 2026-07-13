@@ -24,6 +24,8 @@ import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
 } from '../file-def-code-ref.ts';
+import { baseRef } from '../constants.ts';
+import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
 export interface FileIndexerOptions {
@@ -86,6 +88,12 @@ export async function performFileIndexing({
   ) {
     fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
   }
+  // Terminate the chain at BaseDef (the common ancestor of FileDef and CardDef)
+  // so a `{ type: baseRef }` filter matches both file and card-instance rows —
+  // e.g. `scope: 'all'` searches wanting one type ref for "everything". The
+  // instance chain (render/meta.ts `getTypes`) and the extractor chain
+  // (file-def-attributes-extractor.ts `getTypes`) append it too.
+  fileTypeRefs.push(baseRef);
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
@@ -171,11 +179,13 @@ export async function performFileIndexing({
   // Shared by the success entry and the dependency-error entry below, so the
   // two rows carry the same search keys. Two of them are synthetic (stamped
   // after the extractor's searchDoc so they win deterministically):
-  // - `_isCardInstance` marks the `file` row of a dual-indexed card-instance
+  // - `_isCardInstanceFile` marks the `file` row of a dual-indexed card-instance
   //   .json so mixed cards+files search can exclude it (the card already
   //   appears via its `instance` row). It rides on the dependency-error entry
   //   too, so a card .json whose card is in an error state stays out of file
-  //   search. Stamped only when true; plain file docs don't carry the key.
+  //   search. Stamped only when true; plain file docs don't carry the key — so
+  //   `eq: { _isCardInstanceFile: false }` (absent-as-false) keeps cards + plain
+  //   files and drops this row.
   // - `_title` is the row's display title (a file's is its name) under a
   //   neutral key that card docs also carry (stamped alongside `_cardType`
   //   during card render), so one mixed query can substring-match
@@ -187,7 +197,7 @@ export async function performFileIndexing({
     name,
     contentType,
     ...(extractResult.searchDoc ?? {}),
-    ...(isCardInstance ? { _isCardInstance: true } : {}),
+    ...(isCardInstance ? { [CARD_INSTANCE_FILE_KEY]: true } : {}),
     _title: name,
   };
 

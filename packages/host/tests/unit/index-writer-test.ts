@@ -1642,7 +1642,7 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('error entry keeps freshly-stamped synthetic search keys over the last-known-good doc', async function (assert) {
-    // Rollout case: a `file` row indexed before `_isCardInstance` / `_title`
+    // Rollout case: a `file` row indexed before `_isCardInstanceFile` / `_title`
     // existed, then hit by a dependency-error reindex. The fresh searchData
     // carries the synthetic keys and must survive rather than being clobbered
     // by the production doc, while last-known-good fields (here `extra`) still
@@ -1671,7 +1671,11 @@ module('Unit | index-writer', function (hooks) {
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'file-error',
       error: { message: 'dep in error', status: 500, additionalErrors: [] },
-      searchData: { name: '1.json', _isCardInstance: true, _title: '1.json' },
+      searchData: {
+        name: '1.json',
+        _isCardInstanceFile: true,
+        _title: '1.json',
+      },
     });
     await batch.done();
 
@@ -1684,7 +1688,7 @@ module('Unit | index-writer', function (hooks) {
       {
         name: '1.json',
         extra: 'keep-me',
-        _isCardInstance: true,
+        _isCardInstanceFile: true,
         _title: '1.json',
       },
       'error row merges freshly-stamped synthetic keys onto the last-known-good doc',

@@ -229,3 +229,32 @@ let response = await request
 ```
 
 The response is an `entry` collection document: each entry resolves to prerendered HTML (the fast path) or a live serialization, and `fields: ['item']` asks for the full card/file serialization in `included`.
+
+### Result kinds and `scope`
+
+The index holds two row kinds: card instances and files (a card's `.json` is dual-indexed — it appears as both an `instance` row and a `file` row that share the same URL). A search spans both kinds by default.
+
+Select which kinds a query returns with the `scope` member (default `'all'`):
+
+- `scope: 'cards'` — card instances only.
+- `scope: 'files'` — file rows only (including a card `.json`'s file row).
+- `scope: 'all'` — both kinds. This returns **both** rows of a dual-indexed card `.json`. To keep each card once (drop the duplicate `.json` file row) add the dedup filter `excludeCardInstanceFileRows()` — i.e. `eq: { _isCardInstanceFile: false }`.
+
+`scope` pins the row kind directly, independent of the filter, so it works with any filter shape. Prefer it over discriminating kind through a `{ type: … }` anchor.
+
+```ts
+// Card instances only, across realms:
+searchEntryWireQueryFromQuery(query, { fields: ['item'], scope: 'cards' });
+```
+
+### The mixed-search key contract
+
+Cards and files carry non-overlapping fields, so a filter that names a card field narrows to cards by construction, and a FileDef-typed filter narrows to files. A mixed (`scope: 'all'`) query can filter and sort across both kinds only through the keys both row kinds carry:
+
+- `matches` — full-text search over both kinds' content.
+- `_title` — the row's display title (a card's `cardTitle`, a file's name); usable in `contains` and `sort`.
+- `_cardType` — the card type's display name.
+- `_isCardInstanceFile` — stamped `true` only on a card `.json`'s file row; the dedup key (`eq: false` keeps everything else).
+- `{ type: <BaseDef> }` — BaseDef terminates both kinds' type chains, so a BaseDef-anchored type filter matches every row and composes with other conditions.
+
+Any other field key narrows the result to a single kind.

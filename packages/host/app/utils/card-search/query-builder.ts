@@ -3,9 +3,12 @@ import type {
   Filter,
   Query,
   ResolvedCodeRef,
+  SearchEntryScope,
 } from '@cardstack/runtime-common';
 import {
   codeRefFromInternalKey,
+  excludeCardInstanceFileRows,
+  getTypeRefsFromFilter,
   isAnyFilter,
   isCardTypeFilter,
   isEveryFilter,
@@ -29,9 +32,11 @@ export function shouldSkipSearchQuery(
 
 // Removes CardTypeFilter nodes from a filter tree.
 // Returns undefined if the entire filter was type-only.
-// Used to avoid combining two type conditions in an `every` clause,
-// which produces impossible SQL (the query engine shares one cross-join alias
-// for all tableValuedEach('types') references).
+// When a subtype is picked from the type filter, the base filter's (parent)
+// type condition is redundant — the picked subtype's `types` already contains
+// the parent — so dropping it keeps the query minimal. (Type conditions now
+// compose as an intersection via self-contained membership predicates, so
+// keeping both would also be correct; this is a simplification, not a fix.)
 function stripTypeFromFilter(filter: Filter): Filter | undefined {
   // Preserve the `on` property (TypedFilter) so field-scoped filters
   // like {on: specRef, every: [{eq: {isCard: true}}]} keep their type context.
@@ -84,13 +89,62 @@ function buildTypeFilter(
   return { any: codeRefs.map((ref) => ({ type: ref })) };
 }
 
-// OR-combine full-text markdown search with a cardTitle substring match so
-// short prefixes (e.g. "ma" → "mango", "mark") still find cards by title
+// OR-combine full-text markdown search with a `_title` substring match so
+// short prefixes (e.g. "ma" → "mango", "mark") still find results by title
 // while longer/natural-language queries tap markdown content via `matches`.
+// `_title` is the synthetic key stamped on both card and file rows (a card's
+// title, a file's name), so the term matches files by name too.
 function buildSearchTermFilter(searchTerm: string): Filter {
   return {
-    any: [{ matches: searchTerm }, { contains: { cardTitle: searchTerm } }],
+    any: [{ matches: searchTerm }, { contains: { _title: searchTerm } }],
   };
+}
+
+// Search spans card and file rows in one query. Kind selection is a wire-level
+// concern now: a `opts.cardsOnly` caller sends `scope: 'cards'` (see
+// `searchScopeForOptions`), which pins `boxel_index.type` to instance rows
+// server-side — no filter anchor needed, and immune to a stray file-type filter
+// (which just yields no results rather than leaking files). The mixed sheet
+// (no `cardsOnly`, default `scope: 'all'`) still discriminates the one case
+// scope can't: dropping a card's dual-indexed `.json` file row so the card
+// shows once. See `scopeFilters`.
+export interface BuildQueryOptions {
+  cardsOnly?: boolean;
+}
+
+// The wire scope for a set of build options. cardsOnly pins card-instance rows;
+// the mixed default leaves scope unset ('all').
+export function searchScopeForOptions(
+  opts: BuildQueryOptions | undefined,
+): SearchEntryScope | undefined {
+  return opts?.cardsOnly ? 'cards' : undefined;
+}
+
+function hasPositiveTypeRef(filter: Filter | undefined): boolean {
+  if (!filter) {
+    return false;
+  }
+  return getTypeRefsFromFilter(filter)?.some((r) => !r.negated) ?? false;
+}
+
+function scopeFilters(
+  filters: Filter[],
+  opts: BuildQueryOptions | undefined,
+  hasPositiveType: boolean,
+): Filter[] {
+  // cardsOnly is enforced by `scope: 'cards'` on the wire, so nothing to add.
+  if (opts?.cardsOnly) {
+    return filters;
+  }
+  // Mixed (`scope: 'all'`) sheet: drop a card's dual-indexed `.json` file row so
+  // the card shows once (via its instance row). Skipped when the filter already
+  // carries a positive type ref — a picked card type matches only instance rows
+  // (no dupe to drop), and a picked file type must stay free to surface a
+  // `.json` file row that legitimately matches it.
+  if (hasPositiveType) {
+    return filters;
+  }
+  return [...filters, excludeCardInstanceFileRows()];
 }
 
 export function buildSearchQuery(
@@ -98,14 +152,15 @@ export function buildSearchQuery(
   activeSort: SortOption,
   baseFilter?: Filter,
   selectedTypeIds?: string[],
+  opts?: BuildQueryOptions,
 ): Query {
   const typeFilter = buildTypeFilter(selectedTypeIds);
   const searchTerm = searchKey?.trim() || undefined;
   let filters: Filter[];
   if (baseFilter) {
-    // When typeFilter is present, strip the baseFilter's type constraint
-    // to avoid SQL conflict where two type conditions share one cross-join alias.
-    // This is safe because the type picker only offers subtypes of the baseFilter type.
+    // When typeFilter is present, strip the baseFilter's (parent) type
+    // constraint as redundant — the picked subtype already implies it. Safe
+    // because the type picker only offers subtypes of the baseFilter type.
     const effectiveBaseFilter = typeFilter
       ? stripTypeFromFilter(baseFilter)
       : baseFilter;
@@ -121,6 +176,11 @@ export function buildSearchQuery(
       ...(searchTerm ? [buildSearchTermFilter(searchTerm)] : []),
     ];
   }
+  filters = scopeFilters(
+    filters,
+    opts,
+    Boolean(typeFilter) || hasPositiveTypeRef(baseFilter),
+  );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
     sort: activeSort.sort,
@@ -129,21 +189,27 @@ export function buildSearchQuery(
 
 // Narrower query for the Recents section. Matches the pre-prerendered
 // client-side behavior where a search term filtered recents only by
-// cardTitle substring — unlike the realm search which also runs
+// title substring — unlike the realm search which also runs
 // full-text `matches` on markdown. Using `matches` here picks up
 // linked-card content (e.g. Fadhlan's card markdown includes its
 // linked Mango pet, so "man" matches via "mango"), producing false
 // positives the previous UX never showed.
+//
+// Recents are always cards (their URLs are card `.json`s, applied by the
+// caller through `cardUrls`), but the same URL also names the card's
+// dual-indexed file row — so the mixed/cards-only scoping here is what keeps
+// each recent from surfacing twice.
 export function buildRecentsQuery(
   searchTerm: string | undefined,
   activeSort: SortOption,
   baseFilter?: Filter,
   selectedTypeIds?: string[],
+  opts?: BuildQueryOptions,
 ): Query {
   const typeFilter = buildTypeFilter(selectedTypeIds);
   const term = searchTerm?.trim() || undefined;
   const termFilter: Filter | undefined = term
-    ? { contains: { cardTitle: term } }
+    ? { contains: { _title: term } }
     : undefined;
   let filters: Filter[];
   if (baseFilter) {
@@ -162,6 +228,11 @@ export function buildRecentsQuery(
       ...(termFilter ? [termFilter] : []),
     ];
   }
+  filters = scopeFilters(
+    filters,
+    opts,
+    Boolean(typeFilter) || hasPositiveTypeRef(baseFilter),
+  );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
     sort: activeSort.sort,

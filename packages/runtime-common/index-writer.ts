@@ -847,7 +847,7 @@ export class Batch {
           // favor the last known good types over the types derived from the error state
           ...production,
           // Assign search_doc AFTER the production spread so the freshly-stamped
-          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // synthetic keys (`_title`, `_isCardInstanceFile`, `_cardType`) survive
           // rather than being clobbered by the last-known-good doc. Overlaying
           // the current searchData onto that doc keeps an instance's rich fields
           // when it degrades to a sparse error searchData, while a file /

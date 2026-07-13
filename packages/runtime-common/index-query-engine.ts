@@ -20,8 +20,8 @@ import {
   type JsonContainsQuery,
   param,
   isParam,
-  tableValuedEach,
   tableValuedTree,
+  typesContains,
   separatedByCommas,
   addExplicitParens,
   any,
@@ -64,6 +64,10 @@ import {
   type FieldDefinition,
 } from './definitions.ts';
 import { matchSearchableRoutes, routesForField } from './searchable-routes.ts';
+import {
+  CARD_INSTANCE_FILE_KEY,
+  isSyntheticSearchDocKey,
+} from './search-doc-keys.ts';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
@@ -610,18 +614,12 @@ export class IndexQueryEngine {
     let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
-      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+      `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('file')],
-        any(
-          typeKeys.map((typeKey) => [
-            tableValuedEach('types'),
-            '=',
-            param(typeKey),
-          ]),
-        ),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -639,18 +637,12 @@ export class IndexQueryEngine {
     let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     let rows = (await this.#query([
       'SELECT 1',
-      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+      `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
         ['i.realm_url =', param(realmURL.href)],
         ['i.type =', param('instance')],
-        any(
-          typeKeys.map((typeKey) => [
-            tableValuedEach('types'),
-            '=',
-            param(typeKey),
-          ]),
-        ),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
@@ -675,7 +667,7 @@ export class IndexQueryEngine {
     { filter, sort, page }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
-    entryType: 'instance' | 'file' = 'instance',
+    entryType: 'instance' | 'file' | 'all' = 'instance',
     // When set, the grouped projection is wrapped in an outer select so a
     // conditional live `pristine_doc` can reference the computed `html` column
     // once (see `search()`'s render branch). The inner projection must alias
@@ -692,16 +684,33 @@ export class IndexQueryEngine {
         ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
       ];
 
-      if (opts.includeErrors) {
+      // "not errored" spans both error channels (index + current render error),
+      // matching the single-kind branches below — so a file row with a current
+      // render error is excluded from the mixed scope too.
+      let notErrored: CardExpression = [`NOT ${effectiveHasError()}`];
+      if (entryType === 'all') {
+        // Mixed scope. Instance rows follow `includeErrors` (their error
+        // markup is rendered through the html branch); file rows are only
+        // ever surfaced in a healthy state, so they always require
+        // `has_error` false regardless of `includeErrors`.
+        let instanceBranch: CardExpression = opts.includeErrors
+          ? ['i.type =', param('instance')]
+          : every([['i.type =', param('instance')], notErrored]);
+        let fileBranch = every([['i.type =', param('file')], notErrored]);
+        conditions.push(any([instanceBranch, fileBranch]));
+      } else if (opts.includeErrors) {
         conditions.push(['i.type =', param(entryType)]);
       } else {
-        conditions.push(
-          every([
-            ['i.type =', param(entryType)],
-            [`NOT ${effectiveHasError()}`],
-          ]),
-        );
+        conditions.push(every([['i.type =', param(entryType)], notErrored]));
       }
+
+      // A card-instance `.json` is dual-indexed: an `instance` row and a
+      // `file` row sharing the same `i.url`, distinguished only by `i.type`.
+      // `GROUP BY i.url, i.type` (below) keeps them as two distinct rows so a
+      // mixed query surfaces both; a consumer that wants to dedup the `file`
+      // row filters on the `_isCardInstanceFile` search-doc key (stamped only on
+      // that row) — e.g. `eq: { _isCardInstanceFile: false }` keeps cards + plain
+      // files and drops the card `.json`.
 
       if (opts.cardUrls && opts.cardUrls.length > 0) {
         // Restrict to this URL subset. Instance rows key on their `.json` file
@@ -744,7 +753,7 @@ export class IndexQueryEngine {
           )} ${tableValuedFunctionsPlaceholder}`,
           'WHERE',
           ...everyCondition,
-          'GROUP BY i.url',
+          'GROUP BY i.url, i.type',
           ') AS sub',
           ...outerOrderBy,
           ...limitClause,
@@ -757,7 +766,7 @@ export class IndexQueryEngine {
           )} ${tableValuedFunctionsPlaceholder}`,
           'WHERE',
           ...everyCondition,
-          'GROUP BY i.url',
+          'GROUP BY i.url, i.type',
           ...this.orderExpression(sort),
           ...limitClause,
         ];
@@ -765,14 +774,20 @@ export class IndexQueryEngine {
       // Count over the same tables as the data query (via `opts`) so `total`
       // stays consistent with the result set — including in WIP mode and for a
       // `matches` predicate, which is shared with the data query through
-      // `everyCondition` and references `ph.markdown`.
+      // `everyCondition` and references `ph.markdown`. Count distinct
+      // `(url, type)` pairs to match the `GROUP BY i.url, i.type` grouping — a
+      // dual-indexed card `.json` contributes both its `instance` and `file`
+      // row. Expressed as a `COUNT(*)` over a `DISTINCT` subquery because
+      // SQLite's `COUNT(DISTINCT …)` takes only a single expression.
       let queryCount = [
-        'SELECT COUNT(DISTINCT i.url) AS total',
+        'SELECT COUNT(*) AS total FROM (',
+        'SELECT DISTINCT i.url, i.type',
         `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
           opts,
         )} ${tableValuedFunctionsPlaceholder}`,
         'WHERE',
         ...everyCondition,
+        ') AS distinct_entries',
       ];
 
       let [results, totalResults] = await Promise.all([
@@ -808,6 +823,13 @@ export class IndexQueryEngine {
     { filter, sort, page }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
+    // 'all' searches both `instance` and `file` rows in one query (kind is
+    // discriminated by the caller's filter, with the card-instance `.json`
+    // exclusion applied); 'file' pins file rows only; the file columns needed
+    // to synthesize a file row's resource + renderings ride the projection when
+    // file rows are in scope. Defaults to instance-only so `searchCards` and
+    // other single-kind callers are unchanged.
+    entryType: 'instance' | 'file' | 'all' = 'instance',
   ): Promise<{
     meta: QueryResultsMeta;
     results: (Partial<BoxelIndexTable> & {
@@ -819,31 +841,65 @@ export class IndexQueryEngine {
       html_generation?: number | null;
     })[];
   }> {
+    // File-only columns the assembly loop reads to build a `file` row's
+    // resource + native renderings. Each is gated on `i.type = 'file'` so a
+    // mixed query never drags a card row's (potentially multi-megabyte)
+    // `search_doc` / `isolated_html` / `markdown`: within a `(url, type)`
+    // group the type is constant, so the CASE yields the value for a file
+    // group and NULL for an instance group (which the assembly loop ignores
+    // — it only calls `fileEntryFromResult` on `file` rows). Appended to
+    // either projection only when file rows are in scope.
+    let fileOnly = (col: string) =>
+      `ANY_VALUE(CASE WHEN i.type = 'file' THEN ${col} END)`;
+    // Only the columns the file-row assembly actually reads
+    // (`fileResourceFromIndex` + `fileEntryFromResult`): the row's search_doc,
+    // timestamps, realm, and index generation. `markdown` and `isolated_html`
+    // are deliberately NOT here — neither the file-meta resource nor its
+    // renderings read them, and `markdown` can be multi-megabyte. The standalone
+    // `searchFiles` projection (below) still carries them for its own consumers.
+    let fileColumns = `, ${fileOnly('i.search_doc')} as search_doc, ${fileOnly(
+      'i.last_modified',
+    )} as last_modified, ${fileOnly(
+      'i.resource_created_at',
+    )} as resource_created_at, ${fileOnly('i.realm_url')} as realm_url, ${fileOnly(
+      'i.indexed_at',
+    )} as indexed_at`;
     let selectClauseExpression: CardExpression;
     if (projection.kind === 'dataOnly') {
-      selectClauseExpression = [
-        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation`,
-      ];
+      // The live serialization only — no rendered HTML entries (dataOnly).
+      // When file rows are in scope, also carry the columns the file-row
+      // assembly reads to synthesize each file's `file-meta` resource + type
+      // descriptor. The effective error columns fold in current render errors
+      // from the prerendered_html channel.
+      let dataOnly = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation`;
+      selectClauseExpression =
+        entryType !== 'instance'
+          ? [
+              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(${dualReadColumn(
+                'deps',
+              )}) as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
+            ]
+          : [dataOnly];
     } else {
       // The full rendering set: every per-format HTML column whole (the
       // fitted/embedded JSONB maps keyed by render type, the scalar
       // atom/head columns), plus the live serialization on every row. The
       // caller enumerates candidate renderings and selects from the set.
-      selectClauseExpression = [
-        `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
-          'fitted_html',
-        )}) as fitted_html, ANY_VALUE(${dualReadColumn(
-          'embedded_html',
-        )}) as embedded_html, ANY_VALUE(${dualReadColumn(
-          'atom_html',
-        )}) as atom_html, ANY_VALUE(${dualReadColumn(
-          'head_html',
-        )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
-          'deps',
-        )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
-          'generation',
-        )}) as html_generation`,
-      ];
+      let renderSet = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
+        'fitted_html',
+      )}) as fitted_html, ANY_VALUE(${dualReadColumn(
+        'embedded_html',
+      )}) as embedded_html, ANY_VALUE(${dualReadColumn(
+        'atom_html',
+      )}) as atom_html, ANY_VALUE(${dualReadColumn(
+        'head_html',
+      )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
+        'deps',
+      )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
+        'generation',
+      )}) as html_generation`;
+      selectClauseExpression =
+        entryType !== 'instance' ? [`${renderSet}${fileColumns}`] : [renderSet];
     }
 
     return (await this._search(
@@ -851,7 +907,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       selectClauseExpression,
-      'instance',
+      entryType,
     )) as {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
@@ -913,54 +969,8 @@ export class IndexQueryEngine {
       'file',
     );
 
-    let files = results.map((result) => this.fileEntryFromResult(result));
+    let files = results.map((result) => fileEntryFromResult(result));
     return { files, meta };
-  }
-
-  private fileEntryFromResult(result: Partial<BoxelIndexTable>): IndexedFile {
-    let canonicalURL = result.url;
-    if (!canonicalURL) {
-      throw new Error('expected file search result to include url');
-    }
-    let lastModified =
-      typeof result.last_modified === 'string'
-        ? parseInt(result.last_modified)
-        : (result.last_modified ?? null);
-    let resourceCreatedAt =
-      typeof result.resource_created_at === 'string'
-        ? parseInt(result.resource_created_at)
-        : (result.resource_created_at ?? null);
-    let indexedAt =
-      typeof result.indexed_at === 'string'
-        ? parseInt(result.indexed_at)
-        : (result.indexed_at ?? null);
-    return {
-      type: 'file',
-      canonicalURL,
-      searchDoc: (result.search_doc as Record<string, any> | null) ?? null,
-      resource: (result.pristine_doc as FileMetaResource | null) ?? null,
-      types: (result.types as string[] | null) ?? null,
-      displayNames: (result.display_names as string[] | null) ?? null,
-      deps: (result.deps as string[] | null) ?? null,
-      isolatedHtml: result.isolated_html ?? null,
-      headHtml: result.head_html ?? null,
-      embeddedHtml:
-        (result.embedded_html as { [refURL: string]: string } | null) ?? null,
-      fittedHtml:
-        (result.fitted_html as { [refURL: string]: string } | null) ?? null,
-      atomHtml: result.atom_html ?? null,
-      iconHtml: result.icon_html ?? null,
-      markdown: result.markdown ?? null,
-      lastModified,
-      resourceCreatedAt,
-      generation: result.generation ?? 0,
-      htmlGeneration:
-        (result as { html_generation?: number | null }).html_generation ??
-        result.generation ??
-        0,
-      realmURL: result.realm_url ?? '',
-      indexedAt,
-    };
   }
 
   private generalFieldSortColumn(field: string) {
@@ -974,7 +984,9 @@ export class IndexQueryEngine {
 
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
-      return ['ORDER BY i.url COLLATE "POSIX"'];
+      // `i.type` follows `url` so a dual-indexed card `.json`'s two rows
+      // (same url, `instance` vs `file`) order deterministically.
+      return ['ORDER BY i.url COLLATE "POSIX", i.type'];
     }
     return [
       'ORDER BY',
@@ -990,8 +1002,10 @@ export class IndexQueryEngine {
           s.direction ?? 'asc',
           'NULLS LAST',
         ]),
-        // we include 'url' as the final sort key for deterministic results
+        // `url` then `type` are the final sort keys for deterministic results
+        // (the two rows of a dual-indexed card `.json` share a url).
         ['i.url COLLATE "POSIX"'],
+        ['i.type'],
       ]),
     ];
   }
@@ -1006,9 +1020,12 @@ export class IndexQueryEngine {
     outerOrderBy: CardExpression;
   } {
     if (!sort) {
+      // `type` follows `url` to match `orderExpression`'s tiebreaker — the two
+      // rows of a dual-indexed card `.json` share a url. The inner projection
+      // aliases `ANY_VALUE(i.type) as type`, so the outer references it bare.
       return {
         innerSortColumns: [],
-        outerOrderBy: ['ORDER BY url COLLATE "POSIX"'],
+        outerOrderBy: ['ORDER BY url COLLATE "POSIX", type'],
       };
     }
     let innerSortColumns: CardExpression = [];
@@ -1024,8 +1041,11 @@ export class IndexQueryEngine {
       );
       outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
     });
-    // the `url` tiebreaker matches `orderExpression` for deterministic results
+    // `url` then `type` are the final tiebreakers, matching `orderExpression`
+    // for deterministic results (a dual-indexed card `.json`'s two rows share
+    // a url; the inner projection aliases `ANY_VALUE(i.type) as type`).
     outerKeys.push(['url COLLATE "POSIX"']);
+    outerKeys.push(['type']);
     return {
       innerSortColumns,
       outerOrderBy: ['ORDER BY', ...separatedByCommas(outerKeys)],
@@ -1107,11 +1127,17 @@ export class IndexQueryEngine {
     // Match any equivalent spelling of the type key (RRI / real-URL /
     // virtual-alias), so rows indexed before references were canonicalized to
     // RRI still satisfy the filter without a reindex or DB migration.
+    //
+    // Each key is a self-contained `types-contains` membership predicate rather
+    // than a comparison against a shared `jsonb_array_elements_text(types)`
+    // cross-join alias. The cross join gave every type condition in a query
+    // exists-one-element semantics (all type conditions dedupe onto one alias),
+    // which miscompose: `not: { type: X }` failed to exclude X, and
+    // `every: [{ type: A }, { type: B }]` was unsatisfiable. Per-row membership
+    // makes negation a true exclusion and conjunction a true intersection.
     return any(
       internalKeysFor(ref, undefined, this.#virtualNetwork).map((typeKey) => [
-        tableValuedEach('types'),
-        '=',
-        param(typeKey),
+        typesContains(typeKey),
       ]),
     );
   }
@@ -1308,6 +1334,31 @@ export class IndexQueryEngine {
     onRef: CodeRef,
     polarity: FilterPolarity = 'positive',
   ): CardExpression {
+    if (
+      currentField(key) === CARD_INSTANCE_FILE_KEY &&
+      typeof value === 'boolean'
+    ) {
+      // Synthetic boolean search-doc key, stamped `true` only on the file row of
+      // a dual-indexed card `.json` and omitted (never stamped `false`)
+      // everywhere else. Because the key is present exactly when it is true,
+      // membership is an existence test: `eq: false` ("not a card-instance
+      // file", which must also match rows lacking the key) is `->> IS NULL`, and
+      // `eq: true` is `->> IS NOT NULL`. This deliberately avoids comparing the
+      // extracted value against a boolean literal: `->>` of a JSON boolean
+      // renders as 'true'/'false' on Postgres but 1/0 on SQLite, so a
+      // `= 'true'` comparison would silently diverge between adapters. `IS
+      // [NOT] NULL` is adapter-agnostic and inverts cleanly when `notCondition`
+      // wraps this in `NOT (...)`, so polarity needs no special handling here.
+      let extracted = fieldQuery(key, onRef, false, 'filter');
+      return [
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [extracted, value ? 'IS NOT NULL' : 'IS NULL'],
+          errorHint: 'filter',
+        }),
+      ];
+    }
     if (value === null) {
       let query = fieldQuery(key, onRef, true, 'filter');
       return [
@@ -1476,7 +1527,8 @@ export class IndexQueryEngine {
             typeof element === 'string' ||
             element.kind === 'table-valued-each' ||
             element.kind === 'table-valued-tree' ||
-            element.kind === 'json-contains'
+            element.kind === 'json-contains' ||
+            element.kind === 'types-contains'
           ) {
             return Promise.resolve([element]);
           } else if (element.kind === 'field-query') {
@@ -1918,16 +1970,19 @@ async function getField(
     return await definitionLookup.lookupDefinition(codeRef);
   });
   if (!field) {
-    if (
-      currentField(pathTraveled) === '_cardType' ||
-      currentField(pathTraveled) === '_title'
-    ) {
-      // this is a little awkward--we have the need to treat '_cardType' and
-      // '_title' as string fields that we can query against from the index
-      // (e.g. the cards grid sorts by the card's display name; a mixed
-      // cards+files search sorts/filters both row types on '_title'). the
-      // index-runner / prerender meta route inject these into the searchDoc
-      // during index time.
+    if (isSyntheticSearchDocKey(currentField(pathTraveled))) {
+      // this is a little awkward--we have the need to treat the synthetic
+      // search-doc keys (see search-doc-keys.ts) as fields that we can query
+      // against from the index (e.g. the cards grid sorts by the card's display
+      // name via `_cardType`; a mixed cards+files search sorts/filters both row
+      // types on `_title`, and dedups a card's dual-indexed `.json` file row
+      // with `eq: { _isCardInstanceFile: false }`). the index-runner / prerender
+      // meta route inject these into the searchDoc during index time. The string
+      // field shape here is enough for the non-null string keys and the `IS
+      // NULL` legacy spelling; `_isCardInstanceFile`'s boolean `eq: true/false`
+      // is special-cased in `fieldEqFilter` so it never depends on the
+      // adapter-specific `->>` rendering of a JSON boolean. Kept in sync with
+      // the matcher shim (instance-filter-matcher.ts) and searchable-parity.ts.
       return {
         type: 'contains',
         isPrimitive: true,
@@ -2044,6 +2099,57 @@ const DUAL_READ_ERROR_OVERRIDES = [
 // FTS path already treats as unrendered).
 function dualReadColumn(col: string): string {
   return `CASE WHEN ph.url IS NULL THEN i.${col} ELSE ph.${col} END`;
+}
+
+// Maps a raw `file`-row search result to the `IndexedFile` view-model. Shared
+// by `searchFiles` and the mixed `searchEntries` assembly loop (which builds
+// a file's resource + native renderings from the same shape).
+export function fileEntryFromResult(
+  result: Partial<BoxelIndexTable>,
+): IndexedFile {
+  let canonicalURL = result.url;
+  if (!canonicalURL) {
+    throw new Error('expected file search result to include url');
+  }
+  let lastModified =
+    typeof result.last_modified === 'string'
+      ? parseInt(result.last_modified)
+      : (result.last_modified ?? null);
+  let resourceCreatedAt =
+    typeof result.resource_created_at === 'string'
+      ? parseInt(result.resource_created_at)
+      : (result.resource_created_at ?? null);
+  let indexedAt =
+    typeof result.indexed_at === 'string'
+      ? parseInt(result.indexed_at)
+      : (result.indexed_at ?? null);
+  return {
+    type: 'file',
+    canonicalURL,
+    searchDoc: (result.search_doc as Record<string, any> | null) ?? null,
+    resource: (result.pristine_doc as FileMetaResource | null) ?? null,
+    types: (result.types as string[] | null) ?? null,
+    displayNames: (result.display_names as string[] | null) ?? null,
+    deps: (result.deps as string[] | null) ?? null,
+    isolatedHtml: result.isolated_html ?? null,
+    headHtml: result.head_html ?? null,
+    embeddedHtml:
+      (result.embedded_html as { [refURL: string]: string } | null) ?? null,
+    fittedHtml:
+      (result.fitted_html as { [refURL: string]: string } | null) ?? null,
+    atomHtml: result.atom_html ?? null,
+    iconHtml: result.icon_html ?? null,
+    markdown: result.markdown ?? null,
+    lastModified,
+    resourceCreatedAt,
+    generation: result.generation ?? 0,
+    htmlGeneration:
+      (result as { html_generation?: number | null }).html_generation ??
+      result.generation ??
+      0,
+    realmURL: result.realm_url ?? '',
+    indexedAt,
+  };
 }
 
 // Dual-read HTML/markdown reads, appended after a `SELECT i.*` so these win over

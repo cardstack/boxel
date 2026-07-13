@@ -33,6 +33,7 @@ import {
   isSparseItemResource,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
+  getTypeRefsFromFilter,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
   Deferred,
@@ -76,6 +77,7 @@ import {
   type StoreReadType,
   type CardResource,
   type SearchEntryResults,
+  type SearchEntryScope,
   type SearchEntryWireQuery,
   type EntrySingleDocument,
   isEntrySingleDocument,
@@ -1263,8 +1265,26 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
   ): Promise<SearchEntryResults> {
+    // Search spans card instances and files. A query with a positive type ref
+    // already selects a kind (a card type -> instances, a FileDef type ->
+    // files), so it passes through with the default 'all' scope and its filter
+    // discriminates. An otherwise-unscoped query is pinned to 'cards' so the
+    // common "search for cards" case doesn't surface a card's dual-indexed
+    // `.json` file row (or plain files) — the choke point that replaces the
+    // former per-call-site card anchor, while leaving file/typed searches
+    // (e.g. SearchResource's file-meta queries) untouched.
+    let typeRefs = query.filter
+      ? getTypeRefsFromFilter(query.filter)
+      : undefined;
+    let hasPositiveType = typeRefs?.some((r) => !r.negated) ?? false;
+    let scope: SearchEntryScope | undefined = hasPositiveType
+      ? undefined
+      : 'cards';
     return await this.fetchSearchEntryDoc(
-      searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
+      searchEntryWireQueryFromQuery(query, {
+        fields: ['item'],
+        ...(scope ? { scope } : {}),
+      }),
       realms,
     );
   }

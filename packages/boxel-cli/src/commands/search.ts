@@ -108,6 +108,9 @@ interface SearchEntryRequestBody {
   sort?: Record<string, unknown>[];
   page?: unknown;
   cardUrls?: unknown;
+  // Which row kinds to span: 'cards' | 'files' | 'all' (default 'all' server-
+  // side). Pass 'cards' to restrict to card instances.
+  scope?: unknown;
 }
 
 /**
@@ -149,6 +152,9 @@ export function searchEntryRequestBody(
   }
   if (query.cardUrls !== undefined) {
     body.cardUrls = query.cardUrls;
+  }
+  if (query.scope !== undefined) {
+    body.scope = query.scope;
   }
   return body;
 }

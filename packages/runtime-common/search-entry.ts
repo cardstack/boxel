@@ -104,7 +104,18 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'realms',
   'fields',
   'cardUrls',
+  'scope',
 ];
+
+// Which row kinds a search spans. Pins `boxel_index.type` directly, so it works
+// for any filter shape and is independent of index-stamp state — unlike
+// discriminating kind through a `{ type: … }` anchor or the
+// `_isCardInstanceFile` dedup key. `'all'` (the default) returns both kinds,
+// including both rows of a dual-indexed card `.json`; a caller that wants the
+// `.json` file row dropped adds the dedup filter explicitly.
+export type SearchEntryScope = 'cards' | 'files' | 'all';
+
+const SEARCH_ENTRY_SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
 
 // The operator members whose value is an object keyed by field paths.
 const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'];
@@ -135,6 +146,7 @@ export interface SearchEntryQuery {
   fieldset: SearchEntryFieldset;
   realms?: string[];
   cardUrls?: string[];
+  scope?: SearchEntryScope;
 }
 
 function invalidQuery(message: string): SearchRequestError {
@@ -604,6 +616,18 @@ export function parseSearchEntryQueryFromPayload(
     }
   }
 
+  let scope: SearchEntryScope | undefined;
+  if (record.scope !== undefined) {
+    if (!SEARCH_ENTRY_SCOPES.includes(record.scope as SearchEntryScope)) {
+      throw invalidQuery(
+        `scope must be one of ${SEARCH_ENTRY_SCOPES.map((s) => `"${s}"`).join(
+          ', ',
+        )}`,
+      );
+    }
+    scope = record.scope as SearchEntryScope;
+  }
+
   let capture: HtmlQueryCapture = {};
   let filter: Record<string, unknown> | undefined;
   if (record.filter !== undefined) {
@@ -655,6 +679,7 @@ export function parseSearchEntryQueryFromPayload(
     fieldset,
     realms,
     cardUrls,
+    scope,
   };
 }
 
@@ -851,6 +876,7 @@ export interface SearchEntryWireQuery {
   fields?: { entry: string[] };
   cardUrls?: string[];
   realms?: string[];
+  scope?: SearchEntryScope;
 }
 
 function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
@@ -886,7 +912,7 @@ function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
 
 export function searchEntryWireQueryFromQuery(
   query: Query,
-  opts?: { fields?: string[] },
+  opts?: { fields?: string[]; scope?: SearchEntryScope },
 ): SearchEntryWireQuery {
   // the legacy `realm`/`realms` members are deliberately not carried — the
   // caller addresses realms at the request level; `asData`/`fields` are the
@@ -908,6 +934,9 @@ export function searchEntryWireQueryFromQuery(
   }
   if (opts?.fields) {
     wire.fields = { entry: [...opts.fields] };
+  }
+  if (opts?.scope) {
+    wire.scope = opts.scope;
   }
   return wire;
 }

@@ -1114,8 +1114,8 @@ module(basename(import.meta.filename), function () {
         'file entry includes contentSize',
       );
       assert.true(
-        entry?.searchDoc?._isCardInstance,
-        'file entry for a card instance json is marked _isCardInstance',
+        entry?.searchDoc?._isCardInstanceFile,
+        'file entry for a card instance json is marked _isCardInstanceFile',
       );
       assert.strictEqual(
         entry?.searchDoc?._title,
@@ -1175,8 +1175,8 @@ module(basename(import.meta.filename), function () {
         'search_doc _title is the file name',
       );
       assert.false(
-        '_isCardInstance' in searchDoc,
-        'non-card file search_doc does not carry _isCardInstance',
+        '_isCardInstanceFile' in searchDoc,
+        'non-card file search_doc does not carry _isCardInstanceFile',
       );
     });
 

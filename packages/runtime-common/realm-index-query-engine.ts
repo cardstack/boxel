@@ -9,6 +9,7 @@ import {
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
+  fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
   CardResourceType,
@@ -272,15 +273,33 @@ export class RealmIndexQueryEngine {
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
+    // Internal override for the single-URL GET path, which pins 'instance' so a
+    // bare file URL never resolves as a card entry. When omitted, the scope
+    // comes from the wire `searchEntryQuery.scope` (mapped below): 'cards' ->
+    // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
+    entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
-    let { itemQuery: query, htmlQuery, fieldset, cardUrls } = searchEntryQuery;
+    let {
+      itemQuery: query,
+      htmlQuery,
+      fieldset,
+      cardUrls,
+      scope,
+    } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
     };
-    if (await this.queryTargetsFileMeta(query.filter, engineOpts)) {
-      return await this.searchEntriesFileMeta(searchEntryQuery, engineOpts);
-    }
+
+    // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
+    // query — a card row and a file row carry non-overlapping `types`, so the
+    // caller's filter also discriminates by kind. A mixed 'all' query returns
+    // both a card's `instance` row and its dual-indexed `.json` `file` row; a
+    // consumer that wants the file row dropped does so through its own filter
+    // (`eq: { item._isCardInstanceFile: false }`).
+    let entryTypeScope: 'instance' | 'file' | 'all' =
+      entryTypeScopeOverride ??
+      (scope === 'cards' ? 'instance' : scope === 'files' ? 'file' : 'all');
 
     let itemOnEveryRow = fieldset.item.kind !== 'none';
     let projection: SearchProjection = fieldset.html
@@ -288,16 +307,26 @@ export class RealmIndexQueryEngine {
       : { kind: 'dataOnly' };
     // Error rows surface only through the `html` branch (their renderings
     // carry `isError`); the item-only projection matches the live search
-    // path, which excludes them.
-    let sqlOpts: QueryOptions = fieldset.html
-      ? { ...engineOpts, includeErrors: true }
-      : engineOpts;
+    // path, which excludes them. The 'files' scope never includes errors —
+    // files are only ever surfaced healthy (the mixed 'all' scope forces the
+    // same for its file branch in `_search`) — so it strips includeErrors even
+    // when an html fieldset would otherwise set it.
+    let sqlOpts: QueryOptions;
+    if (entryTypeScope === 'file') {
+      let { includeErrors: _drop, ...rest } = engineOpts;
+      sqlOpts = rest;
+    } else if (fieldset.html) {
+      sqlOpts = { ...engineOpts, includeErrors: true };
+    } else {
+      sqlOpts = engineOpts;
+    }
     let runSql = () =>
       this.#indexQueryEngine.search(
         new URL(this.#realm.url),
         query,
         sqlOpts,
         projection,
+        entryTypeScope,
       );
     let { results, meta } = opts?.timings
       ? await opts.timings.time('sql', runSql)
@@ -318,6 +347,82 @@ export class RealmIndexQueryEngine {
     let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
 
     for (let row of results) {
+      // A `file` row (mixed 'all' scope) renders natively and carries no
+      // ancestor coercion — its renderings hang off its own type's entry with
+      // no renderTypeKey, and its resource is the synthesized `file-meta`. This
+      // is the file counterpart of the instance branch below; kind is decided
+      // per row on `row.type`.
+      if (row.type === 'file') {
+        let file = fileEntryFromResult(row);
+        let url = file.canonicalURL;
+        if (!url) {
+          continue;
+        }
+        let fileHtmlIds: string[] | undefined;
+        let fileIconId = collectIconId(
+          fieldset.html ? file.types?.[0] : undefined,
+          fieldset.html ? (file.iconHtml ?? undefined) : undefined,
+          file.displayNames?.[0] ?? '',
+          iconById,
+        );
+        if (fieldset.html) {
+          let matched = enumerateFileRenderings(file).filter((candidate) =>
+            htmlQueryMatches(resolvedHtmlQuery, candidate),
+          );
+          let cssIds: string[] = [];
+          if (matched.length > 0) {
+            for (let href of scopedCssHrefsFromDeps(file.deps)) {
+              let css = buildCssResource(href);
+              if (!cssById.has(css.id)) {
+                cssById.set(css.id, css);
+              }
+              cssIds.push(css.id);
+            }
+          }
+          let ids: string[] = [];
+          for (let candidate of matched) {
+            let htmlResource = buildHtmlResource({
+              url,
+              format: candidate.format,
+              html: candidate.html,
+              cardType: file.displayNames?.[0] ?? '',
+              cssIds,
+              generation: file.htmlGeneration ?? file.generation,
+            });
+            htmlResources.push(htmlResource);
+            ids.push(htmlResource.id);
+          }
+          fileHtmlIds =
+            fieldset.itemAsFallback && ids.length === 0 ? undefined : ids;
+        }
+        let emitFileItem =
+          itemOnEveryRow ||
+          (fieldset.itemAsFallback && fileHtmlIds === undefined);
+        let fileItemEmitted = false;
+        if (emitFileItem) {
+          let item: FileMetaResource = fileResourceFromIndex(
+            new URL(url),
+            file,
+          );
+          if (fieldset.item.kind === 'sparse') {
+            item = buildSparseItemResource(item, fieldset.item.fields);
+          } else {
+            fullItemRoots.push(item);
+          }
+          itemResources.push(item);
+          fileItemEmitted = true;
+        }
+        data.push(
+          buildEntryResource({
+            url,
+            htmlIds: fileHtmlIds,
+            itemType: fileItemEmitted ? FileMetaResourceType : undefined,
+            iconId: fileIconId,
+            generation: file.generation,
+          }),
+        );
+        continue;
+      }
       let fileUrl = row.url;
       if (!fileUrl) {
         continue;
@@ -486,18 +591,17 @@ export class RealmIndexQueryEngine {
       fieldset,
       cardUrls: [url.href],
     };
-    let collection =
-      kind === 'file'
-        ? // The file path is reached only through this explicit `kind` — an
-          // empty membership query never routes to file-meta on its own (see
-          // `queryTargetsFileMeta`), so a file's entry must be requested by
-          // accept header. `cardUrls` rides in `opts` for the file path (it's
-          // read there, not off the SearchEntryQuery).
-          await this.searchEntriesFileMeta(searchEntryQuery, {
-            ...opts,
-            cardUrls: [url.href],
-          })
-        : await this.searchEntries(searchEntryQuery, opts);
+    // Pin the scope by kind: a membership query resolves a card `.json`'s URL
+    // to its `instance` entry, so a file's entry must be requested explicitly by
+    // accept header ('file'), and a by-URL card lookup pins 'instance' so a bare
+    // file URL 404s rather than resolving as a file-meta entry. Both scopes run
+    // through the one `searchEntries` assembly loop (the file rows via its
+    // `row.type === 'file'` branch).
+    let collection = await this.searchEntries(
+      searchEntryQuery,
+      opts,
+      kind === 'file' ? 'file' : 'instance',
+    );
     let [entry] = collection.data;
     if (!entry) {
       return undefined;
@@ -507,125 +611,6 @@ export class RealmIndexQueryEngine {
       doc.included = collection.included;
     }
     return doc;
-  }
-
-  // The file-meta counterpart of `searchEntries`. Files are indexed as
-  // `type: 'file'` rows, which the instance-only projections skip, so they
-  // resolve through `searchFiles` (per-format HTML + the full `file-meta`
-  // resource), with the same fieldset semantics. A file renders natively —
-  // there is no ancestor coercion — so a file rendering carries no
-  // renderType, its composite id is just `<fileURL>#<format>`, and a
-  // renderType predicate in the htmlQuery never matches a file rendering.
-  private async searchEntriesFileMeta(
-    searchEntryQuery: SearchEntryQuery,
-    opts?: Options,
-  ): Promise<EntryCollectionDocument> {
-    let { itemQuery: query, htmlQuery, fieldset } = searchEntryQuery;
-    let { includeErrors: _includeErrors, ...fileOpts } = opts ?? {};
-    let runSql = () =>
-      this.#indexQueryEngine.searchFiles(
-        new URL(this.#realm.url),
-        query,
-        fileOpts,
-      );
-    let { files, meta } = opts?.timings
-      ? await opts.timings.time('sql', runSql)
-      : await runSql();
-
-    let resolvedHtmlQuery = resolveHtmlQuery(htmlQuery, (ref) =>
-      internalKeyFor(ref, undefined, this.#realm.virtualNetwork),
-    );
-
-    let itemOnEveryRow = fieldset.item.kind !== 'none';
-    let data: EntryResource[] = [];
-    let htmlResources: EntryIncludedResource[] = [];
-    let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
-    let cssById = new Map<string, CssResource>();
-    let iconById = new Map<string, IconResource>();
-    let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
-
-    for (let file of files) {
-      let url = file.canonicalURL;
-      if (!url) {
-        continue;
-      }
-
-      let htmlIds: string[] | undefined;
-      // A file's type icon, deduped by its native-type internal key — carried
-      // on the `entry` so a no-HTML file row (e.g. a `.gts`/`.ts`
-      // FileDef with no fitted rendering) still resolves its icon.
-      let iconId = collectIconId(
-        fieldset.html ? file.types?.[0] : undefined,
-        fieldset.html ? (file.iconHtml ?? undefined) : undefined,
-        file.displayNames?.[0] ?? '',
-        iconById,
-      );
-      if (fieldset.html) {
-        let matched = enumerateFileRenderings(file).filter((candidate) =>
-          htmlQueryMatches(resolvedHtmlQuery, candidate),
-        );
-        let cssIds: string[] = [];
-        if (matched.length > 0) {
-          for (let href of scopedCssHrefsFromDeps(file.deps)) {
-            let css = buildCssResource(href);
-            if (!cssById.has(css.id)) {
-              cssById.set(css.id, css);
-            }
-            cssIds.push(css.id);
-          }
-        }
-        let ids: string[] = [];
-        for (let candidate of matched) {
-          let htmlResource = buildHtmlResource({
-            url,
-            format: candidate.format,
-            html: candidate.html,
-            cardType: file.displayNames?.[0] ?? '',
-            cssIds,
-            generation: file.htmlGeneration ?? file.generation,
-          });
-          htmlResources.push(htmlResource);
-          ids.push(htmlResource.id);
-        }
-        htmlIds = fieldset.itemAsFallback && ids.length === 0 ? undefined : ids;
-      }
-
-      let emitItem =
-        itemOnEveryRow || (fieldset.itemAsFallback && htmlIds === undefined);
-      let itemEmitted = false;
-      if (emitItem) {
-        // The file's live serialization — the same synthesized resource the
-        // live search path serves (raw pristine rows can lag the synthesized
-        // attributes, e.g. inferred contentType / searchDoc extras).
-        let item: FileMetaResource = fileResourceFromIndex(new URL(url), file);
-        if (fieldset.item.kind === 'sparse') {
-          item = buildSparseItemResource(item, fieldset.item.fields);
-        } else {
-          fullItemRoots.push(item);
-        }
-        itemResources.push(item);
-        itemEmitted = true;
-      }
-
-      data.push(
-        buildEntryResource({
-          url,
-          htmlIds,
-          itemType: itemEmitted ? FileMetaResourceType : undefined,
-          iconId,
-          generation: file.generation,
-        }),
-      );
-    }
-
-    let metaWithEcho: EntryCollectionDocument['meta'] = fieldset.html
-      ? { ...meta, htmlQuery }
-      : meta;
-    return await this.assembleSearchEntryDoc(
-      { data, meta: metaWithEcho },
-      { htmlResources, cssById, iconById, itemResources, fullItemRoots },
-      opts,
-    );
   }
 
   // Shared tail of the two searchEntries paths: stitch `included` together

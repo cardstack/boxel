@@ -148,7 +148,11 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let { data: cards } = await searchCardsForTest(queryEngine, {});
+    // anchored to cards — an unanchored entry query also returns the card
+    // `.json` file rows
+    let { data: cards } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
+    });
     assert.deepEqual(cards, [
       {
         id: testRRI('empty'),

@@ -54,6 +54,7 @@ export default class MiniCardChooser extends Component<Signature> {
       <SearchPanel
         @searchKey={{this.searchKey}}
         @baseFilter={{@baseFilter}}
+        @cardsOnly={{true}}
         as |Bar Content|
       >
         <header class='mini-card-chooser__header'>
@@ -66,6 +67,7 @@ export default class MiniCardChooser extends Component<Signature> {
         <div class='mini-card-chooser__results'>
           <Content
             @isCompact={{false}}
+            @cardsOnly={{true}}
             @handleSelect={{this.handleSelect}}
             @showHeader={{true}}
             @variant='mini'
