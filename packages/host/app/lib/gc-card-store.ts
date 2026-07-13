@@ -4,6 +4,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   isPrimitive,
+  isCardError,
   isCardInstance,
   isFileDefInstance,
   isBaseInstance,
@@ -190,6 +191,117 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
 
+  // ── Job-scoped wire-document cache ─────────────────────────────────────
+  // Successful card-source / file-meta documents fetched during an indexing
+  // render, keyed by URL and scoped to the indexing job identity
+  // (`__boxelJobId`), so a shared link target (one Policy referenced by
+  // hundreds of Claims) fetches once per job instead of once per
+  // referencing card. The identity map already short-circuits most repeat
+  // loads while a target instance stays resident; this cache covers the
+  // window after the GC sweep evicts an unreferenced target, turning its
+  // re-load into a local deserialize instead of a network round-trip.
+  //
+  // Staleness contract — one consistent view of every target per job. For
+  // the indexed realm's own files this is exact: the job serializes with
+  // that realm's writes, and a mid-job write is picked up by the follow-up
+  // job its invalidation enqueues. A cross-realm target CAN change mid-job,
+  // and the cache pins the version first observed — deliberately, matching
+  // the job-scoped instance reuse in the link getter's lazy-load path,
+  // which pins any target the moment its instance enters the store. The
+  // delta this cache adds is bounded to the job: only a post-GC-eviction
+  // re-load could have observed a newer cross-realm version mid-job, and
+  // one pinned version beats mixing pre- and post-write versions across a
+  // single job's rows. Across jobs nothing changes: entries die with the
+  // job, and cross-realm freshness between jobs is governed by what
+  // re-indexes the consumer (dep-driven invalidation fans out within a
+  // realm; a consumer of a peer realm's card is refreshed by its own
+  // realm's next index of it). This is a looser gate than the resolved-doc
+  // search cache's same-realm-only rule because the pinned unit is
+  // narrower: a document fetched by URL, not a query result whose
+  // membership can silently change under a peer realm's swap.
+  //
+  // Gated to prerender + job id, cleared the first time a different job id
+  // is observed, never consulted by the live app.
+  #jobScopedDocCache = new Map<
+    string,
+    SingleCardDocument | SingleFileMetaDocument
+  >();
+  #jobScopedDocCacheJobId: string | undefined;
+  // Bumped on every clear (the jobId-change clear and `reset()`). A load
+  // captures this alongside its cache key and skips its populate when the
+  // generation moved while the fetch was in flight — a document fetched
+  // under one job must not seed the next job's cache, whose realm sources
+  // may differ.
+  #jobScopedDocCacheGeneration = 0;
+  // Entry cap keeps a tab's memory flat on very large realms. The benchmark
+  // insurance realm (885 instances) shows ~255 distinct shared link targets
+  // per from-scratch job, so this holds several such working sets; beyond
+  // it, least-recently-used entries fall out first (Map iteration order is
+  // insertion order and hits re-insert), which preserves the hot shared
+  // targets that make the cache worthwhile. Public so the eviction test can
+  // size its fill against the real cap.
+  static MAX_JOB_SCOPED_DOC_CACHE_ENTRIES = 2048;
+
+  // Resolve the cache slot for a document load: undefined outside an
+  // indexing render (no `__boxelRenderContext`/`__boxelJobId`), so the live
+  // app and job-less renders never read or write the cache. Observing a
+  // different job id than the held one drops the previous job's entries —
+  // the entry-time clear that covers a prerender tab reused across jobs
+  // without any harder reset in between. The kind prefix keeps a card URL
+  // and a file-meta URL with the same string from sharing a slot.
+  #jobScopedDocCacheKey(
+    kind: 'card' | 'file',
+    url: string,
+  ): string | undefined {
+    let g = globalThis as unknown as {
+      __boxelRenderContext?: boolean;
+      __boxelJobId?: string;
+    };
+    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+      return undefined;
+    }
+    if (g.__boxelJobId !== this.#jobScopedDocCacheJobId) {
+      this.#jobScopedDocCache.clear();
+      this.#jobScopedDocCacheJobId = g.__boxelJobId;
+      this.#jobScopedDocCacheGeneration++;
+    }
+    return `${kind}:${url}`;
+  }
+
+  #readJobScopedDoc(
+    key: string,
+  ): SingleCardDocument | SingleFileMetaDocument | undefined {
+    let doc = this.#jobScopedDocCache.get(key);
+    if (doc === undefined) {
+      return undefined;
+    }
+    // LRU touch — re-insertion moves the entry behind the eviction horizon.
+    this.#jobScopedDocCache.delete(key);
+    this.#jobScopedDocCache.set(key, doc);
+    // Hand out a copy: consumers deserialize from (and may normalize) the
+    // returned document, and a shared mutable doc would leak one consumer's
+    // mutation into the next hit.
+    return structuredClone(doc);
+  }
+
+  #writeJobScopedDoc(
+    key: string,
+    doc: SingleCardDocument | SingleFileMetaDocument,
+  ): void {
+    // Store a private copy for the same mutation-isolation reason reads
+    // clone: the object returned to the fetching caller stays theirs.
+    this.#jobScopedDocCache.set(key, structuredClone(doc));
+    if (
+      this.#jobScopedDocCache.size >
+      CardStoreWithGarbageCollection.MAX_JOB_SCOPED_DOC_CACHE_ENTRIES
+    ) {
+      let oldest = this.#jobScopedDocCache.keys().next().value;
+      if (oldest !== undefined) {
+        this.#jobScopedDocCache.delete(oldest);
+      }
+    }
+  }
+
   #storeHooks: StoreHooks | undefined;
 
   constructor(
@@ -242,20 +354,51 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadCardDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ) {
+    // Dependency tracking runs on every call — a cache hit is still a
+    // consumption of the target, and invalidation must record the edge.
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
+    let cacheKey = this.#jobScopedDocCacheKey('card', url);
+    let cacheGeneration = this.#jobScopedDocCacheGeneration;
+    if (cacheKey !== undefined) {
+      let cached = this.#readJobScopedDoc(cacheKey);
+      if (cached !== undefined) {
+        return cached as SingleCardDocument;
+      }
+    }
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
-      this.trackLoad(promise);
+      if (!opts?.untracked) {
+        this.trackLoad(promise);
+      }
       return await promise;
     }
     promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
     this.#cardDocsInFlight.set(url, promise);
     this.#cardDocStartedAt.set(url, Date.now());
-    this.trackLoad(promise);
+    if (!opts?.untracked) {
+      this.trackLoad(promise);
+    }
     try {
-      return await promise;
+      let doc = await promise;
+      // Cache successful documents only: an error result may be transient
+      // (an auth hiccup, a fetch failure), and the broken-link degradation
+      // path stays live rather than pinned for the job. The generation check
+      // skips the populate when the cache was cleared while this fetch was
+      // in flight — the resolved document belongs to the job that started
+      // the load, not the one now holding the cache.
+      if (
+        cacheKey !== undefined &&
+        this.#jobScopedDocCacheGeneration === cacheGeneration &&
+        !isCardError(doc)
+      ) {
+        this.#writeJobScopedDoc(cacheKey, doc);
+      }
+      return doc;
     } finally {
       let startedAt = this.#cardDocStartedAt.get(url);
       this.#cardDocsInFlight.delete(url);
@@ -271,20 +414,46 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadFileMetaDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleFileMetaDocument | CardError> {
+    // Same shape as `loadCardDocument` above: dependency tracking on every
+    // call, job-scoped cache consulted before the in-flight map, successes
+    // cached, `untracked` skips the load-generation registration.
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
+    let cacheKey = this.#jobScopedDocCacheKey('file', url);
+    let cacheGeneration = this.#jobScopedDocCacheGeneration;
+    if (cacheKey !== undefined) {
+      let cached = this.#readJobScopedDoc(cacheKey);
+      if (cached !== undefined) {
+        return cached as SingleFileMetaDocument;
+      }
+    }
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
-      this.trackLoad(promise);
+      if (!opts?.untracked) {
+        this.trackLoad(promise);
+      }
       return await promise;
     }
     promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
     this.#fileMetaDocsInFlight.set(url, promise);
     this.#fileMetaStartedAt.set(url, Date.now());
-    this.trackLoad(promise);
+    if (!opts?.untracked) {
+      this.trackLoad(promise);
+    }
     try {
-      return await promise;
+      let doc = await promise;
+      if (
+        cacheKey !== undefined &&
+        this.#jobScopedDocCacheGeneration === cacheGeneration &&
+        !isCardError(doc)
+      ) {
+        this.#writeJobScopedDoc(cacheKey, doc);
+      }
+      return doc;
     } finally {
       let startedAt = this.#fileMetaStartedAt.get(url);
       this.#fileMetaDocsInFlight.delete(url);
@@ -586,6 +755,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#recentQueryLoads.length = 0;
     this.#recentCardDocLoads.length = 0;
     this.#recentFileMetaLoads.length = 0;
+    // The job-scoped doc cache holds wire documents, which module changes
+    // don't invalidate — but a store reset is a hard identity boundary, and
+    // holding entries across one risks serving a document whose realm state
+    // the resetter deliberately discarded. The generation bump makes any
+    // in-flight load skip its populate on resolve.
+    this.#jobScopedDocCache.clear();
+    this.#jobScopedDocCacheJobId = undefined;
+    this.#jobScopedDocCacheGeneration++;
     this.#idResolver.reset();
   }
 

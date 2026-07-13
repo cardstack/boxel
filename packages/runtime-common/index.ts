@@ -112,8 +112,11 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
 // loads via the getter's lazy path, not the generator's targeted loading —
 // carries an empty `path`, since the store observing it can't name the
 // owning field. Only actual loads are represented — a target already
-// resident in the store records a near-zero entry that the persistence
-// floor drops.
+// resident in the store (or served from the job-scoped document cache)
+// records a near-zero entry that the persistence floor drops. Independent
+// branches of the walk load concurrently, so entries overlap in time: each
+// `ms` is that load's own wall-clock span, and the entries don't sum to the
+// walk's elapsed time.
 export interface SearchDocLinkLoad {
   path: string;
   target: string;
@@ -154,19 +157,27 @@ export interface PrerenderMetaDiagnostics {
   computedCacheHits?: number;
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
-  // Wall-clock of the host-side searchDoc call.
+  // Wall-clock of the searchable walk that produced the doc — the first
+  // walk against a stable load generation. It never waits on getter-fired
+  // loads (those mark a walk unstable and it is discarded), but it can
+  // include targeted `searchable`-route loads it consumed inline — the
+  // first walk to reach a target performs its load, and a first-walk-stable
+  // card performs them all here. Each such load is itemized in
+  // `searchDocLinkLoads`; because loads run concurrently their entries
+  // overlap, so read a load-entry-bearing `searchDocMs` as an upper bound
+  // on evaluation time rather than subtracting the entries out.
   searchDocMs?: number;
-  // Wall-clock of the searchable load-settle loop that runs before the
-  // timed searchDoc call: the passes that drive the card's searchable-path
-  // link loads (and the links its contained/computed fields read) to
-  // quiescence. Link-load cost lives HERE, not inside `searchDocMs` — by
-  // the time the timed generation runs, its targets are resident. Read
-  // `searchDocLinkLoads` for the per-target breakdown of this time.
+  // Wall-clock spent driving the card's getter-fired link loads to
+  // quiescence before the walk that produced the doc: the discarded walk
+  // passes and their load drains. Read `searchDocLinkLoads` for the
+  // per-target load breakdown (its entries span both this and the
+  // doc-producing walk). Near-zero when the first walk settled.
   searchDocSettleMs?: number;
-  // How many settle passes ran before the store's load generation held
-  // steady. Each pass loads one more dependency-depth wave, so a high count
-  // means a deep searchable/computed link chain (capped host-side; the cap
-  // logs a warning).
+  // How many walk passes were discarded before one ran against a stable
+  // load generation. Each pass loads one more dependency-depth wave, so a
+  // high count means a deep searchable/computed link chain (capped
+  // host-side; the cap logs a warning). Zero when the first walk settled —
+  // the card fired no lazy getter loads.
   searchDocSettlePasses?: number;
   // Per-field inclusive evaluation timings from the timed searchDoc walk,
   // keyed by dotted field path from the indexed card's root (a parent's
