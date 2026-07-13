@@ -10,6 +10,7 @@ import {
   type Batch,
   type Diagnostics,
   type FileRenderResponse,
+  type IndexVisitClientTimings,
   type JobInfo,
   type LocalPath,
   type LooseCardResource,
@@ -227,6 +228,13 @@ export async function visitFileForIndexing({
     ...(fileContentSize !== undefined ? { fileContentSize } : {}),
   };
 
+  // Everything up to here — the file read, parse, and file-metadata lookups —
+  // is the visit's pre-render client overhead. The render round-trip and the
+  // post-render bookkeeping are measured separately and persisted on the row's
+  // diagnostics so the index job's between-render wall is attributable per row
+  // (see IndexVisitClientTimings).
+  let readMs = Date.now() - start;
+  let renderStart = Date.now();
   let indexResponse: RenderVisitResponse;
   try {
     indexResponse = await prerenderer.prerenderVisit({
@@ -287,6 +295,15 @@ export async function visitFileForIndexing({
     }
   }
 
+  // Client-observed wall of the render round-trip(s), minus the server's own
+  // `totalElapsedMs`, is the transport overhead (serialization + wire hop +
+  // waits the server doesn't count). Both visits contribute when the fused
+  // path runs both; in split mode only the index visit ran.
+  let renderClientMs = Date.now() - renderStart;
+  let serverRenderMs =
+    (indexResponse.meta?.diagnostics?.totalElapsedMs ?? 0) +
+    (htmlResponse?.meta?.diagnostics?.totalElapsedMs ?? 0);
+
   let card = mergeCardVisitResults(indexResponse.card, htmlResponse?.card);
   let fileRenderResult = mergeFileRenderVisitResults(
     indexResponse.fileRender,
@@ -294,9 +311,15 @@ export async function visitFileForIndexing({
   );
   let pageUnusableError =
     indexResponse.pageUnusableError ?? htmlResponse?.pageUnusableError;
-  let diagnostics = mergeVisitDiagnostics(
-    flattenPrerenderMeta(indexResponse.meta),
-    flattenPrerenderMeta(htmlResponse?.meta),
+  let diagnostics = attachIndexVisitClientTimings(
+    mergeVisitDiagnostics(
+      flattenPrerenderMeta(indexResponse.meta),
+      flattenPrerenderMeta(htmlResponse?.meta),
+    ),
+    {
+      read: readMs,
+      renderRpc: Math.max(0, renderClientMs - serverRenderMs),
+    },
   );
 
   // Route card result when we parsed a card resource. If the visits
@@ -355,6 +378,27 @@ export async function visitFileForIndexing({
   logDebug(
     `${jobIdentity(jobInfo)} completed visit of file ${url.href} in ${Date.now() - start}ms`,
   );
+}
+
+// Fold the pre-render + transport client overhead into the row's diagnostics
+// blob, creating one if the render produced none. `bookkeeping` is filled in
+// later by the card / file indexers, just before each row write, since it
+// spans work that happens downstream of this merge.
+function attachIndexVisitClientTimings(
+  diagnostics: Diagnostics | undefined,
+  timings: IndexVisitClientTimings,
+): Diagnostics | undefined {
+  let measured = Object.entries(timings).filter(([, v]) => v !== undefined);
+  if (measured.length === 0) {
+    return diagnostics;
+  }
+  return {
+    ...(diagnostics ?? {}),
+    indexVisitClientMs: {
+      ...(diagnostics?.indexVisitClientMs ?? {}),
+      ...Object.fromEntries(measured),
+    },
+  };
 }
 
 // Reassemble the two visits' card sub-results into the single RenderResponse
