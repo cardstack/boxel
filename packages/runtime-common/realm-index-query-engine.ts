@@ -1416,13 +1416,18 @@ export class RealmIndexQueryEngine {
     let vnForIdentity = this.#realm.virtualNetwork;
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
     // `omit`/root ids may arrive in either resolved-URL or registered-alias
-    // form (the search-entry item resource's id is always resolved, while a
+    // form (the entry's item resource id is always resolved, while a
     // fetched linked resource's own pristine_doc-derived id — and the
     // relationship pointing at it, `relationshipIdStr` below — stays in
-    // alias form for storage portability). Index both spellings under one
-    // key so a root recognized via one form still matches when the same
-    // card is reached again via the other.
-    let omitSet = new Set(omit.flatMap((id) => vnForIdentity.equivalentURLForms(id)));
+    // alias form for storage portability). `equivalentURLForms` only
+    // enumerates spellings of a *resolved* URL, so an alias-form input needs
+    // `toURLHref` first to reach the resolved form it can expand from;
+    // `toURLHref` is a no-op on an input that's already a resolved URL.
+    // Index every spelling under one key so a root recognized via one form
+    // still matches when the same card is reached again via another.
+    let allIdForms = (id: string) =>
+      vnForIdentity.equivalentURLForms(vnForIdentity.toURLHref(id));
+    let omitSet = new Set(omit.flatMap((id) => allIdForms(id)));
     let visited = new Set<string>();
 
     type LayerItem = {
@@ -1442,7 +1447,7 @@ export class RealmIndexQueryEngine {
         if (visited.has(resource.id)) {
           continue;
         }
-        for (let form of vnForIdentity.equivalentURLForms(resource.id)) {
+        for (let form of allIdForms(resource.id)) {
           visited.add(form);
         }
       }
