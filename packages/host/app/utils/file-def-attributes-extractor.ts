@@ -12,6 +12,7 @@ import {
   identifyCard,
   inferContentType,
   internalKeyFor,
+  rri,
   SupportedMimeType,
   ToolContextStamp,
   type CodeRef,
@@ -460,7 +461,7 @@ export class FileDefAttributesExtractor {
       // recomputation from the stamped codeRef always agree. Package
       // specifiers pass through verbatim.
       let resolvedRef = codeRefWithAbsoluteIdentifier(
-        { module: codeRef.module, name: codeRef.name },
+        { module: rri(codeRef.module), name: codeRef.name },
         new URL(this.#fileURL),
         undefined,
       ) as ResolvedCodeRef;
