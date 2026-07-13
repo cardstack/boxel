@@ -11,6 +11,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import { PagePool } from '../prerender/page-pool.ts';
 import { RenderRunner } from '../prerender/render-runner.ts';
 import { BrowserManager } from '../prerender/browser-manager.ts';
@@ -7355,6 +7356,16 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            'pet.gts': `
+              import { CardDef } from '@cardstack/base/card-api';
+              const PetIcon = <template>
+                <svg data-test-icon='pet' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' /></svg>
+              </template>;
+              export class Pet extends CardDef {
+                static displayName = "Pet";
+                static icon = PetIcon;
+              }
+            `,
             'maple.json': {
               data: {
                 attributes: { name: 'Maple' },
@@ -7362,6 +7373,28 @@ module(basename(import.meta.filename), function () {
                   adoptsFrom: {
                     module: rri('./person'),
                     name: 'Person',
+                  },
+                },
+              },
+            },
+            'willow.json': {
+              data: {
+                attributes: { name: 'Willow' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'rex.json': {
+              data: {
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./pet'),
+                    name: 'Pet',
                   },
                 },
               },
@@ -7747,6 +7780,176 @@ module(basename(import.meta.filename), function () {
         },
       });
       assert.true(result.pool.reused, 'second visit reused the pooled page');
+    });
+
+    // Icon HTML is a pure function of the card's type (the type's static
+    // `icon` component), so an indexing job renders each type's icon once:
+    // the first index visit for a type renders it and every later visit of
+    // that type reuses the captured markup, skipping the icon route. The
+    // memo is scoped to the visit's jobId; visits without one (on-demand
+    // renders) always render the icon and never touch the memo.
+    module('index-visit icon memo', function () {
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+      let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
+        prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}${fileName}`,
+          auth: auth(),
+          visitType: 'index',
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef: {
+              module: baseRRI('json-file-def'),
+              name: 'JsonFileDef',
+            },
+            ...((extra?.renderOptions as object) ?? {}),
+          },
+          ...(extra?.jobId ? { jobId: extra.jobId as string } : {}),
+          ...(extra?.batchId ? { batchId: extra.batchId as string } : {}),
+        });
+
+      test('one job renders each type icon once and reuses it', async function (assert) {
+        let jobId = 'icon-memo-reuse.1';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.notOk(first.card?.error, 'first visit completes cleanly');
+        assert.ok(
+          first.card?.iconHTML?.startsWith('<svg'),
+          `first visit renders the card icon: ${first.card?.iconHTML}`,
+        );
+        assert.ok(
+          first.fileRender?.iconHTML,
+          'first visit renders the file icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.misses,
+          2,
+          'card + file icons each rendered once',
+        );
+        assert.strictEqual(memo?.hits, 0, 'nothing reused yet');
+        assert.strictEqual(memo?.types.length, 2, 'two type keys memoized');
+
+        let second = (await indexVisit('willow.json', { jobId })).response;
+        assert.notOk(second.card?.error, 'second visit completes cleanly');
+        assert.strictEqual(
+          second.card?.iconHTML,
+          first.card?.iconHTML,
+          'same-type card icon is reused byte-identically',
+        );
+        assert.strictEqual(
+          second.fileRender?.iconHTML,
+          first.fileRender?.iconHTML,
+          'same-type file icon is reused byte-identically',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.hits, 2, 'card + file icons each reused');
+        assert.strictEqual(memo?.misses, 2, 'no additional renders');
+
+        let third = (await indexVisit('rex.json', { jobId })).response;
+        assert.notOk(third.card?.error, 'third visit completes cleanly');
+        assert.ok(
+          third.card?.iconHTML?.includes('data-test-icon'),
+          `a different type renders its own icon: ${third.card?.iconHTML}`,
+        );
+        assert.notStrictEqual(
+          third.card?.iconHTML,
+          first.card?.iconHTML,
+          'the two card types have distinct icons',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.misses, 3, 'the new card type rendered once');
+        assert.strictEqual(memo?.hits, 3, 'its file icon was reused');
+        assert.strictEqual(memo?.types.length, 3, 'three type keys memoized');
+      });
+
+      test('a different job renders icons afresh', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-job-a.1' });
+        let memoA = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memoA?.misses, 2, 'first job rendered its icons');
+
+        let result = (
+          await indexVisit('willow.json', { jobId: 'icon-memo-job-b.1' })
+        ).response;
+        assert.ok(result.card?.iconHTML, 'card icon rendered');
+        let memoB = prerenderer.getIconMemo(affinityKey);
+        assert.notStrictEqual(
+          memoB?.jobKey,
+          memoA?.jobKey,
+          'the memo belongs to the new job',
+        );
+        assert.strictEqual(
+          memoB?.misses,
+          2,
+          'the new job rendered the icons itself',
+        );
+        assert.strictEqual(memoB?.hits, 0, 'nothing carried over');
+      });
+
+      test('a visit without a jobId never touches the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-anon.1' });
+        let before = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(before?.misses, 2, 'job memo established');
+
+        let result = (await indexVisit('willow.json')).response;
+        assert.ok(
+          result.card?.iconHTML?.startsWith('<svg'),
+          'icon still renders without a jobId',
+        );
+        let after = prerenderer.getIconMemo(affinityKey);
+        assert.deepEqual(
+          after,
+          before,
+          'the jobless visit neither read nor wrote the memo',
+        );
+      });
+
+      test('a clearCache visit bypasses the memo read and releaseBatch drops the memo', async function (assert) {
+        let jobId = 'icon-memo-clear.1';
+        let batchId = 'icon-memo-clear-batch';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.ok(first.card?.iconHTML, 'card icon rendered');
+
+        let second = (
+          await indexVisit('willow.json', {
+            jobId,
+            batchId,
+            renderOptions: { clearCache: true },
+          })
+        ).response;
+        assert.ok(
+          second.card?.iconHTML?.startsWith('<svg'),
+          'clearCache visit renders the icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.hits,
+          0,
+          'the clearCache visit did not read the memo',
+        );
+        assert.strictEqual(
+          memo?.misses,
+          4,
+          'the clearCache visit re-rendered and re-stored both icons',
+        );
+
+        await prerenderer.releaseBatch({
+          batchId,
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'releasing the owning batch drops the memo',
+        );
+      });
     });
   });
 });

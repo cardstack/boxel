@@ -80,6 +80,16 @@ type PoolInfo = {
   timedOut: boolean;
 };
 
+// One indexing job's icon renderings for one affinity: the captured icon
+// markup keyed by the type's internal key, plus hit/miss counters for the
+// stats line emitted when the memo is replaced or released.
+type IconMemo = {
+  jobKey: string;
+  icons: Map<string, string>;
+  hits: number;
+  misses: number;
+};
+
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
   // glimmer is tracking. when we go to teardown the component glimmer gets mad
@@ -133,6 +143,17 @@ export class RenderRunner {
     byAffinity: new Map<string, { unusable: number; timeout: number }>(),
   };
   #lastAuthByAffinity = new Map<string, string>();
+  // Job-scoped icon memo, one slot per affinity. Icon HTML is a pure
+  // function of the card's type — the type's static `icon` component, never
+  // the instance — so within one indexing job the first visit for a type
+  // renders the icon and every later visit of that type reuses the captured
+  // markup, skipping the icon route. Indexing serializes per realm (= per
+  // affinity), so at most one job is active per slot: a visit carrying a
+  // different job key (jobId + loader epoch) replaces the slot outright. A
+  // module edit arrives as a new job with a new key, so stale markup cannot
+  // leak across module changes. Visits without a jobId (on-demand renders)
+  // never touch the memo.
+  #iconMemoByAffinity = new Map<string, IconMemo>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
@@ -170,6 +191,70 @@ export class RenderRunner {
 
   clearAuthCache(affinityKey: string) {
     this.#lastAuthByAffinity.delete(affinityKey);
+  }
+
+  // Resolve the icon memo for a visit. Only indexing visits participate
+  // (they carry a jobId); the loader epoch rides the job key as
+  // belt-and-braces so a memo can never outlive the module surface it was
+  // rendered against.
+  #iconMemoFor(
+    affinityKey: string,
+    jobId: string | undefined,
+    loaderEpoch: string | undefined,
+  ): IconMemo | undefined {
+    if (!jobId) {
+      return undefined;
+    }
+    let jobKey = `${jobId}|${loaderEpoch ?? ''}`;
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    if (!memo || memo.jobKey !== jobKey) {
+      if (memo) {
+        this.#logIconMemoStats(affinityKey, memo, 'superseded');
+      }
+      memo = { jobKey, icons: new Map(), hits: 0, misses: 0 };
+      this.#iconMemoByAffinity.set(affinityKey, memo);
+    }
+    return memo;
+  }
+
+  // Drop an affinity's icon memo. Called when the indexing batch that owns
+  // the affinity releases it; the job-key check in #iconMemoFor already
+  // guarantees a later job never reads another job's entries, so this is
+  // memory hygiene, not a correctness gate.
+  clearIconMemo(affinityKey: string) {
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    if (memo) {
+      this.#logIconMemoStats(affinityKey, memo, 'released');
+      this.#iconMemoByAffinity.delete(affinityKey);
+    }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getIconMemo(affinityKey: string):
+    | {
+        jobKey: string;
+        types: string[];
+        hits: number;
+        misses: number;
+      }
+    | undefined {
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    return memo
+      ? {
+          jobKey: memo.jobKey,
+          types: [...memo.icons.keys()],
+          hits: memo.hits,
+          misses: memo.misses,
+        }
+      : undefined;
+  }
+
+  #logIconMemoStats(affinityKey: string, memo: IconMemo, reason: string) {
+    log.debug(
+      `icon memo stats affinity=${affinityKey} types=${memo.icons.size} hits=${memo.hits} misses=${memo.misses} (${reason})`,
+    );
   }
 
   // Builds the per-render profile context threaded into `withTimeout`.
@@ -1124,6 +1209,15 @@ export class RenderRunner {
           return;
         };
 
+        let emptyMeta: PrerenderMeta = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+        };
+        let meta: PrerenderMeta = emptyMeta;
+
         if (runHtmlSteps) {
           let isolatedStart = Date.now();
           let isolatedResult = await withTimeout(
@@ -1166,46 +1260,65 @@ export class RenderRunner {
             capturedDeps = await this.#readCapturedDeps(page);
           }
         } else {
-          // An index visit never touches the html route, so the icon render
-          // is its entry into the render app; subsequent steps are in-page
-          // child transitions.
-          let iconResult = await withTimeout(
-            page,
+          // An index visit never touches the html route, so render.meta is
+          // its entry into the render app; the icon runs after it as an
+          // in-page child transition. Meta goes first because the icon is a
+          // pure function of the card's type (`types[0]`, which meta
+          // resolves): the job-scoped memo lets the first visit for a type
+          // render the icon and every later visit of that type reuse the
+          // captured markup, skipping the icon route.
+          let metaResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta',
             async () => {
               await transitionTo(
                 page,
-                'render.icon',
+                'render.meta',
                 url,
                 nonce,
                 serializedOptions,
               );
-              return await renderIcon(page, captureOptions);
+              return await renderMeta(page, captureOptions);
             },
-            opts?.timeoutMs,
-            this.#profileContext(affinityKey, url, 'card icon', jobId),
           );
-          if (isRenderError(iconResult)) {
-            cardShortCircuit = true;
-            let renderError = iconResult as RenderError;
-            let evicted = await this.#maybeEvict(
+          if (metaResult !== undefined) {
+            meta = metaResult;
+          }
+          if (!cardShortCircuit) {
+            let iconMemo = this.#iconMemoFor(
               affinityKey,
-              'visit card icon render',
-              renderError,
+              jobId,
+              baseOptions.loaderEpoch,
             );
-            applyStepError(renderError, evicted);
-          } else {
-            iconHTML = iconResult as string;
+            let iconTypeKey = meta.types?.[0];
+            // A clearCache visit is asked for a pristine render, so it
+            // bypasses the memo read; its fresh capture overwrites the
+            // entry below.
+            let memoizedIconHTML =
+              iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
+                ? iconMemo.icons.get(iconTypeKey)
+                : undefined;
+            if (memoizedIconHTML !== undefined) {
+              iconMemo!.hits++;
+              iconHTML = memoizedIconHTML;
+              log.debug(
+                `card icon memo hit type=${iconTypeKey} url=${url} affinity=${affinityKey}`,
+              );
+            } else {
+              let iconResult = await runTimedStep<string>(
+                'visit card icon render',
+                () => renderIcon(page, captureOptions),
+              );
+              if (iconResult !== undefined) {
+                iconHTML = iconResult;
+                if (iconMemo && iconTypeKey !== undefined) {
+                  iconMemo.misses++;
+                  iconMemo.icons.set(iconTypeKey, iconHTML);
+                }
+              }
+            }
           }
         }
 
-        let emptyMeta: PrerenderMeta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-        let meta: PrerenderMeta = emptyMeta;
         let typesForAncestors: PrerenderTypes = { types: null };
         let headHTML: string | null = null;
         let atomHTML: string | null = null;
@@ -1329,7 +1442,10 @@ export class RenderRunner {
           }
         }
 
-        if (!cardShortCircuit && runIndexSteps) {
+        // The fused visit runs meta last, after the format renders above
+        // marked the linksTo / linksToMany fields they read as "used"; the
+        // index visit ran meta as its entry instead.
+        if (!cardShortCircuit && runIndexSteps && runHtmlSteps) {
           let finalMetaResult = await runTimedStep<PrerenderMeta>(
             'visit card render.meta',
             () => renderMeta(page, captureOptions),
@@ -1421,11 +1537,28 @@ export class RenderRunner {
             timeoutMs: opts?.timeoutMs,
           };
 
-          // stash file data for the render route model hook to consume
-          await page.evaluate((data) => {
-            (globalThis as any).__boxelFileRenderData = data;
-          }, effectiveFileData);
-          didStashFileRenderData = true;
+          // The index visit's only page work for a file is its icon, which
+          // is a pure function of the file's type (`effectiveTypes[0]`,
+          // resolved by the extract pass): on a memo hit the pass touches
+          // the page not at all — including the file-data stash, which only
+          // the render routes consume. A clearCache visit bypasses the memo
+          // read (see the card pass).
+          let iconMemo = runHtmlSteps
+            ? undefined
+            : this.#iconMemoFor(affinityKey, jobId, baseOptions.loaderEpoch);
+          let iconTypeKey = effectiveTypes?.[0];
+          let memoizedIconHTML =
+            iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
+              ? iconMemo.icons.get(iconTypeKey)
+              : undefined;
+
+          if (memoizedIconHTML === undefined) {
+            // stash file data for the render route model hook to consume
+            await page.evaluate((data) => {
+              (globalThis as any).__boxelFileRenderData = data;
+            }, effectiveFileData);
+            didStashFileRenderData = true;
+          }
 
           let fileError: RenderError | undefined;
           let fileShortCircuit = false;
@@ -1493,6 +1626,12 @@ export class RenderRunner {
                 }
               }
             }
+          } else if (memoizedIconHTML !== undefined) {
+            iconMemo!.hits++;
+            iconHTML = memoizedIconHTML;
+            log.debug(
+              `file icon memo hit type=${iconTypeKey} url=${url} affinity=${affinityKey}`,
+            );
           } else {
             // The file's icon belongs to the index half, and an index visit
             // never touches the html route — so the icon render is its entry
@@ -1522,6 +1661,10 @@ export class RenderRunner {
               applyStepError(renderError, evicted);
             } else {
               iconHTML = iconResult as string;
+              if (iconMemo && iconTypeKey !== undefined) {
+                iconMemo.misses++;
+                iconMemo.icons.set(iconTypeKey, iconHTML);
+              }
             }
           }
 
