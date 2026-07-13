@@ -344,6 +344,31 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
+  test('adding a prefix-form reference installs the realm subscription', async function (assert) {
+    getService('network').virtualNetwork.addRealmMapping(
+      '@test-prefix/',
+      testRealmURL,
+    );
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm is not subscribed before adding the reference',
+    );
+
+    storeService.addReference('@test-prefix/Person/hassan');
+
+    assert.true(
+      subscriptions.has(testRealmURL),
+      'a prefix-form reference subscribes to its realm under the URL-form key',
+    );
+
+    await storeService.flush();
+    storeService.dropReference('@test-prefix/Person/hassan');
+  });
+
   test('deleting a linked target rewrites a loaded consumer linksTo slot to a broken-link sentinel', async function (assert) {
     // Load the consumer and the target, then link them so the consumer holds
     // the target as a resolved (present) link — the state a user is looking at
