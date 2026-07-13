@@ -629,7 +629,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
-        let initialJobs = await context.dbAdapter.execute('select * from jobs');
+        // Index passes fire-and-forget prerender_html jobs on their own
+        // schedule; exclude them so counts track only the jobs these
+        // endpoints enqueue.
+        let initialJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         assert.strictEqual(
           initialJobs.length,
           2,
@@ -693,7 +698,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           1,
           'realm reindex keeps modules for other realms',
         );
-        let finalJobs = await context.dbAdapter.execute('select * from jobs');
+        let finalJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         assert.strictEqual(finalJobs.length, 3, 'an index job was created');
         let job = finalJobs.pop()!;
         assert.strictEqual(
@@ -785,7 +792,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           keepMounted: true,
         });
 
-        let initialJobs = await context.dbAdapter.execute('select * from jobs');
+        // Index passes fire-and-forget prerender_html jobs on their own
+        // schedule; exclude them so counts track only the jobs these
+        // endpoints enqueue.
+        let initialJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         let realmPath = realmURL.substring(
           new URL(testRealmURL.origin).href.length,
         );
@@ -798,7 +810,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           200,
           'reindex succeeds against a realm absent from realms[]',
         );
-        let finalJobs = await context.dbAdapter.execute('select * from jobs');
+        let finalJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         assert.strictEqual(
           finalJobs.length,
           initialJobs.length + 1,
@@ -1160,7 +1174,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             'owner',
             false
           )`);
-        let initialJobs = await context.dbAdapter.execute('select * from jobs');
+        // Index passes fire-and-forget prerender_html jobs on their own
+        // schedule; exclude them so counts track only the jobs these
+        // endpoints enqueue.
+        let initialJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         assert.strictEqual(
           initialJobs.length,
           2,
@@ -1210,7 +1229,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           0,
           'full reindex clears stale module rows for all realms',
         );
-        let finalJobs = await context.dbAdapter.execute('select * from jobs');
+        let finalJobs = await context.dbAdapter.execute(
+          "select * from jobs where job_type != 'prerender_html' order by id",
+        );
         assert.strictEqual(
           finalJobs.length,
           3,

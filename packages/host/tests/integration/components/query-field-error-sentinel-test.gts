@@ -14,13 +14,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type {
-  RelationshipState,
-  RelationshipStatus,
-} from 'https://cardstack.com/base/card-api';
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
-
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -32,6 +25,13 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // Resolves to the in-process test realm so the runtime treats the cards we
 // build below as belonging to it. Without this stub the query field tries to
@@ -62,8 +62,8 @@ module(
   'Integration | query-field linksTo/linksToMany error sentinel',
   function (hooks) {
     let loader: Loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
     let fieldSupport: typeof FieldSupportModule;
 
     setupRenderingTest(hooks);
@@ -82,16 +82,16 @@ module(
       getOwner(this)!.register('service:realm', StubRealmService);
 
       loader = getService('loader-service').loader;
-      cardApi = await loader.import(`${baseRealm.url}card-api`);
-      string = await loader.import(`${baseRealm.url}string`);
+      cardApi = await loader.import('@cardstack/base/card-api');
+      string = await loader.import('@cardstack/base/string');
       fieldSupport = await loader.import<typeof FieldSupportModule>(
-        `${baseRealm.url}field-support`,
+        '@cardstack/base/field-support',
       );
     });
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // These tests pin down the *recognizer* side of the tolerance machine for

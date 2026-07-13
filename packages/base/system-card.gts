@@ -10,20 +10,22 @@ import {
 import BooleanField from './boolean';
 import StringField from './string';
 import enumField from './enum';
+import { MarkdownDef } from './markdown-file-def';
+import { Skill } from './skill';
 import { getMenuItems, rri } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
-import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
-import GetUserSystemCardCommand from '@cardstack/boxel-host/commands/get-user-system-card';
+import SetUserSystemCardTool from '@cardstack/boxel-host/commands/set-user-system-card';
+import GetUserSystemCardTool from '@cardstack/boxel-host/commands/get-user-system-card';
 import {
   BoxelButton,
   BoxelDropdown,
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import AppsIcon from '@cardstack/boxel-icons/apps';
-import CopyCardToRealmCommand from '@cardstack/boxel-host/commands/copy-card';
-import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
-import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import CopyCardToRealmTool from '@cardstack/boxel-host/commands/copy-card';
+import GetAllRealmMetasTool from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
 import { on } from '@ember/modifier';
 import { restartableTask, task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
@@ -81,13 +83,33 @@ export class SystemCard extends CardDef {
     searchable: true,
   });
 
+  // Skills enabled by default in new AI assistant rooms. A skill is either a
+  // legacy `Skill` card or a `.md` skill file (`MarkdownDef` whose
+  // `boxel.kind: skill` frontmatter makes it a skill source). The two kinds
+  // live in separate `linksToMany` fields because a single relationship field
+  // serializes every item under one resource type (card links vs. file-meta
+  // links); `loadDefaultSkills` unions their ids and resolves each
+  // kind-agnostically. When either is set on the user's active system card,
+  // they replace the host's hardcoded default-skill list for new rooms.
+  @field defaultSkillCards = linksToMany(Skill, {
+    description:
+      'Skill cards enabled by default in new AI assistant rooms',
+    searchable: true,
+  });
+
+  @field defaultSkillFiles = linksToMany(MarkdownDef, {
+    description:
+      'Markdown skill files enabled by default in new AI assistant rooms',
+    searchable: true,
+  });
+
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getMenuItems](params);
     menuItems = [
       {
         label: 'Set as My System Card',
         action: async () => {
-          await new SetUserSystemCardCommand(params.commandContext).execute({
+          await new SetUserSystemCardTool(params.toolContext).execute({
             cardId: this.id,
           });
         },
@@ -114,14 +136,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   }
 
   loadActiveSystemCard = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.hasLoaded = true;
       return;
     }
     try {
       let result =
-        await new GetUserSystemCardCommand(commandContext).execute();
+        await new GetUserSystemCardTool(toolContext).execute();
       this.activeSystemCardId = result.cardId ?? undefined;
       this.activeIsDefault = result.isDefault ?? false;
     } finally {
@@ -147,7 +169,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
     this,
-    GetAllRealmMetasCommand,
+    GetAllRealmMetasTool,
   );
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
@@ -188,20 +210,20 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   cloneTask = task(async (targetRealmUrl: string, realmName: string) => {
     this.cloningToRealmName = realmName;
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext || !this.args.model.id) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext || !this.args.model.id) {
       this.cloningToRealmName = undefined;
       return;
     }
     try {
-      let copyResult = await new CopyCardToRealmCommand(
-        commandContext,
+      let copyResult = await new CopyCardToRealmTool(
+        toolContext,
       ).execute({
         sourceCard: this.args.model as CardDef,
         targetRealm: targetRealmUrl,
       });
       if (copyResult.newCardId) {
-        await new ShowCardCommand(commandContext).execute({
+        await new ShowCardTool(toolContext).execute({
           cardId: copyResult.newCardId,
           format: 'isolated',
         });
@@ -226,17 +248,17 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   };
 
   setAsActiveTask = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext || !this.args.model.id) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext || !this.args.model.id) {
       return;
     }
-    await new SetUserSystemCardCommand(commandContext).execute({
+    await new SetUserSystemCardTool(toolContext).execute({
       cardId: this.args.model.id,
     });
     this.activeSystemCardId = this.args.model.id;
     // Re-check default status after setting active
     let result =
-      await new GetUserSystemCardCommand(commandContext).execute();
+      await new GetUserSystemCardTool(toolContext).execute();
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
   });
@@ -246,14 +268,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   };
 
   restoreDefaultTask = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       return;
     }
-    await new SetUserSystemCardCommand(commandContext).execute({});
+    await new SetUserSystemCardTool(toolContext).execute({});
     // Reload to pick up the new active system card (the default)
     let result =
-      await new GetUserSystemCardCommand(commandContext).execute();
+      await new GetUserSystemCardTool(toolContext).execute();
     this.activeSystemCardId = result.cardId ?? undefined;
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
@@ -359,6 +381,16 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       <div class='system-card-content'>
         <@fields.defaultModelConfiguration />
         <@fields.modelConfigurations />
+
+        <section class='default-skills'>
+          <h3 class='section-heading'>Default Skills</h3>
+          <p class='section-hint'>
+            Skills enabled automatically in new AI assistant sessions when this
+            is your active system card. Add skill cards, skill files, or both.
+          </p>
+          <@fields.defaultSkillCards @format='fitted' />
+          <@fields.defaultSkillFiles @format='fitted' />
+        </section>
       </div>
     </div>
 
@@ -483,6 +515,22 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
       .system-card-content {
         padding-top: var(--boxel-sp-sm);
+      }
+
+      .default-skills {
+        margin-top: var(--boxel-sp-lg);
+      }
+
+      .section-heading {
+        margin: 0 0 var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+      }
+
+      .section-hint {
+        margin: 0 0 var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-500, #6b7280);
       }
     </style>
   </template>

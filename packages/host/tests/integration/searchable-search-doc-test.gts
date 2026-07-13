@@ -1,13 +1,14 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-import type { Realm, IndexedInstance } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  IndexedInstance,
+  SearchDocTimings,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -26,10 +27,13 @@ import {
   FieldDef,
   Component,
   StringField,
+  getDataBucket,
   searchDocFromFields,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let realm: Realm;
@@ -52,7 +56,7 @@ module('Integration | searchable search doc', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {
@@ -685,16 +689,17 @@ module('Integration | searchable search doc', function (hooks) {
     return await searchDocFromFields(instance);
   }
 
-  // The search doc the indexer persisted, minus `_cardType` (which the prerender
-  // meta route appends, not the generator). The prerender meta route generates
-  // it via `searchDocFromFields`; the parity check below confirms it matches a
-  // direct `searchDocFromFields` call.
+  // The search doc the indexer persisted, minus the synthetic keys `_cardType`
+  // and `_title` (which the prerender meta route appends, not the generator).
+  // The prerender meta route generates the rest via `searchDocFromFields`; the
+  // parity check below confirms it matches a direct `searchDocFromFields` call.
   async function indexedSearchDoc(id: string) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       return undefined;
     }
-    let { _cardType, ...rest } = (entry as IndexedInstance).searchDoc ?? {};
+    let { _cardType, _title, ...rest } =
+      (entry as IndexedInstance).searchDoc ?? {};
     return rest;
   }
 
@@ -1213,6 +1218,140 @@ module('Integration | searchable search doc', function (hooks) {
     assert.ok(
       deps.some((d) => d.includes('SimpleAuthor/sa1')),
       'the searchable-expanded target is recorded as a dependency',
+    );
+  });
+
+  // ===========================================================================
+  // the timing collector (searchDocFieldsMs / searchDocLinkLoads inputs)
+  // ===========================================================================
+
+  async function loadInstance(id: string) {
+    let store = getService('store') as StoreService;
+    return (await store.get(id)) as CardDefType;
+  }
+
+  // A store-resident instance can arrive with its link fields already
+  // materialized, in which case the generator has no load to perform (and
+  // correctly records none). Reset a link slot to its unloaded wire state so
+  // the walk drives the load itself — the state an indexing visit starts
+  // from.
+  function unloadLink(
+    instance: CardDefType,
+    fieldName: string,
+    reference: string | string[],
+  ) {
+    getDataBucket(instance).set(
+      fieldName,
+      Array.isArray(reference)
+        ? reference.map((r) => ({ type: 'not-loaded', reference: r }))
+        : { type: 'not-loaded', reference },
+    );
+  }
+
+  test('per-field timings are keyed by dotted path and include expanded link targets; link loads carry path + target', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}ArticleDeep/d1`);
+    let author = await loadInstance(authorUrl);
+    unloadLink(instance, 'author', authorUrl);
+    unloadLink(author, 'agent', agentUrl);
+    let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
+    let doc = await searchDocFromFields(instance, undefined, timings);
+
+    let fieldsMs = timings.fieldsMs!;
+    for (let path of ['title', 'author', 'author.agent']) {
+      assert.strictEqual(
+        typeof fieldsMs[path],
+        'number',
+        `fieldsMs['${path}'] is a number, got: ${fieldsMs[path]}`,
+      );
+      assert.ok(
+        fieldsMs[path] >= 0,
+        `fieldsMs['${path}'] is non-negative, got: ${fieldsMs[path]}`,
+      );
+    }
+    assert.ok(
+      fieldsMs['author'] >= fieldsMs['author.agent'],
+      'a parent field time is inclusive of its nested fields',
+    );
+
+    let loads = timings.linkLoads!;
+    assert.ok(
+      loads.some((l) => l.path === 'author' && l.target === authorUrl),
+      `the author load is recorded with its path and target, got: ${JSON.stringify(loads)}`,
+    );
+    assert.ok(
+      loads.some((l) => l.path === 'author.agent' && l.target === agentUrl),
+      'the route-expanded deeper load is recorded under its dotted path',
+    );
+    assert.ok(
+      loads.every((l) => typeof l.ms === 'number' && l.ms >= 0),
+      'every load entry carries a non-negative ms',
+    );
+
+    // Instrumentation must not perturb the doc itself.
+    assert.deepEqual(
+      doc,
+      await searchDocFromFields(instance),
+      'the instrumented walk produces the same doc as an uninstrumented one',
+    );
+  });
+
+  test('a plural field accumulates under one path key and records one load per slot', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}Team/valid`);
+    unloadLink(instance, 'members', [
+      `${testRealmURL}Author/au1`,
+      `${testRealmURL}Author/au2`,
+    ]);
+    let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
+    await searchDocFromFields(instance, undefined, timings);
+
+    let memberKeys = Object.keys(timings.fieldsMs!).filter(
+      (k) => k === 'members' || k.startsWith('members.'),
+    );
+    assert.ok(
+      memberKeys.includes('members'),
+      'the plural field has a single accumulated key',
+    );
+    assert.ok(
+      memberKeys.includes('members.name'),
+      "the expanded members' fields accumulate under the shared dotted path",
+    );
+
+    let memberLoads = timings.linkLoads!.filter((l) => l.path === 'members');
+    assert.deepEqual(
+      memberLoads.map((l) => l.target).sort(),
+      [`${testRealmURL}Author/au1`, `${testRealmURL}Author/au2`],
+      'each slot records its own load, distinguished by target',
+    );
+  });
+
+  test('collector channels are opt-in', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}ArticleSelf/s1`);
+    unloadLink(instance, 'author', authorUrl);
+
+    let fieldsOnly: SearchDocTimings = { fieldsMs: {} };
+    await searchDocFromFields(instance, undefined, fieldsOnly);
+    assert.ok(
+      Object.keys(fieldsOnly.fieldsMs!).length > 0,
+      'the supplied fields channel is filled',
+    );
+    assert.strictEqual(
+      fieldsOnly.linkLoads,
+      undefined,
+      'the absent loads channel is not created',
+    );
+
+    let loadsOnly: SearchDocTimings = { linkLoads: [] };
+    await searchDocFromFields(instance, undefined, loadsOnly);
+    assert.ok(
+      loadsOnly.linkLoads!.some(
+        (l) => l.path === 'author' && l.target === authorUrl,
+      ),
+      'the supplied loads channel is filled',
+    );
+    assert.strictEqual(
+      loadsOnly.fieldsMs,
+      undefined,
+      'the absent fields channel is not created',
     );
   });
 });

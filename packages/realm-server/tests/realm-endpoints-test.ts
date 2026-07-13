@@ -63,7 +63,7 @@ import type {
   RealmEvent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -414,7 +414,7 @@ module(basename(import.meta.filename), function () {
         field,
         Component,
         FieldDef,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
       import { Country } from './country';
 
       export class TranspileTestField extends FieldDef {
@@ -766,13 +766,23 @@ module(basename(import.meta.filename), function () {
         realmURL: testRealmHref,
       });
 
-      assert.deepEqual(incrementalEvent?.content, {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [newCardId],
-        clientRequestId: null,
-        realmURL: testRealmHref,
-      });
+      {
+        let content = { ...(incrementalEvent?.content as Record<string, any>) };
+        let hasPositiveGeneration =
+          typeof content.generation === 'number' && content.generation > 0;
+        assert.true(
+          hasPositiveGeneration,
+          `incremental event carries a positive generation: ${content.generation}`,
+        );
+        delete content.generation;
+        assert.deepEqual(content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [newCardId],
+          clientRequestId: null,
+          realmURL: testRealmHref,
+        });
+      }
 
       {
         let response = await request
@@ -923,12 +933,22 @@ module(basename(import.meta.filename), function () {
         realmURL: testRealmHref,
       });
 
-      assert.deepEqual(incrementalEvent?.content, {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [`${testRealmHref}person-1`],
-        realmURL: testRealmHref,
-      });
+      {
+        let content = { ...(incrementalEvent?.content as Record<string, any>) };
+        let hasPositiveGeneration =
+          typeof content.generation === 'number' && content.generation > 0;
+        assert.true(
+          hasPositiveGeneration,
+          `incremental event carries a positive generation: ${content.generation}`,
+        );
+        delete content.generation;
+        assert.deepEqual(content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmHref}person-1`],
+          realmURL: testRealmHref,
+        });
+      }
 
       {
         let response = await request

@@ -49,10 +49,10 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import { SelectedTypePill } from './create-file-modal';
+
+import type { BaseDef, FieldType } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 interface Signature {
   Args: {

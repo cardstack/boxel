@@ -4,10 +4,9 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  type RenderRouteOptions,
-  type RenderError,
-  baseRealm,
+import type {
+  RenderRouteOptions,
+  RenderError,
 } from '@cardstack/runtime-common';
 
 import {
@@ -47,8 +46,8 @@ module('Acceptance | prerender | html', function (hooks) {
     (globalThis as any).__boxel_definitions_recursing_depth = 0;
     (globalThis as any).__doNotSuppressRenderRouteError = true;
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    cardApi = await loader.import('@cardstack/base/card-api');
 
     let {
       field,

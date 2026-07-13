@@ -680,16 +680,25 @@ export abstract class RealmSyncBase {
       const body = (await response.json()) as {
         'atomic:results'?: Array<{ data?: { id?: string } }>;
       };
-      // The realm normalizes hrefs: a path with a space goes out as
-      // `Knowledge Articles/...` but comes back URL-encoded as
-      // `Knowledge%20Articles/...`. Decode the response id before the
-      // map lookup so we resolve back to the original relative path
-      // instead of falling through to the raw encoded URL.
-      const atomicSucceeded = (body['atomic:results'] ?? [])
-        .map((r) => r.data?.id)
-        .filter((id): id is string => typeof id === 'string')
-        .map((id) => decodeAtomicResultId(id))
-        .map((id) => hrefToRelative.get(id) ?? id);
+      const results = body['atomic:results'] ?? [];
+      // atomic:results are positional: result[i] answers operations[i]. Map
+      // back to relative paths by index rather than by matching the returned
+      // id string — the server may express ids in forms this side cannot
+      // reconstruct (URL-encoded hrefs, or resource identifiers like
+      // `@cardstack/skills/...`), and a missed match used to leak raw ids
+      // into `succeeded`, crashing the manifest hashing downstream.
+      let atomicSucceeded: string[];
+      if (results.length === textEntries.length) {
+        atomicSucceeded = textEntries.map(([rel]) => rel);
+      } else {
+        // Unexpected shape; fall back to id matching (decoding the
+        // URL-encoded href form) and drop anything unmatched.
+        atomicSucceeded = results
+          .map((r) => r.data?.id)
+          .filter((id): id is string => typeof id === 'string')
+          .map((id) => hrefToRelative.get(decodeAtomicResultId(id)))
+          .filter((rel): rel is string => rel !== undefined);
+      }
       for (const rel of atomicSucceeded) {
         console.log(`  Uploaded: ${rel}`);
       }

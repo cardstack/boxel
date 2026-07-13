@@ -24,11 +24,10 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const log = logger('resource:file');
 const realmEventsLogger = logger('realm:events');
@@ -385,7 +384,7 @@ class _FileResource extends Resource<Args> {
       } else if (
         clientRequestId.startsWith('bot-patch:') ||
         // create-file writes originate from this host (cardService.saveSource
-        // with saveType 'create-file' — the path WriteTextFileCommand uses)
+        // with saveType 'create-file' — the path WriteTextFileTool uses)
         // but the FileResource may not yet have any content because its first
         // fetch raced indexing and 404'd. The clientRequestId being in
         // cardService.clientRequestIds does NOT imply we already have the

@@ -5,7 +5,11 @@ import sinon from 'sinon';
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
-import { archiveRealm, unarchiveRealm } from '@cardstack/runtime-common';
+import {
+  archiveRealm,
+  insertPermissions,
+  unarchiveRealm,
+} from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
@@ -226,6 +230,66 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         restored.body[testRealmHref],
         'unarchived realm reappears in the response',
+      );
+    });
+
+    test('POST /_realm-auth enumerates realms newest-created-first', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!ordering-test-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      // Two registry-backed realms whose creation order is the reverse of
+      // both their permission-row insertion order and their alphabetical
+      // order, so the assertion can only pass via created_at ordering.
+      const olderRealmURL = 'http://127.0.0.1:4444/ordering/zz-older/';
+      const newerRealmURL = 'http://127.0.0.1:4444/ordering/aa-newer/';
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: newerRealmURL,
+        diskId: 'ordering/aa-newer',
+        ownerUsername: 'ordering',
+      });
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: olderRealmURL,
+        diskId: 'ordering/zz-older',
+        ownerUsername: 'ordering',
+      });
+      await dbAdapter.execute(
+        `UPDATE realm_registry SET created_at = '2020-01-01T00:00:00Z' WHERE url = '${olderRealmURL}'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE realm_registry SET created_at = '2021-01-01T00:00:00Z' WHERE url = '${newerRealmURL}'`,
+      );
+      await insertPermissions(dbAdapter, new URL(newerRealmURL), {
+        [matrixUserId]: ['read', 'write'],
+      });
+      await insertPermissions(dbAdapter, new URL(olderRealmURL), {
+        [matrixUserId]: ['read', 'write'],
+      });
+
+      let response = await request
+        .post('/_realm-auth')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'server-session-room' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send('{}');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let urls = Object.keys(response.body);
+      assert.deepEqual(
+        urls.filter((url) => [olderRealmURL, newerRealmURL].includes(url)),
+        [newerRealmURL, olderRealmURL],
+        'registry-backed realms are enumerated newest-created-first',
       );
     });
   });

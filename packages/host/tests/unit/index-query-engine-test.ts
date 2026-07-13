@@ -26,9 +26,6 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   p,
@@ -38,12 +35,15 @@ import {
   serializeCard,
 } from '../helpers';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let date: typeof import('https://cardstack.com/base/date');
-let number: typeof import('https://cardstack.com/base/number');
-let boolean: typeof import('https://cardstack.com/base/boolean');
-let codeRef: typeof import('https://cardstack.com/base/code-ref');
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
+let date: typeof import('@cardstack/base/date');
+let number: typeof import('@cardstack/base/number');
+let boolean: typeof import('@cardstack/base/boolean');
+let codeRef: typeof import('@cardstack/base/code-ref');
 let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
@@ -77,12 +77,12 @@ module('Unit | query', function (hooks) {
       virtualNetwork,
     });
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    date = await loader.import(`${baseRealm.url}date`);
-    number = await loader.import(`${baseRealm.url}number`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    date = await loader.import('@cardstack/base/date');
+    number = await loader.import('@cardstack/base/number');
+    boolean = await loader.import('@cardstack/base/boolean');
+    codeRef = await loader.import('@cardstack/base/code-ref');
 
     let {
       field,
@@ -225,7 +225,7 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
 
     async function buildDefinition(cardDef: typeof CardDef) {
       let { fields, fieldDefs } = getFieldDefinitions(api, cardDef);

@@ -6,23 +6,20 @@ import { service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  type ResolvedCodeRef,
-  getClass,
-  isCardInstance,
-} from '@cardstack/runtime-common';
+import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
   decodeCommandRequest,
 } from '@cardstack/runtime-common/commands';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  getToolRequests,
+  isToolResultEventType,
+  isToolResultRelType,
+  isToolResultWithNoOutputMsgtype,
+  isToolResultWithOutputContent,
+  isToolResultWithOutputMsgtype,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -34,31 +31,34 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  getSkillSourceTools,
+  loadSkillSource,
+} from '@cardstack/host/lib/skill-tools';
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
-import type { CommandStatus } from 'https://cardstack.com/base/command';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import { Message } from './message';
+import MessageCodePatchResult from './message-code-patch-result';
+import MessageTool from './message-tool';
+
+import type { RoomMember } from './member';
+import type { ToolCallStatus } from '@cardstack/base/command';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
   DebugMessageEvent,
-  CommandResultEvent,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
-} from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
-
-import { Message } from './message';
-import MessageCodePatchResult from './message-code-patch-result';
-import MessageCommand from './message-command';
-
-import type { RoomMember } from './member';
+} from '@cardstack/base/matrix-event';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -84,13 +84,13 @@ export default class MessageBuilder {
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
-      commandResultEvent?: CommandResultEvent;
+      toolResultEvent?: ToolResultEvent;
     },
   ) {
     setOwner(this, owner);
   }
 
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -184,8 +184,8 @@ export default class MessageBuilder {
       message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
-      if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.setCommands(await this.buildMessageCommands(message));
+      if (getToolRequests(event.content)) {
+        message.setTools(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
@@ -245,17 +245,17 @@ export default class MessageBuilder {
     }
 
     let encodedCommandRequests =
-      (this.event.content as CardMessageContent)[
-        APP_BOXEL_COMMAND_REQUESTS_KEY
-      ] ?? [];
+      getToolRequests<Partial<EncodedToolRequest>>(
+        this.event.content as CardMessageContent,
+      ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
-      let command = message.commands.find(
-        (c) => c.commandRequest.id === encodedCommandRequest.id,
+      let command = message.tools.find(
+        (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
+        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
-        message.commands.push(
+        message.tools.push(
           await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
@@ -266,31 +266,29 @@ export default class MessageBuilder {
   }
 
   async updateMessageCommandResult(message: Message) {
-    if (message.commands.length === 0) {
-      message.setCommands(await this.buildMessageCommands(message));
+    if (message.tools.length === 0) {
+      message.setTools(await this.buildMessageCommands(message));
     }
 
-    if (this.builderContext.commandResultEvent && message.commands.length > 0) {
-      let event = this.builderContext.commandResultEvent;
+    if (this.builderContext.toolResultEvent && message.tools.length > 0) {
+      let event = this.builderContext.toolResultEvent;
       if (
-        event.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-        event.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+        isToolResultWithOutputMsgtype(event.content.msgtype) ||
+        isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
-        let messageCommand = message.commands.find(
-          (c) => c.commandRequest.id === commandRequestId,
+        let messageTool = message.tools.find(
+          (c) => c.toolRequest.id === commandRequestId,
         );
-        if (messageCommand) {
-          messageCommand.commandStatus = event.content['m.relates_to']
-            .key as CommandStatus;
-          messageCommand.commandResultFileDef =
-            event.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-              ? event.content.data.card
-              : undefined;
-          messageCommand.failureReason = event.content.failureReason;
+        if (messageTool) {
+          messageTool.toolCallStatus = event.content['m.relates_to']
+            .key as ToolCallStatus;
+          messageTool.toolResultFileDef = isToolResultWithOutputContent(
+            event.content,
+          )
+            ? event.content.data.card
+            : undefined;
+          messageTool.failureReason = event.content.failureReason;
         }
       }
     }
@@ -302,15 +300,16 @@ export default class MessageBuilder {
 
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
-    let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
-    if (!commandRequests) {
-      return new TrackedArray<MessageCommand>();
+    let toolRequests =
+      getToolRequests<Partial<EncodedToolRequest>>(eventContent);
+    if (!toolRequests) {
+      return new TrackedArray<MessageTool>();
     }
-    let commands = new TrackedArray<MessageCommand>();
-    for (let commandRequest of commandRequests) {
+    let commands = new TrackedArray<MessageTool>();
+    for (let toolRequest of toolRequests) {
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(commandRequest),
+        decodeCommandRequest(toolRequest),
       );
       commands.push(command);
     }
@@ -319,10 +318,10 @@ export default class MessageBuilder {
 
   private async buildMessageCommand(
     message: Message,
-    commandRequest: Partial<CommandRequest>,
+    toolRequest: Partial<ToolRequest>,
   ) {
-    let commandResultEvent =
-      this.builderContext.commandResultEvent ??
+    let toolResultEvent =
+      this.builderContext.toolResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
         // Correlate the result to its command by commandRequestId (the
@@ -333,11 +332,11 @@ export default class MessageBuilder {
         // across edits and present on every one, so it resolves the command on
         // both the live and reload paths.
         return (
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          r?.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
-          e.content.commandRequestId === commandRequest.id
+          isToolResultEventType(e.type) &&
+          isToolResultRelType(r?.rel_type) &&
+          e.content.commandRequestId === toolRequest.id
         );
-      }) as CommandResultEvent | undefined);
+      }) as ToolResultEvent | undefined);
 
     // ai-bot ran this one itself (e.g. readRealmFile), so the host never
     // resolves a command class or runs it. Skip the skill lookup below — it's
@@ -345,44 +344,45 @@ export default class MessageBuilder {
     // leave the indicator blank for a beat while it runs. Build the command
     // synchronously: 'applying' (loading) until the result event lands, then
     // applied (success) or invalid + reason (failure).
-    if (commandRequest.executedBy === AI_BOT_EXECUTOR) {
-      return new MessageCommand(
+    if (toolRequest.executedBy === AI_BOT_EXECUTOR) {
+      return new MessageTool(
         message,
-        commandRequest,
+        toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
         false, // requiresApproval — never prompts or runs
         'Apply', // actionVerb — unused; the indicator shows status, not a Run button
-        (commandResultEvent
-          ? commandResultEvent.content['m.relates_to']?.key || 'applied'
-          : 'applying') as CommandStatus,
+        (toolResultEvent
+          ? toolResultEvent.content['m.relates_to']?.key || 'applied'
+          : 'applying') as ToolCallStatus,
         undefined, // no result card (server-handled results carry no output)
         getOwner(this)!,
-        commandResultEvent?.content.failureReason,
+        toolResultEvent?.content.failureReason,
       );
     }
 
-    // Find command in skills
-    let skillCommand:
+    // Find command in skills. loadSkillSource handles both legacy Skill
+    // cards and markdown skills (tools in boxel.tools frontmatter).
+    let skillTool:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = await this.store.get<Skill>(skill.cardId);
-      if (!skillCard || !isCardInstance(skillCard)) {
+      let source = await loadSkillSource(this.store, skill.cardId);
+      if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of skillCard.commands) {
-        if (commandRequest.name === candidateSkillCommand.functionName) {
-          skillCommand = candidateSkillCommand;
+      for (let candidateSkillTool of getSkillSourceTools(source)) {
+        if (toolRequest.name === candidateSkillTool.functionName) {
+          skillTool = candidateSkillTool;
           break findCommand;
         }
       }
     }
 
     let actionVerb = 'Apply';
-    if (skillCommand?.codeRef) {
+    if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
-        skillCommand?.codeRef,
+        skillTool?.codeRef,
         this.loaderService.loader,
       )) as { actionVerb: string };
       if (CommandKlass?.actionVerb) {
@@ -390,28 +390,27 @@ export default class MessageBuilder {
       }
     }
 
-    let requiresApproval = skillCommand?.requiresApproval ?? true;
+    let requiresApproval = skillTool?.requiresApproval ?? true;
 
-    let commandStatus: CommandStatus = (commandResultEvent?.content[
+    let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
       'm.relates_to'
-    ]?.key || 'ready') as CommandStatus;
+    ]?.key || 'ready') as ToolCallStatus;
 
-    let messageCommand = new MessageCommand(
+    let messageTool = new MessageTool(
       message,
-      commandRequest,
-      skillCommand?.codeRef,
+      toolRequest,
+      skillTool?.codeRef,
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
-      commandStatus,
-      commandResultEvent?.content.msgtype ===
-        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-        ? commandResultEvent.content.data.card
+      toolCallStatus,
+      toolResultEvent && isToolResultWithOutputContent(toolResultEvent.content)
+        ? toolResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
-      commandResultEvent?.content.failureReason,
+      toolResultEvent?.content.failureReason,
     );
-    return messageCommand;
+    return messageTool;
   }
 
   private buildMessageCodePatchResults(message: Message) {

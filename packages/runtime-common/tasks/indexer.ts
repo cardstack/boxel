@@ -9,12 +9,15 @@ import {
   type RealmPermissions,
 } from '../index.ts';
 import {
+  systemInitiatedPriority,
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
 } from '../queue.ts';
 import { IndexRunner } from '../index-runner.ts';
+import { INCREMENTAL_INDEX_JOB_TIMEOUT_SEC } from '../jobs/indexing.ts';
+import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
 import type { Stats } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
@@ -51,6 +54,9 @@ export interface IncrementalResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
+  // The realm generation this pass committed. Optional so a result produced
+  // by an older worker mid-deploy still parses.
+  generation?: number;
 }
 
 export interface IncrementalDoneResult extends IncrementalResult {
@@ -70,17 +76,19 @@ export interface FromScratchArgs extends WorkerArgs {
   clearLastModified: boolean;
 }
 
-export interface FromScratchResult extends JSONTypes.Object {
+export interface FromScratchResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
+  // See IncrementalResult.generation.
+  generation?: number;
 }
 
-function isObjectLike(value: unknown): value is JSONTypes.Object {
+export function isObjectLike(value: unknown): value is JSONTypes.Object {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function maxPriorityAndTimeout(
+export function maxPriorityAndTimeout(
   existing: QueueCoalesceCandidate,
   incoming: { priority: number; timeout: number },
 ) {
@@ -90,7 +98,7 @@ function maxPriorityAndTimeout(
   };
 }
 
-function mergeIncrementalChanges(
+export function mergeIncrementalChanges(
   existing: IncrementalChange[],
   incoming: IncrementalChange[],
 ): IncrementalChange[] {
@@ -166,7 +174,7 @@ function parseIncrementalArgsForCoalesce(
   };
 }
 
-function incrementalChangesCover(
+export function incrementalChangesCover(
   existing: IncrementalChange[],
   incoming: IncrementalChange[],
 ): boolean {
@@ -328,6 +336,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   prerenderer,
   definitionLookup,
   virtualNetwork,
+  queuePublisher,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -356,12 +365,31 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
+      // Fire-and-forget: the index pass must not block on — or fail with —
+      // the prerender enqueue. Fires as soon as the invalidation set is
+      // known, so HTML rendering can start concurrently with the pass.
+      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+        enqueuePrerenderHtmlJob(queuePublisher, {
+          realmURL,
+          realmUsername,
+          changes: changes.map(({ url, operation }) => ({ url, operation })),
+          generation,
+          loaderEpoch,
+          spawningJobId: jobInfo?.jobId ?? null,
+          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+        }).catch((e) => {
+          log.warn(
+            `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
+          );
+        });
+      },
       auth,
       fetch: _fetch,
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations } =
+    let { stats, ignoreData, invalidations, generation } =
       await IndexRunner.fromScratch(currentRun);
 
     log.debug(
@@ -397,6 +425,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       invalidations,
       ignoreData: { ...ignoreData },
       stats,
+      ...(generation !== undefined ? { generation } : {}),
     };
   };
 
@@ -412,6 +441,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   prerenderer,
   definitionLookup,
   virtualNetwork,
+  queuePublisher,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -441,21 +471,43 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
+      // See fromScratchIndex — same fire-and-forget early enqueue.
+      onInvalidationsReady: ({
+        changes: htmlChanges,
+        generation,
+        loaderEpoch,
+      }) => {
+        enqueuePrerenderHtmlJob(queuePublisher, {
+          realmURL,
+          realmUsername,
+          changes: htmlChanges.map(({ url, operation }) => ({
+            url,
+            operation,
+          })),
+          generation,
+          loaderEpoch,
+          spawningJobId: jobInfo?.jobId ?? null,
+          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        }).catch((e) => {
+          log.warn(
+            `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
+          );
+        });
+      },
       auth,
       fetch: _fetch,
       prerenderer,
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
-    let { stats, invalidations, ignoreData } = await IndexRunner.incremental(
-      currentRun,
-      {
+    let { stats, invalidations, ignoreData, generation } =
+      await IndexRunner.incremental(currentRun, {
         changes: changes.map(({ operation, url }) => ({
           operation,
           url: new URL(url),
         })),
-      },
-    );
+      });
 
     log.debug(
       `${jobIdentity(jobInfo)} completed incremental indexing for ${changes
@@ -467,10 +519,11 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ignoreData: { ...ignoreData },
       invalidations,
       stats,
+      ...(generation !== undefined ? { generation } : {}),
     };
   };
 
-function ensureRealmOwnerPermissions(
+export function ensureRealmOwnerPermissions(
   permissions: RealmPermissions,
   realmURL: string,
 ): RealmPermissions {

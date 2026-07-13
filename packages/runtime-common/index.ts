@@ -12,8 +12,8 @@ import type { Definition } from './definitions.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
@@ -103,6 +103,39 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// One performed load of a link target during search-doc production. `path`
+// is the dotted field path (from the indexed card's root) of the `linksTo` /
+// `linksToMany` field that owns the link; `target` is the resolved
+// (absolute) URL that was loaded. A `linksToMany` field produces one entry
+// per loaded slot, all sharing the field's `path` and distinguished by
+// `target`. A load fired through a field getter — a computed reading a link
+// loads via the getter's lazy path, not the generator's targeted loading —
+// carries an empty `path`, since the store observing it can't name the
+// owning field. Only actual loads are represented — a target already
+// resident in the store records a near-zero entry that the persistence
+// floor drops.
+export interface SearchDocLinkLoad {
+  path: string;
+  target: string;
+  ms: number;
+}
+
+// Mutable out-param collector `searchDocFromFields` fills in place while it
+// walks the card. Each sub-collector is opt-in: the generator only spends
+// timer calls on the channels the caller supplies. Values are raw
+// (unbounded, unrounded) — the render.meta route prunes to the slowest
+// entries before persisting onto `boxel_index.diagnostics`.
+export interface SearchDocTimings {
+  // Dotted field path → inclusive evaluation wall-clock. A parent field's
+  // time includes its nested fields' (and its link loads'), so a slow leaf
+  // surfaces alongside every ancestor on its path — the drill-down reads
+  // directly from the keys. Plural fields accumulate across their items
+  // under one key.
+  fieldsMs?: Record<string, number>;
+  // One entry per link-target load the walk performed.
+  linkLoads?: SearchDocLinkLoad[];
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -123,6 +156,34 @@ export interface PrerenderMetaDiagnostics {
   serializeMs?: number;
   // Wall-clock of the host-side searchDoc call.
   searchDocMs?: number;
+  // Wall-clock of the searchable load-settle loop that runs before the
+  // timed searchDoc call: the passes that drive the card's searchable-path
+  // link loads (and the links its contained/computed fields read) to
+  // quiescence. Link-load cost lives HERE, not inside `searchDocMs` — by
+  // the time the timed generation runs, its targets are resident. Read
+  // `searchDocLinkLoads` for the per-target breakdown of this time.
+  searchDocSettleMs?: number;
+  // How many settle passes ran before the store's load generation held
+  // steady. Each pass loads one more dependency-depth wave, so a high count
+  // means a deep searchable/computed link chain (capped host-side; the cap
+  // logs a warning).
+  searchDocSettlePasses?: number;
+  // Per-field inclusive evaluation timings from the timed searchDoc walk,
+  // keyed by dotted field path from the indexed card's root (a parent's
+  // time includes its children's, so a slow leaf appears alongside its
+  // ancestors). Bounded: only the slowest fields at/over a floor are
+  // persisted, so a typical ~1 ms search doc records nothing and a slow one
+  // records its hot paths — the retained entries' (top-level) sum accounts
+  // for `searchDocMs`. A large `searchDocMs` with NO entries means death by
+  // a thousand cheap fields rather than one hot path. Omitted when empty.
+  searchDocFieldsMs?: Record<string, number>;
+  // The slowest searchable link-target loads performed while producing this
+  // row's search doc — the settle passes' loads plus any the timed walk
+  // still performed — same bounding as `searchDocFieldsMs`. Separates "the
+  // linked instance was slow to load" (an entry here) from "the field was
+  // expensive to compute" (a hot `searchDocFieldsMs` path with no matching
+  // load). Omitted when empty.
+  searchDocLinkLoads?: SearchDocLinkLoad[];
   // Broken `linksTo` / `linksToMany` targets found on the rendered
   // instance after the store settled. Captured by the render.meta scan
   // and persisted to `boxel_index.diagnostics.brokenLinks` so
@@ -228,6 +289,17 @@ export interface RenderTimeoutDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
+  // Per-format wall-clock of the html-route renders in this visit, split by
+  // the card rendering and the FileDef file rendering. Keys are the format
+  // steps the visit ran (`isolated`, `head`, `atom`, `markdown`, and the
+  // ancestor-driven `fitted` / `embedded`, each one number covering the
+  // whole ancestor chain). Only populated by visits that run html steps, so
+  // it tells you which format dominated `renderElapsedMs` — e.g. a slow
+  // isolated template vs. a fitted render fanning out across many ancestors.
+  renderFormatsMs?: {
+    card?: Record<string, number>;
+    file?: Record<string, number>;
+  };
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
@@ -461,12 +533,14 @@ export interface PrerenderResponseMeta {
   requestId?: string;
 }
 
-// The shape persisted to `boxel_index.diagnostics`. Named `Diagnostics`
-// (not `TimingDiagnostics`) because the block is no longer purely about
-// timing: it also carries `brokenLinks`, the broken-link findings the
-// render surfaced. Extends `RenderTimeoutDiagnostics` (which already
-// carries `requestId`) with two write-side stamps applied at
-// `IndexWriter.updateEntry` time:
+// The shape persisted to the `diagnostics` columns — `boxel_index` for the
+// index visit's breakdown, `prerendered_html` for the prerender-html visit's
+// (the two visits' costs are independently queryable per row; join them on
+// url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
+// not purely about timing: it also carries `brokenLinks`, the
+// broken-link findings the render surfaced. Extends
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
+// write-side stamps applied at `IndexWriter.updateEntry` time:
 //
 //   - `invalidationId` — one UUID per `Batch`; every row touched by
 //     the same indexing pass (incremental fan-out or fromScratch)
@@ -490,9 +564,14 @@ export interface Diagnostics
   invalidationId?: string;
   indexedAt?: number;
   // A row is produced by two prerender visits (index + prerender-html),
-  // each its own HTTP request. `requestId` carries the index visit's id;
-  // this carries the prerender-html visit's so operators can join logs
-  // for both. Absent for in-process callers and fused single-visit rows.
+  // each its own HTTP request. `requestId` always carries the index visit's
+  // id and this always carries the prerender-html visit's, whichever table
+  // the blob lands in. A split-pipeline write puts `requestId` on
+  // `boxel_index.diagnostics` and this field on
+  // `prerendered_html.diagnostics`; a fused pass produces one combined blob
+  // — both ids, when each visit was its own HTTP request — which lands on
+  // `boxel_index` and is projected as-is onto `prerendered_html`. Absent
+  // for in-process callers.
   prerenderHtmlRequestId?: string;
   // Frontmatter YAML that wouldn't parse during file extraction. The row
   // still indexes (body-only); this is the only indexed signal that the
@@ -519,6 +598,24 @@ export function flattenPrerenderMeta(
   return {
     ...diagnostics,
     ...(hasRequestId ? { requestId: meta.requestId } : {}),
+  };
+}
+
+// The prerender-html-visit flavor of `flattenPrerenderMeta`, for blobs bound
+// for `prerendered_html.diagnostics`: the visit's HTTP correlation id lands
+// under `prerenderHtmlRequestId` rather than `requestId`, keeping the
+// field-name → visit mapping constant across both diagnostics columns
+// (`requestId` always names an index visit, `prerenderHtmlRequestId` always
+// names a prerender-html visit).
+export function flattenPrerenderHtmlVisitMeta(
+  meta: PrerenderResponseMeta | undefined,
+): Diagnostics | undefined {
+  let flattened = flattenPrerenderMeta(meta);
+  if (!flattened) return undefined;
+  let { requestId, ...rest } = flattened;
+  return {
+    ...rest,
+    ...(requestId != null ? { prerenderHtmlRequestId: requestId } : {}),
   };
 }
 
@@ -779,6 +876,7 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
+export * from './frontmatter-parse.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';
@@ -801,6 +899,7 @@ export * from './matrix-constants.ts';
 export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
+export * from './prerender-html-reconcile.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
@@ -823,6 +922,7 @@ export * from './authorization-middleware.ts';
 export * from './resource-types.ts';
 export * from './prerender-headers.ts';
 export * from './query.ts';
+export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './search-resource-helpers.ts';
@@ -939,6 +1039,7 @@ export {
   isSingleFileMetaDocument,
   isFileMetaCollectionDocument,
   isEntryCollectionDocument,
+  isEntrySingleDocument,
   isCardDocumentString,
 } from './document-types.ts';
 export {
@@ -953,12 +1054,8 @@ export { sanitizeHtml } from './dompurify-runtime.ts';
 
 export { getPlural } from './pluralize-runtime.ts';
 
-import type {
-  CardDef,
-  FieldDef,
-  BaseDef,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef, FieldDef, BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { RealmInfo } from './realm.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 

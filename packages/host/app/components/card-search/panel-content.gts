@@ -39,12 +39,12 @@ import {
   resolveSearchKeyAsURL,
 } from '@cardstack/host/utils/card-search/url';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { SECTION_DISPLAY_LIMIT_FOCUSED, type SortOption } from './constants';
 import LiveRecentsProvider from './live-recents-provider';
 import SearchResults from './search-results';
 import SheetResults from './sheet-results';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 import type { NamedArgs } from 'ember-modifier';
 

@@ -11,9 +11,9 @@ import {
   linksToMany,
   StringField,
   realmInfo,
-} from 'https://cardstack.com/base/card-api';
-import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
-import setBackgroundImage from 'https://cardstack.com/base/helpers/set-background-image';
+} from '@cardstack/base/card-api';
+import { CardsGrid } from '@cardstack/base/cards-grid';
+import setBackgroundImage from '@cardstack/base/helpers/set-background-image';
 
 import { TabbedHeader } from '@cardstack/boxel-ui/components';
 import { cn, eq, not } from '@cardstack/boxel-ui/helpers';

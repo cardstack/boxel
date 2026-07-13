@@ -18,16 +18,6 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
-import type {
-  BaseDef,
-  CardDef,
-  FieldDef,
-  Field,
-  SerializeOpts,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as Searchable from 'https://cardstack.com/base/searchable';
-
 import LimitedSet from '../lib/limited-set';
 
 import type EnvironmentService from './environment-service';
@@ -36,6 +26,15 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
 import type ResetService from './reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardDef,
+  FieldDef,
+  Field,
+  SerializeOpts,
+} from '@cardstack/base/card-api';
+import type * as Searchable from '@cardstack/base/searchable';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -302,6 +301,15 @@ export default class CardService extends Service {
         Accept: 'application/vnd.card+source',
       },
     });
+    // Without this guard an error response's body would be written into the
+    // destination as file content and the copy would appear to succeed.
+    if (!response.ok) {
+      throw new Error(
+        `Could not read ${fromUrl.href} for copying: ${
+          response.status
+        } - ${(await response.text()).slice(0, 500)}`,
+      );
+    }
 
     const content = await response.text();
     return await this.saveSource(toUrl, content, 'copy');

@@ -3,13 +3,13 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
-
-import type * as BrandGuideModule from 'https://cardstack.com/base/brand-guide';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandGuideModule from '@cardstack/base/brand-guide';
 
 module('Integration | brand-guide | custom-css section', function (hooks) {
   setupRenderingTest(hooks);
@@ -23,7 +23,7 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     let brandGuideModule = await loader.import<typeof BrandGuideModule>(
-      `${baseRealm.url}brand-guide`,
+      '@cardstack/base/brand-guide',
     );
     BrandGuide = brandGuideModule.default;
     CompoundColorField = brandGuideModule.CompoundColorField;

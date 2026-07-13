@@ -3,15 +3,15 @@ import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import { commandData } from '@cardstack/base/resources/command-data';
 import {
   SearchGoogleImagesInput,
   SearchGoogleImagesResult,
-} from 'https://cardstack.com/base/command';
-import SearchGoogleImagesCommand from '@cardstack/boxel-host/commands/search-google-images';
+} from '@cardstack/base/command';
+import SearchGoogleImagesTool from '@cardstack/boxel-host/commands/search-google-images';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 import { IconSearchThick } from '@cardstack/boxel-ui/icons';
 import ArrowRight from '@cardstack/boxel-icons/arrow-right';
@@ -34,7 +34,7 @@ export class GoogleImageSearch extends CardDef {
     searchResource = commandData<
       typeof SearchGoogleImagesInput,
       typeof SearchGoogleImagesResult
-    >(this, SearchGoogleImagesCommand, () => {
+    >(this, SearchGoogleImagesTool, () => {
       return {
         query: this.args.model.searchQuery,
         maxResults: this.args.model.maxResults || 10,

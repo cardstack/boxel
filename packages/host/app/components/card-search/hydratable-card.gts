@@ -23,11 +23,11 @@ import {
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef, CardContext } from 'https://cardstack.com/base/card-api';
-
 import CardRenderer from '../card-renderer';
 
 import SearchResultError from './search-result-error';
+
+import type { BaseDef, CardContext } from '@cardstack/base/card-api';
 
 // `HydrationMode` is the card-facing contract (it rides the `@context`
 // search surface), so it lives in runtime-common; re-exported here because this

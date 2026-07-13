@@ -19,6 +19,19 @@ const tests = Object.freeze({
     );
   },
 
+  'parseBoxelHostCommandSpecifier parses the tools/ spelling as authored':
+    async (assert) => {
+      assert.deepEqual(
+        parseBoxelHostCommandSpecifier(
+          '@cardstack/boxel-host/tools/show-card/default',
+        ),
+        {
+          module: '@cardstack/boxel-host/tools/show-card',
+          name: 'default',
+        },
+      );
+    },
+
   'parseBoxelHostCommandSpecifier rejects unscoped command specifier': async (
     assert,
   ) => {

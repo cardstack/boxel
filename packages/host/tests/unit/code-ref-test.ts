@@ -5,15 +5,8 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  loadCardDef,
-  rri,
-  visitModuleDeps,
-} from '@cardstack/runtime-common';
+import { loadCardDef, rri, visitModuleDeps } from '@cardstack/runtime-common';
 import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
-
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -26,6 +19,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 module('code-ref', function (hooks) {
   setupRenderingTest(hooks);
@@ -44,16 +39,16 @@ module('code-ref', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-          import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
           }
         `,
           'code-ref-test.ts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import CodeRefField from 'https://cardstack.com/base/code-ref';
+          import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+          import CodeRefField from '@cardstack/base/code-ref';
 
           export class TestCard extends CardDef {
             @field ref = contains(CodeRefField);
@@ -71,7 +66,7 @@ module('code-ref', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can dynamically load a card definition', async function (assert) {

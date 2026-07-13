@@ -11,6 +11,7 @@ import {
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   type SyncManifest,
@@ -205,11 +206,16 @@ class RealmPusher extends RealmSyncBase {
       // binary POST fails — dropping the manifest update in that
       // case would force a re-add on the next push (409 cascade).
       if (result.succeeded.length > 0) {
+        // Guard the map lookup: `succeeded` should only carry paths from
+        // `filesToUpload`, but a server response in an unexpected shape must
+        // degrade to a manifest gap (re-upload next push), not a crash.
         const uploaded = await Promise.all(
-          result.succeeded.map(async (rel) => ({
-            rel,
-            hash: await computeFileHash(filesToUpload.get(rel)!),
-          })),
+          result.succeeded
+            .filter((rel) => filesToUpload.has(rel))
+            .map(async (rel) => ({
+              rel,
+              hash: await computeFileHash(filesToUpload.get(rel)!),
+            })),
         );
         for (const { rel, hash } of uploaded) {
           newManifest.files[rel] = hash;
@@ -393,6 +399,14 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
+  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    console.error(`Error: ${resolvedRealm.error}`);
+    process.exit(1);
+  }
+  realmUrl = resolvedRealm.url;
   const resolution = resolveRealmAuthenticator({
     realmUrl,
     realmSecretSeed: options.realmSecretSeed,

@@ -28,6 +28,7 @@ import {
 import { MatrixClient } from './matrix-client.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -99,6 +100,7 @@ export class Worker {
   #secretSeed: string;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #reportProgress: ((event: IndexingProgressEvent) => void) | undefined;
+  #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #createPrerenderAuth: (
     userId: string,
@@ -116,6 +118,7 @@ export class Worker {
     secretSeed,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
   }: {
@@ -130,6 +133,7 @@ export class Worker {
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
     reportProgress?: (event: IndexingProgressEvent) => void;
+    reportRealmEvent?: (event: RealmEventContent) => void;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -142,6 +146,7 @@ export class Worker {
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
     this.#reportProgress = reportProgress;
+    this.#reportRealmEvent = reportRealmEvent;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
@@ -169,6 +174,7 @@ export class Worker {
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
       reportProgress: this.reportProgress.bind(this),
+      reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
     };
 
@@ -180,6 +186,11 @@ export class Worker {
       this.#queue.register(
         `incremental-index`,
         Tasks['incrementalIndex'](taskArgs),
+      ),
+      this.#queue.register(`prerender_html`, Tasks['prerenderHtml'](taskArgs)),
+      this.#queue.register(
+        `prerender-html-reconcile`,
+        Tasks['prerenderHtmlReconcile'](taskArgs),
       ),
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
@@ -266,12 +277,17 @@ export class Worker {
   private reportProgress(event: IndexingProgressEvent) {
     this.#reportProgress?.(event);
   }
+
+  private reportRealmEvent(event: RealmEventContent) {
+    this.#reportRealmEvent?.(event);
+  }
 }
 
 export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
 ): Reader {
+  let readerLog = logger('worker');
   let parseResponseMetadata = (
     response: Response,
     url: URL,
@@ -317,12 +333,29 @@ export function getReader(
         return undefined;
       }
       let content: string;
-      if ('nodeStream' in response && response.nodeStream) {
-        content = await fileContentToText({
-          content: response.nodeStream,
-        });
-      } else {
-        content = await response.text();
+      try {
+        if ('nodeStream' in response && response.nodeStream) {
+          content = await fileContentToText({
+            content: response.nodeStream,
+          });
+        } else {
+          content = await response.text();
+        }
+      } catch (err: any) {
+        // An in-process realm serves file bodies as lazy node streams: the
+        // realm checks existence when it builds the response, but the
+        // underlying open() happens only when we consume the body here. A
+        // file deleted in that window surfaces as an ENOENT on the body
+        // read even though the response itself was ok. That is a
+        // not-found, same as the !response.ok branch above — callers
+        // already treat undefined as "file no longer exists".
+        if (err?.code === 'ENOENT') {
+          readerLog.info(
+            `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
+          );
+          return undefined;
+        }
+        throw err;
       }
       let { lastModified, created, path } = parseResponseMetadata(
         response,

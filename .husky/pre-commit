@@ -1,3 +1,12 @@
+# Skip the autofix on merge commits: the staged set is every file the merge
+# brings in (often thousands), all of which were already linted on their own
+# branch, so running lint-staged here is slow and redundant. MERGE_HEAD exists
+# exactly while a merge is being committed.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  echo "pre-commit: merge commit detected; skipping lint autofix." >&2
+  exit 0
+fi
+
 # GUI git clients (Sourcetree, etc.) launch hooks with a minimal PATH that
 # omits version managers like mise, so `pnpm` may not be found. Best-effort:
 # add mise's shims and a few common bin dirs so `pnpm` resolves.

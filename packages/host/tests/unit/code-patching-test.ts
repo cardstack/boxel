@@ -146,5 +146,25 @@ ${REPLACE_MARKER}`;
           <div class='rsvp-section'>`,
       );
     });
+
+    test('strips a stray extra separator the model emits before the REPLACE marker', async function (assert) {
+      // Models sometimes duplicate the separator right before REPLACE_MARKER;
+      // parsing must drop it rather than include it in replaceContent, where
+      // it would reach the file as a line of box-drawing characters.
+      let block = `game-1.json
+${SEARCH_MARKER}
+{ "old": true }
+${SEPARATOR_MARKER}
+{ "new": true }
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+      let result = parseSearchReplace(block);
+      assert.strictEqual(result.searchContent, `{ "old": true }`);
+      assert.strictEqual(
+        result.replaceContent,
+        `{ "new": true }`,
+        'the stray separator is not part of the replacement',
+      );
+    });
   },
 );

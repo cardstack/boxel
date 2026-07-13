@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { tmpdir } from 'os';
+import fsExtra from 'fs-extra';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   fetchSessionRoom,
@@ -8,7 +10,7 @@ import {
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { NodeAdapter } from '../node-realm.ts';
 import { insertUser, setupDB } from './helpers/index.ts';
 
@@ -143,5 +145,40 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     assert.true(true, 'broadcast resolves even if stale room cleanup fails');
+  });
+});
+
+module(`${basename(import.meta.filename)} | file stat probing`, function () {
+  test('openFile and lastModified treat a path nested under a regular file as nonexistent', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      fsExtra.writeFileSync(join(dir, 'plain.txt'), 'hello');
+      let adapter = new NodeAdapter(dir);
+
+      assert.strictEqual(
+        await adapter.openFile('plain.txt/nested'),
+        undefined,
+        'openFile reports not-found instead of throwing ENOTDIR',
+      );
+      assert.strictEqual(
+        await adapter.lastModified('plain.txt/nested'),
+        undefined,
+        'lastModified reports not-found instead of throwing ENOTDIR',
+      );
+    } finally {
+      fsExtra.removeSync(dir);
+    }
+  });
+
+  test('openFile and lastModified treat a missing path as nonexistent', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      let adapter = new NodeAdapter(dir);
+
+      assert.strictEqual(await adapter.openFile('absent.txt'), undefined);
+      assert.strictEqual(await adapter.lastModified('absent.txt'), undefined);
+    } finally {
+      fsExtra.removeSync(dir);
+    }
   });
 });

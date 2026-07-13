@@ -6,11 +6,7 @@ import type { SafeString } from '@ember/template';
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type {
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format, FieldType } from '@cardstack/base/card-api';
 
 import type { ArgsFor } from 'ember-modifier';
 

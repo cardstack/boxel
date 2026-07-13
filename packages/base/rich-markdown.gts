@@ -18,7 +18,6 @@ import {
   containsMany,
   field,
   linksToMany,
-  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
@@ -37,7 +36,7 @@ import { CardContextConsumer } from './field-component';
  *
  * Usage:
  * ```
- * import RichMarkdownField from 'https://cardstack.com/base/rich-markdown';
+ * import RichMarkdownField from '@cardstack/base/rich-markdown';
  *
  * class MyCard extends CardDef {
  *   @field body = contains(RichMarkdownField);
@@ -112,18 +111,15 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -131,7 +127,6 @@ export class RichMarkdownField extends FieldDef {
         @linkedCards={{@model.linkedCards}}
         @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
-        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -140,18 +135,15 @@ export class RichMarkdownField extends FieldDef {
     get content() {
       return this.args.model?.content ?? null;
     }
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -159,7 +151,6 @@ export class RichMarkdownField extends FieldDef {
         @linkedCards={{@model.linkedCards}}
         @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
-        @cardReferenceVirtualNetwork={{this.virtualNetwork}}
       />
     </template>
   };
@@ -186,18 +177,15 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
-    get virtualNetwork() {
-      return this.args.model ? virtualNetworkFor(this.args.model) : undefined;
-    }
     get baseUrl(): string | null {
       let model = this.args.model;
       let rel = model?.[relativeTo];
       if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string'
-        ? (virtualNetworkFor(model)?.toURL(rel).href ?? rel)
-        : rel.href;
+      // Instance ids are canonical (prefix form for mapped realms, URL for
+      // unmapped), so the reference base is the id as-is — no VirtualNetwork.
+      return typeof rel === 'string' ? rel : rel.href;
     }
     get linkedCards(): CardDef[] | null {
       try {
@@ -235,7 +223,6 @@ export class RichMarkdownField extends FieldDef {
               @linkedCards={{@model.linkedCards}}
               @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
-              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
             />
           </div>
         {{else}}
@@ -246,7 +233,6 @@ export class RichMarkdownField extends FieldDef {
               @linkedCards={{this.linkedCards}}
               @linkedFiles={{this.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
-              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             >

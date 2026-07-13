@@ -15,16 +15,15 @@ import {
   Warning,
 } from '@cardstack/boxel-ui/icons';
 
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
-import type CommandService from '@cardstack/host/services/command-service';
-
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
-
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
+import type ToolService from '@cardstack/host/services/tool-service';
+import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
 
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+
+import type { FileDef } from '@cardstack/base/file-api';
+import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLElement;
@@ -89,7 +88,7 @@ export default class ErrorDisplay
 {
   @tracked private showDetails = this.args.openDetails ?? false;
 
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private errorDisplay: ErrorDisplayService;
 
   constructor(owner: any, args: any) {
@@ -99,8 +98,8 @@ export default class ErrorDisplay
   }
 
   private viewInCodeMode = dropTask(async () => {
-    let switchSubmodeCommand = new SwitchSubmodeCommand(
-      this.commandService.commandContext,
+    let switchSubmodeCommand = new SwitchSubmodeTool(
+      this.toolService.toolContext,
     );
     await switchSubmodeCommand.execute({
       submode: 'code',

@@ -2,29 +2,32 @@ import type {
   CardMessageEvent,
   CardMessageContent,
   CodePatchResultEvent,
-  CommandResultEvent,
+  ToolResultEvent,
+  EncodedToolRequest,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
   RealmServerEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
 import { logger } from '../log.ts';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  getToolRequests,
+  isToolResultEventType,
+  isToolResultWithOutputMsgtype,
 } from '../matrix-constants.ts';
 
 import { downloadFile } from './matrix-utils.ts';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { HistoryConstructionError } from './types.ts';
 
 function getLog() {
@@ -47,7 +50,7 @@ export async function constructHistory(
   for (let rawEvent of eventsWithAggregatedReplacements) {
     if (
       rawEvent.type !== 'm.room.message' &&
-      rawEvent.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      !isToolResultEventType(rawEvent.type) &&
       rawEvent.type !== APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
     ) {
       continue;
@@ -58,7 +61,7 @@ export async function constructHistory(
     // make a copy of the event
     let event = { ...rawEvent } as
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | RealmServerEvent
       | MessageEvent; // Typescript could have inferred this from the line above
@@ -104,9 +107,16 @@ export async function constructHistory(
           content[APP_BOXEL_REASONING_CONTENT_KEY] =
             content[APP_BOXEL_REASONING_CONTENT_KEY] ??
             '' + (continuationContent[APP_BOXEL_REASONING_CONTENT_KEY] ?? '');
-          content[APP_BOXEL_COMMAND_REQUESTS_KEY] = (
-            content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
-          ).concat(continuationContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []);
+          // Merge under the new key regardless of which spelling either part
+          // carried, and drop the legacy key so the merged view has a single
+          // source of truth.
+          content[APP_BOXEL_TOOL_REQUESTS_KEY] = (
+            getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+          ).concat(
+            getToolRequests<Partial<EncodedToolRequest>>(continuationContent) ??
+              [],
+          );
+          delete content[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY];
           event.origin_server_ts = continuationEvent.origin_server_ts;
           delete content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
         }
@@ -195,7 +205,7 @@ async function downloadAttachments(event: IRoomEvent, client: MatrixClient) {
       );
     }
   } else if (
-    event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+    isToolResultWithOutputMsgtype(event.content.msgtype) &&
     event.content.data.card
   ) {
     try {

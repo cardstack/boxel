@@ -1,7 +1,7 @@
 import type {
   BaseDefConstructor,
   BaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 /**
  * A migration serializer for composite fields that replace a primitive

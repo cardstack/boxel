@@ -11,10 +11,10 @@ import type { FileUploadTask } from '@cardstack/host/services/file-upload';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import IndexedFileTree from '../editor/indexed-file-tree';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { WithBoundArgs } from '@glint/template';
 

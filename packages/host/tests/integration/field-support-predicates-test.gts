@@ -1,15 +1,14 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 let loader: Loader;
 let isNotLoadedValue: (typeof FieldSupportModule)['isNotLoadedValue'];
@@ -54,7 +53,7 @@ module(
     setupBaseRealm(hooks);
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
     setupLocalIndexing(hooks);
     setupMockMatrix(hooks);
@@ -62,7 +61,7 @@ module(
     hooks.beforeEach(async function () {
       loader = getService('loader-service').loader;
       let fieldSupport = await loader.import<typeof FieldSupportModule>(
-        `${baseRealm.url}field-support`,
+        '@cardstack/base/field-support',
       );
       isNotLoadedValue = fieldSupport.isNotLoadedValue;
       isLinkError = fieldSupport.isLinkError;

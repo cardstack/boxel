@@ -53,19 +53,17 @@ import {
 } from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 
-import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import ENV from '@cardstack/host/config/environment';
-import { isAutoExecutableCommand } from '@cardstack/host/lib/command-auto-execute';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
+import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { isReady } from '@cardstack/host/resources/file';
 import type { RoomResource } from '@cardstack/host/resources/room';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -75,10 +73,9 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
@@ -97,6 +94,8 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { MatrixEvent } from 'matrix-js-sdk';
 
 const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
@@ -566,7 +565,7 @@ export default class Room extends Component<Signature> {
 
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service('file-upload') declare private fileUpload: FileUploadService;
   @service('loader-service') declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -1015,7 +1014,7 @@ export default class Room extends Component<Signature> {
   private get isAcceptingAll() {
     return (
       this.executeAllReadyActionsTask.isRunning ||
-      this.commandService.isPerformingAcceptAllForRoom(this.args.roomId)
+      this.toolService.isPerformingAcceptAllForRoom(this.args.roomId)
     );
   }
 
@@ -1163,6 +1162,9 @@ export default class Room extends Component<Signature> {
   private goToSystemCard() {
     let systemCardId = this.systemCardId;
     if (systemCardId) {
+      if (this.operatorModeStateService.workspaceChooserOpened) {
+        this.operatorModeStateService.closeWorkspaceChooser();
+      }
       let stackIndex = Math.min(
         this.operatorModeStateService.numberOfStacks(),
         1,
@@ -1757,9 +1759,7 @@ export default class Room extends Component<Signature> {
 
   private updateSkillIsActiveTask = task(
     async (isActive: boolean, skillCardId?: string) => {
-      await new UpdateRoomSkillsCommand(
-        this.commandService.commandContext,
-      ).execute({
+      await new UpdateRoomSkillsTool(this.toolService.toolContext).execute({
         roomId: this.args.roomId,
         skillCardIdsToActivate: isActive ? [skillCardId!] : [],
         skillCardIdsToDeactivate: isActive ? [] : [skillCardId!],
@@ -1808,8 +1808,8 @@ export default class Room extends Component<Signature> {
   }
 
   private attachSkillTask = task(async (cardId: string) => {
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
+      this.toolService.toolContext,
     );
 
     await updateRoomSkillsCommand.execute({
@@ -1856,10 +1856,10 @@ export default class Room extends Component<Signature> {
   }
 
   @cached
-  private get readyCommands() {
+  private get readyTools() {
     let lastMessage = this.messages[this.messages.length - 1];
 
-    if (!lastMessage || !lastMessage.commands) {
+    if (!lastMessage || !lastMessage.tools) {
       return [];
     }
     let roomResource = this.matrixService.roomResources.get(this.args.roomId);
@@ -1868,19 +1868,17 @@ export default class Room extends Component<Signature> {
     );
     let isOwnedByCurrentAgent =
       lastMessage.agentId === this.matrixService.agentId;
-    return lastMessage.commands.filter(
+    return lastMessage.tools.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&
-        !this.commandService.currentlyExecutingCommandRequestIds.has(
-          command.id!,
-        ) &&
-        !this.commandService.executedCommandRequestIds.has(command.id!) &&
+        !this.toolService.currentlyExecutingToolRequestIds.has(command.id!) &&
+        !this.toolService.executedToolRequestIds.has(command.id!) &&
         // Commands destined for auto-execution must not surface the manual
         // Accept All / Cancel bar, even during the ~100ms debounce before
-        // command-service flips `acceptingAllRoomIds`. Without this filter,
+        // tool-service flips `acceptingAllRoomIds`. Without this filter,
         // the bar paints and then yanks itself once auto-execution starts,
         // which is the CS-11647 glitch.
-        !isAutoExecutableCommand(command, activeMode, isOwnedByCurrentAgent),
+        !isAutoExecutableTool(command, activeMode, isOwnedByCurrentAgent),
     );
   }
 
@@ -1888,7 +1886,7 @@ export default class Room extends Component<Signature> {
   private get readyCodePatches() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return [];
-    return this.commandService.getReadyCodePatches(lastMessage.htmlParts);
+    return this.toolService.getReadyCodePatches(lastMessage.htmlParts);
   }
 
   private get generatingResults() {
@@ -1921,16 +1919,16 @@ export default class Room extends Component<Signature> {
     return (
       this.showUnreadIndicator ||
       this.generatingResults ||
-      this.readyCommands.length > 0 ||
+      this.readyTools.length > 0 ||
       this.readyCodePatches.length > 0 ||
       this.isAcceptingAll
     );
   }
 
   private async executeReadyCommands() {
-    for (let command of this.readyCommands) {
+    for (let command of this.readyTools) {
       this.acceptingAllLabel = command.actionVerb;
-      await this.commandService.run.unlinked().perform(command);
+      await this.toolService.run.unlinked().perform(command);
       this.acceptingAllLabel = undefined;
     }
   }
@@ -1939,7 +1937,7 @@ export default class Room extends Component<Signature> {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return;
 
-    await this.commandService.executeReadyCodePatches(
+    await this.toolService.executeReadyCodePatches(
       this.args.roomId,
       lastMessage.htmlParts,
     );

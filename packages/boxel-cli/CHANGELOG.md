@@ -6,6 +6,54 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-07-09 — npm v0.4.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.4.0
+
+## @cardstack/boxel-cli v0.4.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.4.0
+
+## Changes
+
+- fix: add import attribute to release-prefixes.json import by @lukemelia in https://github.com/cardstack/boxel/pull/5445
+- fix: atomic upload result mapping breaks when the realm returns resource-identifier ids by @jurgenwerk in https://github.com/cardstack/boxel/pull/5413
+- fix: stop background git maintenance racing the checkpoint commit loop by @habdelra in https://github.com/cardstack/boxel/pull/5411
+- refactor: split the prerender visit into index and prerender-html passes by @habdelra in https://github.com/cardstack/boxel/pull/5399
+- fix: rename search-entry resource type to entry by @habdelra in https://github.com/cardstack/boxel/pull/5398
+- test: rename realm version to generation across the index schema by @habdelra in https://github.com/cardstack/boxel/pull/5391
+- feat: add `boxel realm archive` / `restore` + archived state in `realm list` (CS-11671) by @lukemelia in https://github.com/cardstack/boxel/pull/5365
+- Add owner-only archive/unarchive realm endpoints by @lukemelia in https://github.com/cardstack/boxel/pull/5341
+- feat: drop the -v2 suffix from the search endpoints by @habdelra in https://github.com/cardstack/boxel/pull/5345
+- chore: retire the four legacy search endpoints, compat layer, and legacy wire shapes by @habdelra in https://github.com/cardstack/boxel/pull/5332
+- fix: Lockfile update by @ef4 in https://github.com/cardstack/boxel/pull/5207
+- refactor: Change cross-resource references to prefix form by @backspace in https://github.com/cardstack/boxel/pull/5148
+- feat: realm secret seed auth for boxel file read/write + realm publish/unpublish by @habdelra in https://github.com/cardstack/boxel/pull/5326
+- feat: support all BFM formats in both inline and block reference directives by @lukemelia in https://github.com/cardstack/boxel/pull/5323
+- fix: boxel-cli \_\_dirname under ESM breaks build-plugin / publish by @jurgenwerk in https://github.com/cardstack/boxel/pull/5302
+- chore: lint-guard CommonJS `__dirname`/`__filename` in ESM TS source by @lukemelia in https://github.com/cardstack/boxel/pull/5307
+- refactor: migrate boxel-cli ingest-card search to per-realm \_search-v2 (data-only) by @habdelra in https://github.com/cardstack/boxel/pull/5305
+- refactor: migrate boxel-cli and vscode-boxel-tools search to /\_federated-search-v2 (data-only) by @habdelra in https://github.com/cardstack/boxel/pull/5291
+- feat: boxel search can list a realm's cards without a query, and explains rejected filters by @jurgenwerk in https://github.com/cardstack/boxel/pull/5275
+- fix: ingest-card copies Spec + instances from shared/published source realms by @jurgenwerk in https://github.com/cardstack/boxel/pull/5276
+- fix: ingesting one card no longer copies every card of its type by @jurgenwerk in https://github.com/cardstack/boxel/pull/5289
+- feat: surface frontmatter parse errors via indexing diagnostics by @lukemelia in https://github.com/cardstack/boxel/pull/5272
+- refactor: migrate from ts-node to native Node ESM by @lukemelia in https://github.com/cardstack/boxel/pull/5265
+- feat: route software-factory tests through boxel-cli's engine (drop host/dist dep) by @jurgenwerk in https://github.com/cardstack/boxel/pull/5246
+- fix: ship @glimmer/component + @glimmer/tracking types with boxel parse by @jurgenwerk in https://github.com/cardstack/boxel/pull/5197
+- feat(ui): Extract fitted component from homepage to boxel-ui with improvements by @burieberry in https://github.com/cardstack/boxel/pull/5212
+- fix: keep republish recovery progress off stdout in boxel realm publish by @lukemelia in https://github.com/cardstack/boxel/pull/5203
+- feat: add publishability gate and --json to boxel realm publish/unpublish by @lukemelia in https://github.com/cardstack/boxel/pull/5191
+- feat: factory:go adjust-existing-card flow + `boxel realm ingest-card` by @jurgenwerk in https://github.com/cardstack/boxel/pull/5145
+- refactor: extract RealmClient + RealmOperation pattern shared by host and boxel-cli by @lukemelia in https://github.com/cardstack/boxel/pull/5188
+- feat: add `boxel realm ingest-card` to copy a card with its dependency graph by @jurgenwerk in https://github.com/cardstack/boxel/pull/5166
+- build: pin Node >=24 across engines, .nvmrc, and CI (CS-11449) by @lukemelia in https://github.com/cardstack/boxel/pull/5173
+- refactor: add explicit .ts import extensions in browser-consumed packages (CS-11448 part 2) by @lukemelia in https://github.com/cardstack/boxel/pull/5159
+- fix(boxel-cli): auto-bump unstable version on manual publish by @jurgenwerk in https://github.com/cardstack/boxel/pull/5143
+- refactor: burn down the erasable-syntax override list (parameter properties + enums) by @lukemelia in https://github.com/cardstack/boxel/pull/5156
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.3.1...boxel-cli-v0.4.0
+
 ## 2026-06-06 — npm v0.3.1
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.3.1

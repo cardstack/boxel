@@ -42,25 +42,23 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
-  isCommandDeclaration,
+  isToolDeclaration,
   isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
+import type ToolService from '@cardstack/host/services/tool-service';
+import OpenCreateListingModalTool from '@cardstack/host/tools/open-create-listing-modal';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -85,6 +83,7 @@ import type { SelectorItem } from './detail-panel-selector';
 import type { ModuleAnalysis } from '../../resources/module-contents';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -116,7 +115,7 @@ export default class DetailPanel extends Component<Signature> {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
@@ -212,11 +211,11 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  private get showCommandPanel() {
+  private get showToolPanel() {
     return (
       this.isModule &&
       this.args.selectedDeclaration &&
-      isCommandDeclaration(this.args.selectedDeclaration)
+      isToolDeclaration(this.args.selectedDeclaration)
     );
   }
 
@@ -455,8 +454,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action private async createListing() {
-    const command = new OpenCreateListingModalCommand(
-      this.commandService.commandContext,
+    const command = new OpenCreateListingModalTool(
+      this.toolService.toolContext,
     );
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
@@ -791,16 +790,16 @@ export default class DetailPanel extends Component<Signature> {
             {{/let}}
           {{/if}}
         </PanelSection>
-      {{else if this.showCommandPanel}}
+      {{else if this.showToolPanel}}
         <PanelSection as |PanelHeader|>
           <PanelHeader
-            aria-label='Command Panel Header'
-            data-test-command-panel-header
+            aria-label='Tool Panel Header'
+            data-test-tool-panel-header
           >
-            Command
+            Tool
           </PanelHeader>
           <ModuleDefinitionContainer
-            @title='Command'
+            @title='Tool'
             @fileURL={{@readyFile.url}}
             @name={{this.selectedDeclarationName}}
             @fileExtension={{this.fileExtension}}

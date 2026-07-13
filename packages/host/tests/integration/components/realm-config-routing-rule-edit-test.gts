@@ -45,12 +45,13 @@ module(
       relationships?: Record<string, unknown>,
     ) {
       let loader = getService('loader-service').loader;
-      let cardApi: typeof import('https://cardstack.com/base/card-api') =
-        await loader.import(`${baseRealm.url}card-api`);
-      let string: typeof import('https://cardstack.com/base/string') =
-        await loader.import(`${baseRealm.url}string`);
-      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid') =
-        await loader.import(`${baseRealm.url}cards-grid`);
+      let cardApi: typeof import('@cardstack/base/card-api') =
+        await loader.import('@cardstack/base/card-api');
+      let string: typeof import('@cardstack/base/string') = await loader.import(
+        '@cardstack/base/string',
+      );
+      let cardsGrid: typeof import('@cardstack/base/cards-grid') =
+        await loader.import('@cardstack/base/cards-grid');
 
       let { field, contains, CardDef } = cardApi;
       let { default: StringField } = string;
@@ -266,10 +267,9 @@ module(
       // test can prove `consumingRealm` (and a derived
       // `lockConsumingRealm`) flow through the model-level derivation
       // rather than the context fallback.
-      let cardApi: typeof import('https://cardstack.com/base/card-api') =
-        await getService('loader-service').loader.import(
-          `${baseRealm.url}card-api`,
-        );
+      let cardApi: typeof import('@cardstack/base/card-api') = await getService(
+        'loader-service',
+      ).loader.import('@cardstack/base/card-api');
 
       await setupIntegrationTestRealm({
         mockMatrixUtils,

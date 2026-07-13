@@ -15,7 +15,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 /**
  * Internal key strings for root types (CardDef, FieldDef, BaseDef).

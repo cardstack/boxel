@@ -54,6 +54,16 @@ export class RealmIndexUpdater {
   // gate exists to serialize. From-scratch jobs are tracked too, but only so
   // that callers wanting "all indexing has settled" semantics (e.g. publish)
   // continue to see them via `indexing()`.
+  //
+  // These deferreds are quiescence signals, not success signals: they are
+  // always fulfilled, never rejected, even when the underlying job fails.
+  // Failures travel to interested callers via the per-job promise (`settled`
+  // for incremental, `completed` for from-scratch, the method's own throw
+  // for copy) and via error_doc inside the worker. Rejecting the gate would
+  // (a) turn a background indexing failure into a 500 for whatever
+  // unrelated request happens to be awaiting the write-path gate, and
+  // (b) become an unhandled promise rejection whenever a deferred-indexing
+  // job fails while nothing is draining the gate.
   #incrementalIndexingDeferreds = new Set<Deferred<void>>();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
@@ -220,7 +230,10 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       onSettled?: () => Promise<void> | void;
       clientRequestId?: string | null;
     },
@@ -249,16 +262,17 @@ export class RealmIndexUpdater {
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
     } catch (e: any) {
-      indexingDeferred.reject(e);
+      indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
       throw e;
     }
     // Past the durable-enqueue boundary. Build the settle promise that the
     // caller can either await (synchronous-indexing path) or fire-and-forget
-    // (deferred-indexing path).
+    // (deferred-indexing path). Failures reject `settled` only — the
+    // quiescence gate always fulfills (see #incrementalIndexingDeferreds).
     let settled = (async () => {
       try {
-        let { invalidations, ignoreData, stats } = await job.done;
+        let { invalidations, ignoreData, stats, generation } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -269,14 +283,12 @@ export class RealmIndexUpdater {
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+            { generation },
           );
         }
         if (opts?.onSettled) {
           await opts.onSettled();
         }
-      } catch (e: any) {
-        indexingDeferred.reject(e);
-        throw e;
       } finally {
         indexingDeferred.fulfill();
         this.#incrementalIndexingDeferreds.delete(indexingDeferred);
@@ -289,7 +301,10 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       clientRequestId?: string | null;
     },
   ): Promise<void> {
@@ -300,7 +315,7 @@ export class RealmIndexUpdater {
   async copy(
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
-  ): Promise<void> {
+  ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.add(indexingDeferred);
     try {
@@ -316,15 +331,13 @@ export class RealmIndexUpdater {
         priority: userInitiatedPriority,
         args,
       });
-      let { invalidations } = await job.done;
+      let { invalidations, generation } = await job.done;
       if (onInvalidation) {
         await onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
-    } catch (e: any) {
-      indexingDeferred.reject(e);
-      throw e;
+      return { generation };
     } finally {
       indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);

@@ -22,6 +22,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../lib/profile-manager.ts';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { findBoxelCliRoot } from '../lib/find-package-root.ts';
@@ -215,6 +216,16 @@ export async function parseRealm(
     if (!active) {
       return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
     }
+  }
+
+  if (realmUrl) {
+    let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+      profileManager: pm,
+    });
+    if (!resolvedRealm.ok) {
+      return emptyErrorResult(resolvedRealm.error);
+    }
+    realmUrl = resolvedRealm.url;
   }
 
   let normalizedRealmUrl = realmUrl ? ensureTrailingSlash(realmUrl) : '';
@@ -549,6 +560,7 @@ async function runGlintCheck(
           // resolvable `@cardstack/local-types` package in node_modules.
           types: ['qunit-dom'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],

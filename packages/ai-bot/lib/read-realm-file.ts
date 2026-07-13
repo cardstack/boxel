@@ -1,7 +1,7 @@
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
-import type { Tool } from 'https://cardstack.com/base/matrix-event';
+import type { Tool } from '@cardstack/base/matrix-event';
 import type {
   ChatCompletion,
   ChatCompletionMessageToolCall,
@@ -12,60 +12,71 @@ let log = logger('ai-bot:read-realm-file');
 
 export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
 
-// On-demand file reading. The model calls `readRealmFile` to pull a file's
-// contents only when it needs them — most often a skill's SKILL.md or a file it
-// references, but it works for any file in the realm. ai-bot executes it
-// in-process: it mints a delegated, user-scoped realm token and fetches the
-// file over HTTP, so the bot can only read what the requesting human can
-// already read, and the content is always live (no Matrix snapshots, no host
-// round-trip).
+// On-demand file reading. The model calls `readRealmFile` to pull files'
+// contents only when it needs them — most often a skill's SKILL.md or the
+// references it lists, but it works for any file in the realm. One call reads
+// any number of files: each model turn that requests reads costs a full
+// round-trip (fulfillment + a fresh generation), so the tool takes a list and
+// the description pushes the model to batch everything it already knows it
+// needs. ai-bot executes it in-process: it mints a delegated, user-scoped
+// realm token and fetches each file over HTTP, so the bot can only read what
+// the requesting human can already read, and the content is always live (no
+// Matrix snapshots, no host round-trip).
 export const readRealmFileTool: Tool = {
   type: 'function',
   function: {
     name: READ_REALM_FILE_TOOL_NAME,
     description:
-      "Read a file from a realm on demand — e.g. a skill's SKILL.md, or a " +
-      "file it references. Use this to get a skill's full instructions, or a " +
-      'reference it cites, when you only have it listed.',
+      "Read files from a realm on demand — e.g. a skill's SKILL.md, or the " +
+      'reference files it lists. Reads all the given URLs at once, so when ' +
+      'you already know several files you need (a skill’s reference ' +
+      'list usually tells you), request them all in a single call rather ' +
+      'than a few at a time — every extra round of reads delays your answer.',
     parameters: {
       type: 'object',
       properties: {
-        realm: {
-          type: 'string',
+        urls: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string' },
           description:
-            'Realm URL the file lives in, e.g. https://app.boxel.ai/user/jane/. ' +
-            'Scopes the read to that realm; the file must be inside it.',
-        },
-        url: {
-          type: 'string',
-          description:
-            'Full URL of the file to read. The realm and these URLs are given ' +
-            'to you together.',
+            'Full URLs of the files to read, each exactly as it appears in ' +
+            "the skill (a link there is already absolute — don't shorten " +
+            'or rewrite it). The realm each file lives in is worked out ' +
+            'for you.',
         },
       },
-      required: ['realm', 'url'],
+      required: ['urls'],
     },
   },
 };
 
 export interface ReadRealmFileArgs {
-  // Realm root the read is scoped to (what the delegated token is minted for).
-  realm: string;
-  // Full URL of the file to read; must be inside `realm`.
-  url: string;
+  // Full URLs of the files to read. The realm each belongs to is discovered
+  // from the realm server's response, so the caller supplies only URLs.
+  urls: string[];
 }
+
+// Realm servers echo the owning realm's root on every response — success or
+// auth failure — via this header. Reading it lets us discover the realm from
+// the file URL alone, so a delegated token is minted for the right realm
+// without the model having to name it (and get it wrong).
+const REALM_URL_HEADER = 'x-boxel-realm-url';
 
 export type ReadRealmFileResult =
   | { ok: true; url: string; content: string }
   | { ok: false; error: string };
 
-// Executes a readRealmFile tool call inside the bot process: mints a delegated,
-// read-only token for `onBehalfOf` scoped to `realm`, then GETs the file as raw
-// source. Never throws — returns a result the caller hands back to the model as
-// the tool result, so a missing file or a permission failure becomes
+// Reads one of a readRealmFile call's files inside the bot process: GETs the
+// file as raw source, discovering the owning realm from the response so a
+// delegated, read-only token can be minted for `onBehalfOf` only when the
+// realm actually gates the file. A public file (e.g. anything in the skills
+// realm) is returned from the first unauthenticated fetch with no token at
+// all. Never throws — returns a result the caller hands back to the model as
+// part of the tool result, so a missing file or a permission failure becomes
 // information the model can act on rather than a crashed turn.
 export async function executeReadRealmFile(
-  args: ReadRealmFileArgs,
+  url: string,
   {
     onBehalfOf,
     delegatedUserRealmSessions,
@@ -79,23 +90,70 @@ export async function executeReadRealmFile(
     fetch?: typeof globalThis.fetch;
   },
 ): Promise<ReadRealmFileResult> {
-  let url = args.url;
+  // `redirect: 'manual'` keeps a stray redirect from being silently followed
+  // (it surfaces as a non-2xx instead). No Authorization on the first try:
+  // public files (the skills realm) come back 200, and a gated file comes back
+  // 401/403 while still telling us its realm via the response header.
+  let get = async (token?: string): Promise<Response> =>
+    fetch(url, {
+      redirect: 'manual',
+      headers: {
+        Accept: SupportedMimeType.CardSource,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
 
-  // The delegated token is scoped to `realm`; a file outside it would be
-  // rejected by the realm server anyway, so fail clearly up front.
-  if (!url.startsWith(ensureTrailingSlash(args.realm))) {
-    return { ok: false, error: `${url} is not inside realm ${args.realm}` };
+  let response: Response;
+  try {
+    response = await get();
+  } catch (e: any) {
+    log.error(`readRealmFile: fetch failed for ${url}: ${e?.message ?? e}`);
+    return { ok: false, error: `could not fetch ${url}` };
   }
 
-  // One mint+fetch attempt. `redirect: 'manual'` keeps a stray redirect from
-  // being silently followed (it surfaces as a non-2xx instead).
-  let attempt = async (): Promise<{ response?: Response; error?: string }> => {
+  // Public read (or an already-authorized cache/CDN hit): done, no token.
+  if (response.ok) {
+    return { ok: true, url, content: await response.text() };
+  }
+
+  // Anything other than an auth challenge is a real failure (404, 302, …).
+  if (response.status !== 401 && response.status !== 403) {
+    return {
+      ok: false,
+      error: `could not load ${url} (HTTP ${response.status})`,
+    };
+  }
+
+  // Gated file: the realm server named the owning realm even on the 401/403.
+  let realmHeader = response.headers.get(REALM_URL_HEADER);
+  if (!realmHeader) {
+    return {
+      ok: false,
+      error: `could not determine which realm ${url} belongs to`,
+    };
+  }
+  let realm = ensureTrailingSlash(realmHeader);
+
+  // The header is only trustworthy as a claim about the responding host
+  // itself: the token minted below is sent with the retry to `url`, and the
+  // mint handshake goes to the realm's origin. Requiring the file to live
+  // inside the realm that claimed it keeps both on the origin that issued the
+  // challenge — otherwise a hostile host could name someone else's realm in
+  // the header and receive that realm's delegated token on the retry.
+  if (!url.startsWith(realm)) {
+    return {
+      ok: false,
+      error: `could not load ${url}: it does not belong to the realm that claimed it (${realm})`,
+    };
+  }
+
+  let authorized = async (): Promise<{
+    response?: Response;
+    error?: string;
+  }> => {
     let token: string;
     try {
-      token = await delegatedUserRealmSessions.getToken({
-        onBehalfOf,
-        realm: args.realm,
-      });
+      token = await delegatedUserRealmSessions.getToken({ onBehalfOf, realm });
     } catch (e: any) {
       if (e instanceof DelegatedUserRealmSessionError) {
         if (e.kind === 'disabled') {
@@ -105,54 +163,46 @@ export async function executeReadRealmFile(
           };
         }
         if (e.kind === 'forbidden') {
-          return { error: `no read access to ${args.realm}` };
+          return { error: `no read access to ${realm}` };
         }
       }
       log.error(
-        `readRealmFile: could not obtain a delegated token for ${args.realm}: ${
+        `readRealmFile: could not obtain a delegated token for ${realm}: ${
           e?.message ?? e
         }`,
       );
-      return { error: `could not obtain realm access for ${args.realm}` };
+      return { error: `could not obtain realm access for ${realm}` };
     }
     try {
-      return {
-        response: await fetch(url, {
-          redirect: 'manual',
-          headers: {
-            Accept: SupportedMimeType.CardSource,
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-      };
+      return { response: await get(token) };
     } catch (e: any) {
       log.error(`readRealmFile: fetch failed for ${url}: ${e?.message ?? e}`);
       return { error: `could not fetch ${url}` };
     }
   };
 
-  let { response, error } = await attempt();
+  let { response: authed, error } = await authorized();
   if (error) {
     return { ok: false, error };
   }
   // A cached token whose access was revoked inside its staleness window gets a
   // 401/403. Drop it and try once with a freshly minted token before failing.
-  if (response && (response.status === 401 || response.status === 403)) {
-    delegatedUserRealmSessions.invalidate({ onBehalfOf, realm: args.realm });
-    ({ response, error } = await attempt());
+  if (authed && (authed.status === 401 || authed.status === 403)) {
+    delegatedUserRealmSessions.invalidate({ onBehalfOf, realm });
+    ({ response: authed, error } = await authorized());
     if (error) {
       return { ok: false, error };
     }
   }
 
-  if (!response || !response.ok) {
+  if (!authed || !authed.ok) {
     return {
       ok: false,
-      error: `could not load ${url} (HTTP ${response?.status ?? 'unknown'})`,
+      error: `could not load ${url} (HTTP ${authed?.status ?? 'unknown'})`,
     };
   }
 
-  return { ok: true, url, content: await response.text() };
+  return { ok: true, url, content: await authed.text() };
 }
 
 export interface ClassifiedToolCalls {
@@ -202,4 +252,29 @@ export function fileLabelFromUrl(url: string | undefined): string | undefined {
   } catch {
     return url;
   }
+}
+
+// A readRealmFile call can batch many urls; cap how many we name in the
+// timeline label so the description (and the event payload it rides in) stays
+// bounded no matter how many files the model requests at once.
+const READ_FILES_LABEL_MAX = 5;
+
+// Build the human-readable timeline label ("Read file: <name>" /
+// "Read files: <names>") from a readRealmFile call's `urls` argument. Non-string
+// entries are dropped so a malformed argument never leaks into the label.
+export function readFilesLabel(urls: unknown): string {
+  let labels = (Array.isArray(urls) ? urls : [])
+    .filter((url): url is string => typeof url === 'string')
+    .map((url) => fileLabelFromUrl(url))
+    .filter((label): label is string => Boolean(label));
+  if (labels.length === 0) {
+    return 'Read files';
+  }
+  if (labels.length === 1) {
+    return `Read file: ${labels[0]}`;
+  }
+  let shown = labels.slice(0, READ_FILES_LABEL_MAX);
+  let remaining = labels.length - shown.length;
+  let suffix = remaining > 0 ? `, and ${remaining} more` : '';
+  return `Read files: ${shown.join(', ')}${suffix}`;
 }

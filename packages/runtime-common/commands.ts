@@ -5,8 +5,8 @@ import {
 } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDefConstructor } from '@cardstack/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai.ts';
 import { generateJsonSchemaForCardType } from './helpers/ai.ts';
 import { simpleHash } from './utils.ts';
@@ -16,7 +16,7 @@ import type { EncodedCommandRequest } from '../base/matrix-event.gts';
 // readRealmFile).
 export const AI_BOT_EXECUTOR = 'ai-bot';
 
-export interface CommandRequest {
+export interface ToolRequest {
   id: string;
   name: string;
   arguments: { [key: string]: any };
@@ -28,12 +28,12 @@ export interface CommandRequest {
   executedBy?: string;
 }
 
-export const CommandContextStamp = Symbol.for('CommandContext');
-export interface CommandContext {
-  [CommandContextStamp]: boolean;
+export const ToolContextStamp = Symbol.for('CommandContext');
+export interface ToolContext {
+  [ToolContextStamp]: boolean;
 }
 
-export interface CommandInvocation<CardResultType extends CardDefConstructor> {
+export interface ToolInvocation<CardResultType extends CardDefConstructor> {
   cardResult: CardInstance<CardResultType> | null;
   error: Error | null;
   status: 'pending' | 'success' | 'error';
@@ -46,7 +46,7 @@ export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
 export type CardInstance<T extends CardDefConstructor | undefined> =
   T extends CardDefConstructor ? InstanceType<T> : undefined;
 
-export abstract class Command<
+export abstract class Tool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > {
@@ -60,10 +60,17 @@ export abstract class Command<
   name: string = this.constructor.name;
   description = '';
 
-  protected readonly commandContext: CommandContext;
+  protected readonly toolContext: ToolContext;
 
-  constructor(commandContext: CommandContext) {
-    this.commandContext = commandContext;
+  constructor(toolContext: ToolContext) {
+    this.toolContext = toolContext;
+  }
+
+  // Pre-rename spelling of `toolContext`. Realm-content tool classes read
+  // `this.commandContext` inside run(); it stays until the content window
+  // confirms nothing does.
+  protected get commandContext(): ToolContext {
+    return this.toolContext;
   }
 
   async execute(): Promise<CardInstance<CardResultType>>;
@@ -123,6 +130,11 @@ export abstract class Command<
   }
 }
 
+// Pre-rename spelling of `Tool`. Realm content (user command modules) extends
+// this under the old name, so the alias stays for as long as such content
+// exists; new code extends `Tool`.
+export { Tool as Command };
+
 function friendlyModuleName(fullModuleUrl: string) {
   return fullModuleUrl
     .split('/')
@@ -130,12 +142,12 @@ function friendlyModuleName(fullModuleUrl: string) {
     .replace(/\.gts$/, '');
 }
 
-export function buildCommandFunctionName(
+export function buildToolFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
   // `functionName` is a recomputed `computeVia` field (never persisted), and
-  // `buildCommandFunctionName` is its only producer, so dropping the VN keeps
+  // `buildToolFunctionName` is its only producer, so dropping the VN keeps
   // every command name self-consistent.
   virtualNetwork?: VirtualNetwork,
 ) {
@@ -149,24 +161,57 @@ export function buildCommandFunctionName(
     virtualNetwork,
   ) as ResolvedCodeRef;
 
+  return buildToolFunctionNameFromResolvedRef(absoluteCodeRef);
+}
+
+// The host tool modules were published as `@cardstack/boxel-host/commands/*`
+// before the command → tool rename; both spellings resolve to the same
+// modules. functionNames are minted by hashing `module#name`, so the hash
+// input canonicalizes the tool-named spelling back to the pre-rename one —
+// HASH INPUT ONLY, never resolution. This keeps every functionName ever
+// minted byte-identical across the rename: definitions persisted in room
+// state, names referenced in matrix history, and refs authored under either
+// spelling all agree without any re-upload or migration. Tools that never
+// had a pre-rename spelling also hash through this mapping, which is
+// harmless — the mapped string is just a stable seed.
+const HOST_TOOLS_MODULE_PREFIX = '@cardstack/boxel-host/tools/';
+const HOST_COMMANDS_MODULE_PREFIX = '@cardstack/boxel-host/commands/';
+
+export function moduleForFunctionNameHash(module: string): string {
+  if (module.startsWith(HOST_TOOLS_MODULE_PREFIX)) {
+    return `${HOST_COMMANDS_MODULE_PREFIX}${module.slice(
+      HOST_TOOLS_MODULE_PREFIX.length,
+    )}`;
+  }
+  return module;
+}
+
+// The name-construction half of buildToolFunctionName, for callers that
+// already hold an absolute code ref (registered package prefixes resolve
+// verbatim, so e.g. ai-bot can produce identical names without a
+// VirtualNetwork).
+export function buildToolFunctionNameFromResolvedRef(ref: {
+  module: string;
+  name: string;
+}): string {
+  if (!ref?.module || !ref?.name) {
+    return '';
+  }
   const hashed = simpleHash(
-    `${absoluteCodeRef.module}#${absoluteCodeRef.name}`,
+    `${moduleForFunctionNameHash(ref.module)}#${ref.name}`,
   );
-  let name =
-    absoluteCodeRef.name === 'default'
-      ? friendlyModuleName(absoluteCodeRef.module)
-      : absoluteCodeRef.name;
+  let name = ref.name === 'default' ? friendlyModuleName(ref.module) : ref.name;
   return `${name}_${hashed.slice(0, 4)}`;
 }
 
-export function decodeCommandRequest(
+export function decodeToolRequest(
   commandRequest: Partial<EncodedCommandRequest>,
-): Partial<CommandRequest> {
+): Partial<ToolRequest> {
   if (typeof commandRequest.arguments === 'object') {
     // backwards compatibility for older format
-    return commandRequest as Partial<CommandRequest>;
+    return commandRequest as Partial<ToolRequest>;
   }
-  let decodedCommandRequest: Partial<CommandRequest> = {};
+  let decodedCommandRequest: Partial<ToolRequest> = {};
   if (commandRequest.id) {
     decodedCommandRequest.id = commandRequest.id;
   }
@@ -191,7 +236,7 @@ export function decodeCommandRequest(
 }
 
 export function encodeCommandRequest(
-  commandRequest: Partial<CommandRequest>,
+  commandRequest: Partial<ToolRequest>,
 ): Partial<EncodedCommandRequest> {
   if (typeof commandRequest.arguments === 'string') {
     // backwards compatibility for older format
@@ -213,8 +258,22 @@ export function encodeCommandRequest(
   return encodedCommandRequest;
 }
 
-export function encodeCommandRequests(
-  commandRequests: Partial<CommandRequest>[],
+export function encodeToolRequests(
+  commandRequests: Partial<ToolRequest>[],
 ): Partial<EncodedCommandRequest>[] {
   return commandRequests.map(encodeCommandRequest);
 }
+
+// Pre-rename spelling; new code imports `ToolRequest`.
+export type CommandRequest = ToolRequest;
+
+// Pre-rename spellings. Realm content and out-of-tree code import these;
+// they stay until the content window (CS-12042) confirms nothing does.
+export type CommandContext = ToolContext;
+export type CommandInvocation<T extends CardDefConstructor> = ToolInvocation<T>;
+export const CommandContextStamp = ToolContextStamp;
+export const decodeCommandRequest = decodeToolRequest;
+export const encodeCommandRequests = encodeToolRequests;
+export const buildCommandFunctionName = buildToolFunctionName;
+export const buildCommandFunctionNameFromResolvedRef =
+  buildToolFunctionNameFromResolvedRef;

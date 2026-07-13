@@ -21,8 +21,8 @@ const SOURCE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TouchCheck extends CardDef {
   static displayName = 'Touch Check';
@@ -36,8 +36,8 @@ const SOURCE_GTS_WITH_MARKER_IN_STRING = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class MarkerInString extends CardDef {
   static displayName = 'Marker In String';

@@ -3,6 +3,7 @@ import {
   type PrerenderTypes,
   type RenderError,
   type RenderResponse,
+  type RenderTimeoutDiagnostics,
   type ModuleRenderResponse,
   type FileExtractResponse,
   type FileRenderResponse,
@@ -766,9 +767,15 @@ export class RenderRunner {
     let runIndexSteps = visitType !== 'prerender-html';
     let runHtmlSteps = visitType !== 'index';
     let requested = {
-      // The extract belongs to the index half; a prerender-html visit never
-      // runs it even when the flag rides along on shared render options.
-      fileExtract: Boolean(renderOptions?.fileExtract) && runIndexSteps,
+      // The extract belongs to the index half. A standalone 'prerender-html'
+      // visit still runs it when its fileRender pass wasn't handed
+      // `fileData` — that is what makes the visit self-sufficient: it
+      // resolves the file's resource + types from source instead of
+      // chaining off a prior index visit's outputs.
+      fileExtract:
+        Boolean(renderOptions?.fileExtract) &&
+        (runIndexSteps ||
+          (Boolean(renderOptions?.fileRender) && fileData == null)),
       cardRender: Boolean(renderOptions?.cardRender),
       fileRender: Boolean(renderOptions?.fileRender),
     };
@@ -806,6 +813,25 @@ export class RenderRunner {
     let response: RenderVisitResponse = {};
     let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
     let didStashFileRenderData = false;
+    // Per-format wall-clock of the html-route steps, recorded directly onto
+    // `response.meta.diagnostics.renderFormatsMs` as each step completes so
+    // every return path — including the early short-circuits — carries
+    // whatever formats had run by then. A step that errors still records:
+    // its time-to-failure is exactly what a triage of `renderElapsedMs`
+    // wants to see. `decorateRenderErrorsWithTimings` merges its own timing
+    // fields around this block without disturbing it.
+    let recordFormatMs = (
+      rendering: 'card' | 'file',
+      format: string,
+      ms: number,
+    ) => {
+      let meta = (response.meta ??= {});
+      let diagnostics = (meta.diagnostics ??= {});
+      let renderFormatsMs: NonNullable<
+        RenderTimeoutDiagnostics['renderFormatsMs']
+      > = (diagnostics.renderFormatsMs ??= {});
+      (renderFormatsMs[rendering] ??= {})[format] = ms;
+    };
 
     try {
       // Page acquired but untouched — tag as 'queued'. The between-pass
@@ -1074,10 +1100,12 @@ export class RenderRunner {
         let runTimedStep = async <T>(
           step: string,
           fn: () => Promise<T | RenderError>,
+          format?: string,
         ): Promise<T | undefined> => {
           if (cardShortCircuit) {
             return;
           }
+          let stepStart = Date.now();
           let stepResult = await this.#step(affinityKey, step, () =>
             withTimeout(
               page,
@@ -1086,6 +1114,9 @@ export class RenderRunner {
               this.#profileContext(affinityKey, url, step, jobId),
             ),
           );
+          if (format) {
+            recordFormatMs('card', format, Date.now() - stepStart);
+          }
           if (stepResult.ok) {
             return stepResult.value as T;
           }
@@ -1094,6 +1125,7 @@ export class RenderRunner {
         };
 
         if (runHtmlSteps) {
+          let isolatedStart = Date.now();
           let isolatedResult = await withTimeout(
             page,
             async () => {
@@ -1111,6 +1143,7 @@ export class RenderRunner {
             opts?.timeoutMs,
             this.#profileContext(affinityKey, url, 'card isolated/0', jobId),
           );
+          recordFormatMs('card', 'isolated', Date.now() - isolatedStart);
           if (isRenderError(isolatedResult)) {
             cardShortCircuit = true;
             let renderError = isolatedResult as RenderError;
@@ -1181,13 +1214,21 @@ export class RenderRunner {
         let markdown: string | null = null;
 
         if (!cardShortCircuit && runHtmlSteps) {
-          const formatSteps = [
+          const formatSteps: Array<{
+            name: string;
+            cb: () => Promise<string | RenderError>;
+            assign: (v: string) => void;
+            // html-route format key for `renderFormatsMs`; the icon step is
+            // index-half work and records no format timing.
+            format?: string;
+          }> = [
             {
               name: 'visit card head render',
               cb: () => renderHTML(page, 'head', 0, captureOptions),
               assign: (v: string) => {
                 headHTML = v;
               },
+              format: 'head',
             },
             {
               name: 'visit card atom render',
@@ -1195,6 +1236,7 @@ export class RenderRunner {
               assign: (v: string) => {
                 atomHTML = v;
               },
+              format: 'atom',
             },
             // The icon belongs to the index half; the fused visit renders it
             // between atom and markdown.
@@ -1215,11 +1257,12 @@ export class RenderRunner {
               assign: (v: string) => {
                 markdown = v;
               },
+              format: 'markdown',
             },
           ];
           for (let step of formatSteps) {
             if (cardShortCircuit) break;
-            let v = await runTimedStep<string>(step.name, step.cb);
+            let v = await runTimedStep<string>(step.name, step.cb, step.format);
             if (v !== undefined) step.assign(v);
           }
         }
@@ -1258,6 +1301,7 @@ export class RenderRunner {
               assign: (v: Record<string, string>) => {
                 fittedHTML = v;
               },
+              format: 'fitted',
             },
             {
               name: 'visit card embedded render',
@@ -1271,6 +1315,7 @@ export class RenderRunner {
               assign: (v: Record<string, string>) => {
                 embeddedHTML = v;
               },
+              format: 'embedded',
             },
           ];
           for (let step of ancestorSteps) {
@@ -1278,6 +1323,7 @@ export class RenderRunner {
             let v = await runTimedStep<Record<string, string>>(
               step.name,
               step.cb,
+              step.format,
             );
             if (v !== undefined) step.assign(v);
           }
@@ -1404,6 +1450,7 @@ export class RenderRunner {
           };
 
           if (runHtmlSteps) {
+            let isolatedStart = Date.now();
             let isolatedResult = await withTimeout(
               page,
               async () => {
@@ -1421,6 +1468,7 @@ export class RenderRunner {
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, 'file isolated/0', jobId),
             );
+            recordFormatMs('file', 'isolated', Date.now() - isolatedStart);
             if (isRenderError(isolatedResult)) {
               let renderError = isolatedResult as RenderError;
               let evicted = await this.#maybeEvict(
@@ -1478,6 +1526,7 @@ export class RenderRunner {
           }
 
           if (!fileShortCircuit && runHtmlSteps) {
+            let headStart = Date.now();
             let headHTMLResult = await this.#step(
               affinityKey,
               'visit file head render',
@@ -1489,6 +1538,7 @@ export class RenderRunner {
                   this.#profileContext(affinityKey, url, 'file head/0', jobId),
                 ),
             );
+            recordFormatMs('file', 'head', Date.now() - headStart);
             if (headHTMLResult.ok) {
               headHTML = headHTMLResult.value as string;
             } else {
@@ -1501,6 +1551,9 @@ export class RenderRunner {
               name: string;
               cb: () => Promise<string | Record<string, string> | RenderError>;
               assign: (value: string | Record<string, string>) => void;
+              // html-route format key for `renderFormatsMs`; the icon step
+              // is index-half work and records no format timing.
+              format?: string;
             }> = [];
 
             if (effectiveTypes && effectiveTypes.length > 0) {
@@ -1517,6 +1570,7 @@ export class RenderRunner {
                   assign: (v) => {
                     fittedHTML = v as Record<string, string>;
                   },
+                  format: 'fitted',
                 },
                 {
                   name: 'visit file embedded render',
@@ -1530,6 +1584,7 @@ export class RenderRunner {
                   assign: (v) => {
                     embeddedHTML = v as Record<string, string>;
                   },
+                  format: 'embedded',
                 },
               );
             }
@@ -1540,6 +1595,7 @@ export class RenderRunner {
               assign: (v) => {
                 atomHTML = v as string;
               },
+              format: 'atom',
             });
             if (runIndexSteps) {
               // The icon belongs to the index half; the fused visit renders
@@ -1558,10 +1614,12 @@ export class RenderRunner {
               assign: (v) => {
                 markdown = v as string;
               },
+              format: 'markdown',
             });
 
             for (let step of steps) {
               if (fileShortCircuit) break;
+              let stepStart = Date.now();
               let res = await this.#step(affinityKey, step.name, () =>
                 withTimeout(
                   page,
@@ -1570,6 +1628,9 @@ export class RenderRunner {
                   this.#profileContext(affinityKey, url, step.name, jobId),
                 ),
               );
+              if (step.format) {
+                recordFormatMs('file', step.format, Date.now() - stepStart);
+              }
               if (res.ok) {
                 step.assign(res.value);
               } else {

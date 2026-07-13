@@ -5,16 +5,16 @@ import {
   setTitle,
   shouldSetRoomTitle,
 } from '../lib/set-title.ts';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { IEvent, IRoomEvent, IStateEvent } from 'matrix-js-sdk';
@@ -383,7 +383,7 @@ module('shouldSetRoomTitle', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               name: 'patchCardInstance',
               id: 'patchCardInstance-1',
@@ -405,14 +405,14 @@ module('shouldSetRoomTitle', () => {
 
   test('Set a title if the user applied a command', () => {
     let patchCommandResultEvent: Partial<IEvent> = {
-      type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       content: {
         'm.relates_to': {
           event_id: '1',
           key: 'applied',
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
       },
     };
     const eventLog: IRoomEvent[] = [
@@ -440,7 +440,7 @@ module('shouldSetRoomTitle', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'patching card',
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               name: 'patchCardInstance',
               id: 'patchCardInstance-1',
@@ -557,7 +557,7 @@ module('getLatestResultMessage', (hooks) => {
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: commandRequestId,
               name: 'testCommand',
@@ -584,14 +584,14 @@ module('getLatestResultMessage', (hooks) => {
     );
 
     // Create a command result event that references the command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
     } as unknown as MatrixEvent;
@@ -600,7 +600,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Verify the function returns the expected message
@@ -631,7 +631,7 @@ module('getLatestResultMessage', (hooks) => {
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'non-matching-id',
               name: 'testCommand',
@@ -649,14 +649,14 @@ module('getLatestResultMessage', (hooks) => {
     ];
 
     // Create a command result event that references a non-existent command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: 'test-event-id',
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: 'missing-id', // ID that doesn't exist in the command requests
       }),
     } as unknown as MatrixEvent;
@@ -665,7 +665,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Function should gracefully handle the missing command request and return an empty array
@@ -696,7 +696,7 @@ module('getLatestResultMessage', (hooks) => {
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'first-command',
               name: 'firstCommand',
@@ -724,14 +724,14 @@ module('getLatestResultMessage', (hooks) => {
     ];
 
     // Create a command result event that references the second command request
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
     } as unknown as MatrixEvent;
@@ -740,7 +740,7 @@ module('getLatestResultMessage', (hooks) => {
     const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
 
     // Verify the function returns the expected message based on the correct command
@@ -801,7 +801,7 @@ module('setTitle', () => {
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: commandRequestId,
               name: 'patchCardInstance',
@@ -847,14 +847,14 @@ module('setTitle', () => {
     ];
 
     // Create command result event
-    const commandResultEvent = {
+    const toolResultEvent = {
       getContent: () => ({
         'm.relates_to': {
           event_id: testEventId,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           key: 'applied',
         },
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
     } as unknown as MatrixEvent;
@@ -866,7 +866,7 @@ module('setTitle', () => {
       'test-room-id',
       history,
       '@aibot:localhost',
-      commandResultEvent,
+      toolResultEvent,
     );
     // The assertions are inside the mock matrixClient.setRoomName function
   });

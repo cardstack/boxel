@@ -77,17 +77,15 @@ import {
   type CardResource,
   type SearchEntryResults,
   type SearchEntryWireQuery,
+  type EntrySingleDocument,
+  isEntrySingleDocument,
+  type PrerenderedHtmlFormat,
+  type ResolvedCodeRef,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
@@ -110,7 +108,6 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
-import type CommandService from './command-service';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -121,7 +118,12 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type ToolService from './tool-service';
 import type { SearchResource } from '../resources/search';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -217,7 +219,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
@@ -537,23 +539,23 @@ export default class StoreService extends Service implements StoreInterface {
   // error document ("what query fields were still pending").
   trackQueryLoad(
     load: Promise<unknown>,
-    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+    meta: import('@cardstack/base/card-api').QueryLoadMeta,
   ): (() => void) | void {
     return (
       this.store as unknown as {
         trackQueryLoad?: (
           l: Promise<unknown>,
-          m: import('https://cardstack.com/base/card-api').QueryLoadMeta,
+          m: import('@cardstack/base/card-api').QueryLoadMeta,
         ) => (() => void) | void;
       }
     ).trackQueryLoad?.(load, meta);
   }
 
-  queryLoadsInFlight(): import('https://cardstack.com/base/card-api').QueryLoadInfo[] {
+  queryLoadsInFlight(): import('@cardstack/base/card-api').QueryLoadInfo[] {
     return (
       (
         this.store as unknown as {
-          queryLoadsInFlight?: () => import('https://cardstack.com/base/card-api').QueryLoadInfo[];
+          queryLoadsInFlight?: () => import('@cardstack/base/card-api').QueryLoadInfo[];
         }
       ).queryLoadsInFlight?.() ?? []
     );
@@ -602,14 +604,14 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
   recentQueryLoads(): Array<{
-    meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+    meta: import('@cardstack/base/card-api').QueryLoadMeta;
     ms: number;
   }> {
     return (
       (
         this.store as unknown as {
           recentQueryLoads?: () => Array<{
-            meta: import('https://cardstack.com/base/card-api').QueryLoadMeta;
+            meta: import('@cardstack/base/card-api').QueryLoadMeta;
             ms: number;
           }>;
         }
@@ -1337,6 +1339,84 @@ export default class StoreService extends Service implements StoreInterface {
       );
     }
     return json;
+  }
+
+  // Conditional single-instance card+html GET: fetch one `entry` sourced by
+  // URL (the single-instance counterpart of `_search`), with the rendering
+  // selection spelled as query params and the client's held composite
+  // validator as `If-None-Match`. A `304` means the client's rendering is
+  // current; a `200` returns the fresh entry (with an `item` fallback when no
+  // rendering exists). The live-search selective refresh uses this to bring one
+  // member's HTML up to date without re-querying the whole search. Nothing is
+  // hydrated into the store.
+  async fetchCardEntry(
+    url: string,
+    opts: {
+      kind: StoreReadType;
+      format?: PrerenderedHtmlFormat;
+      renderType?: ResolvedCodeRef;
+      // `html` | `item` | `html,item`; omit for the default resolution (the
+      // selected rendering, falling back to `item` where none matched).
+      fields?: string;
+      ifNoneMatch?: string;
+    },
+  ): Promise<
+    { notModified: true } | { notModified: false; doc: EntrySingleDocument }
+  > {
+    let requestURL = new URL(url);
+    if (opts.format) {
+      requestURL.searchParams.set('format', opts.format);
+    }
+    if (opts.renderType) {
+      requestURL.searchParams.set(
+        'renderType',
+        `${opts.renderType.module}/${opts.renderType.name}`,
+      );
+    }
+    if (opts.fields) {
+      requestURL.searchParams.set('fields', opts.fields);
+    }
+    let headers: Record<string, string> = {
+      Accept:
+        opts.kind === 'file-meta'
+          ? SupportedMimeType.FileMetaHtml
+          : SupportedMimeType.CardHtml,
+      ...duringPrerenderHeaders(),
+      ...consumingRealmHeader(),
+      ...jobIdHeader(),
+      ...jobPriorityHeader(),
+      ...loggingCorrelationIdHeader(),
+    };
+    if (opts.ifNoneMatch) {
+      headers['If-None-Match'] = opts.ifNoneMatch;
+    }
+    let response = await this.network.authedFetch(requestURL.href, {
+      method: 'GET',
+      headers,
+    });
+    if (response.status === 304) {
+      return { notModified: true };
+    }
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} - ${response.statusText}. ${responseText}`,
+      ) as any;
+      err.status = response.status;
+      err.responseText = responseText;
+      err.responseHeaders = response.headers;
+      throw err;
+    }
+    // The response content-type is the negotiated `application/vnd.card+html`
+    // (not `+json`), but the body is a JSON:API document — parse the text.
+    let json = JSON.parse(await response.text());
+    if (!isEntrySingleDocument(json)) {
+      throw new Error(
+        `The card+html response was not a valid entry single document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    return { notModified: false, doc: json };
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(
@@ -2240,6 +2320,13 @@ export default class StoreService extends Service implements StoreInterface {
         },
       );
       this.setIdentityContext(fileInstance as unknown as FileDef, 'file-meta');
+      // The realm may serve the doc id in canonical prefix form (e.g.
+      // `@cardstack/skills/...`) while the caller asked by URL. Register the
+      // requested id as an alias — mirroring the card path — so later lookups
+      // by either form find this instance instead of silently missing.
+      if (fileMetaDoc.data.id && fileMetaDoc.data.id !== id) {
+        this.store.setFileMeta(id, fileInstance as unknown as FileDef);
+      }
       deferred.fulfill(fileInstance as T);
       return fileInstance as T;
     } catch (error: any) {

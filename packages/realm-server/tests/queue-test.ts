@@ -108,6 +108,50 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(queueTests, assert, { runner, publisher });
     });
 
+    test('a runner only claims job types it has a handler for', async function (assert) {
+      // A worker that claimed a type it can't run would finalize the job as
+      // rejected, permanently discarding work that a differently-configured
+      // worker (e.g. a newer version mid rolling-deploy) could have
+      // completed — so the claim query must skip unregistered types.
+      runner.register('known-job', async (arg: number) => arg);
+
+      let unknownJob = await publisher.publish<number>({
+        jobType: 'job-with-no-handler-here',
+        concurrencyGroup: 'handler-filter-group',
+        timeout: 30,
+        args: 1,
+      });
+      let knownJob = await publisher.publish<number>({
+        jobType: 'known-job',
+        concurrencyGroup: 'handler-filter-group-2',
+        timeout: 30,
+        args: 7,
+      });
+
+      // the unknown job is older, so by the time the worker has polled past
+      // it and completed the known job, it has decided to leave the unknown
+      // job alone
+      assert.strictEqual(await knownJob.done, 7, 'registered job type runs');
+
+      let rows = (await adapter.execute(
+        `SELECT status,
+           (SELECT COUNT(*)::int FROM job_reservations r
+             WHERE r.job_id = jobs.id) AS reservation_count
+         FROM jobs WHERE id = $1`,
+        { bind: [unknownJob.id] },
+      )) as { status: string; reservation_count: number }[];
+      assert.strictEqual(
+        rows[0].status,
+        'unfulfilled',
+        'job with no local handler stays pending for a capable worker',
+      );
+      assert.strictEqual(
+        rows[0].reservation_count,
+        0,
+        'job with no local handler is never reserved',
+      );
+    });
+
     test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {
       await runner.destroy();
 

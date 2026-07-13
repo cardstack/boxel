@@ -14,6 +14,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -60,7 +61,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               },
             },
           },
-          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          'home.gts': `import { Component, CardDef } from '@cardstack/base/card-api';
                       export class Home extends CardDef {
                         static isolated = class Isolated extends Component<typeof this> {
                           <template>
@@ -73,8 +74,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                             field,
                             Component,
                             CardDef,
-                          } from 'https://cardstack.com/base/card-api';
-                          import StringField from 'https://cardstack.com/base/string';
+                          } from '@cardstack/base/card-api';
+                          import StringField from '@cardstack/base/string';
 
                           export class Person extends CardDef {
                             static displayName = 'Person';
@@ -105,7 +106,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
           },
           'isolated-card.gts': `
-              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+              import { Component, CardDef } from '@cardstack/base/card-api';
 
               export class IsolatedCard extends CardDef {
                 static isolated = class Isolated extends Component<typeof this> {
@@ -129,7 +130,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           },
 
           'dollar-sign-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class DollarSignCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -154,7 +155,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           },
 
           'head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class HeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -185,7 +186,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           },
 
           'unsafe-head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -220,7 +221,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           },
 
           'scoped-css-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class ScopedCssCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -255,7 +256,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           // can only be found by iterating over serialized.included resources.
 
           'linked-css-base.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class LinkedCssBase extends CardDef {
               static embedded = class Embedded extends Component<typeof this> {
@@ -267,7 +268,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             `,
 
           'linked-css-child.gts': `
-            import { Component } from 'https://cardstack.com/base/card-api';
+            import { Component } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssChild extends LinkedCssBase {
@@ -295,7 +296,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             `,
 
           'linked-css-parent.gts': `
-            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef, field, linksTo } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssParent extends CardDef {
@@ -894,11 +895,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to be indexed (head_html populated, even if empty string).
+        // Wait for the card's rendering to land (head_html populated, even
+        // if empty string) — it arrives on the prerendered_html channel via
+        // the fire-and-forget prerender_html job.
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -998,7 +1001,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-brand-guide-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -1556,6 +1559,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
             );
           }
+          // Readiness drains the index channel only; head HTML lands via the
+          // realm's prerender_html job, so settle that channel before the
+          // assertions read it.
+          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
           await closeServer(testRealmHttpServer);

@@ -7,11 +7,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, skip } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -20,8 +19,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   testRealmURL,
@@ -33,6 +30,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 
 class MockRouterService extends Service {
   replaceWith(_route: any, _args: any) {
@@ -66,7 +65,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {
@@ -193,12 +192,12 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     );
 
     // Remove catalog app card dependency for now since we don't have catalog in tests
-    const moduleCode = `import { Component, CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';\nimport StringField from 'https://cardstack.com/base/string';\nimport BooleanField from 'https://cardstack.com/base/boolean';\nimport DateField from 'https://cardstack.com/base/date';\nimport DateTimeField from 'https://cardstack.com/base/datetime';\nimport NumberField from 'https://cardstack.com/base/number';\nimport MarkdownField from 'https://cardstack.com/base/markdown';\n\nexport class Tour extends CardDef {\n  static displayName = 'Tour';\n\n  @field tourID = contains(StringField);\n  @field date = contains(DateField);\n  @field time = contains(DateTimeField);\n  @field parentNames = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field notes = contains(MarkdownField);\n\n  @field parents = linksToMany(() => Parent);\n}\n\nexport class Student extends CardDef {\n  static displayName = 'Student';\n\n  @field studentID = contains(StringField);\n  @field name = contains(StringField);\n  @field age = contains(NumberField);\n  @field enrollmentDate = contains(DateField);\n  @field parentInformation = contains(MarkdownField);\n  @field allergiesMedicalNotes = contains(MarkdownField);\n  @field attendanceRecords = containsMany(MarkdownField);\n  \n  @field parents = linksToMany(() => Parent);\n  @field classes = linksToMany(() => Class);\n}\n\nexport class Parent extends CardDef {\n  static displayName = 'Parent';\n\n  @field parentID = contains(StringField);\n  @field name = contains(StringField);\n  @field contactInformation = contains(StringField);\n  \n  @field students = linksToMany(Student);\n  @field tours = linksToMany(Tour);\n}\n\nexport class Staff extends CardDef {\n  static displayName = 'Staff';\n\n  @field staffID = contains(StringField);\n  @field name = contains(StringField);\n  @field role = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field schedule = contains(MarkdownField);\n}\n\nexport class Class extends CardDef {\n  static displayName = 'Class';\n\n  @field classID = contains(StringField);\n  @field name = contains(StringField);\n  @field schedule = contains(MarkdownField);\n  \n  @field instructor = linksTo(Staff);\n  @field enrolledStudents = linksToMany(Student);\n}\n\nexport class Communication extends CardDef {\n  static displayName = 'Communication';\n\n  @field communicationID = contains(StringField);\n  @field date = contains(DateField);\n  @field type = contains(StringField);\n  @field content = contains(MarkdownField);\n  @field followUpDate = contains(DateField);\n}\n\nexport class PreschoolCRMApp extends CardDef {\n  static displayName = 'Preschool CRM';\n\n  @field tours = containsMany(Tour);\n  @field students = containsMany(Student);\n  @field parents = containsMany(Parent);\n  @field staff = containsMany(Staff);\n  @field classes = containsMany(Class);\n  @field communications = containsMany(Communication);\n}\n`;
+    const moduleCode = `import { Component, CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from '@cardstack/base/card-api';\nimport StringField from '@cardstack/base/string';\nimport BooleanField from '@cardstack/base/boolean';\nimport DateField from '@cardstack/base/date';\nimport DateTimeField from '@cardstack/base/datetime';\nimport NumberField from '@cardstack/base/number';\nimport MarkdownField from '@cardstack/base/markdown';\n\nexport class Tour extends CardDef {\n  static displayName = 'Tour';\n\n  @field tourID = contains(StringField);\n  @field date = contains(DateField);\n  @field time = contains(DateTimeField);\n  @field parentNames = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field notes = contains(MarkdownField);\n\n  @field parents = linksToMany(() => Parent);\n}\n\nexport class Student extends CardDef {\n  static displayName = 'Student';\n\n  @field studentID = contains(StringField);\n  @field name = contains(StringField);\n  @field age = contains(NumberField);\n  @field enrollmentDate = contains(DateField);\n  @field parentInformation = contains(MarkdownField);\n  @field allergiesMedicalNotes = contains(MarkdownField);\n  @field attendanceRecords = containsMany(MarkdownField);\n  \n  @field parents = linksToMany(() => Parent);\n  @field classes = linksToMany(() => Class);\n}\n\nexport class Parent extends CardDef {\n  static displayName = 'Parent';\n\n  @field parentID = contains(StringField);\n  @field name = contains(StringField);\n  @field contactInformation = contains(StringField);\n  \n  @field students = linksToMany(Student);\n  @field tours = linksToMany(Tour);\n}\n\nexport class Staff extends CardDef {\n  static displayName = 'Staff';\n\n  @field staffID = contains(StringField);\n  @field name = contains(StringField);\n  @field role = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field schedule = contains(MarkdownField);\n}\n\nexport class Class extends CardDef {\n  static displayName = 'Class';\n\n  @field classID = contains(StringField);\n  @field name = contains(StringField);\n  @field schedule = contains(MarkdownField);\n  \n  @field instructor = linksTo(Staff);\n  @field enrolledStudents = linksToMany(Student);\n}\n\nexport class Communication extends CardDef {\n  static displayName = 'Communication';\n\n  @field communicationID = contains(StringField);\n  @field date = contains(DateField);\n  @field type = contains(StringField);\n  @field content = contains(MarkdownField);\n  @field followUpDate = contains(DateField);\n}\n\nexport class PreschoolCRMApp extends CardDef {\n  static displayName = 'Preschool CRM';\n\n  @field tours = containsMany(Tour);\n  @field students = containsMany(Student);\n  @field parents = containsMany(Parent);\n  @field staff = containsMany(Staff);\n  @field classes = containsMany(Class);\n  @field communications = containsMany(Communication);\n}\n`;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Generate code for Preschool CRM based on product requirement document.',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'generateAppModule',
           name: 'Generate App Module',
@@ -217,8 +216,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-command-apply="ready"]');
-    await click('[data-test-command-apply="ready"]');
+    await waitFor('[data-test-tool-call-apply="ready"]');
+    await click('[data-test-tool-call-apply="ready"]');
     assert.dom('[data-test-view-module]').exists();
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement

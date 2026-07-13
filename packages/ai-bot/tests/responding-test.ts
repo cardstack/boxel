@@ -5,10 +5,10 @@ import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -57,21 +57,21 @@ function chunkWithReasoning(
 }
 
 function snapshotWithToolCall(
-  commandRequest: Partial<CommandRequest>,
+  toolRequest: Partial<ToolRequest>,
 ): ChatCompletionSnapshot {
   let toolCall = {
     type: 'function',
   } as any;
-  if (commandRequest.arguments) {
+  if (toolRequest.arguments) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.arguments = JSON.stringify(commandRequest.arguments);
+    toolCall.function.arguments = JSON.stringify(toolRequest.arguments);
   }
-  if (commandRequest.name) {
+  if (toolRequest.name) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.name = commandRequest.name;
+    toolCall.function.name = toolRequest.name;
   }
-  if (commandRequest.id) {
-    toolCall.id = commandRequest.id;
+  if (toolRequest.id) {
+    toolCall.id = toolRequest.id;
   }
   return {
     choices: [
@@ -305,7 +305,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[1].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -391,7 +391,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           name: 'patchCardInstance',
@@ -401,7 +401,7 @@ module('Responding', (hooks) => {
       'Partial tool call event should be sent with correct content',
     );
     assert.deepEqual(
-      sentEvents[3].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[3].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -523,7 +523,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',
@@ -610,7 +610,7 @@ module('Responding', (hooks) => {
       'Thinking message, and event with content, and event with one tool call should be sent',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',

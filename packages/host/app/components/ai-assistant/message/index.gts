@@ -23,18 +23,18 @@ import {
 
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
 import Meta from './meta';
 import UserMessage from './user-message';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -75,7 +75,7 @@ interface Signature {
     waitAction?: () => void;
     hideMeta?: boolean;
     isCodePatchCorrectness?: boolean;
-    commands?: MessageCommand[];
+    commands?: MessageTool[];
   };
   Blocks: { default: [] };
 }
@@ -508,7 +508,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .ai-assistant-message.code-patch-correctness
         .content
-        > :deep(.room-message-command.compact + .room-message-command.compact) {
+        > :deep(.room-message-tool.compact + .room-message-tool.compact) {
         margin-top: 0;
       }
       :deep(pre) {

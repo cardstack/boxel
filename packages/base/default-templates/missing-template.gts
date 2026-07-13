@@ -7,7 +7,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { Button } from '@cardstack/boxel-ui/components';
 // @ts-ignore can't include this in tuntime-common tsconfig until we
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 
 export default class MissingTemplate extends GlimmerComponent<{
   Args: {
@@ -87,8 +87,8 @@ export default class MissingTemplate extends GlimmerComponent<{
       return;
     }
     let moduleId = moduleFrom(ref);
-    let commandContext = this.args.context?.commandContext;
-    await new SwitchSubmodeCommand(commandContext!).execute({
+    let toolContext = this.args.context?.toolContext;
+    await new SwitchSubmodeTool(toolContext!).execute({
       codePath: moduleId,
       submode: 'code',
     });

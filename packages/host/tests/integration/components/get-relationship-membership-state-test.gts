@@ -5,17 +5,11 @@ import { module, test } from 'qunit';
 
 import {
   PermissionsContextName,
-  baseRealm,
   localId,
   type Permissions,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type {
-  RelationshipState as RelationshipStateType,
-  RelationshipStatus as RelationshipStatusType,
-} from 'https://cardstack.com/base/card-api';
 
 import {
   provideConsumeContext,
@@ -39,6 +33,11 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  RelationshipState as RelationshipStateType,
+  RelationshipStatus as RelationshipStatusType,
+} from '@cardstack/base/card-api';
 
 type RelationshipState = RelationshipStateType;
 type NotLoadedSentinel = { type: 'not-loaded'; reference: string };
@@ -116,7 +115,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   module('singular linksTo', function () {

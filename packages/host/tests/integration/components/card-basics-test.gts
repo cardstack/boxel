@@ -25,7 +25,6 @@ import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   primitive,
   localId,
   getField,
@@ -35,11 +34,6 @@ import {
   rri,
   type CodeRef,
 } from '@cardstack/runtime-common';
-
-import type {
-  BaseDef,
-  SignatureFor,
-} from 'https://cardstack.com/base/card-api';
 
 import {
   cleanWhiteSpace,
@@ -95,6 +89,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { BaseDef, SignatureFor } from '@cardstack/base/card-api';
+
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
@@ -106,7 +102,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
+    return await loader.import('@cardstack/base/card-api');
   });
 
   module('cards are read-only', function (_hooks) {

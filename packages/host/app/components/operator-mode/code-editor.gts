@@ -34,7 +34,6 @@ import {
 } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
-import LintAndFixCommand from '@cardstack/host/commands/lint-and-fix';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import {
   isReady,
@@ -46,7 +45,6 @@ import type {
   ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type { SaveType } from '@cardstack/host/services/card-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -55,6 +53,8 @@ import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import LintAndFixTool from '@cardstack/host/tools/lint-and-fix';
 import { applyBoxelFormatting } from '@cardstack/host/utils/editor/boxel-formatter';
 
 import BinaryFileInfo from './binary-file-info';
@@ -83,7 +83,7 @@ export default class CodeEditor extends Component<Signature> {
   @service declare private environmentService: EnvironmentService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private store: StoreService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private network: NetworkService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -587,9 +587,7 @@ export default class CodeEditor extends Component<Signature> {
     this.updateFormatActionAvailability();
 
     try {
-      let lintCommand = new LintAndFixCommand(
-        this.commandService.commandContext,
-      );
+      let lintCommand = new LintAndFixTool(this.toolService.toolContext);
       await applyBoxelFormatting({
         lintAndFix: (input) => lintCommand.execute(input),
         realm: readyFile.realmURL,

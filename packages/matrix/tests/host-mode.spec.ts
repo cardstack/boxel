@@ -101,7 +101,7 @@ async function createAndPublishHostModeRealm(
     realmURL,
     'host-mode-isolated-card.gts',
     `
-      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { CardDef, Component } from '@cardstack/base/card-api';
 
       export class HostModeIsolatedCard extends CardDef {
         static isolated = class Isolated extends Component<typeof this> {
@@ -118,7 +118,7 @@ async function createAndPublishHostModeRealm(
     realmURL,
     'white-paper-card.gts',
     `
-      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { CardDef, Component } from '@cardstack/base/card-api';
 
       export class WhitePaperCard extends CardDef {
         static prefersWideFormat = true;
@@ -202,7 +202,7 @@ async function createAndPublishHostModeRealm(
     realmURL,
     'card-with-head-title.gts',
     `
-      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { CardDef, Component } from '@cardstack/base/card-api';
 
       export class CardWithHeadTitle extends CardDef {
         static displayName = 'Card With Head Title';

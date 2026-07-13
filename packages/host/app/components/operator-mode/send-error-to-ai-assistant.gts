@@ -6,14 +6,13 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
-import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
+import type ToolService from '../../services/tool-service';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Element: HTMLButtonElement;
@@ -63,7 +62,7 @@ function truncateForAi(s: string | undefined, max: number): string | undefined {
 export default class SendErrorToAIAssistant extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   private get errorMessage() {
     let { error, errorType } = this.args;
@@ -127,15 +126,15 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     return truncateForAi(assembled, AI_PROMPT_TOTAL_MAX_CHARS) ?? assembled;
   }
 
-  get commandContext() {
-    return this.commandService.commandContext;
+  get toolContext() {
+    return this.toolService.toolContext;
   }
 
   private sendToAiAssistant = restartableTask(async () => {
-    await new OpenAiAssistantRoomCommand(this.commandContext).execute({
+    await new OpenAiAssistantRoomTool(this.toolContext).execute({
       roomId: this.matrixService.currentRoomId,
     });
-    await new SendAiAssistantMessageCommand(this.commandContext).execute({
+    await new SendAiAssistantMessageTool(this.toolContext).execute({
       roomId: this.matrixService.currentRoomId,
       prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       attachedFileIdentifiers: this.args.fileToAttach

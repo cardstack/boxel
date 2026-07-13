@@ -52,14 +52,10 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
-import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { SpecType } from 'https://cardstack.com/base/spec';
+import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
 
 import { cleanseString } from '../../lib/utils';
 
@@ -72,9 +68,12 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 import CardErrorDetail from './card-error-detail';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -462,7 +461,7 @@ export default class CreateFileModal extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard<Spec>;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
@@ -929,8 +928,8 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let { newCardId } = await new CopyCardToRealmCommand(
-      this.commandService.commandContext,
+    let { newCardId } = await new CopyCardToRealmTool(
+      this.toolService.toolContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,

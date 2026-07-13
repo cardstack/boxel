@@ -10,6 +10,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(commandParsingTests, assert, {});
     });
 
+    test('parseBoxelHostCommandSpecifier parses the tools/ spelling as authored', async function (assert) {
+      await runSharedTest(commandParsingTests, assert, {});
+    });
+
     test('parseBoxelHostCommandSpecifier rejects unscoped command specifier', async function (assert) {
       await runSharedTest(commandParsingTests, assert, {});
     });

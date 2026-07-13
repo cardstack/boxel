@@ -41,7 +41,7 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -70,12 +70,6 @@ import {
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type {
-  CardContext,
-  CardCrudFunctions,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -93,6 +87,11 @@ import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+} from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
@@ -106,7 +105,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
-    commandContext: CommandContext;
+    toolContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (
@@ -671,7 +670,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
-        commandContext: this.args.commandContext,
+        toolContext: this.args.toolContext,
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],

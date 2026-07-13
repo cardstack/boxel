@@ -36,12 +36,11 @@ import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import formatComponentName from '../helpers/format-component-name';
 
-import type CommandService from '../services/command-service';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
+import type { CardContext } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 interface UsageComponent {
@@ -55,7 +54,7 @@ interface HostFreestyleSignature {
 
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   @service declare private store: StoreService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   formatComponentName = formatComponentName;
 
   @provide(GetCardContextName)
@@ -86,7 +85,8 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       getCards: this.store.getSearchResource.bind(this.store),
       getCardCollection,
       store: this.store,
-      commandContext: this.commandService.commandContext,
+      toolContext: this.toolService.toolContext,
+      commandContext: this.toolService.toolContext,
       searchResultsComponent: SearchResults,
     };
   }

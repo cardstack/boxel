@@ -8,27 +8,23 @@ import { tracked } from '@glimmer/tracking';
 
 import type {
   Command,
-  CommandContext,
+  ToolContext,
   CommandInvocation,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
-  CommandContextStamp,
+  ToolContextStamp,
   getClass,
   parseBoxelHostCommandSpecifier,
   rri,
 } from '@cardstack/runtime-common';
-
-import type {
-  CardDef,
-  CardDefConstructor,
-} from 'https://cardstack.com/base/card-api';
 
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type RealmService from '../services/realm';
+import type { CardDef, CardDefConstructor } from '@cardstack/base/card-api';
 
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 const commandRequestTtlMs = 5 * 60 * 1000;
@@ -45,7 +41,7 @@ type GenericCommand = Command<
   CardDefConstructor
 >;
 type GenericCommandConstructor = {
-  new (context: CommandContext): GenericCommand;
+  new (context: ToolContext): GenericCommand;
 };
 
 class CommandRunState implements CommandInvocation<CardDefConstructor> {
@@ -107,7 +103,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       params.nonce,
     );
     let command = parseCommandParam(request?.command);
-    let commandInput = parseCommandInputValue(request?.input);
+    let toolInput = parseCommandInputValue(request?.input);
 
     if (!command) {
       model.status = 'error';
@@ -115,14 +111,14 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       return model;
     }
 
-    void this.#runCommand(model, command, commandInput);
+    void this.#runCommand(model, command, toolInput);
     return model;
   }
 
-  get commandContext(): CommandContext {
+  get toolContext(): ToolContext {
     let result = {
-      [CommandContextStamp]: true,
-    } as CommandContext;
+      [ToolContextStamp]: true,
+    } as ToolContext;
     setOwner(result, getOwner(this)!);
     return result;
   }
@@ -130,23 +126,23 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   async #runCommand(
     model: CommandRunState,
     command: ResolvedCodeRef,
-    commandInput: Record<string, unknown> | undefined,
+    toolInput: Record<string, unknown> | undefined,
   ) {
     try {
-      let CommandConstructor = (await getClass(
+      let ToolConstructor = (await getClass(
         command,
         this.loaderService.loader,
       )) as GenericCommandConstructor | undefined;
-      if (!CommandConstructor) {
+      if (!ToolConstructor) {
         throw new Error('Command not found for provided CodeRef');
       }
 
-      let commandInstance = new CommandConstructor(this.commandContext);
+      let toolInstance = new ToolConstructor(this.toolContext);
       let resultCard: CardDef | undefined;
-      if (commandInput) {
-        resultCard = await commandInstance.execute(commandInput);
+      if (toolInput) {
+        resultCard = await toolInstance.execute(toolInput);
       } else {
-        resultCard = await commandInstance.execute();
+        resultCard = await toolInstance.execute();
       }
 
       model.cardResult = resultCard ?? null;

@@ -46,7 +46,6 @@ import {
   hasExtension,
 } from '@cardstack/runtime-common';
 
-import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
@@ -69,7 +68,6 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -81,18 +79,16 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import CreateSpecTool from '@cardstack/host/tools/create-specs';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type {
-  CardDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -130,7 +126,7 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -293,7 +289,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           return false;
         }
 
-        return this.commandService.getCodePatchStatus(codeData) === 'ready';
+        return this.toolService.getCodePatchStatus(codeData) === 'ready';
       });
     }
 
@@ -520,8 +516,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private createSpecTask = task(async (ref: ResolvedCodeRef) => {
     try {
-      const createSpecCommand = new CreateSpecCommand(
-        this.commandService.commandContext,
+      const createSpecCommand = new CreateSpecTool(
+        this.toolService.toolContext,
       );
       let currentRealm = this.operatorModeStateService.realmURL;
       const result = await createSpecCommand.execute({

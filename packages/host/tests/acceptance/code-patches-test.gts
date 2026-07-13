@@ -24,7 +24,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -54,8 +54,8 @@ import type { TestContextWithSave } from '../helpers';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
-import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
@@ -131,7 +131,7 @@ module('Acceptance | Code patches tests', function (hooks) {
                 commands: [
                   {
                     codeRef: {
-                      name: 'SearchCardsByTypeAndTitleCommand',
+                      name: 'SearchCardsByTypeAndTitleTool',
                       module: '@cardstack/boxel-host/commands/search-cards',
                     },
                     requiresApproval: true,
@@ -283,9 +283,11 @@ ${REPLACE_MARKER}\n\`\`\``;
       'updated file should be attached 2',
     );
 
-    let commandService = getService('command-service') as any;
-    let requestIdsByRoom =
-      commandService.aiAssistantClientRequestIdsByRoom as Map<string, any>;
+    let toolService = getService('tool-service') as any;
+    let requestIdsByRoom = toolService.aiAssistantClientRequestIdsByRoom as Map<
+      string,
+      any
+    >;
     let roomRequestIds = requestIdsByRoom?.get(roomId);
     assert.ok(
       roomRequestIds,
@@ -399,7 +401,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',
@@ -653,7 +655,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',
@@ -1726,7 +1728,7 @@ ${REPLACE_MARKER}
     });
 
     // Wait for the patches to be processed - the spinner should appear during automatic execution
-    // This test should FAIL until we implement the CommandService state tracking
+    // This test should FAIL until we implement the ToolService state tracking
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
       {

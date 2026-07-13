@@ -15,27 +15,26 @@ import perform from 'ember-concurrency/helpers/perform';
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
-import PublishRealmCommand from '@cardstack/host/commands/publish-realm';
-import UnpublishRealmCommand from '@cardstack/host/commands/unpublish-realm';
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import PublishRealmTool from '@cardstack/host/tools/publish-realm';
+import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
-
-import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
 
 import HostModeContent from '../host-mode/content';
 
 import SubmodeLayout from './submode-layout';
 
 import type { PublishError } from './publish-realm-modal';
+import type { ViewCardFn } from '@cardstack/base/card-api';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -47,7 +46,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
   @service declare private hostModeService: HostModeService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
@@ -101,7 +100,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     // Publish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path. The modal already enforces the
     // publishability gate, so force past the command's redundant re-check.
-    let command = new PublishRealmCommand(this.commandService.commandContext);
+    let command = new PublishRealmTool(this.toolService.toolContext);
     let result = await command.execute({
       realmURL: this.realmURL,
       publishedRealmURLs,
@@ -146,7 +145,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     // Unpublish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path.
-    let command = new UnpublishRealmCommand(this.commandService.commandContext);
+    let command = new UnpublishRealmTool(this.toolService.toolContext);
     await command.execute({ realmURL: this.realmURL, publishedRealmURL });
   });
 

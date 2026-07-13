@@ -1,18 +1,13 @@
 import { module, test } from 'qunit';
 
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import {
-  codeRefWithAbsoluteIdentifier,
-  rri,
-  VirtualNetwork,
-} from '@cardstack/runtime-common';
+import { codeRefWithAbsoluteIdentifier, rri } from '@cardstack/runtime-common';
 import {
   getValueForResourcePath,
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common/query-field-utils';
 
 module('normalizeQueryDefinition', function () {
-  let virtualNetwork = new VirtualNetwork();
   let fieldDefinition = {
     type: 'containsMany',
     isPrimitive: false,
@@ -49,7 +44,6 @@ module('normalizeQueryDefinition', function () {
       fieldPath: 'profile',
       resource,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -57,13 +51,71 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       new URL(resource.id!),
       undefined,
-      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'NYC' },
       on: targetRef,
     });
     assert.strictEqual(normalized?.realm, 'https://other.realm/');
+  });
+
+  test('resolves relative code refs in RRI space', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let resource: LooseCardResource = {
+      // A prefix-mapped realm's canonical instance id.
+      id: '@scope/realm/cards/1',
+      meta: {
+        adoptsFrom: {
+          module: rri('@scope/realm/base'),
+          name: 'BaseCard',
+        },
+      },
+      attributes: {},
+    };
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          // Relative module: must resolve against the prefix-form id.
+          module: rri('../test-defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(
+      normalized?.query.filter,
+      {
+        type: { module: rri('@scope/realm/test-defs'), name: 'Test' },
+      },
+      'relative module resolved against the prefix-form id, staying in RRI space',
+    );
+
+    // An already-absolute prefix module passes through unchanged.
+    let absolute = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          module: rri('@other/realm/defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+    assert.deepEqual(absolute?.query.filter, {
+      type: { module: rri('@other/realm/defs'), name: 'Test' },
+    });
   });
 
   test('injects on into leaf filter inside not', function (assert) {
@@ -73,7 +125,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -85,7 +136,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -101,7 +151,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -115,7 +164,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -134,7 +182,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -148,7 +195,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -167,7 +213,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -186,7 +231,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -210,7 +254,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
     let typeRef = {
       module: rri('https://example.com/other'),
@@ -228,7 +271,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -259,7 +301,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'testField',
       resolvePathValue: () => undefined,
       relativeTo,
-      virtualNetwork,
     });
 
     assert.ok(normalized, 'normalization succeeded');
@@ -267,7 +308,6 @@ module('normalizeQueryDefinition', function () {
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       any: [
@@ -291,14 +331,12 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'matchingItems',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
-      virtualNetwork,
     });
 
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       in: { color: ['red', 'blue', 'green'] },
@@ -320,7 +358,6 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'matchingItems',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
-      virtualNetwork,
     });
 
     assert.strictEqual(
@@ -344,14 +381,12 @@ module('normalizeQueryDefinition', function () {
       fieldName: 'favoriteCity',
       resolvePathValue: (path) => resolvePath(instance, path),
       relativeTo,
-      virtualNetwork,
     });
 
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
       undefined,
-      virtualNetwork,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'Paris' },

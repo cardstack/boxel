@@ -33,8 +33,6 @@ import type { SerializedState } from '@cardstack/host/services/operator-mode-sta
 
 import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   elementIsVisible,
   getMonacoContent,
@@ -62,6 +60,7 @@ import { assertRecentFileURLs } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {
@@ -1278,16 +1277,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}command-module.gts`,
     });
 
-    await waitFor('[data-test-command-panel-header]');
+    await waitFor('[data-test-tool-panel-header]');
     assert
-      .dom('[data-test-command-panel-header]')
-      .hasText('Command', 'renders command panel');
+      .dom('[data-test-tool-panel-header]')
+      .hasText('Tool', 'renders tool panel');
     assert
       .dom('[data-test-card-module-definition]')
-      .hasTextContaining('SampleCommand', 'shows command definition details');
+      .hasTextContaining('SampleCommand', 'shows tool definition details');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText('SampleCommand command', 'selector shows command type');
+      .hasText('SampleCommand tool', 'selector shows tool type');
   });
 
   test('shows component panel and Create Listing action for component declarations', async function (assert) {

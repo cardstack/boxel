@@ -13,7 +13,7 @@ export {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');
@@ -84,5 +84,21 @@ export function skillCardURL(skillId: string): string {
   return `@cardstack/skills/Skill/${skillId}`;
 }
 
+/**
+ * Constructs a universal @cardstack/skills/ reference to a `.md` skill file
+ * (`skills/<name>/SKILL.md`) — the markdown skill form, resolved as a
+ * `MarkdownDef` whose `boxel.kind: skill` frontmatter makes it a skill source.
+ *
+ * @example
+ * skillFileURL('source-code-editing')  // '@cardstack/skills/skills/source-code-editing/SKILL.md'
+ */
+export function skillFileURL(skillName: string): string {
+  return `@cardstack/skills/skills/${skillName}/SKILL.md`;
+}
+
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
 export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
+
+// The markdown-first source-code-editing skill, enabled directly in code
+// mode alongside the card defaults.
+export const sourceCodeEditingSkillUrl = `${skillsRealmURL}skills/source-code-editing/SKILL.md`;

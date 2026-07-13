@@ -47,11 +47,6 @@ import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type {
-  IndexRealmEventContent,
-  RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
 import {
   syncTokenToServiceWorker,
   syncAllTokensToServiceWorker,
@@ -64,6 +59,10 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type {
+  IndexRealmEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 const log = logger('service:realm');
 
@@ -708,7 +707,7 @@ class RealmResource {
       }
     } catch (error) {
       // Log for observability, then propagate so callers (e.g.
-      // UnpublishRealmCommand) can report the failure.
+      // UnpublishRealmTool) can report the failure.
       console.error(`Error unpublishing from URL ${url}:`, error);
       throw error;
     } finally {

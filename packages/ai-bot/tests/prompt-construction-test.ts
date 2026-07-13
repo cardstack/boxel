@@ -4,10 +4,10 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
@@ -16,16 +16,21 @@ import {
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
   CardMessageContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import fsExtra from 'fs-extra';
 const { readFileSync } = fsExtra;
 import * as path from 'path';
@@ -37,10 +42,14 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import {
+  absolutizeSkillLinks,
   buildPromptForModel,
   getPromptParts,
   getRelevantCards,
   getTools,
+  isMarkdownSkillFile,
+  parseMarkdownSkill,
+  skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -2603,7 +2612,7 @@ Attached Files (files with newer versions don't show their content):
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'tool-call-id-1',
               name: 'searchCardsByTypeAndTitle',
@@ -2628,16 +2637,16 @@ Attached Files (files with newer versions don't show their content):
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@tintinthong:localhost',
         content: {
           'm.relates_to': {
             event_id: 'command-event-id-1',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'tool-call-id-1',
           data: {
             card: {
@@ -2716,6 +2725,93 @@ Attached Files (files with newer versions don't show their content):
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal((result[5].content as string).trim(), expected.trim());
+  });
+
+  test('pairs a pre-rename request/result (legacy wire keys) with the same tool_call_id', async () => {
+    // A room whose history predates the command → tool rename replays events
+    // with the legacy spellings forever; prompt assembly must pair them
+    // exactly as it pairs new-keyed events.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          body: 'set the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242847000,
+        unsigned: { age: 1000, transaction_id: 't0' },
+        event_id: 'user-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Setting the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { functions: [] } },
+          [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'legacy-tool-call-id-1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                attributes: { description: 'Set the title' },
+              }),
+            },
+          ],
+        },
+        origin_server_ts: 1722242849000,
+        unsigned: { age: 900, transaction_id: 't1' },
+        event_id: 'legacy-command-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'legacy-command-event-id-1',
+            rel_type: LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'legacy-tool-call-id-1',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242853000,
+        unsigned: { age: 800, transaction_id: 't2' },
+        event_id: 'legacy-command-result-id-1',
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    let assistantMessage = result.find((m) => m.role === 'assistant');
+    assert.ok(
+      assistantMessage?.tool_calls?.some(
+        (tc) => tc.id === 'legacy-tool-call-id-1',
+      ),
+      'the legacy-keyed request surfaces as a tool call',
+    );
+    let toolMessage = result.find((m) => m.role === 'tool');
+    assert.equal(
+      (toolMessage as { tool_call_id?: string })?.tool_call_id,
+      'legacy-tool-call-id-1',
+      'the legacy-typed result pairs with the same tool_call_id',
+    );
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
@@ -3128,7 +3224,7 @@ Attached Files (files with newer versions don't show their content):
           id: 'http://localhost:4201/admin/custom-embedded/Skill/72d005b5-1a6b-4c6d-995f-2411c5948e74',
           attributes: {
             instructions:
-              'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+              'Use the tool SwitchSubmodeTool with "code" to go to codemode and "interact" to go to interact mode.',
             commands: [
               {
                 codeRef: {
@@ -3227,7 +3323,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(
       switchSubmodeTool,
-      'Should have SwitchSubmodeCommand function available',
+      'Should have SwitchSubmodeTool function available',
     );
   });
 
@@ -4102,7 +4198,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4158,17 +4254,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4256,7 +4352,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'cancelled-patch',
               name: 'patchFields',
@@ -4325,7 +4421,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4381,17 +4477,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4481,7 +4577,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'stale-command',
               name: 'patchFields',
@@ -4619,7 +4715,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: `check-${requestId}`,
               name: 'checkCorrectness',
@@ -4650,18 +4746,18 @@ new content
       errorText: string,
     ): DiscreteMatrixEvent {
       return {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: `command-result-${index}`,
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: index * 10 + 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: requestId,
           'm.relates_to': {
             event_id: relatesToId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4785,7 +4881,7 @@ new content
           body: 'First patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-first',
               name: 'checkCorrectness',
@@ -4812,18 +4908,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-1',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 2,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-first',
           'm.relates_to': {
             event_id: firstEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4857,7 +4953,7 @@ new content
           body: 'Second patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-second',
               name: 'checkCorrectness',
@@ -4884,18 +4980,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-2',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-second',
           'm.relates_to': {
             event_id: secondEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4993,7 +5089,7 @@ new
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-1',
               name: 'checkCorrectness',
@@ -5044,18 +5140,18 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '$command-result',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             context: {
@@ -5331,7 +5427,7 @@ new
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'patchCardInstance',
@@ -5352,14 +5448,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -6474,7 +6570,7 @@ new
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: {},
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'read-file-for-ai-assistant_a831',
@@ -6495,14 +6591,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -6608,13 +6704,13 @@ module('set model in prompt', (hooks) => {
     assert.strictEqual(reasoningEffort, 'minimal');
   });
 
-  // Regression coverage for CS-11045: the host's `commandResult` may carry an
+  // Regression coverage for CS-11045: the host's `toolResult` may carry an
   // `m.relates_to.event_id` that disagrees with the bot message's canonical
   // event_id (the matrix server normalizes the bot message's event_id to the
   // last m.replace's id, while the host captured the streaming/original id).
   // ai-bot must still pair the result with the bot message via the
   // commandRequestId.
-  test('CS-11045: getCommandResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
+  test('CS-11045: getToolResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
     const NEW_EVENT_ID = '$NEW-canonical-id';
     const OLD_EVENT_ID = '$OLD-streaming-id';
     const TOOL_CALL_ID = 'tool-call-T1';
@@ -6645,7 +6741,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6662,15 +6758,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: OLD_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6709,7 +6805,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6747,7 +6843,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6764,15 +6860,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: BOT_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6802,7 +6898,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6852,7 +6948,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_SWITCH_SUBMODE,
               name: 'switch-submode_dd88',
@@ -6869,15 +6965,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_SWITCH_SUBMODE,
           'm.relates_to': {
             event_id: BOT1_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6888,7 +6984,7 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       // Bot message #2: write-text-file tool_call. The host emits its
-      // commandResult with m.relates_to.event_id pointing to the streaming
+      // toolResult with m.relates_to.event_id pointing to the streaming
       // id, which is NOT this bot message's canonical event_id. ✗
       {
         type: 'm.room.message',
@@ -6900,7 +6996,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_WRITE_TEXT_FILE,
               name: 'write-text-file_e5a1',
@@ -6921,15 +7017,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_WRITE_TEXT_FILE,
           'm.relates_to': {
             event_id: BOT2_DRIFTED_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6955,7 +7051,7 @@ module('set model in prompt', (hooks) => {
             event_id: BOT2_EVENT_ID,
           },
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_CHECK_CORRECTNESS,
               name: 'checkCorrectness',
@@ -6979,15 +7075,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_CHECK_CORRECTNESS,
           'm.relates_to': {
             event_id: BOT3_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -7198,6 +7294,337 @@ module('fill missing capability fields from fallback constant', (hooks) => {
       toolsSupported,
       true,
       'no-event branch fills toolsSupported from the default row',
+    );
+  });
+});
+
+module('markdown skills', () => {
+  test('isMarkdownSkillFile detects .md/.markdown by sourceUrl', (assert) => {
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/skills/x/SKILL.md' } as any),
+    );
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/notes.markdown' } as any),
+    );
+    assert.false(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/Skill/boxel-dev' } as any),
+    );
+  });
+
+  test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
+    let content =
+      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
+    let { title, body, kind } = parseMarkdownSkill(content, {
+      sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'Source Code Editing');
+    assert.strictEqual(
+      body,
+      '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
+    );
+    assert.strictEqual(kind, 'skill');
+    assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');
+  });
+
+  test('parseMarkdownSkill reports no kind for plain markdown', (assert) => {
+    let { kind } = parseMarkdownSkill(
+      '---\nname: "Notes"\n---\nJust some notes.',
+      { sourceUrl: 'https://r/notes.md' } as any,
+    );
+    assert.strictEqual(kind, undefined);
+  });
+
+  test('parseMarkdownSkill falls back to the file name when no frontmatter', (assert) => {
+    let { title, body } = parseMarkdownSkill('Just instructions.', {
+      sourceUrl: 'https://r/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'SKILL.md');
+    assert.strictEqual(body, 'Just instructions.');
+  });
+});
+
+module('markdown skill tools', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
+  let originalFetch: any;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 500,
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
+  });
+
+  hooks.afterEach(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  const SKILL_MD = [
+    '---',
+    'name: "Boxel Environment"',
+    'description: "env"',
+    'boxel:',
+    '  kind: skill',
+    '  tools:',
+    '    - codeRef:',
+    '        module: "@cardstack/boxel-host/commands/switch-submode"',
+    '        name: "default"',
+    '      requiresApproval: false',
+    '---',
+    '',
+    'Use switch-submode to change modes.',
+  ].join('\n');
+
+  test('parseMarkdownSkill computes the same functionName the host derives', (assert) => {
+    let { tools: commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    assert.strictEqual(commands.length, 1);
+    // switch-submode_dd88 is the name the host's buildToolFunctionName
+    // produces for this code ref (registered prefixes resolve verbatim).
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+    assert.false(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill reads the pre-rename boxel.commands key', (assert) => {
+    let { tools: commands } = parseMarkdownSkill(
+      SKILL_MD.replace('  tools:', '  commands:'),
+      {
+        sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+      } as any,
+    );
+    assert.strictEqual(commands.length, 1);
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+  });
+
+  test('a command without requiresApproval defaults to approval required', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "@cardstack/boxel-host/commands/switch-submode"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.true(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill resolves relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "../../commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  test('parseMarkdownSkill resolves root-relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "/commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  // Builds the room-skills state event + enabled skill for the getTools
+  // tests; `definitionsKey` selects which spelling the state event uses for
+  // its uploaded definitions ('toolDefinitions', or the pre-rename
+  // 'commandDefinitions' that old rooms replay).
+  function skillsRoomFixture(definitionsKey: string) {
+    mockResponses.set('mxc://mock-server/switch-submode-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/switch-submode',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'Switch between interact and code submodes',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+
+    const eventList = [
+      {
+        type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        event_id: 'skills-1',
+        origin_server_ts: 1000,
+        state_key: '',
+        content: {
+          enabledSkillCards: [
+            {
+              sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+              url: 'mxc://mock-server/env-skill',
+              name: 'SKILL.md',
+              contentType: 'text/plain',
+            },
+          ],
+          disabledSkillCards: [],
+          [definitionsKey]: [
+            {
+              sourceUrl: 'https://realm/commands/switch-submode',
+              url: 'mxc://mock-server/switch-submode-def',
+              name: 'switch-submode_dd88',
+              contentType: 'text/plain',
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000 },
+        status: EventStatus.SENT,
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    // The card-shaped skill getEnabledSkills produces for this SKILL.md.
+    let { title, body, tools } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    const enabledSkills = [
+      {
+        id: 'https://realm/skills/boxel-environment/SKILL.md',
+        type: 'card',
+        attributes: { title, instructions: body, tools },
+      } as unknown as LooseCardResource,
+    ];
+    return { eventList, enabledSkills };
+  }
+
+  test('getTools offers a command definition matched by a markdown skill', async () => {
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+
+  test('getTools reads definitions from the pre-rename commandDefinitions state key', async () => {
+    const { eventList, enabledSkills } =
+      skillsRoomFixture('commandDefinitions');
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+});
+
+module('absolutizeSkillLinks', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+
+  test('resolves a document-relative link against the skill url', () => {
+    // The skills realm is itself named `skills`, so a link relative to the
+    // index (which lives at the realm root) doubles the segment — the exact
+    // shape the ai-bot used to flatten to a 404.
+    assert.strictEqual(
+      absolutizeSkillLinks('See [boxel](skills/boxel/SKILL.md).', INDEX),
+      'See [boxel](https://localhost:4201/skills/skills/boxel/SKILL.md).',
+    );
+  });
+
+  test('resolves against the skill url, not a shorter prefix', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks('[g](skills/glossary.md)', INDEX),
+      '[g](https://localhost:4201/skills/skills/glossary.md)',
+    );
+  });
+
+  test('leaves absolute urls, anchors, and non-navigational schemes alone', () => {
+    let body =
+      '[abs](https://example.com/x) [anchor](#section) [mail](mailto:a@b.c) [root](/top)';
+    assert.strictEqual(absolutizeSkillLinks(body, INDEX), body);
+  });
+
+  test('preserves a link title', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks(
+        '[c](commands/boxel-create-card.md "Create")',
+        INDEX,
+      ),
+      '[c](https://localhost:4201/skills/commands/boxel-create-card.md "Create")',
+    );
+  });
+
+  test('leaves the body untouched when the id is not an absolute url', () => {
+    let body = '[boxel](skills/boxel/SKILL.md)';
+    assert.strictEqual(
+      absolutizeSkillLinks(body, '@cardstack/skills/index.md'),
+      body,
+    );
+    assert.strictEqual(absolutizeSkillLinks(body, undefined), body);
+  });
+
+  test('skillCardsToMessages absolutizes links in the emitted instructions', () => {
+    let [message] = skillCardsToMessages([
+      {
+        id: INDEX,
+        attributes: {
+          title: 'Index',
+          instructions: 'Read [boxel](skills/boxel/SKILL.md).',
+        },
+      },
+    ]);
+    assert.true(
+      message.includes(
+        '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
+      ),
+      'the prompt carries a copy-ready absolute url',
     );
   });
 });

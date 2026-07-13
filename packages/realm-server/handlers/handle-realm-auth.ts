@@ -130,14 +130,41 @@ export default function handleRealmAuth({
       }
     }
 
-    let sessions: { [realm: string]: string } = {};
     for (let realmUrl of accessibleRealmUrls) {
       if (!registeredUrls.has(realmUrl)) {
         console.error(
           `Permissions found pointing to unknown realm ${realmUrl}`,
         );
-        continue;
       }
+    }
+
+    // Enumerate the response's realms newest-created-first. The workspace
+    // chooser renders this list in response order (and prepends realms
+    // created mid-session), so this is what keeps a workspace's position
+    // stable across sessions with new workspaces at the front; without it
+    // the permissions query's UNION returns hash-order rows. JSON object key
+    // order follows insertion order for non-numeric keys, so the ordering
+    // survives the trip to the client. Legacy-registered mounts without a
+    // realm_registry row (test fixtures, pre-Phase-3 boots) have no creation
+    // time and go last, keeping their permission-row order.
+    let orderedRealmUrls: string[] = [];
+    if (registeredUrls.size > 0) {
+      let orderedRows = (await query(dbAdapter, [
+        'SELECT url FROM realm_registry WHERE url IN (',
+        ...separatedByCommas([...registeredUrls].map((url) => [param(url)])),
+        ') ORDER BY created_at DESC, url',
+      ] as Expression)) as { url: string }[];
+      orderedRealmUrls = orderedRows.map(({ url }) => url);
+    }
+    let alreadyOrdered = new Set(orderedRealmUrls);
+    for (let realmUrl of accessibleRealmUrls) {
+      if (registeredUrls.has(realmUrl) && !alreadyOrdered.has(realmUrl)) {
+        orderedRealmUrls.push(realmUrl);
+      }
+    }
+
+    let sessions: { [realm: string]: string } = {};
+    for (let realmUrl of orderedRealmUrls) {
       let permissions = permissionsForAllRealms[realmUrl];
       try {
         sessions[realmUrl] = createJWT(

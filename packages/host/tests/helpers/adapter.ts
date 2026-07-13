@@ -8,7 +8,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   RealmPaths,
-  baseRealm,
   createResponse,
   hasExecutableExtension,
   Deferred,
@@ -27,16 +26,15 @@ import type {
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
 
-import type {
-  FileWatcherEventContent,
-  RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type {
+  FileWatcherEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 import type ms from 'ms';
 
 interface Dir {
@@ -49,7 +47,7 @@ interface File {
   content: string | object | Uint8Array;
 }
 
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type CardAPI = typeof import('@cardstack/base/card-api');
 
 class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
@@ -147,7 +145,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
 
     let cardApi = await this.#loader.import<CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     for (let { content, url } of this.#potentialModulesAndInstances) {
       if (cardApi.isCard(content)) {
@@ -262,7 +260,7 @@ export class TestRealmAdapter implements RealmAdapter {
       fileRefContent = value;
     } else if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
-        `${baseRealm.url}card-api`,
+        '@cardstack/base/card-api',
       );
       if (cardApi.isCard(value)) {
         let doc = cardApi.serializeCard(value, {});

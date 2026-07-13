@@ -11,12 +11,11 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type ResetService from './reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as FileAPI from '@cardstack/base/file-api';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -311,8 +310,8 @@ function extendedClient({
           return getJoinedRoomsWithCache.bind(null, target);
         case 'uploadCards':
           return fileDefManager.uploadCards.bind(fileDefManager);
-        case 'uploadCommandDefinitions':
-          return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadToolDefinitions':
+          return fileDefManager.uploadToolDefinitions.bind(fileDefManager);
         case 'uploadFiles':
           return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'prefetchFileContent':

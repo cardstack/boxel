@@ -80,6 +80,11 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  decodeWorkerRequestIpc,
+  dispatchWorkerRequest,
+  WORKER_REQUEST_IPC_PREFIX,
+} from './lib/worker-request-forwarder.ts';
 
 /* About the Worker Manager
  *
@@ -232,7 +237,7 @@ if (port != null) {
         `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
         `FROM jobs j`,
         `WHERE j.status = 'unfulfilled'`,
-        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index', 'prerender_html')`,
         `AND NOT EXISTS (`,
         `  SELECT 1 FROM job_reservations jr`,
         `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
@@ -978,6 +983,31 @@ async function startWorker(
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith(WORKER_REQUEST_IPC_PREFIX)
+        ) {
+          // A worker child handed us a typed request it can't service itself
+          // (e.g. broadcasting a realm event — it holds no matrix client). We
+          // dispatch on the request type and forward to the realm server over
+          // the authenticated /_worker-request endpoint. Routing every request
+          // through this single manager avoids per-replica fan-out.
+          let request = decodeWorkerRequestIpc(message);
+          if (!request) {
+            log.error(`Failed to parse worker request from worker ${name}`);
+            return;
+          }
+          dispatchWorkerRequest(request, {
+            urlMappings,
+            secret: REALM_SECRET_SEED!,
+            workerName: name,
+          }).catch((e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: failed dispatching worker request '${request.type}' from ${name}`,
+              e,
+            );
+          });
         }
       });
     }),

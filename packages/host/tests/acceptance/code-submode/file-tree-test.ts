@@ -15,7 +15,7 @@ import { module, test } from 'qunit';
 
 import { baseRealmRRI } from '@cardstack/runtime-common';
 
-import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
+import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {
@@ -39,7 +39,7 @@ import { setupApplicationTest } from '../../helpers/setup';
 import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -53,9 +53,9 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
-import WriteTextFileCommand from '../../../app/commands/write-text-file';
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+import WriteTextFileTool from '../../../app/tools/write-text-file';
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -94,8 +94,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -118,8 +118,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -164,8 +164,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -1084,14 +1084,12 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let newDirName = 'new-dir';
     let newFileName = 'new-file.gts';
 
-    let commandService = getService('command-service');
-    let writeTextFileCommand = new WriteTextFileCommand(
-      commandService.commandContext,
-    );
+    let toolService = getService('tool-service');
+    let writeTextFileCommand = new WriteTextFileTool(toolService.toolContext);
     await writeTextFileCommand.execute({
       path: `${newDirName}/${newFileName}`,
       content:
-        'import { CardDef, Component } from "https://cardstack.com/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
+        'import { CardDef, Component } from "@cardstack/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
       realm: testRealmURL,
     });
     await settled();

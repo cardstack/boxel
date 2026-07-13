@@ -8,6 +8,7 @@ import {
   buildSparseItemResource,
   fieldsetFromParam,
   htmlQueryFromParams,
+  htmlQueryRenderingSelection,
   htmlResourceId,
   cssResourceId,
   htmlQueryHasRenderTypePredicate,
@@ -20,6 +21,7 @@ import {
   parseSearchEntryQueryFromPayload,
   resolveHtmlQuery,
   searchEntryWireQueryFromQuery,
+  wireFilterHasMatches,
   SearchRequestError,
   DEFAULT_HTML_QUERY,
   rri,
@@ -416,6 +418,94 @@ module(basename(import.meta.filename), function () {
         () => fieldsetFromParam('html,bogus'),
         (e: any) =>
           e instanceof SearchRequestError && e.code === 'invalid-query',
+      );
+    });
+  });
+
+  // The (format, renderType) a single-leaf htmlQuery selects — what the
+  // live-search selective refresh spells as the card+html GET's query params.
+  module('htmlQuery rendering selection', function () {
+    test('a single eq leaf yields its format and renderType', function (assert) {
+      assert.deepEqual(
+        htmlQueryRenderingSelection({
+          eq: { format: 'embedded', renderType: authorRef },
+        }),
+        { format: 'embedded', renderType: authorRef },
+      );
+      assert.deepEqual(
+        htmlQueryRenderingSelection({ eq: { format: 'fitted' } }),
+        { format: 'fitted' },
+      );
+    });
+
+    test('a format-less eq leaf has no selection — it leaves format unconstrained (one rendering per format), which one ?format= cannot spell', function (assert) {
+      assert.strictEqual(
+        htmlQueryRenderingSelection({ eq: { renderType: authorRef } }),
+        undefined,
+      );
+    });
+
+    test('an absent htmlQuery and composite htmlQueries have no selection', function (assert) {
+      assert.strictEqual(htmlQueryRenderingSelection(undefined), undefined);
+      assert.strictEqual(
+        htmlQueryRenderingSelection({
+          any: [{ eq: { format: 'fitted' } }, { eq: { format: 'embedded' } }],
+        }),
+        undefined,
+      );
+      assert.strictEqual(
+        htmlQueryRenderingSelection({ not: { eq: { format: 'atom' } } }),
+        undefined,
+      );
+    });
+
+    test('a malformed value reads as no selection instead of throwing', function (assert) {
+      // The input can come straight off a wire document's meta.htmlQuery,
+      // which the document guard does not validate.
+      for (let malformed of [
+        'fitted',
+        42,
+        null,
+        { eq: null },
+        { eq: 'fitted' },
+        { eq: { format: 'nonsense' } },
+        { eq: { format: 'fitted', renderType: 'not-a-code-ref' } },
+      ]) {
+        assert.strictEqual(
+          htmlQueryRenderingSelection(malformed as any),
+          undefined,
+          `${JSON.stringify(malformed)} → undefined`,
+        );
+      }
+    });
+  });
+
+  // Whether a full-text `matches` predicate appears anywhere in an entry wire
+  // filter — what routes a prerender_html event to a full re-run vs a
+  // selective refresh.
+  module('wire filter matches detection', function () {
+    test('detects matches at the top level and nested in connectives', function (assert) {
+      assert.true(wireFilterHasMatches({ matches: 'pigeon' }));
+      assert.true(
+        wireFilterHasMatches({
+          every: [
+            { 'item.on': authorRef },
+            { any: [{ not: { matches: 'pigeon' } }] },
+          ],
+        }),
+      );
+    });
+
+    test('structured filters carry no matches', function (assert) {
+      assert.false(wireFilterHasMatches(undefined));
+      assert.false(wireFilterHasMatches({ 'item.on': authorRef }));
+      assert.false(
+        wireFilterHasMatches({
+          every: [
+            { eq: { 'item.status': 'ready' } },
+            { not: { contains: { 'item.title': 'x' } } },
+          ],
+        }),
       );
     });
   });

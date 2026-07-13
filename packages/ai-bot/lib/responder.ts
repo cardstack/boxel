@@ -1,6 +1,6 @@
 import { logger } from '@cardstack/runtime-common';
 import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
-import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
+import { isToolOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import { errorReporter } from './sentry.ts';
 import type { OpenAIError } from 'openai/error';
@@ -35,7 +35,7 @@ export class Responder {
     }
 
     // If it's a command result or a code patch result, we might respond
-    if (isCommandOrCodePatchResult(event)) {
+    if (isToolOrCodePatchResult(event)) {
       return true;
     }
 
@@ -45,7 +45,7 @@ export class Responder {
 
   static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
     return (
-      this.eventMayTriggerResponse(event) && !isCommandOrCodePatchResult(event)
+      this.eventMayTriggerResponse(event) && !isToolOrCodePatchResult(event)
     );
   }
 

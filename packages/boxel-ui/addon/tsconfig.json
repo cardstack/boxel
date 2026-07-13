@@ -26,6 +26,9 @@
     "target": "es2020",
     "traceResolution": false,
     "paths": {
+      "@cardstack/base/*": [
+        "../../base/*"
+      ],
       "https://cardstack.com/base/*": [
         "../../base/*"
       ],

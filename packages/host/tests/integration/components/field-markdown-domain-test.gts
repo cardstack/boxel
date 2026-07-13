@@ -3,22 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
-
-import type * as BrandFunctionalPaletteModule from 'https://cardstack.com/base/brand-functional-palette';
-import type * as BrandLogoModule from 'https://cardstack.com/base/brand-logo';
-import type * as CSSValueFieldModule from 'https://cardstack.com/base/css-value';
-import type * as CsvFileDefModule from 'https://cardstack.com/base/csv-file-def';
-import type * as GtsFileDefModule from 'https://cardstack.com/base/gts-file-def';
-import type * as ImageFileDefModule from 'https://cardstack.com/base/image-file-def';
-import type * as JsonFileDefModule from 'https://cardstack.com/base/json-file-def';
-import type * as MarkdownFileDefModule from 'https://cardstack.com/base/markdown-file-def';
-import type * as ResponseFieldModule from 'https://cardstack.com/base/response-field';
-import type * as StructuredThemeModule from 'https://cardstack.com/base/structured-theme';
-import type * as StructuredThemeVarsModule from 'https://cardstack.com/base/structured-theme-variables';
-import type * as TextFileDefModule from 'https://cardstack.com/base/text-file-def';
-import type * as TsFileDefModule from 'https://cardstack.com/base/ts-file-def';
-import type * as TypographyFieldModule from 'https://cardstack.com/base/typography';
+import type { Loader } from '@cardstack/runtime-common';
 
 import {
   CardDef,
@@ -31,8 +16,25 @@ import {
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
+
 import { renderCard } from '../../helpers/render-component';
+
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BrandFunctionalPaletteModule from '@cardstack/base/brand-functional-palette';
+import type * as BrandLogoModule from '@cardstack/base/brand-logo';
+import type * as CSSValueFieldModule from '@cardstack/base/css-value';
+import type * as CsvFileDefModule from '@cardstack/base/csv-file-def';
+import type * as GtsFileDefModule from '@cardstack/base/gts-file-def';
+import type * as ImageFileDefModule from '@cardstack/base/image-file-def';
+import type * as JsonFileDefModule from '@cardstack/base/json-file-def';
+import type * as MarkdownFileDefModule from '@cardstack/base/markdown-file-def';
+import type * as ResponseFieldModule from '@cardstack/base/response-field';
+import type * as StructuredThemeModule from '@cardstack/base/structured-theme';
+import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
+import type * as TextFileDefModule from '@cardstack/base/text-file-def';
+import type * as TsFileDefModule from '@cardstack/base/ts-file-def';
+import type * as TypographyFieldModule from '@cardstack/base/typography';
 
 // Verifies the explicit `static markdown` templates added per CS-10787 to
 // domain/reference/file/theme fields. Fields are tested via a CardDef wrapper
@@ -75,70 +77,70 @@ module('Integration | field markdown domain', function (hooks) {
     loader = getService('loader-service').loader;
     BrandFunctionalPalette = (
       await loader.import<typeof BrandFunctionalPaletteModule>(
-        `${baseRealm.url}brand-functional-palette`,
+        '@cardstack/base/brand-functional-palette',
       )
     ).default;
     let brandLogoModule = await loader.import<typeof BrandLogoModule>(
-      `${baseRealm.url}brand-logo`,
+      '@cardstack/base/brand-logo',
     );
     BrandLogo = brandLogoModule.default;
     MarkField = brandLogoModule.MarkField;
     CSSValueField = (
       await loader.import<typeof CSSValueFieldModule>(
-        `${baseRealm.url}css-value`,
+        '@cardstack/base/css-value',
       )
     ).default;
     CsvFileDef = (
       await loader.import<typeof CsvFileDefModule>(
-        `${baseRealm.url}csv-file-def`,
+        '@cardstack/base/csv-file-def',
       )
     ).CsvFileDef;
     GtsFileDef = (
       await loader.import<typeof GtsFileDefModule>(
-        `${baseRealm.url}gts-file-def`,
+        '@cardstack/base/gts-file-def',
       )
     ).GtsFileDef;
     ImageDef = (
       await loader.import<typeof ImageFileDefModule>(
-        `${baseRealm.url}image-file-def`,
+        '@cardstack/base/image-file-def',
       )
     ).ImageDef;
     JsonFileDef = (
       await loader.import<typeof JsonFileDefModule>(
-        `${baseRealm.url}json-file-def`,
+        '@cardstack/base/json-file-def',
       )
     ).JsonFileDef;
     MarkdownDef = (
       await loader.import<typeof MarkdownFileDefModule>(
-        `${baseRealm.url}markdown-file-def`,
+        '@cardstack/base/markdown-file-def',
       )
     ).MarkdownDef;
     ResponseField = (
       await loader.import<typeof ResponseFieldModule>(
-        `${baseRealm.url}response-field`,
+        '@cardstack/base/response-field',
       )
     ).default;
     StructuredTheme = (
       await loader.import<typeof StructuredThemeModule>(
-        `${baseRealm.url}structured-theme`,
+        '@cardstack/base/structured-theme',
       )
     ).default;
     let themeVarsModule = await loader.import<typeof StructuredThemeVarsModule>(
-      `${baseRealm.url}structured-theme-variables`,
+      '@cardstack/base/structured-theme-variables',
     );
     ThemeVarField = themeVarsModule.default;
     ThemeTypographyField = themeVarsModule.ThemeTypographyField;
     TextFileDef = (
       await loader.import<typeof TextFileDefModule>(
-        `${baseRealm.url}text-file-def`,
+        '@cardstack/base/text-file-def',
       )
     ).TextFileDef;
     TsFileDef = (
-      await loader.import<typeof TsFileDefModule>(`${baseRealm.url}ts-file-def`)
+      await loader.import<typeof TsFileDefModule>('@cardstack/base/ts-file-def')
     ).TsFileDef;
     TypographyField = (
       await loader.import<typeof TypographyFieldModule>(
-        `${baseRealm.url}typography`,
+        '@cardstack/base/typography',
       )
     ).default;
   });

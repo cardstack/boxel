@@ -23,7 +23,7 @@ import {
   isResolvedCodeRef,
   removeFileExtension,
   rri,
-  type CommandContext,
+  type ToolContext,
   type ResolvedCodeRef,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -33,17 +33,17 @@ import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 interface Signature {
   Args: {};
 }
 
 export default class CreateListingModal extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -176,11 +176,11 @@ export default class CreateListingModal extends Component<Signature> {
     // runtime. Vite/Embroider has no equivalent alias and the host doesn't
     // depend on `@cardstack/catalog`, so a static import would fail to
     // resolve at build time. The realm content also imports things like
-    // `@cardstack/boxel-host/commands/...` which are likewise loader-only
+    // `@cardstack/boxel-host/tools/...` which are likewise loader-only
     // specifiers, so the catalog file isn't independently buildable. Going
     // through the loader is the only path that resolves both correctly.
     let module = await this.loaderService.loader.import<{
-      default: new (commandContext: CommandContext) => {
+      default: new (toolContext: ToolContext) => {
         execute: (input: {
           codeRef: ResolvedCodeRef;
           targetRealm: string;
@@ -194,7 +194,7 @@ export default class CreateListingModal extends Component<Signature> {
     let ListingCreateCommand = module.default;
 
     let result = await new ListingCreateCommand(
-      this.commandService.commandContext,
+      this.toolService.toolContext,
     ).execute({
       codeRef,
       targetRealm,

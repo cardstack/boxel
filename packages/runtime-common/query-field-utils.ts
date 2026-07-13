@@ -1,5 +1,5 @@
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
-import type { VirtualNetwork } from './virtual-network.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { FieldDefinition } from './definitions.ts';
 import type {
   FileMetaResource,
@@ -39,8 +39,7 @@ export interface NormalizeQueryDefinitionParams {
   fieldPath?: string;
   resolvePathValue: (path: string) => any;
   resource?: LooseCardResource | FileMetaResource;
-  relativeTo?: URL;
-  virtualNetwork: VirtualNetwork;
+  relativeTo?: RealmResourceIdentifier | URL;
 }
 
 export interface NormalizedQueryDefinitionResult {
@@ -57,7 +56,6 @@ export function normalizeQueryDefinition({
   resolvePathValue,
   resource,
   relativeTo,
-  virtualNetwork,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
@@ -233,13 +231,16 @@ export function normalizeQueryDefinition({
 
   let resolvedRealm = resolveRealm(specifiedRealm);
 
-  let relativeToURL =
-    relativeTo ?? (resource?.id ? virtualNetwork.toURL(resource.id) : realmURL);
+  // Resolve in RRI space: the resource's canonical id (prefix form for mapped
+  // realms, URL otherwise) is a valid base for relative code-ref resolution,
+  // and the resulting ref keeps its canonical spelling — which the search
+  // index and the client-side filter matcher both tolerate.
+  let relativeToBase: RealmResourceIdentifier | URL =
+    relativeTo ?? (resource?.id ? rri(resource.id) : realmURL);
   let targetRef = codeRefWithAbsoluteIdentifier(
     fieldDefinition.fieldOrCard,
-    relativeToURL,
+    relativeToBase,
     undefined,
-    virtualNetwork,
   );
 
   let filter = queryAny.filter as Record<string, any> | undefined;

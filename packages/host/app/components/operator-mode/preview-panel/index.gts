@@ -40,10 +40,16 @@ import Overlays from '@cardstack/host/components/operator-mode/overlays';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '@cardstack/host/resources/element-tracker';
-import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
+
+import FormatChooser from '../code-submode/format-chooser';
+
+import FittedFormatGallery from './fitted-format-gallery';
+import MarkdownPreview from './markdown-preview';
+import MetadataPanel from './metadata-panel';
 
 import type {
   BaseDef,
@@ -51,13 +57,7 @@ import type {
   CardDef,
   Format,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import FormatChooser from '../code-submode/format-chooser';
-
-import FittedFormatGallery from './fitted-format-gallery';
-import MarkdownPreview from './markdown-preview';
-import MetadataPanel from './metadata-panel';
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -71,7 +71,7 @@ interface Signature {
 
 export default class PreviewPanel extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
@@ -152,7 +152,7 @@ export default class PreviewPanel extends Component<Signature> {
         canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
-        commandContext: this.commandService.commandContext,
+        toolContext: this.toolService.toolContext,
       }),
     );
   }

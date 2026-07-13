@@ -19,12 +19,12 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { isMarkdownSkillId } from '@cardstack/host/lib/skill-commands';
-import type CommandService from '@cardstack/host/services/command-service';
+import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 
 interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -40,7 +40,7 @@ interface SkillToggleSignature {
 export default class SkillToggle extends Component<SkillToggleSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
@@ -100,15 +100,13 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   }
 
   private async openSkillCard() {
-    let showCardCommand = new ShowCardCommand(
-      this.commandService.commandContext,
-    );
+    let showCardCommand = new ShowCardTool(this.toolService.toolContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });
   }
 
-  // A skill markdown file is not a card, so `ShowCardCommand` can't open it.
+  // A skill markdown file is not a card, so `ShowCardTool` can't open it.
   // Open it the way any file opens: a file stack item in interact mode, or by
   // pointing the code editor at it in code mode.
   private async openSkillFile() {

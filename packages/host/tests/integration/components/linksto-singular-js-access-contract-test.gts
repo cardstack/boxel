@@ -4,16 +4,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import {
   provideConsumeContext,
@@ -34,6 +30,9 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // The contract under test is the *userland* JS shape of `card.linkField`:
 // strict-equality, optional-chain, and raw-access semantics across all five
@@ -101,7 +100,7 @@ module('Integration | linksTo singular JS-access contract', function (hooks) {
     provideConsumeContext(PermissionsContextName, permissions);
     loader = getService('loader-service').loader;
     let fieldSupport = await loader.import<typeof FieldSupportModule>(
-      `${baseRealm.url}field-support`,
+      '@cardstack/base/field-support',
     );
     isLinkError = fieldSupport.isLinkError;
     isLinkNotFound = fieldSupport.isLinkNotFound;
@@ -109,7 +108,7 @@ module('Integration | linksTo singular JS-access contract', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   // Realm holds the Person/Pet module and one real Pet (`Pet/mango`). Links to

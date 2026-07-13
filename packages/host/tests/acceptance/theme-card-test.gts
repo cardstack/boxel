@@ -6,9 +6,8 @@ import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { dasherize } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   percySnapshot,
@@ -92,11 +91,6 @@ const DARK_MODE_VARS = {
   trackingNormal: '0.01em',
 };
 
-const ROOT_STYLE_ATTRS = Object.entries(ROOT_CSS_VARS)
-  .sort()
-  .map(([key, val]) => [`--${dasherize(key)}`, val].join(': '))
-  .join('; ');
-
 const DARK_GOLD_THEME_VARS = {
   primary: '#ffd700',
   primaryForeground: '#0a0f23',
@@ -120,6 +114,14 @@ const FOREST_GREEN_THEME_VARS = {
   background: '#E8F5E9',
   spacing: '0.25rem',
 };
+
+function computedProperty(selector: string, property: string): string {
+  let el = document.querySelector(selector);
+  if (!el) {
+    throw new Error(`expected to find element: ${selector}`);
+  }
+  return window.getComputedStyle(el).getPropertyValue(property).trim();
+}
 
 function hexToRgb(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -208,10 +210,10 @@ module('Acceptance | theme-card-test', function (hooks) {
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let booleanMod: typeof import('https://cardstack.com/base/boolean');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    booleanMod = await loader.import(`${baseRealm.url}boolean`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let booleanMod: typeof import('@cardstack/base/boolean');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    booleanMod = await loader.import('@cardstack/base/boolean');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: BooleanField } = booleanMod;
@@ -442,6 +444,30 @@ module('Acceptance | theme-card-test', function (hooks) {
               },
             },
           },
+          'checkbox-forest-green-2.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: false,
+                cardInfo: {
+                  name: 'Second Forest Green Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}forest-green-theme`,
+                  },
+                },
+              },
+            },
+          },
           'checkbox-forest-green.json': {
             data: {
               meta: {
@@ -472,27 +498,25 @@ module('Acceptance | theme-card-test', function (hooks) {
   });
 
   module('style-reference-card', () => {
-    test('renders with inline css variables', async function (assert) {
+    test('renders with scoped theme css variables', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: styleRefCardId, format: 'isolated' }]],
       });
-      assert
-        .dom(`[data-test-card="${styleRefCardId}"] h1`)
-        .hasText('Starry Night');
-      assert
-        .dom(`[data-test-card="${styleRefCardId}"]`)
-        .hasClass('boxel-card-container--themed');
-      assert
-        .dom(`[data-test-card="${styleRefCardId}"]`)
-        .hasAttribute('style', ROOT_STYLE_ATTRS);
-
-      let container = document.querySelector<HTMLElement>(
-        `[data-test-card="${styleRefCardId}"]`,
+      let cardSelector = `[data-test-card="${styleRefCardId}"]`;
+      assert.dom(`${cardSelector} h1`).hasText('Starry Night');
+      assert.dom(cardSelector).hasClass('boxel-card-container--themed');
+      assert.dom(cardSelector).hasAttribute('data-boxel-theme-scope');
+      assert.strictEqual(
+        computedProperty(cardSelector, '--background'),
+        ROOT_CSS_VARS.background,
+        'computed --background matches the theme root variable',
       );
-      assert.ok(container, 'theme card container is present');
-      let computedFontFamily = window
-        .getComputedStyle(container!)
-        .getPropertyValue('font-family');
+      assert.strictEqual(
+        computedProperty(cardSelector, '--primary'),
+        ROOT_CSS_VARS.primary,
+        'computed --primary matches the theme root variable',
+      );
+      let computedFontFamily = computedProperty(cardSelector, 'font-family');
       assert.ok(
         computedFontFamily.includes('Libre Baskerville'),
         `computed font-family includes themed value`,
@@ -501,45 +525,51 @@ module('Acceptance | theme-card-test', function (hooks) {
   });
 
   module('structured-theme-card', () => {
-    test('renders with inline css variables', async function (assert) {
+    test('renders with scoped theme css variables', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: themeCardId, format: 'isolated' }]],
       });
-      assert
-        .dom(`[data-test-card="${themeCardId}"] h1`)
-        .hasText('Starry Night');
+      let cardSelector = `[data-test-card="${themeCardId}"]`;
+      assert.dom(`${cardSelector} h1`).hasText('Starry Night');
       assert.dom('[data-test-css-field]').containsText('--radius: 0.75rem;');
-      assert
-        .dom(`[data-test-card="${themeCardId}"]`)
-        .hasClass('boxel-card-container--themed');
-      assert
-        .dom(`[data-test-card="${themeCardId}"]`)
-        .hasAttribute('style', ROOT_STYLE_ATTRS);
+      assert.dom(cardSelector).hasClass('boxel-card-container--themed');
+      assert.dom(cardSelector).hasAttribute('data-boxel-theme-scope');
 
-      let container = document.querySelector<HTMLElement>(
-        `[data-test-card="${themeCardId}"]`,
+      // the card container and the theme dashboard inside it derive their
+      // scopes from the same identity (the theme card's id plus its css), so
+      // the two render paths agree and their stylesheets are dedupable
+      let containerScope = document
+        .querySelector(cardSelector)!
+        .getAttribute('data-boxel-theme-scope');
+      let dashboardScope = document
+        .querySelector(`${cardSelector} article[data-boxel-theme-scope]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.true(
+        containerScope!.startsWith(`${themeCardId}-`),
+        'scope derives from the theme card id',
       );
-      assert.ok(container, 'theme card container is present');
-      let styleAttr = container?.getAttribute('style') ?? '';
-      assert.ok(
-        styleAttr.includes('--background: #0a0f23'),
-        'inline style includes root background variable',
+      assert.strictEqual(
+        dashboardScope,
+        containerScope,
+        'dashboard scope matches the container scope',
       );
-      assert.ok(
-        styleAttr.includes('--chart-1: #ffb347'),
-        'inline style includes root chart-1 variable',
+
+      assert.strictEqual(
+        computedProperty(cardSelector, '--background'),
+        '#0a0f23',
+        'computed --background matches the root variable',
       );
-      assert.ok(
-        styleAttr.includes('--shadow-2xl: 0 6px 12px rgba(255, 215, 0, 0.5)'),
-        'inline style includes root shadow-2xl variable',
+      assert.strictEqual(
+        computedProperty(cardSelector, '--chart-1'),
+        '#ffb347',
+        'computed --chart-1 matches the root variable',
       );
-      assert.false(
-        styleAttr.includes('--background: #050813'),
-        'dark mode value is not applied inline',
+      assert.strictEqual(
+        computedProperty(cardSelector, '--shadow-2xl'),
+        '0 6px 12px rgba(255, 215, 0, 0.5)',
+        'computed --shadow-2xl matches the root variable',
       );
-      let computedFontFamily = window
-        .getComputedStyle(container!)
-        .getPropertyValue('font-family');
+      let computedFontFamily = computedProperty(cardSelector, 'font-family');
       assert.ok(
         computedFontFamily.includes('Libre Baskerville'),
         `computed font-family includes themed value`,
@@ -550,15 +580,80 @@ module('Acceptance | theme-card-test', function (hooks) {
         codePath: themeCardId,
         submode: 'code',
       });
-      assert
-        .dom(`[data-test-card="${themeCardId}"] h1`)
-        .hasText('Starry Night');
+      assert.dom(`${cardSelector} h1`).hasText('Starry Night');
       assert.dom('[data-test-css-field]').containsText('--radius: 0.75rem;');
-      assert
-        .dom(`[data-test-card="${themeCardId}"]`)
-        .hasAttribute('style', ROOT_STYLE_ATTRS);
+      assert.dom(cardSelector).hasAttribute('data-boxel-theme-scope');
+      assert.strictEqual(
+        computedProperty(cardSelector, '--background'),
+        '#0a0f23',
+        'computed --background matches the root variable in code submode',
+      );
 
       await percySnapshot(assert);
+    });
+
+    test('dark mode preview toggle applies dark theme variables to the dashboard', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: themeCardId, format: 'isolated' }]],
+      });
+      let dashboardSelector = `[data-test-card="${themeCardId}"] .detailed-style-reference`;
+      assert.strictEqual(
+        computedProperty(dashboardSelector, '--background'),
+        ROOT_CSS_VARS.background,
+        'dashboard shows root variables before toggling',
+      );
+
+      await click('[data-test-mode="toggle-dark"]');
+      assert.strictEqual(
+        computedProperty(dashboardSelector, '--background'),
+        DARK_MODE_VARS.background,
+        'dashboard shows dark mode variables after toggling dark',
+      );
+      assert.strictEqual(
+        computedProperty(dashboardSelector, '--primary'),
+        DARK_MODE_VARS.primary,
+        'dashboard --primary flips to the dark value',
+      );
+
+      await click('[data-test-mode="toggle-light"]');
+      assert.strictEqual(
+        computedProperty(dashboardSelector, '--background'),
+        ROOT_CSS_VARS.background,
+        'dashboard shows root variables again after toggling light',
+      );
+    });
+
+    test('dark mode variables apply when the ambient scheme is dark', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: themeCardId, format: 'isolated' }]],
+      });
+      let cardSelector = `[data-test-card="${themeCardId}"]`;
+      assert.strictEqual(
+        computedProperty(cardSelector, '--background'),
+        ROOT_CSS_VARS.background,
+        'root variables apply under the default light scheme',
+      );
+
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        assert.strictEqual(
+          computedProperty(cardSelector, '--background'),
+          DARK_MODE_VARS.background,
+          'dark mode variables apply when the ambient scheme is dark',
+        );
+        assert.strictEqual(
+          computedProperty(cardSelector, '--primary'),
+          DARK_MODE_VARS.primary,
+          'dark mode --primary applies when the ambient scheme is dark',
+        );
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      assert.strictEqual(
+        computedProperty(cardSelector, '--background'),
+        ROOT_CSS_VARS.background,
+        'root variables apply again when the ambient scheme returns to light',
+      );
     });
 
     test<TestContextWithSave>('applies pasted custom CSS variables', async function (assert) {
@@ -801,22 +896,31 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
       assert.ok(container, 'themed card container is present');
 
-      let styleAttr = container?.getAttribute('style') ?? '';
-      assert.ok(
-        styleAttr.includes('--primary: #ffd700'),
-        'inline style includes --primary',
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasAttribute('data-boxel-theme-scope');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#ffd700',
+        'computed --primary matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--border: #3a4073'),
-        'inline style includes --border',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--border'),
+        '#3a4073',
+        'computed --border matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--background: #1a1f3a'),
-        'inline style includes --background',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--background'),
+        '#1a1f3a',
+        'computed --background matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--theme-body-font-size: 18px'),
-        'inline style includes --theme-body-font-size',
+      assert.strictEqual(
+        computedProperty(
+          `[data-test-card="${cardId}"]`,
+          '--theme-body-font-size',
+        ),
+        '18px',
+        'computed --theme-body-font-size matches the theme',
       );
 
       assert
@@ -874,22 +978,31 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
       assert.ok(container, 'themed card container is present');
 
-      let styleAttr = container?.getAttribute('style') ?? '';
-      assert.ok(
-        styleAttr.includes('--primary: #0058A3'),
-        'inline style includes --primary',
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasAttribute('data-boxel-theme-scope');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#0058A3',
+        'computed --primary matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--border: #003B6F'),
-        'inline style includes --border',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--border'),
+        '#003B6F',
+        'computed --border matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--background: #E3F2FD'),
-        'inline style includes --background',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--background'),
+        '#E3F2FD',
+        'computed --background matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--theme-body-font-size: 14px'),
-        'inline style includes --theme-body-font-size',
+      assert.strictEqual(
+        computedProperty(
+          `[data-test-card="${cardId}"]`,
+          '--theme-body-font-size',
+        ),
+        '14px',
+        'computed --theme-body-font-size matches the theme',
       );
 
       assert
@@ -947,22 +1060,31 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
       assert.ok(container, 'themed card container is present');
 
-      let styleAttr = container?.getAttribute('style') ?? '';
-      assert.ok(
-        styleAttr.includes('--primary: #2e7d32'),
-        'inline style includes --primary',
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasAttribute('data-boxel-theme-scope');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#2e7d32',
+        'computed --primary matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--border: #1b5e20'),
-        'inline style includes --border',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--border'),
+        '#1b5e20',
+        'computed --border matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--background: #E8F5E9'),
-        'inline style includes --background',
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--background'),
+        '#E8F5E9',
+        'computed --background matches the theme',
       );
-      assert.ok(
-        styleAttr.includes('--theme-body-font-size: 16px'),
-        'inline style includes --theme-body-font-size',
+      assert.strictEqual(
+        computedProperty(
+          `[data-test-card="${cardId}"]`,
+          '--theme-body-font-size',
+        ),
+        '16px',
+        'computed --theme-body-font-size matches the theme',
       );
 
       assert
@@ -1002,6 +1124,87 @@ module('Acceptance | theme-card-test', function (hooks) {
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '16px',
         'checkbox size matches --theme-body-font-size',
+      );
+    });
+
+    test('cards sharing a theme emit identical scoped stylesheets with only one active copy', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-forest-green`;
+      let otherCardId = `${testRealmURL}checkbox-forest-green-2`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: cardId, format: 'isolated' }],
+          [{ id: otherCardId, format: 'isolated' }],
+        ],
+      });
+
+      let themeStyleText = (id: string) => {
+        let container = document.querySelector(`[data-test-card="${id}"]`);
+        return [...container!.querySelectorAll('style')]
+          .map((style) => style.textContent?.trim())
+          .filter((text) => text?.includes('data-boxel-theme-scope'))
+          .join('');
+      };
+
+      let scope = document
+        .querySelector(`[data-test-card="${cardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      let otherScope = document
+        .querySelector(`[data-test-card="${otherCardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.ok(scope, 'theme scope is set');
+      assert.true(
+        scope!.startsWith(`${testRealmURL}forest-green-theme-`),
+        'scope derives from the theme card id plus a content hash',
+      );
+      assert.strictEqual(
+        scope,
+        otherScope,
+        'cards sharing a theme share a scope',
+      );
+      assert.ok(
+        themeStyleText(cardId).length,
+        'theme stylesheet is rendered within the card container',
+      );
+      assert.strictEqual(
+        themeStyleText(cardId),
+        themeStyleText(otherCardId),
+        'cards sharing a theme emit byte-identical theme stylesheets',
+      );
+
+      let copies = () =>
+        [...document.querySelectorAll('style')].filter((style) =>
+          style.textContent?.includes(
+            `data-boxel-theme-scope="${testRealmURL}forest-green-theme-`,
+          ),
+        );
+      assert.strictEqual(copies().length, 2, 'each card emits its own copy');
+      assert.strictEqual(
+        copies().filter((style) => !style.disabled).length,
+        1,
+        'exactly one copy participates in style matching',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#2e7d32',
+        'the first card resolves the theme variables',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the second card resolves the theme variables',
+      );
+
+      // when the active copy leaves the DOM, a survivor is promoted
+      copies()
+        .find((style) => !style.disabled)!
+        .remove();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(copies().length, 1, 'one copy remains');
+      assert.false(copies()[0].disabled, 'the surviving copy is re-enabled');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the theme stays applied after the active copy is removed',
       );
     });
   });

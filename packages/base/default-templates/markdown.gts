@@ -16,8 +16,9 @@ import {
   extractMermaidBlocks,
   processKatexPlaceholders,
   replaceMermaidSvgs,
+  resolveRRIReference,
+  rri,
   trimJsonExtension,
-  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
@@ -79,24 +80,16 @@ interface RenderSlot {
   typeName?: string; // present when state === 'unresolved'
 }
 
-function resolveUrl(
-  raw: string,
-  baseUrl: string | null | undefined,
-  virtualNetwork: VirtualNetwork | undefined,
-): string {
-  // With a VN, resolve through it so prefix-form bases and registered
-  // prefix-form refs round-trip correctly. Without a VN, plain
-  // `new URL(raw, baseUrl)` still handles the common case — URL-form
-  // refs (with or without a base) and relative refs against a URL-form
-  // base. Prefix-form bases need a VN; `new URL()` throws on those and
-  // we fall back to the raw ref.
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  // Resolve in RRI space (no VirtualNetwork), the same way the reference
+  // extractors resolve the refs behind `linkedCards`/`linkedFiles`. Instance
+  // ids are canonical (the realm serves prefix form for mapped realms, URL for
+  // unmapped), so this produces the same form as a loaded card's `id` — the
+  // slot key (`card.id` / `file.id`) matches without a VirtualNetwork.
   try {
-    if (virtualNetwork) {
-      return trimJsonExtension(
-        virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
-      );
-    }
-    return trimJsonExtension(new URL(raw, baseUrl || undefined).href);
+    return trimJsonExtension(
+      resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -108,7 +101,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     linkedCards?: CardDef[] | null;
     linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
-    cardReferenceVirtualNetwork?: VirtualNetwork;
   };
 }> {
   @tracked monacoContextInternal: any = undefined;
@@ -208,7 +200,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let linkedCards = this.args.linkedCards;
       let linkedFiles = this.args.linkedFiles;
       let baseUrl = this.args.cardReferenceBaseUrl;
-      let virtualNetwork = this.args.cardReferenceVirtualNetwork;
       let pendingUpdate = false;
       let pendingToken: unknown = undefined;
       // On the very first modifier run the linked instances are likely still
@@ -278,7 +269,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             );
           }
 
-          let resolvedUrl = resolveUrl(rawUrl, baseUrl, virtualNetwork);
+          let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 
           let instance =
             refType === 'file'
@@ -569,8 +560,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               />
             {{else}}
               <span
-                class='markdown-bfm-loading markdown-bfm-loading--inline-embed
-                  markdown-bfm-loading--{{slot.format}}'
+                class='markdown-bfm-loading markdown-bfm-loading--inline-embed markdown-bfm-loading--{{slot.format}}'
                 style={{slot.style}}
                 aria-hidden='true'
                 data-test-markdown-bfm-loading-inline
@@ -599,8 +589,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               </span>
             {{else}}
               <span
-                class='markdown-bfm-broken markdown-bfm-broken--inline-embed
-                  markdown-bfm-broken--{{slot.format}}'
+                class='markdown-bfm-broken markdown-bfm-broken--inline-embed markdown-bfm-broken--{{slot.format}}'
                 style={{slot.style}}
                 title={{slot.url}}
                 data-test-markdown-bfm-unresolved-inline

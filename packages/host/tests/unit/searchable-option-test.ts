@@ -18,10 +18,10 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
-import type { CardDef, Field } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { testRealmURL } from '../helpers';
+
+import type { CardDef, Field } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
 
@@ -65,10 +65,10 @@ module('Unit | searchable option', function (hooks) {
       virtualNetwork,
     });
 
-    api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
-    let string = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+    api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
+    let string = await loader.import<typeof import('@cardstack/base/string')>(
+      '@cardstack/base/string',
+    );
 
     let {
       field,

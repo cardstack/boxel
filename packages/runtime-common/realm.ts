@@ -59,6 +59,7 @@ import {
   CardError,
   responseWithError,
   formattedError,
+  stringifyErrorForLog,
   unsupportedMediaType,
   type SerializedError,
 } from './error.ts';
@@ -171,7 +172,7 @@ import type {
   FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -1234,30 +1235,35 @@ export class Realm {
     // broadcast helpers are fire-and-forget by design (the adapter call
     // inside `broadcastRealmEvent` is invoked without `await`) so we
     // call them without a try/catch, matching every other call site.
-    let completed = indexingCompleted.then(async ({ invalidations }) => {
-      try {
-        this.#dropAllTranspiledModuleCacheEntries();
-      } catch (err: unknown) {
-        this.#log.error(
-          `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
-        );
-      }
-      if (invalidations.length > 0) {
-        this.broadcastIncrementalInvalidationEvent(invalidations);
-      }
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-        realmURL: this.url,
-      });
-      try {
-        await this.#definitionLookup.clearRealmDefinitions(this.url);
-      } catch (err: unknown) {
-        this.#log.error(
-          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
-        );
-      }
-    });
+    let completed = indexingCompleted.then(
+      async ({ invalidations, generation }) => {
+        try {
+          this.#dropAllTranspiledModuleCacheEntries();
+        } catch (err: unknown) {
+          this.#log.error(
+            `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
+          );
+        }
+        if (invalidations.length > 0) {
+          this.broadcastIncrementalInvalidationEvent(invalidations, {
+            generation,
+          });
+        }
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+          ...(generation !== undefined ? { generation } : {}),
+          realmURL: this.url,
+        });
+        try {
+          await this.#definitionLookup.clearRealmDefinitions(this.url);
+        } catch (err: unknown) {
+          this.#log.error(
+            `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
+          );
+        }
+      },
+    );
 
     void completed.catch((error: unknown) => {
       let message: string;
@@ -1358,16 +1364,17 @@ export class Realm {
       delete?: true;
       clientRequestId?: string | null;
     },
-  ): Promise<string[]> {
+  ): Promise<{ invalidations: string[]; generation?: number }> {
     if (urls.length === 0) {
-      return [];
+      return { invalidations: [] };
     }
 
     let invalidations = new Set<string>();
+    let generation: number | undefined;
     await this.#realmIndexUpdater.update(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
-      onInvalidation: async (invalidatedURLs: URL[]) => {
+      onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
         // pre-update promises must not be coalesced into by post-update
@@ -1379,10 +1386,11 @@ export class Realm {
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        generation = meta.generation ?? generation;
       },
     });
 
-    return [...invalidations];
+    return { invalidations: [...invalidations], generation };
   }
 
   // Two-phase variant for the deferred-indexing path. Awaits the durable
@@ -1404,30 +1412,35 @@ export class Realm {
     opts: {
       delete?: true;
       clientRequestId?: string | null;
-      onSettled?: (invalidations: string[]) => Promise<void> | void;
+      onSettled?: (
+        invalidations: string[],
+        meta: { generation?: number },
+      ) => Promise<void> | void;
     },
   ): Promise<{ settled: Promise<void> }> {
     if (urls.length === 0) {
       if (opts.onSettled) {
-        await opts.onSettled([]);
+        await opts.onSettled([], {});
       }
       return { settled: Promise.resolve() };
     }
 
     let invalidations = new Set<string>();
+    let generation: number | undefined;
     let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
-      onInvalidation: async (invalidatedURLs: URL[]) => {
+      onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
         }
+        generation = meta.generation ?? generation;
       },
       onSettled: async () => {
         if (opts.onSettled) {
-          await opts.onSettled([...invalidations]);
+          await opts.onSettled([...invalidations], { generation });
         }
       },
     });
@@ -1437,7 +1450,7 @@ export class Realm {
 
   private broadcastIncrementalInvalidationEvent(
     invalidations: string[],
-    opts?: { clientRequestId?: string | null },
+    opts?: { clientRequestId?: string | null; generation?: number },
   ): void {
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -1445,6 +1458,9 @@ export class Realm {
       invalidations,
       ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
         ? { clientRequestId: opts.clientRequestId }
+        : {}),
+      ...(opts?.generation !== undefined
+        ? { generation: opts.generation }
         : {}),
       realmURL: this.url,
     });
@@ -1508,8 +1524,9 @@ export class Realm {
       }
     }
 
-    let invalidations = await this.updateIndexAndCollectInvalidations(urls);
-    this.broadcastIncrementalInvalidationEvent(invalidations);
+    let { invalidations, generation } =
+      await this.updateIndexAndCollectInvalidations(urls);
+    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
 
     return createResponse({
       body: null,
@@ -1941,15 +1958,15 @@ export class Realm {
     let addedFiles: LocalPath[] = [];
     let updatedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
+    let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
-      let workingInvalidations = await this.updateIndexAndCollectInvalidations(
-        urls,
-        {
+      let { invalidations: workingInvalidations, generation } =
+        await this.updateIndexAndCollectInvalidations(urls, {
           clientRequestId,
-        },
-      );
+        });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
+      indexGeneration = generation ?? indexGeneration;
     };
 
     // Iterate modules (executable extensions) before everything else so
@@ -2067,6 +2084,7 @@ export class Realm {
         await performIndex();
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
+          generation: indexGeneration,
         });
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
@@ -2099,20 +2117,24 @@ export class Realm {
             // awaits the drain still races with the broadcast against
             // test teardown (mock-matrix already destroyed → broadcast
             // throws on serverState).
-            onSettled: (deferredInvalidations) => {
+            onSettled: (deferredInvalidations, meta) => {
               this.broadcastIncrementalInvalidationEvent(
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
-                { clientRequestId },
+                {
+                  clientRequestId,
+                  generation: meta.generation ?? indexGeneration,
+                },
               );
             },
           },
         );
         settled.catch((err: unknown) => {
-          let message = err instanceof Error ? err.message : String(err);
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Deferred indexing chain failed for ${this.url}: ${message}`,
+            `Deferred indexing chain failed for ${this.url} (urls: ${urls
+              .map((u) => u.href)
+              .join(', ')}): ${stringifyErrorForLog(err)}`,
           );
         });
       }
@@ -2121,6 +2143,7 @@ export class Realm {
       // pre-existing always-broadcast behavior.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
+        generation: indexGeneration,
       });
     }
     return results.map(({ path, lastModified }) => ({
@@ -2441,9 +2464,21 @@ export class Realm {
           // Log the underlying exception before returning 500 —
           // otherwise callers only see "Write Error" and the original
           // stack trace is lost, making atomic-batch failures
-          // effectively undebuggable.
+          // effectively undebuggable. Include e.cause explicitly: errors
+          // like FilterRefersToNonexistentTypeError carry the actionable
+          // detail (which module/definition was missing, or that a
+          // concurrent invalidation discarded the lookup) in their cause,
+          // not their message, so without this the real reason is swallowed.
+          let cause =
+            e?.cause instanceof Error
+              ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
+              : e?.cause != null
+                ? String(e.cause)
+                : undefined;
           this.#log.error(
-            `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+            `Atomic write failed: ${e.message}${
+              cause ? `\ncause: ${cause}` : ''
+            }\n${e.stack ?? '(no stack)'}`,
           );
           return createResponse({
             body: JSON.stringify({
@@ -2563,10 +2598,11 @@ export class Realm {
     await this.removeFileMeta([path]);
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
-      let invalidations = await this.updateIndexAndCollectInvalidations([url], {
-        delete: true,
-      });
-      this.broadcastIncrementalInvalidationEvent(invalidations);
+      let { invalidations, generation } =
+        await this.updateIndexAndCollectInvalidations([url], {
+          delete: true,
+        });
+      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
     } else {
       // Mirrors the write() waitForIndex:false path: await the durable
       // enqueue so DB-side failures still bubble out, but fire-and-forget
@@ -2578,8 +2614,10 @@ export class Realm {
         [url],
         {
           delete: true,
-          onSettled: (deferredInvalidations) => {
-            this.broadcastIncrementalInvalidationEvent(deferredInvalidations);
+          onSettled: (deferredInvalidations, meta) => {
+            this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
+              generation: meta.generation,
+            });
           },
         },
       );
@@ -2590,12 +2628,8 @@ export class Realm {
           );
         },
         (err: unknown) => {
-          let detail =
-            err instanceof Error
-              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
-              : String(err);
           this.#log.error(
-            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${stringifyErrorForLog(err)}`,
           );
         },
       );
@@ -2632,10 +2666,11 @@ export class Realm {
     });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
-    let invalidations = await this.updateIndexAndCollectInvalidations(urls, {
-      delete: true,
-    });
-    this.broadcastIncrementalInvalidationEvent(invalidations);
+    let { invalidations, generation } =
+      await this.updateIndexAndCollectInvalidations(urls, {
+        delete: true,
+      });
+    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
   }
 
   get realmIndexUpdater() {
@@ -2655,11 +2690,14 @@ export class Realm {
     await Promise.resolve();
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      let { generation } = await this.#realmIndexUpdater.copy(
+        this.#copiedFromRealm,
+      );
       this.broadcastRealmEvent({
         eventName: 'index',
         indexType: 'copy',
         sourceRealmURL: this.#copiedFromRealm.href,
+        ...(generation !== undefined ? { generation } : {}),
         realmURL: this.url,
       });
     } else {
@@ -6922,10 +6960,11 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      let invalidations = await this.updateIndexAndCollectInvalidations([url], {
-        ...(operation === 'removed' ? { delete: true } : {}),
-      });
-      this.broadcastIncrementalInvalidationEvent(invalidations);
+      let { invalidations, generation } =
+        await this.updateIndexAndCollectInvalidations([url], {
+          ...(operation === 'removed' ? { delete: true } : {}),
+        });
+      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
     }
     itemsDrained!();
   }
@@ -6941,6 +6980,25 @@ export class Realm {
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
     this.#adapter.broadcastRealmEvent(
+      event,
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+    );
+  }
+
+  // Public entry point for broadcasting a realm event that does not originate
+  // from a request this Realm handled — a worker-originated event bridged in
+  // through the worker manager. Unlike the private broadcastRealmEvent
+  // (fire-and-forget), this awaits the adapter so the internal /_worker-request
+  // endpoint doesn't leave a dangling promise and can
+  // surface a resolution/dispatch throw. Delivery itself is best-effort — the
+  // adapter swallows per-room send failures the same way web-tier broadcasts do
+  // — so a 200 means "resolved and dispatched," not "received by every host."
+  // The adapter stamps this realm's canonical url on the event, so it reaches
+  // subscribed hosts exactly as a web-tier-originated event does.
+  async broadcastEvent(event: RealmEventContent): Promise<void> {
+    await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,

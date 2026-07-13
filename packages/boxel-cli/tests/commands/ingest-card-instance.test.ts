@@ -24,15 +24,15 @@ const ROOT = 'https://realms.example.test/garage/';
 
 const REALM_FILES: Record<string, string> = {
   'garage.gts': `
-import { CardDef, field, linksToMany } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, linksToMany } from '@cardstack/base/card-api';
 import { Tool } from './tool';
 export class Garage extends CardDef {
   @field tools = linksToMany(() => Tool);
 }
 `,
   'tool.gts': `
-import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 export class Tool extends CardDef {
   @field name = contains(StringField);
 }

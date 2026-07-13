@@ -16,13 +16,28 @@
    is layered on separately, below.
 */
 
-/* Light — the default theme, and the explicit `data-theme="light"` scope used
-   to force light back on inside a dark subtree. Both resolve to the same
-   values. */
+/* The inherited light/dark signal that scoped theme stylesheets key off (via a
+   style container query). Kept out of the token block below on purpose: it must
+   inherit *through* themed-card boundaries so a card's own `.dark` variables
+   can follow the ambient scheme, while the token values themselves must not. */
 :root,
 [data-theme='light'] {
   --boxel-color-scheme: light;
+}
 
+/* Light — the default theme, and the explicit `data-theme="light"` scope used
+   to force light back on inside a dark subtree. Both resolve to the same
+   values.
+
+   `:where([data-boxel-theme-scope])` re-declares the full contract at every
+   themed-card boundary so token values can't inherit into a themed card from
+   the chrome or an outer theme card — a theme only overrides the tokens it
+   defines, and the rest reset to these defaults instead of leaking through.
+   `:where()` keeps the reset at zero specificity, so the card's own scoped
+   theme stylesheet always wins. */
+:root,
+[data-theme='light'],
+:where([data-boxel-theme-scope]) {
   /* surfaces */
   --background: var(--boxel-light);
   --foreground: var(--boxel-dark);
@@ -97,6 +112,49 @@
   --shadow-xl:
     0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  /* status */
+  --success: var(--boxel-success);
+  --warning: var(--boxel-warning);
+
+  /* other */
+  --boxel-switch-background: var(--boxel-400);
+}
+
+/* Themed-card boundary reset for the --theme-* knobs (typography roles, base
+   font size, typescale) that theme cards may define and CardContainer consumes
+   through var() fallbacks. They have no defaults here, so `initial` (the
+   guaranteed-invalid value for a custom property) stops an outer theme card's
+   values from inheriting into a nested one and lets those fallbacks apply. A
+   card's own theme stylesheet overrides this — `:where()` keeps it at zero
+   specificity. (--theme-spacing is excluded: CardContainer derives it from
+   --spacing, which the token reset above already covers.) */
+:where([data-boxel-theme-scope]) {
+  --theme-font-size: initial;
+  --theme-scale: initial;
+  --theme-heading-font-family: initial;
+  --theme-heading-font-size: initial;
+  --theme-heading-font-weight: initial;
+  --theme-heading-line-height: initial;
+  --theme-section-heading-font-family: initial;
+  --theme-section-heading-font-size: initial;
+  --theme-section-heading-font-weight: initial;
+  --theme-section-heading-line-height: initial;
+  --theme-subheading-font-family: initial;
+  --theme-subheading-font-size: initial;
+  --theme-subheading-font-weight: initial;
+  --theme-subheading-line-height: initial;
+  --theme-body-font-family: initial;
+  --theme-body-font-size: initial;
+  --theme-body-font-weight: initial;
+  --theme-body-line-height: initial;
+  --theme-caption-font-family: initial;
+  --theme-caption-font-size: initial;
+  --theme-caption-font-weight: initial;
+  --theme-caption-line-height: initial;
+  --boxel-switch-background: initial;
+  --success: initial;
+  --warning: initial;
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────
@@ -104,11 +162,10 @@
    any subtree you want themed dark. Force light back on inside a dark subtree
    with `data-theme="light"` (see the light block above).
 
-   OS-driven dark (`prefers-color-scheme` / a `data-theme="system"` mode) is
-   intentionally NOT wired up yet — it needs to resolve in both directions
-   (falling back to light when the OS is light, including inside a dark subtree),
-   so it is deferred until that feature is implemented.
-*/
+   OS-driven dark ('system' preference) has no token set of its own: consumers
+   (e.g. the host theme service) resolve `prefers-color-scheme` to a concrete
+   `data-theme="light"|"dark"` so these two blocks stay the single source of
+   truth in both directions. */
 .dark,
 [data-theme='dark'] {
   --boxel-color-scheme: dark;

@@ -28,11 +28,11 @@ import {
 } from '@cardstack/host/utils/card-search/sections';
 import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import ResultSection from './result-section';
 import SearchResultHeader from './search-result-header';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 import type { ModifierLike } from '@glint/template';
 

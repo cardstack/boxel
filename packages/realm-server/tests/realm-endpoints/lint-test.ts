@@ -77,7 +77,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       const testCases = [
         {
           name: 'Plain text request',
-          source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+          source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -229,7 +229,7 @@ computeVia.call({ title: 'Tic Tac Toe' });
     });
 
     test('fallback to eslint-only when prettier fails', async function (assert) {
-      const malformedSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const malformedSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
   // Malformed syntax that prettier cannot parse
@@ -275,7 +275,7 @@ export class MyCard extends CardDef {
     });
 
     test('lint operations complete within performance threshold', async function (assert) {
-      const testSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const testSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`;
@@ -343,7 +343,7 @@ export class MyCard extends CardDef {
     });
 
     test('memory usage during lint operations', async function (assert) {
-      const testSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const testSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`;
@@ -428,8 +428,8 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField)
 }
@@ -440,7 +440,7 @@ export class MyCard extends CardDef {
       assert.strictEqual(
         responseJson.output,
         `import StringField from '@cardstack/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
 export class MyCard extends CardDef {
   @field name = contains(StringField);
@@ -486,7 +486,7 @@ import MyComponent from 'somewhere';
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 import MyComponent from 'somewhere';
 
 export class MyCard extends CardDef {
@@ -504,7 +504,7 @@ export class MyCard extends CardDef {
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
 import StringField from '@cardstack/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 import MyComponent from 'somewhere';
 
 export class MyCard extends CardDef {
@@ -526,8 +526,8 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import{CardDef}from 'https://cardstack.com/base/card-api';
-import{StringField}from 'https://cardstack.com/base/string';
+        .send(`import{CardDef}from '@cardstack/base/card-api';
+import{StringField}from '@cardstack/base/string';
 export class MyCard extends CardDef{
 @field name=contains(StringField);
 }`);
@@ -536,8 +536,8 @@ export class MyCard extends CardDef{
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { StringField } from 'https://cardstack.com/base/string';
+        `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import { StringField } from '@cardstack/base/string';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -555,7 +555,7 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 }
 <template>
@@ -595,7 +595,7 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 }
 <template>
@@ -672,7 +672,7 @@ import MyComponent from 'somewhere';
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from "https://cardstack.com/base/card-api";
+        .send(`import { CardDef } from "@cardstack/base/card-api";
 export class MyCard extends CardDef {
 @field name = contains(StringField, { cardDescription: "test description" });
 }`);
@@ -686,7 +686,7 @@ export class MyCard extends CardDef {
         'Single quotes are used for imports',
       );
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/card-api'"),
+        responseJson.output.includes("'@cardstack/base/card-api'"),
         'Single quotes are used consistently',
       );
       assert.ok(
@@ -705,7 +705,7 @@ export class MyCard extends CardDef {
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
         .set('X-Filename', 'my-card.gts')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
@@ -716,7 +716,7 @@ export class MyCard extends CardDef {
       assert.strictEqual(
         responseJson.output,
         `import StringField from '@cardstack/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -821,6 +821,59 @@ export default class Sample extends Component {
       );
     });
 
+    test('no-unused-block-params allows underscore-prefixed params but still flags plain unused ones', async function (assert) {
+      // Underscore-prefixed block params are intentionally unused (matching the
+      // `^_` convention we already allow in ESLint), so they must NOT be
+      // flagged; a plain unused trailing param still must be.
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'block-params.gts').send(`<template>
+  {{#each this.rows as |_row|}}
+    <div class="dot"></div>
+  {{/each}}
+  {{#each this.rows as |row idx|}}
+    {{row}}
+  {{/each}}
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        message: string;
+      }[];
+      let unusedFindings = messages.filter((m) =>
+        /is defined but never used/.test(m.message),
+      );
+      assert.notOk(
+        unusedFindings.some((m) => m.message.includes(`'_row'`)),
+        `underscore-prefixed '_row' should be allowed: ${JSON.stringify(
+          unusedFindings,
+        )}`,
+      );
+      assert.ok(
+        unusedFindings.some(
+          (m) =>
+            m.ruleId === 'no-unused-block-params-except-underscore' &&
+            m.message.includes(`'idx'`),
+        ),
+        `plain unused 'idx' should still be flagged: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'no-unused-block-params'),
+        'the core no-unused-block-params rule is disabled (replaced by the underscore-aware variant)',
+      );
+    });
+
     test('lints .gjs files with the gts parser (host config has no .gjs override)', async function (assert) {
       let response = await request
         .post('/_lint')
@@ -921,7 +974,7 @@ export default class Sample extends Component {
 
     test('handles large files within reasonable time', async function (assert) {
       // Create a large file with many imports and classes
-      let largeContent = `import { CardDef } from 'https://cardstack.com/base/card-api';\n`;
+      let largeContent = `import { CardDef } from '@cardstack/base/card-api';\n`;
       for (let i = 0; i < 100; i++) {
         largeContent += `
 export class MyCard${i} extends CardDef {

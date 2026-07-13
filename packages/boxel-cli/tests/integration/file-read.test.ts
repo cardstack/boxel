@@ -22,8 +22,8 @@ const SOURCE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class FileReadCheck extends CardDef {
   static displayName = 'File Read Check';
@@ -91,6 +91,27 @@ describe('file read (integration)', () => {
     expect(result.status).toBe(200);
     expect(result.content).toBeTruthy();
     expect(result.content!.length).toBeGreaterThan(0);
+  });
+
+  it('reads a file via a non-URL @cardstack/ realm identifier', async () => {
+    // `@cardstack/<realm>/` resolves against the active profile's
+    // realm-server URL, so `@cardstack/test/` names the test realm.
+    let result = await read('@cardstack/test/', 'test-card.json', {
+      profileManager,
+    });
+
+    expect(result.ok, `read failed: ${JSON.stringify(result)}`).toBe(true);
+    expect(result.status).toBe(200);
+    let parsed = JSON.parse(result.content!);
+    expect(parsed).toHaveProperty('data');
+  });
+
+  it('returns a not-ok result for an unsupported realm identifier scope', async () => {
+    let result = await read('@unknown-scope/test/', 'test-card.json', {
+      profileManager,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('only @cardstack/<realm>/');
   });
 
   it('returns a not-ok result with 404 status for a nonexistent file', async () => {

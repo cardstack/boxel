@@ -37,7 +37,6 @@ import {
   aiBotUsername,
   submissionBotUsername,
   logger,
-  isCardInstance,
   Deferred,
   ri,
   SEARCH_MARKER,
@@ -54,10 +53,10 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -77,7 +76,7 @@ import {
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  getToolRequests,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -95,44 +94,21 @@ import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  CardForAttachmentCard,
-  FileForAttachmentCard,
-} from 'https://cardstack.com/base/command';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type {
-  ActiveLLMEvent,
-  BoxelContext,
-  BotTriggerContent,
-  CardMessageContent,
-  MatrixEvent as DiscreteMatrixEvent,
-  CodePatchResultContent,
-  CodePatchStatus,
-  CommandResultWithNoOutputContent,
-  CommandResultWithOutputContent,
-  RealmEventContent,
-  Tool,
-  CommandResultStatus,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-import type { SystemCard } from 'https://cardstack.com/base/system-card';
-
-import UpdateRoomSkillsCommand from '../commands/update-room-skills';
-import { addPatchTools } from '../commands/utils';
-import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
-import { getSkillSourceCommands, loadSkillSource } from '../lib/skill-commands';
-import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
+import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
+import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
+import {
+  sourceCodeEditingSkillUrl,
+  devSkillId,
+  envSkillId,
+} from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
+import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
-import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type {
@@ -149,7 +125,32 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type ToolService from './tool-service';
 import type { RoomResource } from '../resources/room';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type {
+  CardForAttachmentCard,
+  FileForAttachmentCard,
+} from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
+import type * as FileAPI from '@cardstack/base/file-api';
+import type {
+  ActiveLLMEvent,
+  BoxelContext,
+  BotTriggerContent,
+  CardMessageContent,
+  MatrixEvent as DiscreteMatrixEvent,
+  CodePatchResultContent,
+  CodePatchStatus,
+  ToolResultWithNoOutputContent,
+  ToolResultWithOutputContent,
+  RealmEventContent,
+  Tool,
+  ToolResultStatus,
+} from '@cardstack/base/matrix-event';
+import type * as SkillModule from '@cardstack/base/skill';
+import type { SystemCard } from '@cardstack/base/system-card';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type {
   LoginResponse,
@@ -173,7 +174,7 @@ export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private loggerService: LoggerService;
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private realm: RealmService;
   @service declare private matrixSdkLoader: MatrixSDKLoader;
   @service declare private messageService: MessageService;
@@ -219,7 +220,7 @@ export default class MatrixService extends Service {
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
-  failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  failedToolState: TrackedMap<string, Error> = new TrackedMap();
   reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -774,7 +775,18 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
+    // The legacy `app.boxel.realms` write above is persistence only. On a
+    // trusted-realm-servers session the in-memory list also holds realms
+    // granted via `_realm-auth` that the legacy list never contained, so
+    // replacing the list with `newRealms` would drop those realms until the
+    // next reload. Merge into the current list instead — prepending, since
+    // the list is newest-created-first.
+    await this.realmServer.setAvailableRealmIdentifiers([
+      ...new Set([
+        ri(realmURLString),
+        ...this.realmServer.userRealmIdentifiers,
+      ]),
+    ]);
   }
 
   public async removeRealmFromAccountData(realmURLString: string) {
@@ -787,7 +799,13 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
+    // Drop only the removed realm from the current in-memory list; see
+    // appendRealmToAccountData for why the legacy list can't be used here.
+    await this.realmServer.setAvailableRealmIdentifiers(
+      this.realmServer.userRealmIdentifiers.filter(
+        (realmIdentifier) => realmIdentifier !== ri(realmURLString),
+      ),
+    );
   }
 
   public async getRealmServersFromAccountData(): Promise<string[]> {
@@ -1301,8 +1319,8 @@ export default class MatrixService extends Service {
       | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | ToolResultWithNoOutputContent
+      | ToolResultWithOutputContent,
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -1324,7 +1342,7 @@ export default class MatrixService extends Service {
 
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
-  async updateSkillsAndCommandsIfNeeded(roomId: string) {
+  async updateSkillsAndToolsIfNeeded(roomId: string) {
     await this.updateStateEvent(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -1333,7 +1351,7 @@ export default class MatrixService extends Service {
         let enabledSkillCardFileDefs =
           (currentSkillsConfig?.enabledSkillCards ??
             []) as FileAPI.SerializedFile[];
-        let enabledCommandDefinitions: SkillModule.CommandField[] = [];
+        let enabledCommandDefinitions: SkillModule.ToolField[] = [];
         // Skill cards re-upload their serialized card content; skill markdown
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
@@ -1345,7 +1363,7 @@ export default class MatrixService extends Service {
               return;
             }
             enabledCommandDefinitions = enabledCommandDefinitions.concat(
-              getSkillSourceCommands(source),
+              getSkillSourceTools(source),
             );
             if (isSkillCard in source) {
               skillCardsToReupload.push(source as SkillModule.Skill);
@@ -1361,10 +1379,10 @@ export default class MatrixService extends Service {
           ? await this.uploadFiles(markdownSkillFileDefs)
           : [];
         // get the unique subset of enabledCommandDefinitions by functionName
-        enabledCommandDefinitions = this.getUniqueCommandDefinitions(
+        enabledCommandDefinitions = this.getUniqueToolDefinitions(
           enabledCommandDefinitions,
         );
-        let enabledCommandDefFileDefs = await this.uploadCommandDefinitions(
+        let enabledCommandDefFileDefs = await this.uploadToolDefinitions(
           enabledCommandDefinitions,
         );
         return {
@@ -1373,7 +1391,7 @@ export default class MatrixService extends Service {
             ...enabledMarkdownSkillFileDefs,
           ].map((fileDef) => fileDef.serialize()),
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
-          commandDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
+          toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
           ),
         };
@@ -1385,10 +1403,10 @@ export default class MatrixService extends Service {
     return await this.client.downloadAsFileInBrowser(serializedFile);
   }
 
-  public getUniqueCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ): SkillModule.CommandField[] {
-    return getUniqueValidCommandDefinitions(commandDefinitions);
+  public getUniqueToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
+  ): SkillModule.ToolField[] {
+    return getUniqueValidToolDefinitions(toolDefinitionFileDefs);
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -1396,18 +1414,17 @@ export default class MatrixService extends Service {
     return cardFileDefs;
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ) {
-    let validCommandDefinitions =
-      getUniqueValidCommandDefinitions(commandDefinitions);
+  async uploadToolDefinitions(toolDefinitionFileDefs: SkillModule.ToolField[]) {
+    let validCommandDefinitions = getUniqueValidToolDefinitions(
+      toolDefinitionFileDefs,
+    );
     if (validCommandDefinitions.length === 0) {
       return [];
     }
-    let commandFileDefs = await this.client.uploadCommandDefinitions(
+    let toolFileDefs = await this.client.uploadToolDefinitions(
       validCommandDefinitions,
     );
-    return commandFileDefs;
+    return toolFileDefs;
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
@@ -1422,11 +1439,11 @@ export default class MatrixService extends Service {
     );
   }
 
-  async sendCommandResultEvent(params: {
+  async sendToolResultEvent(params: {
     roomId: string;
     invokedToolFromEventId: string;
     toolCallId: string;
-    status: CommandResultStatus;
+    status: ToolResultStatus;
     resultCard?: CardDef;
     failureReason?: string;
     attachedCards?: CardDef[];
@@ -1460,28 +1477,26 @@ export default class MatrixService extends Service {
       );
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
-    let content:
-      | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent;
+    let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
     if (resultCardFileDef === undefined) {
       content = {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         },
         data: contentData,
       };
     } else {
       content = {
-        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         },
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
@@ -1494,7 +1509,7 @@ export default class MatrixService extends Service {
     try {
       return await this.sendEvent(
         params.roomId,
-        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         content,
       );
     } catch (e) {
@@ -1729,13 +1744,13 @@ export default class MatrixService extends Service {
     // Generate tool calls for patching currently open cards permitted for modification
     tools = tools.concat(
       await addPatchTools(
-        this.commandService.commandContext,
+        this.toolService.toolContext,
         patchableCards,
         this.cardAPI,
       ),
     );
 
-    await this.updateSkillsAndCommandsIfNeeded(roomId);
+    await this.updateSkillsAndToolsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
       attachedCards,
@@ -1910,31 +1925,34 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [envSkillId];
-
-    let codeModeDefaultSkills = [
-      devSkillId,
-      envSkillId,
-      skillCardURL('source-code-editing'),
-    ];
-
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
+  // The default skills for a new AI room, as skill ids. When the user's active
+  // system card lists any default skills — legacy `Skill` cards, `.md` skill
+  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
+  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
+  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+    let configuredIds = [
+      ...(this.systemCard?.defaultSkillCards ?? []),
+      ...(this.systemCard?.defaultSkillFiles ?? []),
+    ]
+      .map((skill) => skill?.id)
+      .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    if (configuredIds.length) {
+      return configuredIds;
     }
 
-    return (
-      await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillModule.Skill[];
+    let interactModeDefaultSkills = [envSkillId];
+
+    // Code editing is covered by the code-mode entry-point skill (see
+    // activateCodingSkill), so source-code-editing is no longer pushed here.
+    // The two remaining defaults are still legacy pushed cards (full body in
+    // every prompt); they move to markdown + on-demand references once the
+    // bot supports commands on markdown skills, after which this list shrinks.
+    let codeModeDefaultSkills = [devSkillId, envSkillId];
+
+    return submode === 'code'
+      ? codeModeDefaultSkills
+      : interactModeDefaultSkills;
   }
 
   @cached
@@ -1959,7 +1977,7 @@ export default class MatrixService extends Service {
     }
     this.roomResourcesCache.clear();
     this.canceledActionMessageIdByRoom.clear();
-    this.failedCommandState.clear();
+    this.failedToolState.clear();
     this.reasoningExpandedState.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
@@ -2722,10 +2740,10 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      getToolRequests(event.content)?.length &&
       event.content?.isStreamingFinished
     ) {
-      this.commandService.queueEventForCommandProcessing(event);
+      this.toolService.queueEventForToolProcessing(event);
     }
 
     // Queue code patches for processing
@@ -2741,7 +2759,7 @@ export default class MatrixService extends Service {
         body.includes(SEPARATOR_MARKER) &&
         body.includes(REPLACE_MARKER)
       ) {
-        this.commandService.queueEventForCodePatchProcessing(event);
+        this.toolService.queueEventForCodePatchProcessing(event);
       }
     }
   }
@@ -2796,13 +2814,16 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
+      this.toolService.toolContext,
     );
-    let defaultSkills = await this.loadDefaultSkills('code');
+    let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
+      // Dual-path window: the legacy card skills activate alongside the
+      // markdown source-code-editing skill. All are pushed for now; the
+      // on-demand entry point returns as a catalog listing.
+      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
     });
   }
 

@@ -47,6 +47,7 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
+  type PrerenderedHtmlTable,
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -67,6 +68,7 @@ const PRERENDERED_HTML_MUTABLE_COLUMNS = [
   'is_deleted',
   'error_doc',
   'rendered_at',
+  'diagnostics',
   'job_id',
 ];
 
@@ -80,8 +82,19 @@ export class IndexWriter {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
+    opts?: {
+      splitPrerenderHtml?: boolean;
+      prerenderHtmlOnly?: boolean;
+      generation?: number;
+    },
   ) {
-    let batch = new Batch(this.#dbAdapter, realmURL, virtualNetwork, jobInfo);
+    let batch = new Batch(
+      this.#dbAdapter,
+      realmURL,
+      virtualNetwork,
+      jobInfo,
+      opts,
+    );
     await batch.ready;
     return batch;
   }
@@ -187,6 +200,47 @@ export interface FileEntry {
   diagnostics?: Diagnostics;
 }
 
+// The per-URL write payloads of a `prerenderHtmlOnly` batch — the HTML half
+// of an index entry. `PrerenderedHtmlEntry` lands a fresh rendering;
+// `PrerenderedHtmlErrorEntry` records a render failure while preserving the
+// last-known-good HTML already in production `prerendered_html`.
+export interface PrerenderedHtmlEntry {
+  type: 'instance' | 'file';
+  isolatedHtml?: string | null;
+  headHtml?: string | null;
+  embeddedHtml?: Record<string, string> | null;
+  fittedHtml?: Record<string, string> | null;
+  atomHtml?: string | null;
+  markdown?: string | null;
+  deps: string[];
+  // The prerender-html visit's render diagnostics (launch/wait timings,
+  // render elapsed, per-format render timings, `prerenderHtmlRequestId`).
+  // Persisted onto `prerendered_html.diagnostics` — the render-channel
+  // analog of `InstanceEntry.diagnostics`, populated for successful rows
+  // too so operators can retrospectively answer "why did this rendering
+  // take N seconds?".
+  diagnostics?: Diagnostics;
+}
+
+export interface PrerenderedHtmlErrorEntry {
+  type: 'instance-error' | 'file-error';
+  error: SerializedError;
+  // See PrerenderedHtmlEntry.diagnostics: the failing render's own
+  // breakdown. Also mirrored onto `error_doc.diagnostics` at write time,
+  // matching the `boxel_index` error-row pattern.
+  diagnostics?: Diagnostics;
+}
+
+// The invalidation set an index pass threads to its `prerender_html` job:
+// each URL tagged with whether it is a genuine deletion (stays tombstoned)
+// or a re-render. Structurally identical to `IncrementalChange`
+// (tasks/indexer.ts) — declared here so the writer layer doesn't import
+// from the task layer.
+export interface PrerenderedHtmlChange {
+  url: string;
+  operation: 'update' | 'delete';
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -212,6 +266,31 @@ export class Batch {
   #currentInvalidationId: string;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  // The source realm of a copy batch, set by `copyFrom`. `applyBatchUpdates`
+  // uses it to overlay the destination's prerendered HTML from the source
+  // realm's `prerendered_html` rows after the `boxel_index` projection runs.
+  #copyFromSourceRealm: URL | undefined;
+  // When true (the server/Postgres path), HTML prerendering runs as a separate
+  // `prerender_html` job, so this index batch writes only `boxel_index` and
+  // leaves the `prerendered_html` channel to that job. When false (the fused
+  // path — the SQLite in-browser/test realm, which has no separate worker), the
+  // batch keeps projecting HTML into `prerendered_html` inline. Defaults to
+  // `dbAdapter.kind === 'pg'`; a copy batch keeps the projection either way
+  // (guarded by `#copyFromSourceRealm` in `applyBatchUpdates`).
+  #splitPrerenderHtml: boolean;
+  // When true, this batch is the `prerender_html` job's batch: it writes only
+  // the `prerendered_html` channel (not `boxel_index`), stamps the carried
+  // generation without advancing `realm_generations`, and its swap carries a
+  // monotonic guard. The tombstone / last-known-good / resume / write logic is
+  // otherwise identical to an index batch — the fan-out is not recomputed here
+  // (it ran once in the index pass and is seeded via
+  // `seedPrerenderedHtmlInvalidations`).
+  #prerenderHtmlOnly: boolean;
+  #explicitGeneration: number | undefined;
+  #priorLoaderEpoch = '0';
+  #mintedLoaderEpoch: string | undefined;
+  #hasExecutableInvalidation = false;
+  #scannedInvalidationCount = 0;
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -222,13 +301,75 @@ export class Batch {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
+    opts?: {
+      splitPrerenderHtml?: boolean;
+      prerenderHtmlOnly?: boolean;
+      generation?: number;
+    },
   ) {
     this.realmURL = realmURL;
     this.virtualNetwork = virtualNetwork;
     this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
+    this.#splitPrerenderHtml =
+      opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
+    this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
+    this.#explicitGeneration = opts?.generation;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
+  }
+
+  // Whether this batch defers HTML to the `prerender_html` job (server) rather
+  // than projecting it inline (fused / SQLite). Read by the index-runner visit
+  // loop (to skip the inline prerender-html visit) and the enqueue callback.
+  get splitPrerenderHtml(): boolean {
+    return this.#splitPrerenderHtml;
+  }
+
+  // The realm generation this batch stamps on every row it writes
+  // (`current_generation + 1`, computed at batch start). Threaded out so the
+  // index event and the spawned `prerender_html` job can carry it.
+  get currentGeneration(): number {
+    return this.generation;
+  }
+
+  // The loader epoch this batch's renders thread into the /render route:
+  // a freshly minted token when the invalidation set includes executable
+  // modules (their bytes changed, so warm prerender-tab loaders are stale),
+  // otherwise the epoch already committed for the realm. The route resets
+  // its loader when a render's epoch differs from the one the tab last
+  // cleared for, so module edits cost one loader reset per tab while
+  // instance-only passes keep every loader warm. The invalidation set only
+  // grows, so the executable scan memoizes: once an executable is seen the
+  // answer is final, and unchanged set sizes skip re-scanning.
+  get loaderEpoch(): string {
+    if (
+      !this.#hasExecutableInvalidation &&
+      this.#invalidations.size !== this.#scannedInvalidationCount
+    ) {
+      this.#hasExecutableInvalidation = [...this.#invalidations].some((url) =>
+        hasExecutableExtension(url),
+      );
+      this.#scannedInvalidationCount = this.#invalidations.size;
+    }
+    if (this.#hasExecutableInvalidation) {
+      return (this.#mintedLoaderEpoch ??= uuidv4());
+    }
+    return this.#priorLoaderEpoch;
+  }
+
+  // Feed URLs into the loader-epoch executable scan without adding them to
+  // the batch's invalidation set. The from-scratch pass determines its URL
+  // list outside `invalidate()` (rows join `#invalidations` one visit at a
+  // time via `updateEntry`), so without this the epoch read at announce
+  // time — and by the pass's early visits — would predate the module scan
+  // and disagree with the epoch the pass ultimately commits.
+  noteInvalidatedURLs(urls: string[]): void {
+    if (!this.#hasExecutableInvalidation) {
+      this.#hasExecutableInvalidation = urls.some((url) =>
+        hasExecutableExtension(url),
+      );
+    }
   }
 
   private isRegisteredPrefix(reference: string): boolean {
@@ -240,6 +381,20 @@ export class Batch {
   }
 
   private async setupBatch(): Promise<void> {
+    if (this.#prerenderHtmlOnly) {
+      // The `prerender_html` job stamps the generation its spawning index
+      // pass anticipated — it never advances `realm_generations` (the
+      // monotonic swap guard in `done()` is what keeps out-of-order jobs
+      // safe, not the generation being exact).
+      if (this.#explicitGeneration == null) {
+        throw new Error(
+          `a prerenderHtmlOnly batch requires an explicit generation`,
+        );
+      }
+      this.generation = this.#explicitGeneration;
+      await this.loadResumedPrerenderedHtmlRows();
+      return;
+    }
     await this.setNextGeneration();
     await this.loadResumedRows();
   }
@@ -279,6 +434,38 @@ export class Batch {
     }
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} resuming ${this.#resumedRows.size} URLs from prior attempt for ${this.realmURL.href}`,
+    );
+  }
+
+  // The `prerendered_html` analog of `loadResumedRows`, for a
+  // `prerenderHtmlOnly` batch: resume from `prerendered_html_working` rows a
+  // prior attempt of this same job already rendered. Tombstones are excluded
+  // so the deletion intent flows through to the swap, and error rows are
+  // excluded so a transient render failure gets a second chance (the table
+  // has no `has_error` column; an error row is `error_doc IS NOT NULL`).
+  // There is no mtime to record — `args.changes` is the job's deterministic
+  // seed, so a resumed row is always authoritative for this job.
+  private async loadResumedPrerenderedHtmlRows(): Promise<void> {
+    if (!this.jobInfo || this.jobInfo.jobId <= 0) {
+      return;
+    }
+    let rows = (await this.#query([
+      `SELECT url FROM prerendered_html_working WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['job_id =', param(this.jobInfo.jobId)],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        ['error_doc IS NULL'],
+      ]),
+    ] as Expression)) as Pick<PrerenderedHtmlTable, 'url'>[];
+    for (let { url } of rows) {
+      this.#resumedRows.set(url, null);
+      // Pre-seed the invalidation set so the swap in `done()` promotes the
+      // resumed rows even though this attempt never re-writes them.
+      this.#invalidations.add(url);
+    }
+    this.#perfLog.debug(
+      `${jobIdentity(this.jobInfo)} resuming ${this.#resumedRows.size} prerendered-html URLs from prior attempt for ${this.realmURL.href}`,
     );
   }
 
@@ -441,9 +628,95 @@ export class Batch {
         values,
       ),
     ]);
+
+    // `applyBatchUpdates` overlays the source realm's prerendered HTML after the
+    // `boxel_index` projection runs.
+    this.#copyFromSourceRealm = sourceRealmURL;
+  }
+
+  // Overlay the source realm's `prerendered_html` rows onto the destination's
+  // `prerendered_html_working`, so a copied realm keeps its prerendered HTML
+  // without re-rendering — sourced from the `prerendered_html` channel rather
+  // than the `boxel_index` HTML columns. Runs after the `boxel_index`
+  // projection in `applyBatchUpdates` and overwrites the rows it covers, so a
+  // rendering that exists in the source's `prerendered_html` wins, while a row
+  // absent there keeps the `boxel_index`-projected HTML (the copy fills every
+  // row and leaves no gap). Mirrors the `boxel_index` copy's transforms — URL
+  // rewrite (`url`, `realm_url`, `file_alias`), render-type-key rewrite of
+  // `fitted_html` / `embedded_html`, deps rewrite (scoped-CSS URLs ride in
+  // `deps`), and `error_doc` normalization — and stamps the destination
+  // generation so the copied instances read as fresh
+  // (`prerendered_html.generation == boxel_index.generation`). Tombstoned
+  // source rows are skipped, matching the `boxel_index` copy.
+  private async copyPrerenderedHtmlFrom(sourceRealmURL: URL): Promise<void> {
+    let now = String(Date.now());
+    let sources = (await this.#query([
+      `SELECT * FROM prerendered_html WHERE`,
+      ...every([
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [`realm_url =`, param(sourceRealmURL.href)],
+      ]),
+    ] as Expression)) as unknown as PrerenderedHtmlTable[];
+    let copyURL = (value: string) =>
+      this.isRegisteredPrefix(value)
+        ? value
+        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
+    let columns: string[][] | undefined;
+    let values = sources.map((entry) => {
+      let destURL = copyURL(entry.url);
+      // The source's `prerendered_html` rows are a subset of its `boxel_index`
+      // rows, so `copyFrom` already seeded these into `#invalidations`; add
+      // defensively so the swap below promotes every overlaid HTML row.
+      this.#invalidations.add(destURL);
+      entry.url = destURL;
+      entry.realm_url = this.realmURL.href;
+      entry.file_alias = copyURL(entry.file_alias);
+      entry.generation = this.generation;
+      entry.rendered_at = now;
+      entry.job_id = this.jobInfo?.jobId ?? null;
+      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
+      entry.last_known_good_deps = entry.last_known_good_deps
+        ? entry.last_known_good_deps.map(copyURL)
+        : entry.last_known_good_deps;
+      entry.fitted_html = entry.fitted_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
+        : entry.fitted_html;
+      entry.embedded_html = entry.embedded_html
+        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
+        : entry.embedded_html;
+      if (entry.error_doc) {
+        entry.error_doc = this.normalizeErrorDoc(
+          entry.error_doc,
+          new URL(entry.url),
+          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
+        );
+      }
+      let { valueExpressions, nameExpressions } = asExpressions(entry);
+      columns = nameExpressions;
+      return valueExpressions;
+    });
+    if (!columns) {
+      // Source realm has no prerendered HTML to overlay (e.g. never rendered);
+      // the `boxel_index` projection already filled the working rows.
+      return;
+    }
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
   }
 
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    if (this.#prerenderHtmlOnly) {
+      throw new Error(
+        `a prerenderHtmlOnly batch writes only the prerendered_html channel — use updatePrerenderedHtmlEntry`,
+      );
+    }
     if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
@@ -489,12 +762,14 @@ export class Batch {
     // diagnostics via `formattedError`) keeps working unchanged —
     // no schema rename needed. The column remains source of truth;
     // the error-doc copy is derived.
-    // Sanitize so jsonb-illegal bytes can't abort the batch on write.
-    let diagnostics: Diagnostics = sanitizeForJsonb({
+    // jsonb-illegal bytes are stripped once at the write boundary below
+    // (see the sanitizeForJsonb call before asExpressions), so this and every
+    // other content column is covered in one place.
+    let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
       indexedAt: Date.now(),
-    });
+    };
     let errorEntry = isErrorEntry(entry)
       ? {
           ...entry,
@@ -563,15 +838,23 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'file-error':
+      case 'file-error': {
+        let production: Record<string, any> =
+          (await this.getProductionVersion(url, baseTypeFromError(entry))) ??
+          {};
         entryPayload = {
           types: entry.types,
-          search_doc: entry.searchData,
           // favor the last known good types over the types derived from the error state
-          ...((await this.getProductionVersion(
-            url,
-            baseTypeFromError(entry),
-          )) ?? {}),
+          ...production,
+          // Assign search_doc AFTER the production spread so the freshly-stamped
+          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // rather than being clobbered by the last-known-good doc. Overlaying
+          // the current searchData onto that doc keeps an instance's rich fields
+          // when it degrades to a sparse error searchData, while a file /
+          // dependency-error row (full searchData) wins outright.
+          search_doc: entry.searchData
+            ? { ...(production.search_doc ?? {}), ...entry.searchData }
+            : (production.search_doc ?? null),
           // preserve last_known_good_deps through error cycles (may have been cleared
           // by getProductionVersion if it returned undefined, so we explicitly preserve it)
           last_known_good_deps: await this.getLastKnownGoodDeps(
@@ -579,11 +862,12 @@ export class Batch {
             baseTypeFromError(entry),
           ),
           type: baseTypeFromError(entry),
-          error_doc: sanitizeForJsonb(errorEntry?.error ?? entry.error),
+          error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
           diagnostics: diagnostics,
         };
         break;
+      }
       default:
         throw new Error(
           `Unsupported index entry type: ${(entry as { type: string }).type}`,
@@ -634,11 +918,24 @@ export class Batch {
       );
     }
 
-    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
-      jsonFields: [...Object.entries(coerceTypes)]
-        .filter(([_, type]) => type === 'JSON')
-        .map(([column]) => column),
-    });
+    // Strip jsonb-illegal code points from the entire row before persisting.
+    // Postgres rejects the NUL character and unpaired UTF-16 surrogate halves
+    // inside a jsonb value's text (22P05); a single such code point anywhere in
+    // the row aborts the whole upsert batch and, during a from-scratch index,
+    // strands every other card in the realm behind it. Sanitizing the prepared
+    // row here — rather than per-field — covers every content column
+    // (pristine_doc, search_doc, markdown, the *_html columns, deps,
+    // display_names, diagnostics, error_doc) in one place, including rendered
+    // card content that can carry a split emoji surrogate or a stray NUL folded
+    // in from an upstream resolver.
+    let { nameExpressions, valueExpressions } = asExpressions(
+      sanitizeForJsonb(preparedEntry),
+      {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      },
+    );
 
     await this.#query([
       ...upsert(
@@ -650,7 +947,279 @@ export class Batch {
     ]);
   }
 
+  // Seed a prerenderHtmlOnly batch's invalidation set from the changes the
+  // spawning index pass computed — the dependency fan-out already ran there
+  // and is not recomputed here — and tombstone the whole set up front in
+  // `prerendered_html_working` (the `prerendered_html` analog of
+  // `tombstoneEntries`). The visit loop then overwrites survivors, exactly
+  // as the index visit loop does on its channel: an `'update'` URL whose
+  // render succeeds lands a fresh HTML row, a render failure lands an error
+  // row, and a URL that is never overwritten — a `'delete'` operation, or an
+  // `'update'` whose file turns out to be unreadable — stays tombstoned
+  // through the swap.
+  async seedPrerenderedHtmlInvalidations(
+    changes: PrerenderedHtmlChange[],
+  ): Promise<void> {
+    if (!this.#prerenderHtmlOnly) {
+      throw new Error(
+        `seedPrerenderedHtmlInvalidations is only valid on a prerenderHtmlOnly batch`,
+      );
+    }
+    await this.ready;
+    let urls = [...new Set(changes.map((change) => change.url))];
+    for (let url of urls) {
+      this.#invalidations.add(url);
+    }
+    // Mirror `tombstoneEntries`: don't tombstone over rows a previous
+    // attempt of this same job already rendered — that would erase the
+    // resumed progress.
+    let toTombstone = urls.filter((url) => !this.#resumedRows.has(url));
+    if (toTombstone.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingPrerenderedHtmlTypes(toTombstone);
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'generation',
+      'realm_url',
+      'is_deleted',
+      'error_doc',
+      'diagnostics',
+      'rendered_at',
+      'job_id',
+    ].map((c) => [c]);
+    let now = Date.now();
+    let jobIdValue = this.jobInfo?.jobId ?? null;
+    let rows = toTombstone.flatMap((id) => {
+      let types = existingTypes.get(id);
+      if (!types || types.length === 0) {
+        // Nothing rendered for this URL yet — there is no row to hide.
+        return [];
+      }
+      return types.map((type) =>
+        [
+          id,
+          trimExecutableExtension(rri(id)),
+          type,
+          this.generation,
+          this.realmURL.href,
+          true, // is_deleted
+          null, // error_doc — a tombstone clears any prior render error
+          null, // diagnostics — likewise cleared; they described the render this tombstone hides
+          now,
+          jobIdValue,
+        ].map((v) => [param(v)]),
+      );
+    });
+    if (rows.length === 0) {
+      return;
+    }
+    await this.#query([
+      ...upsertMultipleRows(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
+        columns,
+        rows,
+      ),
+    ]);
+  }
+
+  // Upsert one rendered (or render-error) row into
+  // `prerendered_html_working`. The prerenderHtmlOnly counterpart of
+  // `updateEntry`: same in-realm guard, same refusal of message-less error
+  // entries, same jsonb sanitization — but the payload is only the HTML
+  // half, stamped with the batch's carried generation. An error entry
+  // preserves the last-known-good HTML from production `prerendered_html`
+  // (an error row's HTML columns already carry the last-known-good rendering
+  // from prior cycles, so any production row's HTML qualifies).
+  async updatePrerenderedHtmlEntry(
+    url: URL,
+    entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
+  ): Promise<void> {
+    if (!this.#prerenderHtmlOnly) {
+      throw new Error(
+        `updatePrerenderedHtmlEntry is only valid on a prerenderHtmlOnly batch`,
+      );
+    }
+    if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
+      return;
+    }
+    if (
+      isErrorEntry(entry) &&
+      (!entry.error ||
+        typeof entry.error.message !== 'string' ||
+        entry.error.message.length === 0)
+    ) {
+      throw new Error(
+        `prerender-html writer refused ${entry.type} entry for ${url.href}: ` +
+          `error.message is empty. An upstream entry-construction site dropped ` +
+          `the underlying render error. Check worker stderr for the actual ` +
+          `failure text.`,
+      );
+    }
+    this.#invalidations.add(url.href);
+    let payload: Record<string, unknown>;
+    switch (entry.type) {
+      case 'instance':
+      case 'file': {
+        let deps = this.virtualNetwork.unresolveURLs([...new Set(entry.deps)]);
+        payload = {
+          type: entry.type,
+          fitted_html: entry.fittedHtml ?? null,
+          embedded_html: entry.embeddedHtml ?? null,
+          atom_html: entry.atomHtml ?? null,
+          head_html: entry.headHtml ?? null,
+          isolated_html: entry.isolatedHtml ?? null,
+          markdown: entry.markdown ?? null,
+          deps,
+          last_known_good_deps: deps,
+          error_doc: null,
+          diagnostics: entry.diagnostics ?? null,
+        };
+        break;
+      }
+      case 'instance-error':
+      case 'file-error': {
+        let type = baseTypeFromError(entry);
+        let production = await this.getPrerenderedHtmlProductionVersion(
+          url,
+          type,
+        );
+        // The column is the canonical home for the failing render's
+        // diagnostics; the copy on `error_doc.diagnostics` mirrors the
+        // `boxel_index` error-row pattern so error-doc consumers read one
+        // shape on both channels. Unlike the HTML columns below, the
+        // diagnostics are NOT taken from the last-known-good production
+        // row — they describe this failing render.
+        let errorDoc = this.normalizeErrorDoc(
+          {
+            ...entry.error,
+            ...(entry.diagnostics
+              ? {
+                  diagnostics: entry.diagnostics as Record<string, unknown>,
+                }
+              : {}),
+          },
+          url,
+        );
+        payload = {
+          type,
+          fitted_html: production?.fitted_html ?? null,
+          embedded_html: production?.embedded_html ?? null,
+          atom_html: production?.atom_html ?? null,
+          head_html: production?.head_html ?? null,
+          isolated_html: production?.isolated_html ?? null,
+          markdown: production?.markdown ?? null,
+          // The failing render's own dependencies join the row's deps —
+          // `itemsThatReference` scans this column, so fixing one of them
+          // must fan out to this row and clear the error. Mirrors the
+          // error-deps merge on the index channel's error path.
+          deps: [
+            ...new Set([...(production?.deps ?? []), ...(errorDoc.deps ?? [])]),
+          ],
+          last_known_good_deps: production?.last_known_good_deps ?? null,
+          error_doc: errorDoc,
+          diagnostics: entry.diagnostics ?? null,
+        };
+        break;
+      }
+      default:
+        throw new Error(
+          `Unsupported prerendered-html entry type: ${(entry as { type: string }).type}`,
+        );
+    }
+    let preparedEntry = {
+      url: url.href,
+      file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
+      realm_url: this.realmURL.href,
+      generation: this.generation,
+      is_deleted: false,
+      rendered_at: Date.now(),
+      job_id: this.jobInfo?.jobId ?? null,
+      ...payload,
+    };
+    // Same write-boundary sanitization as `updateEntry`: a single
+    // jsonb-illegal code point anywhere in the row would abort the upsert.
+    let { nameExpressions, valueExpressions } = asExpressions(
+      sanitizeForJsonb(preparedEntry),
+      {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      },
+    );
+    await this.#query([
+      ...upsert(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+  }
+
+  private async getPrerenderedHtmlProductionVersion(
+    url: URL,
+    expectedType: PrerenderedHtmlTable['type'],
+  ): Promise<PrerenderedHtmlTable | undefined> {
+    let [entry] = (await this.#query([
+      `SELECT * FROM prerendered_html WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        any([
+          [`url =`, param(url.href)],
+          [`file_alias =`, param(url.href)],
+        ]),
+        ['type =', param(expectedType)],
+      ]),
+    ] as Expression)) as unknown as PrerenderedHtmlTable[];
+    return entry;
+  }
+
+  private async existingPrerenderedHtmlTypes(
+    invalidations: string[],
+  ): Promise<Map<string, PrerenderedHtmlTable['type'][]>> {
+    if (invalidations.length === 0) {
+      return new Map();
+    }
+    let uniqueInvalidations = [...new Set(invalidations)];
+    let rows = (await this.#query([
+      'SELECT DISTINCT url, type FROM prerendered_html WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as Pick<PrerenderedHtmlTable, 'url' | 'type'>[];
+    let typesByUrl = new Map<string, PrerenderedHtmlTable['type'][]>();
+    for (let row of rows) {
+      let existing = typesByUrl.get(row.url);
+      if (existing) {
+        existing.push(row.type);
+      } else {
+        typesByUrl.set(row.url, [row.type]);
+      }
+    }
+    return typesByUrl;
+  }
+
   async done(): Promise<{ totalIndexEntries: number }> {
+    if (this.#prerenderHtmlOnly) {
+      // A prerenderHtmlOnly batch touches nothing but the prerendered_html
+      // channel: no realm_meta, no realm_generations bump, no boxel_index
+      // swap. The guarded swap makes an out-of-order (lower-generation)
+      // zombie job a per-row no-op.
+      await this.#query(['BEGIN']);
+      await this.promotePrerenderedHtmlWorking({ monotonicGuard: true });
+      await this.#query(['COMMIT']);
+      return { totalIndexEntries: this.#invalidations.size };
+    }
     await this.#query(['BEGIN']);
     await this.updateRealmMeta();
     await this.applyBatchUpdates();
@@ -809,6 +1378,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_generation: this.generation,
+      loader_epoch: this.loaderEpoch,
     } as RealmGenerationsTable);
     await this.#query([
       ...upsert(
@@ -846,59 +1416,100 @@ export class Batch {
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
 
-      // Mirror every invalidated URL's HTML onto prerendered_html_working in one
-      // projection from boxel_index_working — the authoritative, complete source
-      // for the invalidation set. Doing it here (rather than per updateEntry)
-      // also covers rows a resumed job wrote in a prior attempt that this
-      // attempt never revisits, and rows written between the backfill migration
-      // and the dual-write deploy, so the swap below can never silently skip a
-      // promoted URL.
-      await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
+      // Populate `prerendered_html` from this pass, UNLESS this is a split-mode
+      // index pass — in which case HTML flows only through the `prerender_html`
+      // job and the index visit produced no HTML columns, so projecting them
+      // would clobber good rows with empty HTML. A copy always runs this block
+      // (it produces HTML via `copyFrom` + the overlay below); the fused path
+      // (SQLite) always runs it (it renders HTML inline).
+      if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
+        // Mirror every invalidated URL's HTML onto prerendered_html_working in one
+        // projection from boxel_index_working — the authoritative, complete source
+        // for the invalidation set. Doing it here (rather than per updateEntry)
+        // also covers rows a resumed job wrote in a prior attempt that this
+        // attempt never revisits, and rows written between the backfill migration
+        // and the dual-write deploy, so the swap below can never silently skip a
+        // promoted URL.
+        await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
 
-      // Swap the mirrored HTML rows into production in the same transaction,
-      // keyed by the same invalidation set and generation. `prerendered_html`
-      // has no `job_id` column, so getColumnNames yields the production
-      // projection and the SELECT drops `job_id` from prerendered_html_working.
-      let prerenderedColumns = (
-        await this.#dbAdapter.getColumnNames('prerendered_html')
-      ).map((c) => [c]);
-      let prerenderedNames = flattenDeep(prerenderedColumns);
-      await this.#query([
-        'INSERT INTO prerendered_html',
-        ...addExplicitParens(separatedByCommas(prerenderedColumns)),
-        'SELECT',
-        ...separatedByCommas(prerenderedColumns),
-        'FROM prerendered_html_working',
-        'WHERE',
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          [
-            'url in',
-            ...addExplicitParens(
-              separatedByCommas(
-                [...this.#invalidations].map((i) => [param(i)]),
-              ),
-            ),
-          ],
-        ]),
-        'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
-        ...separatedByCommas(
-          prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
-        ),
-      ] as Expression);
+        // For a copy, overlay the source realm's `prerendered_html` on top of the
+        // projection: a rendering the source has in `prerendered_html` overwrites
+        // the `boxel_index`-projected row (matched per `(url, type)`), and a row
+        // the source lacks there keeps the projected HTML — so the copy sources
+        // HTML from `prerendered_html` and also fills every row, leaving no
+        // stale destination row behind.
+        if (this.#copyFromSourceRealm) {
+          await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
+        }
+
+        // Swap the mirrored HTML rows into production in the same
+        // transaction, keyed by the same invalidation set and generation.
+        await this.promotePrerenderedHtmlWorking();
+      }
     }
+  }
+
+  // Swap `prerendered_html_working` rows into production `prerendered_html`,
+  // keyed by this batch's invalidation set. `prerendered_html` has no
+  // `job_id` column, so getColumnNames yields the production projection and
+  // the SELECT drops `job_id` from prerendered_html_working.
+  //
+  // A prerenderHtmlOnly batch passes `monotonicGuard: true`: the trailing
+  // `WHERE prerendered_html.generation <= EXCLUDED.generation` makes a stale
+  // (lower-generation) write a per-row no-op — the backstop against an
+  // expired-reservation zombie job overwriting a newer pass's rows — while
+  // keeping an equal-generation retry idempotent. Index/copy batches swap
+  // unguarded, exactly as before the split: their generation is freshly
+  // bumped, so the guard would always pass anyway.
+  private async promotePrerenderedHtmlWorking(opts?: {
+    monotonicGuard?: boolean;
+  }): Promise<void> {
+    if (this.#invalidations.size === 0) {
+      return;
+    }
+    let prerenderedColumns = (
+      await this.#dbAdapter.getColumnNames('prerendered_html')
+    ).map((c) => [c]);
+    let prerenderedNames = flattenDeep(prerenderedColumns);
+    await this.#query([
+      'INSERT INTO prerendered_html',
+      ...addExplicitParens(separatedByCommas(prerenderedColumns)),
+      'SELECT',
+      ...separatedByCommas(prerenderedColumns),
+      'FROM prerendered_html_working',
+      'WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url in',
+          ...addExplicitParens(
+            separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
+          ),
+        ],
+      ]),
+      'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
+      ...separatedByCommas(
+        prerenderedNames.map((name) => [`${name}=EXCLUDED.${name}`]),
+      ),
+      ...(opts?.monotonicGuard
+        ? ['WHERE prerendered_html.generation <= EXCLUDED.generation']
+        : []),
+    ] as Expression);
   }
 
   // Dual-write: project `boxel_index_working` rows onto `prerendered_html_working`
   // for the given URLs. During the fused indexing pass `boxel_index_working`
   // holds the HTML (the read path still reads it); this mirrors it onto the
-  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`) and
-  // the last-known-good HTML preserved through error cycles, with `rendered_at`
-  // seeded from the source row's `indexed_at`. Called from `applyBatchUpdates`
-  // over the whole invalidation set just before the production swap, so the
-  // projection is complete for every promoted row. Deriving from the
-  // already-persisted row reuses the error-path last-known-good merge that
-  // `updateEntry` computed and avoids re-serializing the HTML through JS.
+  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`),
+  // the last-known-good HTML preserved through error cycles, and the row's
+  // `diagnostics` (a fused pass produces one combined index+render blob, so
+  // the projection carries that whole blob rather than a render-only split),
+  // with `rendered_at` seeded from the source row's `indexed_at`. Called from
+  // `applyBatchUpdates` over the whole invalidation set just before the
+  // production swap, so the projection is complete for every promoted row.
+  // Deriving from the already-persisted row reuses the error-path
+  // last-known-good merge that `updateEntry` computed and avoids
+  // re-serializing the HTML through JS.
   private async syncPrerenderedHtmlFromWorking(urls: string[]): Promise<void> {
     if (urls.length === 0) {
       return;
@@ -914,13 +1525,13 @@ export class Batch {
            url, file_alias, realm_url, type,
            fitted_html, embedded_html, atom_html, head_html, isolated_html,
            markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, rendered_at, job_id
+           generation, is_deleted, error_doc, diagnostics, rendered_at, job_id
          )
          SELECT
            url, file_alias, realm_url, type,
            fitted_html, embedded_html, atom_html, head_html, isolated_html,
            markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, indexed_at, job_id
+           generation, is_deleted, error_doc, diagnostics, indexed_at, job_id
          FROM boxel_index_working WHERE`,
         ...every([
           ['realm_url =', param(this.realmURL.href)],
@@ -963,13 +1574,15 @@ export class Batch {
 
   private async setNextGeneration() {
     let [row] = (await this.#query([
-      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      'SELECT current_generation, loader_epoch FROM realm_generations WHERE realm_url =',
       param(this.realmURL.href),
-    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    ])) as Pick<RealmGenerationsTable, 'current_generation' | 'loader_epoch'>[];
+    this.#priorLoaderEpoch = row?.loader_epoch ?? '0';
     if (!row) {
       let { nameExpressions, valueExpressions } = asExpressions({
         realm_url: this.realmURL.href,
         current_generation: 0,
+        loader_epoch: '0',
       } as RealmGenerationsTable);
       // Make the batch updates live
       await this.#query([
@@ -1155,6 +1768,13 @@ export class Batch {
   }
 
   async invalidate(urls: URL[]): Promise<void> {
+    if (this.#prerenderHtmlOnly) {
+      // The dependency fan-out already ran once in the spawning index pass
+      // and is threaded in as `changes` — seed it, don't recompute it.
+      throw new Error(
+        `a prerenderHtmlOnly batch does not compute invalidations — use seedPrerenderedHtmlInvalidations`,
+      );
+    }
     await this.ready;
     // Mint a fresh correlation ID for this invalidation fan-out; every
     // subsequent `updateEntry` on this batch stamps it into the row's
@@ -1399,78 +2019,105 @@ export class Batch {
   > {
     let start = Date.now();
     const pageSize = 1000;
-    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: BoxelIndexTable['type'];
-    })[] = [];
-    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: BoxelIndexTable['type'];
-    })[] = [];
-    let pageNumber = 0;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
     // since deps may be stored in prefix form for portability
     let unresolvedPath = this.unresolveURL(resolvedPath);
     let searchBothForms =
       unresolvedPath !== resolvedPath &&
       this.isRegisteredPrefix(unresolvedPath);
-    do {
-      // SQLite does not support cursors when used in the worker thread since
-      // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach
-      let depCondition: Expression = searchBothForms
-        ? (any([
-            [
-              dbExpression({
-                sqlite: `deps_array_element =`,
-                pg: `i.deps @>`,
-              }),
-              param({
-                sqlite: resolvedPath,
-                pg: `["${resolvedPath}"]`,
-              }),
-            ],
-            [
-              dbExpression({
-                sqlite: `deps_array_element =`,
-                pg: `i.deps @>`,
-              }),
-              param({
-                sqlite: unresolvedPath,
-                pg: `["${unresolvedPath}"]`,
-              }),
-            ],
-          ]) as Expression)
-        : ([
-            dbExpression({
-              sqlite: `deps_array_element =`,
-              pg: `i.deps @>`,
-            }),
-            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
-          ] as Expression);
-      rows = (await this.#query([
-        'SELECT i.url, i.file_alias, i.type',
-        'FROM boxel_index_working as i',
-        dbExpression({
-          sqlite:
-            'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        }),
-        'WHERE',
-        ...every([
-          depCondition,
-          // probably need to reevaluate this condition when we get to cross
-          // realm invalidation
-          [`i.realm_url =`, param(this.realmURL.href)],
-        ]),
-        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+    let scanTable = async (
+      tableName: 'boxel_index_working' | 'prerendered_html',
+    ) => {
+      let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: BoxelIndexTable['type'];
-      })[];
-      results = [...results, ...rows];
-      pageNumber++;
-    } while (rows.length === pageSize);
+      })[] = [];
+      let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+        type: BoxelIndexTable['type'];
+      })[] = [];
+      let pageNumber = 0;
+      do {
+        // SQLite does not support cursors when used in the worker thread since
+        // the API for using cursors cannot be serialized over the postMessage
+        // boundary. so we use a handcrafted paging approach
+        let depCondition: Expression = searchBothForms
+          ? (any([
+              [
+                dbExpression({
+                  sqlite: `deps_array_element =`,
+                  pg: `i.deps @>`,
+                }),
+                param({
+                  sqlite: resolvedPath,
+                  pg: `["${resolvedPath}"]`,
+                }),
+              ],
+              [
+                dbExpression({
+                  sqlite: `deps_array_element =`,
+                  pg: `i.deps @>`,
+                }),
+                param({
+                  sqlite: unresolvedPath,
+                  pg: `["${unresolvedPath}"]`,
+                }),
+              ],
+            ]) as Expression)
+          : ([
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.deps @>`,
+              }),
+              param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+            ] as Expression);
+        rows = (await this.#query([
+          'SELECT i.url, i.file_alias, i.type',
+          `FROM ${tableName} as i`,
+          dbExpression({
+            sqlite:
+              'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+          }),
+          'WHERE',
+          ...every([
+            depCondition,
+            // probably need to reevaluate this condition when we get to cross
+            // realm invalidation
+            [`i.realm_url =`, param(this.realmURL.href)],
+          ]),
+          `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
+        ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+          type: BoxelIndexTable['type'];
+        })[];
+        results = [...results, ...rows];
+        pageNumber++;
+      } while (rows.length === pageSize);
+      return { results, pageNumber };
+    };
+    // The reference graph spans both channels: `boxel_index_working.deps`
+    // carries the index visit's edges (the search-doc walk), while
+    // `prerendered_html.deps` carries edges only the format renders discover
+    // — a rendered non-searchable link, the scoped-CSS artifacts of linked
+    // instances. Both edge sets must feed the fan-out or a change to a
+    // render-only dependency would never re-render its consumers.
+    let [workingScan, prerenderedScan] = await Promise.all([
+      scanTable('boxel_index_working'),
+      scanTable('prerendered_html'),
+    ]);
+    let seen = new Set<string>();
+    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: BoxelIndexTable['type'];
+    })[] = [];
+    for (let row of [...workingScan.results, ...prerenderedScan.results]) {
+      let key = `${row.url}|${row.type}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      results.push(row);
+    }
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms (page count=${pageNumber})`,
+      } ms (page count=${workingScan.pageNumber + prerenderedScan.pageNumber})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
@@ -1612,9 +2259,9 @@ export class Batch {
   }
 }
 
-function baseTypeFromError(
-  entry: SearchIndexErrorEntry,
-): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
+function baseTypeFromError(entry: {
+  type: 'instance-error' | 'file-error';
+}): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
   switch (entry.type) {
     case 'instance-error':
       return 'instance';

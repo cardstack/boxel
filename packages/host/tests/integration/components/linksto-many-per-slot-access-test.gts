@@ -4,18 +4,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type {
-  CardDef as CardDefType,
-  RelationshipState as RelationshipStateType,
-} from 'https://cardstack.com/base/card-api';
 
 import {
   provideConsumeContext,
@@ -39,6 +33,11 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  CardDef as CardDefType,
+  RelationshipState as RelationshipStateType,
+} from '@cardstack/base/card-api';
 
 const MANGO_URL = `${testRealmURL}Pet/mango`;
 const VANGOGH_URL = `${testRealmURL}Pet/vangogh`;
@@ -88,7 +87,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Build a Person whose `pets` array holds two present cards (Mango, Van Gogh)

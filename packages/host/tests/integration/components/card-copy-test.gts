@@ -19,11 +19,6 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type {
-  IncrementalIndexEventContent,
-  IndexRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
@@ -40,6 +35,11 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  IncrementalIndexEventContent,
+  IndexRealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = `http://test-realm/test2/`;
 const readOnlyRealmURL = `http://test-realm/test-read-only/`;
@@ -69,7 +69,7 @@ module('Integration | card-copy', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let loggedInAs = '@testuser:localhost';
@@ -112,10 +112,10 @@ module('Integration | card-copy', function (hooks) {
       ].filter((a) => a.length > 0);
       operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;

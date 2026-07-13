@@ -9,14 +9,14 @@ import {
 import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
-import { CommandField } from './command-field';
+import { CommandField, ToolField } from './tool-field';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
 // `CommandField` lives in its own module so `SkillFrontmatterField` (skill
 // markdown frontmatter) can reuse it without importing the `Skill` card.
 // Re-exported here so it is importable from this module too.
-export { CommandField };
+export { CommandField, ToolField };
 
 export class Skill extends CardDef {
   static displayName = 'Skill';

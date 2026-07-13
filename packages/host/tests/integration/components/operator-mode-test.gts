@@ -10,8 +10,6 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   percySnapshot,
   testRealmURL,
@@ -21,6 +19,8 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | operator-mode | basics', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);

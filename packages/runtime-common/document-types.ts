@@ -160,6 +160,34 @@ export function isEntryCollectionDocument(
   return data.every((resource) => isEntryResource(resource));
 }
 
+export function isEntrySingleDocument(doc: any): doc is EntrySingleDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  // Same untrusted-JSON discipline as the collection guard: a
+  // present-but-malformed `included` must fail rather than throw downstream.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
+    }
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
+  return isEntryResource(doc.data);
+}
+
 export type CardTypeSummaryKind = 'instance' | 'file';
 
 // JSON:API representation of one entry from `realm_meta.value`. Clients

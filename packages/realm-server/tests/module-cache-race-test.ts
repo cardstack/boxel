@@ -81,8 +81,8 @@ module(basename(import.meta.filename), function () {
       });
 
       const transpilerHeavySource = `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class RaceCard extends CardDef {
         @field name = contains(StringField);
@@ -334,8 +334,8 @@ module(basename(import.meta.filename), function () {
       });
 
       const transpilerHeavySource = `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class DedupCard extends CardDef {
         @field name = contains(StringField);
@@ -939,8 +939,8 @@ module(basename(import.meta.filename), function () {
       });
 
       const transpilerHeavySource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class L2Card extends CardDef {
           @field name = contains(StringField);
@@ -1222,8 +1222,8 @@ module(basename(import.meta.filename), function () {
 
       const peerRealmURL = 'http://127.0.0.1:5555/peer/';
       const peerCardSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class PeerCard extends CardDef {
           @field name = contains(StringField);
@@ -1452,8 +1452,8 @@ module(basename(import.meta.filename), function () {
       });
 
       const reindexSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class ReindexCard extends CardDef {
           @field name = contains(StringField);
@@ -1618,8 +1618,8 @@ module(basename(import.meta.filename), function () {
       });
 
       const reindexSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class WorkerNotifyCard extends CardDef {
           @field name = contains(StringField);

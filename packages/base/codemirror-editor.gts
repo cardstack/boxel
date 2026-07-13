@@ -11,7 +11,8 @@ import {
   baseRealm,
   trimJsonExtension,
   maybeRelativeReference,
-  type VirtualNetwork,
+  resolveRRIReference,
+  rri,
 } from '@cardstack/runtime-common';
 import {
   type BfmRefRange,
@@ -98,24 +99,17 @@ function isInline(kind: string): boolean {
   return kind === 'inline';
 }
 
-function resolveUrl(
-  raw: string,
-  baseUrl: string | null | undefined,
-  virtualNetwork: VirtualNetwork | undefined,
-): string {
-  // With a VN, resolve through it so prefix-form bases and registered
-  // prefix-form refs round-trip correctly. Without a VN, plain
-  // `new URL(raw, baseUrl)` still handles the common case — URL-form
-  // refs (with or without a base) and relative refs against a URL-form
-  // base. Prefix-form bases need a VN; `new URL()` throws on those and
-  // we fall back to the raw ref.
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  // Resolve in RRI space (no VirtualNetwork), matching the MarkDownTemplate
+  // display path. Instance ids are canonical (prefix form for mapped realms,
+  // URL for unmapped), so a prefix-form base resolves relative refs to RRI and
+  // a URL-form base to URL. Either form matches the indexed card because the
+  // search tolerates a reference's equivalent spellings (RRI / real-URL /
+  // virtual-alias) rather than requiring one canonical form.
   try {
-    if (virtualNetwork) {
-      return trimJsonExtension(
-        virtualNetwork.resolveURL(raw, baseUrl || undefined).href,
-      );
-    }
-    return trimJsonExtension(new URL(raw, baseUrl || undefined).href);
+    return trimJsonExtension(
+      resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -163,7 +157,6 @@ interface CodeMirrorEditorSignature {
     linkedCards?: CardDef[] | null;
     linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
-    cardReferenceVirtualNetwork?: VirtualNetwork;
     /** When false, all syntax markers are visible (source mode). Default true. */
     livePreview?: boolean;
     getCards?: (
@@ -691,16 +684,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     try {
       result = await editMarkdownEmbed({
         refType: ref.refType as 'card' | 'file',
-        // `ref.url` is the directive verbatim — a document-relative ref
-        // (`../Type/id`). The chooser loads its preview via `store.get`, which
-        // needs the canonical absolute URL; resolve it against the same base
-        // (and virtual network) the render targets use. `documentBaseUrl` below
-        // still carries the base so the pane re-relativizes on insertion.
-        url: resolveUrl(
-          ref.url,
-          this.args.cardReferenceBaseUrl,
-          this.args.cardReferenceVirtualNetwork,
-        ),
+        // Resolve the directive's raw ref (which may be relative to the field's
+        // base URL) to an absolute URL. The chooser loads the preview via
+        // `store.get`, which can't resolve a relative specifier on its own.
+        url: resolveUrl(ref.url, this.args.cardReferenceBaseUrl),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
         documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
@@ -867,11 +854,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   private resolvedUrlsForRefType(refType: 'card' | 'file'): string[] {
     let baseUrl = this.args.cardReferenceBaseUrl;
-    let vn = this.args.cardReferenceVirtualNetwork;
     let urls = new Set<string>();
     for (let target of this._widgetTargets) {
       if (target.refType === refType) {
-        urls.add(resolveUrl(target.cardId, baseUrl, vn));
+        urls.add(resolveUrl(target.cardId, baseUrl));
       }
     }
     return [...urls];
@@ -924,7 +910,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   get cardRenderTargets(): CardRenderTarget[] {
     let targets = this._widgetTargets;
     let baseUrl = this.args.cardReferenceBaseUrl;
-    let vn = this.args.cardReferenceVirtualNetwork;
 
     // Resolve cards and files by URL from every available source. linkedCards /
     // linkedFiles work when a store is present; the getCards resources resolve
@@ -949,7 +934,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     addInstances(this.resolvedFiles);
 
     return targets.map((target) => {
-      let resolvedUrl = resolveUrl(target.cardId, baseUrl, vn);
+      let resolvedUrl = resolveUrl(target.cardId, baseUrl);
       return {
         ...target,
         instance: instancesByUrl.get(resolvedUrl) ?? null,
@@ -1136,7 +1121,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 {{on 'click' this._toggleEmbedPopover}}
               ><PlusIcon width='16' height='16' /></button>
               {{#if this._embedPopoverOpen}}
-                <div class='toolbar-embed-popover' data-test-toolbar-embed-popover>
+                <div
+                  class='toolbar-embed-popover'
+                  data-test-toolbar-embed-popover
+                >
                   <button
                     type='button'
                     class='toolbar-embed-popover__item'

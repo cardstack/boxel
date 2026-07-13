@@ -4,18 +4,11 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type {
-  RelationshipState,
-  RelationshipStatus,
-} from 'https://cardstack.com/base/card-api';
-import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import {
   provideConsumeContext,
@@ -40,6 +33,12 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  RelationshipState,
+  RelationshipStatus,
+} from '@cardstack/base/card-api';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // A terminal sentinel never escapes the field getter — userland reads
 // `undefined` — so tests read the raw bucket entry to observe the planted shape.
@@ -127,7 +126,7 @@ module(
       provideConsumeContext(PermissionsContextName, permissions);
       loader = getService('loader-service').loader;
       let fieldSupport = await loader.import<typeof FieldSupportModule>(
-        `${baseRealm.url}field-support`,
+        '@cardstack/base/field-support',
       );
       isLinkNotFound = fieldSupport.isLinkNotFound;
       isNotLoadedValue = fieldSupport.isNotLoadedValue;
@@ -135,7 +134,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Realm holds the module and one real Pet (`Pet/mango`), but never

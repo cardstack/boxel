@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm, baseRRI } from '@cardstack/runtime-common';
+import { baseRRI } from '@cardstack/runtime-common';
 
 import {
   suggestCardChooserTitle,
@@ -22,8 +22,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
 let loader: Loader;
 
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
@@ -38,8 +38,8 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { contains, field, CardDef, linksTo } = cardApi;
     let { default: StringField } = string;

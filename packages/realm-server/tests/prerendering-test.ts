@@ -277,7 +277,7 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -391,7 +391,7 @@ module(basename(import.meta.filename), function () {
       await realmAdapter.write(
         'person.gts',
         `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
           export class Person extends CardDef {
             static displayName = "Updated Person";
             @field name = contains(StringField);
@@ -472,7 +472,7 @@ module(basename(import.meta.filename), function () {
       await realmAdapter.write(
         'filedef-mismatch.gts',
         `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { MissingChild } from "./missing-child";
 
           export class FileDef extends BaseFileDef {
@@ -541,7 +541,7 @@ module(basename(import.meta.filename), function () {
       await realmAdapter.write(
         modulePath,
         `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
           export class FlakyTarget extends CardDef {
             static displayName = 'FlakyTarget';
             @field name = contains(StringField);
@@ -687,7 +687,7 @@ module(basename(import.meta.filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -710,7 +710,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'no-icon.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class NoIcon extends CardDef {
                   static displayName = "No Icon";
                   static icon = class extends Component<typeof this> {
@@ -736,7 +736,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'bad-icon-import.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class BadIconImport extends CardDef {
                   static displayName = "Bad Icon Import";
                   static icon = undefined as any;
@@ -771,7 +771,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'owner-with-broken-pet.gts': `
-                import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
                 export class Pet extends CardDef {
                   static displayName = "Pet";
                   @field name = contains(StringField);
@@ -811,7 +811,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'owner-with-broken-pets.gts': `
-                import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
                 export class Pet extends CardDef {
                   static displayName = "Pet";
                   @field name = contains(StringField);
@@ -868,7 +868,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Rejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -890,7 +890,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'rsvp-rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               import * as RSVP from 'rsvp';
               export class RsvpRejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -928,7 +928,7 @@ module(basename(import.meta.filename), function () {
               // a stack-bearing entry the test can assert on.
               'desync-repro.gts': `
               import { registerDestructor } from '@ember/destroyable';
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class DesyncRepro extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -975,7 +975,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'throws.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Throws extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -1005,7 +1005,7 @@ module(basename(import.meta.filename), function () {
               // payload and synthesized "invalid error payload" instead of
               // surfacing the real underlying throw.
               'eval-throw.gts': `
-              import { CardDef } from 'https://cardstack.com/base/card-api';
+              import { CardDef } from '@cardstack/base/card-api';
               throw new Error('module-eval-throw');
               export class EvalThrow extends CardDef {
                 static displayName = 'Eval Throw';
@@ -1022,7 +1022,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'console-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -1044,7 +1044,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'console-no-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleNoError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -1066,7 +1066,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'directory-query.gts': `
-              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from '@cardstack/base/card-api';
 
               export class Person extends CardDef {
                 static displayName = 'Person';
@@ -1529,6 +1529,61 @@ module(basename(import.meta.filename), function () {
           'not-found',
           'a missing realm element is classified not-found',
         );
+      });
+
+      test('card prerender records the search-doc settle aggregates on meta.diagnostics for persistence', async function (assert) {
+        // The settle aggregates ride the same consolidated diagnostics
+        // channel as the timings and broken-link findings: render.meta
+        // stamps searchDocSettleMs / searchDocSettlePasses on every card
+        // visit, and the Prerenderer lifts them onto
+        // `response.meta.diagnostics` — the blob the indexer flattens into
+        // `boxel_index.diagnostics`. The per-field / per-link-load detail
+        // (searchDocFieldsMs / searchDocLinkLoads) is floor-bounded so its
+        // presence depends on real timings; only its shape is asserted when
+        // it appears.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}1.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(result.response.card?.error, 'prerender succeeds');
+        let diagnostics = result.response.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettleMs,
+          'number',
+          `searchDocSettleMs is stamped, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettleMs ?? -1) >= 0,
+          `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettlePasses ?? 0) >= 2,
+          `searchDocSettlePasses counts at least the two stability passes, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        if (diagnostics?.searchDocFieldsMs !== undefined) {
+          assert.ok(
+            Object.values(diagnostics.searchDocFieldsMs).every(
+              (ms) => typeof ms === 'number' && ms >= 1,
+            ),
+            'retained per-field timings are all at/over the persistence floor',
+          );
+        }
+        if (diagnostics?.searchDocLinkLoads !== undefined) {
+          assert.ok(
+            diagnostics.searchDocLinkLoads.every(
+              (l) =>
+                typeof l.path === 'string' &&
+                typeof l.target === 'string' &&
+                l.ms >= 1,
+            ),
+            'retained link loads carry path + target and are at/over the floor',
+          );
+        }
       });
 
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
@@ -2455,7 +2510,7 @@ module(basename(import.meta.filename), function () {
             },
             fileSystem: {
               'person.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class Person extends CardDef {
                   static displayName = "Person";
                   @field name = contains(StringField);
@@ -2465,7 +2520,7 @@ module(basename(import.meta.filename), function () {
                 }
               `,
               'dep-reset-consumer.gts': `
-                import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, linksTo, Component } from '@cardstack/base/card-api';
                 import { Person } from './person';
                 export class DepResetConsumer extends CardDef {
                   static displayName = 'Dep Reset Consumer';
@@ -2645,7 +2700,7 @@ module(basename(import.meta.filename), function () {
             },
             fileSystem: {
               'card-search.gts': `
-              import { CardDef, Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component, field, contains, StringField } from '@cardstack/base/card-api';
 
               export class CardSearchResult extends CardDef {
                 static displayName = 'Card Search Result';
@@ -2712,7 +2767,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'file-search.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               import { rri } from '@cardstack/runtime-common';
 
               export class FileSearchInner extends CardDef {
@@ -2989,8 +3044,8 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'article.gts': `
-              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
@@ -3018,7 +3073,7 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'website.gts': `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
               import { Article } from "${providerRealmURL}article" // importing from another realm;
               export class Website extends CardDef {
                 @field linkedArticle = linksTo(Article);
@@ -3036,8 +3091,8 @@ module(basename(import.meta.filename), function () {
               },
             },
             'auth-proxy.gts': `
-              import { contains, field, CardDef, linksTo, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, linksTo, Component } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               // define a local stand-in type so the consumer realm doesn't need to import provider modules
               export class RemoteArticle extends CardDef {
                 @field title = contains(StringField);
@@ -3244,8 +3299,8 @@ module(basename(import.meta.filename), function () {
 
     let makeQueryDirectoryFileSystem = () => ({
       'person.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field name = contains(StringField);
@@ -3278,7 +3333,7 @@ module(basename(import.meta.filename), function () {
         },
       },
       'query-directory.gts': `
-        import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
         import { Person } from "./person";
 
         export class QueryDirectory extends CardDef {
@@ -3315,7 +3370,7 @@ module(basename(import.meta.filename), function () {
         },
       },
       'query-directory-proxy.gts': `
-        import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
         import { QueryDirectory } from "./query-directory";
 
         export class QueryDirectoryProxy extends CardDef {
@@ -3439,8 +3494,8 @@ module(basename(import.meta.filename), function () {
 
       let makeQueryDirectoryFileSystem = () => ({
         'person.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field name = contains(StringField);
@@ -3473,7 +3528,7 @@ module(basename(import.meta.filename), function () {
           },
         },
         'query-directory.gts': `
-          import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
           import { Person } from "./person";
 
           export class QueryDirectory extends CardDef {
@@ -3510,7 +3565,7 @@ module(basename(import.meta.filename), function () {
           },
         },
         'query-directory-proxy.gts': `
-          import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
           import { QueryDirectory } from "./query-directory";
 
           export class QueryDirectoryProxy extends CardDef {
@@ -3680,8 +3735,8 @@ module(basename(import.meta.filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -3739,8 +3794,8 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'cat.gts': `
-              import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Cat extends CardDef {
                 @field name = contains(StringField);
@@ -3750,7 +3805,7 @@ module(basename(import.meta.filename), function () {
               }
             `,
               'dog.gts': `
-              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Dog extends CardDef {
                 static displayName = "Dog";
@@ -3763,7 +3818,7 @@ module(basename(import.meta.filename), function () {
               }
             `,
               'dog-many.gts': `
-              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class DogMany extends CardDef {
                 static displayName = "Dog Many";
@@ -3776,7 +3831,7 @@ module(basename(import.meta.filename), function () {
               }
             `,
               'dog-profile.gts': `
-              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
@@ -3796,7 +3851,7 @@ module(basename(import.meta.filename), function () {
               }
             `,
               'non-isolated-links-card.gts': `
-              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
 
               class RelationshipField extends FieldDef {
@@ -4018,8 +4073,8 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'intentional-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class IntentionalError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Intentional Error";
@@ -4048,8 +4103,8 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'timer-error-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class TimerError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Timer Error";
@@ -4077,8 +4132,8 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'timer-timeout-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               setTimeout(() => {}, 0);
               setInterval(() => {}, 5);
               export class TimerTimeout extends CardDef {
@@ -4112,8 +4167,8 @@ module(basename(import.meta.filename), function () {
               // causing data-prerender-status to be set to 'unusable' by the error handler without
               // transitioning to the render-error route (so nothing overwrites our dataset).
               'unusable-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class UnusableError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Unusable Error";
@@ -4139,7 +4194,7 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'embedded-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
               export class EmbeddedError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Embedded Error";
@@ -4181,8 +4236,8 @@ module(basename(import.meta.filename), function () {
             },
             fileSystem: {
               'dog.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Dog extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Dog";
@@ -7068,8 +7123,8 @@ module(basename(import.meta.filename), function () {
 
       let childRealmFileSystem: Record<string, any> = {
         'detail.gts': `
-          import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Detail extends CardDef {
             static displayName = 'Detail';
             @field info = contains(StringField);
@@ -7099,8 +7154,8 @@ module(basename(import.meta.filename), function () {
 
       let parentRealmFileSystem: Record<string, any> = {
         'child-config.gts': `
-          import { CardDef, field, contains, linksTo, Component } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains, linksTo, Component } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           import { Detail } from '${childRealmURL}detail';
           export class ChildConfig extends CardDef {
             static displayName = 'Child Config';
@@ -7119,7 +7174,7 @@ module(basename(import.meta.filename), function () {
           }
         `,
         'parent-card.gts': `
-          import { CardDef, field, linksToMany, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, linksToMany, Component } from '@cardstack/base/card-api';
           import { ChildConfig } from './child-config';
           export class ParentCard extends CardDef {
             static displayName = 'Parent Card';
@@ -7296,7 +7351,7 @@ module(basename(import.meta.filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -7635,6 +7690,36 @@ module(basename(import.meta.filename), function () {
         ].sort(),
         [...new Set(fused.card?.deps ?? [])].sort(),
         'union of the two visits card deps matches the fused deps as a set',
+      );
+
+      // Per-format render timings ride the prerender-html visit's meta —
+      // one number per html-route step for the card and the file rendering
+      // — while the index visit, which never runs the html route, reports
+      // none.
+      let renderFormatsMs = html.meta?.diagnostics?.renderFormatsMs;
+      const formats = [
+        'isolated',
+        'head',
+        'atom',
+        'markdown',
+        'fitted',
+        'embedded',
+      ] as const;
+      for (let format of formats) {
+        assert.strictEqual(
+          typeof renderFormatsMs?.card?.[format],
+          'number',
+          `prerender-html visit records the card ${format} render timing`,
+        );
+        assert.strictEqual(
+          typeof renderFormatsMs?.file?.[format],
+          'number',
+          `prerender-html visit records the file ${format} render timing`,
+        );
+      }
+      assert.notOk(
+        index.meta?.diagnostics?.renderFormatsMs,
+        'index visit records no per-format render timings',
       );
     });
 

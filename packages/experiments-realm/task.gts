@@ -6,11 +6,11 @@ import {
   linksToMany,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateRangeField from 'https://cardstack.com/base/date-range-field';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateRangeField from '@cardstack/base/date-range-field';
+import ColorField from '@cardstack/base/color';
 
 import { Tag } from './tag';
 import { User } from './user';

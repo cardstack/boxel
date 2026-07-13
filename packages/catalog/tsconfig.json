@@ -26,6 +26,12 @@
     "skipLibCheck": true,
     "paths": {
       "lodash": ["node_modules/@types/lodash-es"],
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "https://cardstack.com/base/*": [
         "../base/*.gts",
         "../base/*.ts",
@@ -36,7 +42,8 @@
       "@cardstack/host/*": ["../host/app/*"],
       "@cardstack/host/tests/*": ["../host/tests/*"],
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
-      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
       "*": ["../host/types/*"]

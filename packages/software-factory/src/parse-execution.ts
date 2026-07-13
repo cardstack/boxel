@@ -624,11 +624,13 @@ export async function runGlintCheck(
           noUnusedParameters: false,
           types: ['qunit-dom', '@cardstack/local-types'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
             '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
+            '@cardstack/boxel-host/tools/*': [`${HOST_PKG_PATH}/app/tools/*`],
             '@cardstack/boxel-host/commands/*': [
-              `${HOST_PKG_PATH}/app/commands/*`,
+              `${HOST_PKG_PATH}/app/tools/*`,
             ],
             '@cardstack/boxel-ui/*': [
               `${join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src')}/*`,

@@ -4,18 +4,14 @@ import { click, fillIn } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  PermissionsContextName,
-  type Loader,
-} from '@cardstack/runtime-common';
-
-import type * as CardApiModule from 'https://cardstack.com/base/card-api';
+import { PermissionsContextName, type Loader } from '@cardstack/runtime-common';
 
 import { provideConsumeContext } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardApiModule from '@cardstack/base/card-api';
 
 module('Integration | card-info | thumbnail picker edit', function (hooks) {
   setupRenderingTest(hooks);
@@ -32,7 +28,7 @@ module('Integration | card-info | thumbnail picker edit', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     let cardApiModule = await loader.import<typeof CardApiModule>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     CardDef = cardApiModule.CardDef;
     CardInfoField = cardApiModule.CardInfoField;

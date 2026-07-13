@@ -3,6 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 
 import Moon from '@cardstack/boxel-icons/moon';
@@ -17,7 +18,12 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn } from '@cardstack/boxel-ui/helpers';
+import {
+  bool,
+  cn,
+  themeScope,
+  themeScopedCss,
+} from '@cardstack/boxel-ui/helpers';
 
 import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
 
@@ -1070,51 +1076,88 @@ export class ThemeDashboard extends GlimmerComponent<{
     headerLabel?: string;
     version?: string;
     isDarkMode?: boolean;
+    themeCss?: string | null;
+    themeId?: string | null;
   };
   Blocks: { default: []; header: []; navBar: [] };
   Element: HTMLElement;
 }> {
+  // Content-derived rather than guidFor: this markup can be persisted as
+  // prerendered HTML, where the scoped rules are page-global. Equal scopes
+  // are only safe when their declarations are equal too, which the theme id
+  // plus content hash guarantees; a per-process guid can repeat across
+  // prerender jobs with different themes. The guid fallback only covers
+  // unsaved theme cards previewing their own CSS, which are never persisted.
+  private get themeScopeId() {
+    return themeScope(this.args.themeId, this.args.themeCss) ?? guidFor(this);
+  }
+
+  // The data-theme wrapper drives the preview's light/dark toggle through the
+  // ambient `--boxel-color-scheme` signal, flipping the semantic tokens to the
+  // boxel dark defaults for this subtree. The theme's own variables must be
+  // re-scoped inside the wrapper (via `data-boxel-theme-scope` + the style
+  // tag) because the card-level scope sits above it and resolves against the
+  // app chrome's scheme, not this toggle.
   <template>
-    <article
-      id='top'
-      class={{cn 'detailed-style-reference' dsr--dark=@isDarkMode}}
-      ...attributes
+    <div
+      class='theme-dashboard-scheme'
+      data-theme={{if @isDarkMode 'dark' 'light'}}
     >
-      {{#if (has-block 'header')}}
-        {{yield to='header'}}
-      {{else}}
-        <ThemeDashboardHeader
-          class='dsr-header'
-          @title={{@title}}
-          @description={{@description}}
-          @isDarkMode={{@isDarkMode}}
-          @metaLabel={{@headerLabel}}
-          @version={{@version}}
-        />
-      {{/if}}
+      <article
+        id='top'
+        class={{cn 'detailed-style-reference' dsr--dark=@isDarkMode}}
+        data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
+        ...attributes
+      >
+        {{#if @themeCss}}
+          {{! template-lint-disable require-scoped-style }}
+          {{! data-boxel-theme-style marks this as a dedupable theme
+              stylesheet; the attribute survives serialization, so prerendered
+              fragments stay recognizable when re-inserted }}
+          <style data-boxel-theme-style>
+            {{themeScopedCss this.themeScopeId @themeCss}}
+          </style>
+          {{! template-lint-enable require-scoped-style }}
+        {{/if}}
+        {{#if (has-block 'header')}}
+          {{yield to='header'}}
+        {{else}}
+          <ThemeDashboardHeader
+            class='dsr-header'
+            @title={{@title}}
+            @description={{@description}}
+            @isDarkMode={{@isDarkMode}}
+            @metaLabel={{@headerLabel}}
+            @version={{@version}}
+          />
+        {{/if}}
 
-      {{#if (has-block 'navBar')}}
-        {{yield to='navBar'}}
-      {{else if @sections.length}}
-        <NavBar @sections={{@sections}} />
-      {{/if}}
+        {{#if (has-block 'navBar')}}
+          {{yield to='navBar'}}
+        {{else if @sections.length}}
+          <NavBar @sections={{@sections}} />
+        {{/if}}
 
-      <div class='dsr-content'>
-        {{yield}}
-      </div>
-
-      <footer class='dsr-footer'>
-        <div class='footer-content'>
-          <p class='footer-text'>
-            This style guide is a living document. Design systems evolve with
-            thoughtful iteration and disciplined execution.
-          </p>
+        <div class='dsr-content'>
+          {{yield}}
         </div>
-      </footer>
-    </article>
+
+        <footer class='dsr-footer'>
+          <div class='footer-content'>
+            <p class='footer-text'>
+              This style guide is a living document. Design systems evolve with
+              thoughtful iteration and disciplined execution.
+            </p>
+          </div>
+        </footer>
+      </article>
+    </div>
 
     <style scoped>
       @layer baseComponent {
+        .theme-dashboard-scheme {
+          height: 100%;
+        }
         .detailed-style-reference {
           --dsr-bg: var(--background, var(--boxel-light));
           --dsr-fg: var(--foreground, var(--boxel-700));

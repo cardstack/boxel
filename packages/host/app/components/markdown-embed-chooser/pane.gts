@@ -18,14 +18,13 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 import { serializeBfmRef } from '@cardstack/runtime-common/bfm-card-references';
 import { maybeRelativeReference } from '@cardstack/runtime-common/url';
 
-import type { CardDef, FileDef } from 'https://cardstack.com/base/card-api';
-
 import PlacementToggle from './placement-toggle';
 
 import MarkdownEmbedPreview from './preview';
 
 import type EmbedFormatSelection from './format-selection';
 import type { FormatOption, OptionValue } from './format-selection';
+import type { CardDef, FileDef } from '@cardstack/base/card-api';
 
 export { type OptionValue };
 

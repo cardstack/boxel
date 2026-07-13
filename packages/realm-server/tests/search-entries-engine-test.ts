@@ -97,8 +97,8 @@ module(basename(import.meta.filename), function () {
       permissions: { '*': ['read'] },
       fileSystem: {
         'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -136,8 +136,8 @@ module(basename(import.meta.filename), function () {
           },
         },
         'webpage.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class WebPage extends CardDef {
             @field url = contains(StringField);
@@ -663,8 +663,8 @@ module(basename(import.meta.filename), function () {
       permissions: { '*': ['read'] },
       fileSystem: {
         'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -683,8 +683,8 @@ module(basename(import.meta.filename), function () {
         `,
         'fancy-person.gts': `
           import { Person } from './person';
-          import { contains, field, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class FancyPerson extends Person {
             @field favoriteColor = contains(StringField);

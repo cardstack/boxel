@@ -6,7 +6,7 @@ import {
   contains,
   containsMany,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { BoxelContainer } from '@cardstack/boxel-ui/components';
 
 class FamilyMember extends FieldDef {

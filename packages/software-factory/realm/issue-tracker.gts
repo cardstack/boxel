@@ -14,11 +14,11 @@ import {
   linksToMany,
   Component,
   Theme,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
 
 import {
   Accordion,
@@ -3215,13 +3215,13 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     </div>
     <style scoped>
       .kanban-board-isolated {
-        --board-bg: var(--background, var(--boxel-100));
-        --board-fg: var(--foreground, var(--boxel-700));
-        --board-card-bg: var(--card, var(--boxel-light));
-        --board-card-fg: var(--foreground, var(--boxel-dark));
-        --board-muted-bg: var(--muted, var(--boxel-100));
-        --board-muted-fg: var(--muted-foreground, var(--boxel-500));
-        --board-border: var(--border, var(--boxel-border-color));
+        --board-bg: color-mix(in oklch, var(--foreground) 1%, transparent);
+        --board-fg: var(--foreground);
+        --board-card-bg: var(--card);
+        --board-card-fg: var(--card-foreground);
+        --board-muted-bg: var(--muted);
+        --board-muted-fg: var(--muted-foreground);
+        --board-border: var(--border);
 
         /* setting boxel-ui component variables */
         --boxel-kanban-bg: var(--board-bg);

@@ -34,8 +34,6 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import CardChooserModal from '../card-chooser/modal';
 import SearchResults from '../card-search/search-results';
 import FileChooserModal from '../file-chooser/modal';
@@ -45,11 +43,12 @@ import { Submodes } from '../submode-switcher';
 import CreateListingModal from './create-listing-modal';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
+import type { CardContext } from '@cardstack/base/card-api';
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
@@ -65,7 +64,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private messageService: MessageService;
   @service declare realmServer: RealmServerService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -95,8 +94,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @provide(CommandContextName)
-  private get commandContext() {
-    return this.commandService.commandContext;
+  private get toolContext() {
+    return this.toolService.toolContext;
   }
 
   @provide(CardContextName)
@@ -107,7 +106,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
-      commandContext: this.commandContext,
+      toolContext: this.toolContext,
+      // populated alongside toolContext for content still reading the
+      // pre-rename spelling
+      commandContext: this.toolContext,
       searchResultsComponent: SearchResults,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,

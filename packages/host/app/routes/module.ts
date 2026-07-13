@@ -20,7 +20,6 @@ import {
   type SearchablePathDiagnostic,
   isBaseDef,
   baseCardRef,
-  baseRealm,
   Deferred,
   loadCardDef,
   internalKeyFor,
@@ -44,9 +43,6 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
@@ -59,6 +55,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export type Model = {
   id: string;
@@ -397,7 +395,7 @@ async function validateModuleSearchablePaths(
   }
   try {
     let loader = context.loaderService.loader;
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let lookupDefinition = async (
       codeRef: CodeRef,
     ): Promise<Definition | undefined> => {
@@ -456,7 +454,7 @@ async function makeDefinition(
   let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;

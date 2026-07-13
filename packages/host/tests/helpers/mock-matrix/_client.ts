@@ -14,7 +14,7 @@ import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
@@ -33,17 +33,15 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { CommandField } from 'https://cardstack.com/base/skill';
-
 import type { MockSDK } from './_sdk';
-
 import type { ServerState } from './_server-state';
-
 import type { Config } from '../mock-matrix';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import type { ToolField } from '@cardstack/base/skill';
+
 import type {
   MSC3575SlidingSyncRequest,
   MSC3575SlidingSyncResponse,
@@ -682,7 +680,7 @@ export class MockClient implements ExtendedClient {
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
-      case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
@@ -894,11 +892,11 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.uploadCards(cards);
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: CommandField[],
+  async uploadToolDefinitions(
+    toolDefinitionFileDefs: ToolField[],
   ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCommandDefinitions(
-      commandDefinitions,
+    return await this.fileDefManager.uploadToolDefinitions(
+      toolDefinitionFileDefs,
     );
   }
 

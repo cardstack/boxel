@@ -66,16 +66,16 @@ import {
 import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
-const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-  import { Component } from 'https://cardstack.com/base/card-api';
-  import CodeRefField from 'https://cardstack.com/base/code-ref';
+const codeRefDriverCard = `import { CardDef, field, contains } from '@cardstack/base/card-api';
+  import { Component } from '@cardstack/base/card-api';
+  import CodeRefField from '@cardstack/base/code-ref';
   export class CodeRefDriver extends CardDef {
     static displayName = "Code Ref Driver";
     @field ref = contains(CodeRefField);
 }`;
 
-const testSpecCard = `import { Component } from 'https://cardstack.com/base/card-api';
-  import { Spec } from 'https://cardstack.com/base/spec';
+const testSpecCard = `import { Component } from '@cardstack/base/card-api';
+  import { Spec } from '@cardstack/base/spec';
   export class TestSpec extends Spec {
     static displayName = 'TestSpec';
     static isolated = class Isolated extends Component<typeof this> {
@@ -85,9 +85,9 @@ const testSpecCard = `import { Component } from 'https://cardstack.com/base/card
     }
   }`;
 
-const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const authorCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   export class Author extends CardDef {
     static displayName = 'Author';
     @field firstName = contains(StringField);
@@ -115,9 +115,9 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     }
 }`;
 
-const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
-  import DateTimeField from 'https://cardstack.com/base/datetime';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
+const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
+  import DateTimeField from '@cardstack/base/datetime';
+  import MarkdownField from '@cardstack/base/markdown';
   import { Author } from './author';
 
   export class Category extends CardDef {
@@ -162,7 +162,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
 }`;
 
-const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
+const personCard = `import { field, linksTo, CardDef } from '@cardstack/base/card-api';
   export class Pet extends CardDef {
     static displayName = 'Pet';
   }
@@ -172,8 +172,8 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
-const customEditCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+const customEditCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class CustomEdit extends CardDef {
     static displayName = 'Custom Edit';
     @field name = contains(StringField);
@@ -184,8 +184,8 @@ const customEditCard = `import { contains, field, CardDef, Component } from "htt
     };
   }`;
 
-const headPreviewCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+const headPreviewCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';
@@ -318,8 +318,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     hooks.beforeEach(async function () {
       let loader = getService('loader-service').loader;
-      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let cardsGrid: typeof import('@cardstack/base/cards-grid');
+      cardsGrid = await loader.import('@cardstack/base/cards-grid');
       let { CardsGrid } = cardsGrid;
 
       createAndJoinRoom({
@@ -1164,9 +1164,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('playground preview for card with contained fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
-      const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-        import StringField from "https://cardstack.com/base/string";
+      const authorCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import MarkdownField from '@cardstack/base/markdown';
+        import StringField from "@cardstack/base/string";
         export class Author extends CardDef {
           static displayName = 'Author';
           @field firstName = contains(StringField);
@@ -1209,10 +1209,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('playground preview for card with linked fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
-      const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import DateTimeField from 'https://cardstack.com/base/datetime';
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-        import StringField from "https://cardstack.com/base/string";
+      const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+        import DateTimeField from '@cardstack/base/datetime';
+        import MarkdownField from '@cardstack/base/markdown';
+        import StringField from "@cardstack/base/string";
         import { Author } from './author';
 
         export class Category extends CardDef {
@@ -1868,7 +1868,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
       mockMatrixUtils;
 
-    const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from 'https://cardstack.com/base/card-api';
+    const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from '@cardstack/base/card-api';
       // this field explodes when serialized (saved)
       export class BoomField extends FieldDef {
         @field cardTitle = contains(StringField);
@@ -1886,7 +1886,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
-    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from '@cardstack/base/card-api';
       export class BoomPerson extends CardDef {
         static displayName = 'Boom Person';
         @field firstName = contains(StringField);
@@ -1921,7 +1921,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       }
     `;
     const syntaxError = `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
       // missing StringField import
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -2058,7 +2058,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         // fix error
         await realm.write(
           'boom-person.gts',
-          `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          `import { field, contains, CardDef, Component, StringField } from '@cardstack/base/card-api';
           export class BoomPerson extends CardDef {
             static displayName = 'Boom Person';
             @field firstName = contains(StringField);
@@ -2102,7 +2102,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       // fix error
       await realm.write(
         'boom-pet.gts',
-        `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+        `import { contains, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
             export class BoomPet extends CardDef {
               static displayName = 'Boom Pet';
               @field boom = contains(StringField);
@@ -2168,7 +2168,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         // fix error
         await realm.write(
           'boom-person.gts',
-          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
            export class FailingField extends FieldDef {
              static displayName = 'Failing Field';
              @field cardTitle = contains(StringField);

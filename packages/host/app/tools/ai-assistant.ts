@@ -1,0 +1,201 @@
+import { service } from '@ember/service';
+
+import { isCardInstance } from '@cardstack/runtime-common';
+
+import HostBaseTool from '../lib/host-base-tool';
+
+import CreateAiAssistantRoomTool from './create-ai-assistant-room';
+import OpenAiAssistantRoomTool from './open-ai-assistant-room';
+
+import SendAiAssistantMessageTool from './send-ai-assistant-message';
+import SetActiveLLMTool from './set-active-llm';
+import UpdateRoomSkillsTool from './update-room-skills';
+
+import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type StoreService from '../services/store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
+
+export default class UseAiAssistantTool extends HostBaseTool<
+  typeof BaseToolModule.UseAiAssistantInput,
+  typeof BaseToolModule.SendAiAssistantMessageResult
+> {
+  @service declare private store: StoreService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+
+  #cardAPI?: typeof CardAPI;
+
+  static actionVerb = 'Send';
+
+  async getInputType() {
+    let commandModule = await this.loadToolModule();
+    const { UseAiAssistantInput } = commandModule;
+    return UseAiAssistantInput;
+  }
+
+  async loadCardAPI() {
+    if (!this.#cardAPI) {
+      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
+        'https://cardstack.com/base/card-api',
+      );
+    }
+    return this.#cardAPI;
+  }
+
+  protected async run(
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
+    let roomId = await this.createRoomIfNeeded(input);
+
+    let openRoomPromise = this.maybeOpenRoom(input, roomId);
+    let loadSkillsPromise = this.maybeLoadSkillCards(input, roomId);
+    let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
+    let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
+    let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
+    await Promise.all([
+      openRoomPromise,
+      loadSkillsPromise,
+      attachedCardsPromise,
+      setActiveLLMPromise,
+      setLLMModePromise,
+    ]);
+
+    // Only send message if prompt is provided
+    if (input.prompt && input.prompt.trim() !== '') {
+      let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
+      let sendMessageResult = await sendMessageCommand.execute({
+        roomId,
+        prompt: input.prompt,
+        clientGeneratedId: input.clientGeneratedId,
+        attachedCards: [...(await attachedCardsPromise)],
+        attachedFileIdentifiers: input.attachedFileIdentifiers,
+        openCardIds: input.openCardIds,
+        realmIdentifier: this.operatorModeStateService.realmURL,
+        requireCommandCall: input.requireCommandCall,
+      });
+      return sendMessageResult;
+    }
+
+    // Return a result indicating no message was sent
+    let commandModule = await this.loadToolModule();
+    const { SendAiAssistantMessageResult } = commandModule;
+    return new SendAiAssistantMessageResult({ roomId });
+  }
+
+  async createRoomIfNeeded(
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<string> {
+    // If a specific roomId is provided and it's not 'new', use that room
+    if (input.roomId && input.roomId !== 'new') {
+      return input.roomId;
+    }
+
+    // Check if there's a current room open (only when roomId is not 'new')
+    let currentRoomId = this.matrixService.currentRoomId;
+    if (input.roomId !== 'new' && currentRoomId) {
+      return currentRoomId;
+    }
+
+    // Create a new room if no roomId is provided and no current room exists
+    let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
+      this.toolContext,
+    );
+    let createRoomResult = await createAIAssistantRoomCommand.execute({
+      name: input.roomName,
+    });
+    return createRoomResult.roomId;
+  }
+
+  async maybeOpenRoom(
+    input: BaseToolModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    if (input.openRoom) {
+      let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
+        this.toolContext,
+      );
+      await openAiAssistantRoomCommand.execute({
+        roomId,
+      });
+    }
+  }
+
+  async maybeLoadSkillCards(
+    input: BaseToolModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    let skillCards = new Set<Skill>(input.skillCards ?? []);
+    let skillCardIds = new Set<string>(input.skillCardIds ?? []);
+    for (let skillCard of skillCards) {
+      if (skillCard.id) {
+        skillCardIds.add(skillCard.id);
+      }
+    }
+
+    if (skillCardIds.size === 0) {
+      return;
+    }
+
+    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(this.toolContext);
+    await updateRoomSkillsCommand.execute({
+      roomId,
+      skillCardIdsToActivate: [...skillCardIds],
+    });
+  }
+
+  async ensureAttachedCardsLoaded(
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<Set<CardAPI.CardDef>> {
+    let attachedCards = new Set<CardAPI.CardDef>(input.attachedCards ?? []);
+    let attachedCardIds = input.attachedCardIds ?? [];
+    let loadAttachedCardPromises = attachedCardIds.map(
+      async (attachedCardId) => {
+        return this.store.get<CardAPI.CardDef>(attachedCardId);
+      },
+    );
+    let loadedAttachedCardOrErrors = await Promise.all(
+      loadAttachedCardPromises,
+    );
+    for (const loadedAttachedCardOrError of loadedAttachedCardOrErrors) {
+      if (isCardInstance(loadedAttachedCardOrError)) {
+        attachedCards.add(loadedAttachedCardOrError);
+      } else {
+        console.warn(
+          'Failed to load attached card',
+          loadedAttachedCardOrError.id,
+          loadedAttachedCardOrError.message,
+        );
+      }
+    }
+    return attachedCards;
+  }
+
+  async maybeSetActiveLLM(
+    input: BaseToolModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    if (input.llmModel) {
+      let setActiveLLMCommand = new SetActiveLLMTool(this.toolContext);
+      await setActiveLLMCommand.execute({
+        roomId,
+        model: input.llmModel,
+      });
+    }
+  }
+
+  async maybeSetLLMMode(
+    input: BaseToolModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    if (input.llmMode) {
+      await this.matrixService.sendLLMModeEvent(roomId, input.llmMode as any);
+    }
+  }
+}
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { UseAiAssistantTool as UseAiAssistantCommand };

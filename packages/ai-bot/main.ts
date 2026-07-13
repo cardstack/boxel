@@ -20,7 +20,7 @@ import {
   isRecognisedDebugCommand,
   getPromptParts,
   isInDebugMode,
-  isCommandResultStatusApplied,
+  isToolResultStatusApplied,
   getRoomEvents,
   sendPromptAsDebugMessage,
   constructHistory,
@@ -31,7 +31,7 @@ import {
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  isToolResultEventType,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug.ts';
@@ -48,7 +48,7 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title.ts';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { spendUsageCost } from '@cardstack/billing/ai-billing';
@@ -304,7 +304,7 @@ Common issues are:
         // answer.
         if (
           senderMatrixUserId === aiBotUserId &&
-          event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          isToolResultEventType(event.getType()) &&
           humanRoomMemberCount === 1
         ) {
           senderMatrixUserId = humanRoomMembers[0].userId;
@@ -435,11 +435,11 @@ Common issues are:
           let triggerCommandRequestId = (event.getContent() as any)
             ?.commandRequestId;
           if (
-            event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            isToolResultEventType(event.getType()) &&
             triggerCommandRequestId &&
             !eventList.some(
               (e: any) =>
-                e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+                isToolResultEventType(e.type) &&
                 e.content?.commandRequestId === triggerCommandRequestId,
             )
           ) {
@@ -827,7 +827,7 @@ Common issues are:
     if (
       event.event.origin_server_ts! < startTime ||
       !room ||
-      !isCommandResultStatusApplied(event)
+      !isToolResultStatusApplied(event)
     ) {
       return;
     }

@@ -1,9 +1,9 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import CreateListingPRRequestCommand from '@cardstack/boxel-host/commands/create-listing-pr-request';
+import CreateListingPRRequestTool from '@cardstack/boxel-host/commands/create-listing-pr-request';
 import CreateShowCardRequestCommand from './commands/create-show-card-request';
 import CreatePatchCardInstanceRequestCommand from './commands/create-patch-card-instance-request';
 import { Button } from '@cardstack/boxel-ui/components';
@@ -19,7 +19,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
   @tracked activeTab: CommandTab = 'show-card';
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get isSubmitDisabled() {
@@ -246,14 +246,14 @@ class Isolated extends Component<typeof BotRequestDemo> {
 
   @action
   async requestShowCard() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
     }
 
-    await new CreateShowCardRequestCommand(commandContext).execute({
+    await new CreateShowCardRequestCommand(toolContext).execute({
       cardId: this.showCardId,
       format: this.showCardFormat,
       realm: this.showCardTargetRealm,
@@ -262,14 +262,14 @@ class Isolated extends Component<typeof BotRequestDemo> {
 
   @action
   async requestCreateListingPR() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
     }
 
-    await new CreateListingPRRequestCommand(commandContext).execute({
+    await new CreateListingPRRequestTool(toolContext).execute({
       realm: this.createListingPRTargetRealm,
       listingId: this.listingId,
     });
@@ -277,14 +277,14 @@ class Isolated extends Component<typeof BotRequestDemo> {
 
   @action
   async requestPatchCardInstance() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
     }
 
-    await new CreatePatchCardInstanceRequestCommand(commandContext).execute({
+    await new CreatePatchCardInstanceRequestCommand(toolContext).execute({
       cardId: this.showCardId,
       patch: this.patchCardPatch,
       realm: this.showCardTargetRealm,

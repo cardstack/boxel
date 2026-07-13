@@ -35,8 +35,6 @@ import {
   serializableError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
@@ -64,6 +62,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
+import type { CardDef } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -353,6 +352,27 @@ export default class RenderRoute extends Route<Model> {
     // Reset before any await so a reader can never see a previous card's
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
+    // Loader-epoch synchronization: indexing renders thread the realm's
+    // loader epoch (re-minted whenever an index pass invalidates executable
+    // modules — see RealmGenerationsTable.loader_epoch). When it differs
+    // from the epoch this tab last cleared for — in either direction; a
+    // mismatch means this loader belongs to a different module timeline —
+    // reset the loader and the store, then record it. This clears each tab
+    // exactly once per module change no matter how many tabs serve the
+    // pass, and instance-only passes (whose epoch is unchanged) keep the
+    // loader warm. Held per tab, unkeyed: the visits that thread an epoch
+    // are realm-affine, so one tab only ever sees one realm's epochs.
+    if (parsedOptions.loaderEpoch !== undefined) {
+      let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
+      if (held !== parsedOptions.loaderEpoch) {
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'render-route loader epoch changed',
+        });
+        this.store.resetCache();
+        (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
+      }
+    }
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,

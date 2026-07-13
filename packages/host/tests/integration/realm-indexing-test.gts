@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
-  baseRealm,
   baseRealmRRI,
   baseCardRef,
   ensureTrailingSlash,
@@ -118,7 +117,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function getInstance(
@@ -280,8 +279,8 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         },
         'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Pet extends CardDef {
             @field firstName = contains(StringField);
@@ -2017,7 +2016,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
@@ -2054,7 +2052,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2073,7 +2070,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2170,7 +2166,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
@@ -2205,7 +2200,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
@@ -2224,7 +2218,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"
@@ -4675,7 +4668,11 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
         '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
         '@cardstack/base/default-templates/fitted',
         '@cardstack/base/default-templates/head',
         '@cardstack/base/default-templates/image-def-atom',
@@ -4839,7 +4836,11 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
         '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
         '@cardstack/base/default-templates/fitted',
         '@cardstack/base/default-templates/head',
         '@cardstack/base/default-templates/image-def-atom',

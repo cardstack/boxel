@@ -1,13 +1,13 @@
 // This should be first
 import '../setup-logger.ts';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 import {
   ensureCombinedFactoryRealmTemplate,
   isFactorySupportContext,
   readSupportContext,
+  writeMetadataFileAtomically,
 } from '@cardstack/realm-test-harness';
 import { logger } from '../logger.ts';
 
@@ -162,12 +162,9 @@ async function main(): Promise<void> {
   };
 
   if (process.env.TEST_HARNESS_METADATA_FILE) {
-    mkdirSync(dirname(process.env.TEST_HARNESS_METADATA_FILE), {
-      recursive: true,
-    });
-    writeFileSync(
+    writeMetadataFileAtomically(
       process.env.TEST_HARNESS_METADATA_FILE,
-      JSON.stringify(payload, null, 2),
+      payload,
     );
   }
 

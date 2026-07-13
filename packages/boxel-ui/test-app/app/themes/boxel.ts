@@ -55,6 +55,11 @@ export const Boxel = `:root {
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
   --tracking-normal: 0.01em;
   --spacing: 0.25rem;
+  --boxel-switch-background: var(--boxel-400);
+  --success: var(--boxel-success);
+  --success-foreground: var(--boxel-success-foreground);
+  --warning: var(--boxel-warning);
+  --warning-foreground: var(--boxel-warning-foreground);
 }
 
 .dark {

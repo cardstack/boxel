@@ -7,7 +7,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   CardContextName,
   PermissionsContextName,
   type CommandContext,
@@ -73,24 +72,24 @@ module('Integration | components | realm field', function (hooks) {
   setupBaseRealm(hooks);
 
   let loader: Loader;
-  let commandContext: CommandContext;
+  let toolContext: CommandContext;
 
   setupCardLogs(hooks, async () => {
     return await getService('loader-service').loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
   });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    const commandService = getService('command-service');
-    commandContext = commandService.commandContext;
+    const toolService = getService('tool-service');
+    toolContext = toolService.toolContext;
 
     const store = getService('store');
 
     provideConsumeContext(CardContextName, {
-      commandContext,
+      toolContext,
       getCard: () => undefined,
       getCards: () => [],
       getCardCollection: () => undefined,

@@ -27,11 +27,15 @@ import {
 } from './helpers/index.ts';
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  expectIncrementalIndexEvent,
+  maxPrerenderHtmlJobId,
+  settlePrerenderHtmlJobs,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { isEqual } from 'lodash-es';
 
 module(basename(import.meta.filename), function () {
@@ -191,14 +195,38 @@ module(basename(import.meta.filename), function () {
           let cacheTestPath = 'cache-test-nocache.gts';
           let initialContent = '// initial cache test content';
 
+          // Each write's index pass fires a fire-and-forget `prerender_html`
+          // job whose worker re-reads this module with the card+source Accept
+          // header — a read that repopulates #sourceCache. write() returns
+          // without awaiting that job, so its seed can land at any later
+          // moment, including between the noCache request below (which drops
+          // the entry) and the follow-up read that asserts a miss, turning the
+          // expected miss into a spurious hit. Settle the prerender-html
+          // channel after every write, keyed off a pre-write baseline so the
+          // fire-and-forget enqueue can't be missed, leaving no such job in
+          // flight during the assertions.
+          let beforeInitial = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
           await testRealm.write(cacheTestPath, initialContent);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeInitial,
+          });
 
           await request
             .get(`/${cacheTestPath}`)
             .set('Accept', 'application/vnd.card+source');
 
           let updatedContent = `${initialContent}\n// updated by test`;
+          let beforeUpdate = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
           await testRealm.write(cacheTestPath, updatedContent);
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeUpdate,
+          });
 
           let noCacheResponse = await request
             .get(`/${cacheTestPath}?noCache=true`)
@@ -227,7 +255,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             cachedResponse.headers['x-boxel-cache'],
             'miss',
-            'subsequent request fetches from disk because noCache call did not seed cache',
+            `subsequent request fetches from disk because noCache call did not seed cache (got x-boxel-cache=${cachedResponse.headers['x-boxel-cache']}, body=${JSON.stringify(cachedResponse.text)}) — a hit here means something re-seeded #sourceCache after the noCache drop, e.g. a prerender_html job that outlived the settle`,
           );
           assert.strictEqual(
             cachedResponse.text,
@@ -245,10 +273,24 @@ module(basename(import.meta.filename), function () {
         // reset.
         test('clearLocalSourceCaches drops cached source bytes', async function (assert) {
           let cacheTestPath = 'clear-local-caches.gts';
+          // Settle the fire-and-forget prerender_html job the write spawns
+          // before we clear the cache: that job re-reads the module with the
+          // card+source Accept header and reseeds #sourceCache, so if it lands
+          // after clearLocalSourceCaches() the afterClear fetch would be a
+          // spurious hit rather than the miss this test asserts. The baseline
+          // keys the settle to the job this write spawns so the fire-and-forget
+          // enqueue can't be missed.
+          let beforeWrite = await maxPrerenderHtmlJobId(
+            dbAdapter,
+            testRealm.url,
+          );
           await testRealm.write(
             cacheTestPath,
             '// clear-local-caches initial content',
           );
+          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+            afterJobId: beforeWrite,
+          });
 
           await request
             .get(`/${cacheTestPath}`)
@@ -270,7 +312,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             afterClear.headers['x-boxel-cache'],
             'miss',
-            'fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped',
+            `fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped (got x-boxel-cache=${afterClear.headers['x-boxel-cache']})`,
           );
         });
 
@@ -799,8 +841,8 @@ module(basename(import.meta.filename), function () {
             let response = await request
               .post('/test-card.gts')
               .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringField from 'https://cardstack.com/base/string';
+                import { contains, field, CardDef } from '@cardstack/base/card-api';
+                import StringField from '@cardstack/base/string';
 
                 export class TestCard extends CardDef {
                   @field field1 = contains(StringField);
@@ -848,8 +890,8 @@ module(basename(import.meta.filename), function () {
             let response = await request
               .post('/test-card.gts')
               .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-                import StringField from 'https://cardstack.com/base/string';
+                import { contains, field, CardDef } from '@cardstack/base/card-api';
+                import StringField from '@cardstack/base/string';
 
                 export class TestCard extends CardDef {
                   @field field1 = contains(StringField);
@@ -1039,8 +1081,17 @@ module(basename(import.meta.filename), function () {
             // FIXME is there a better way?
             let actualEvent = matchRealmEvent(messages, expectedEvent);
 
+            let generation = (actualEvent?.content as any)?.generation;
+            if (generation !== undefined) {
+              let hasPositiveGeneration =
+                typeof generation === 'number' && generation > 0;
+              assert.true(
+                hasPositiveGeneration,
+                `incremental event carries a positive generation: ${generation}`,
+              );
+            }
             assert.deepEqual(
-              actualEvent?.content,
+              withoutGeneration(actualEvent?.content),
               expectedEvent.content,
               'expected event was broadcast',
             );
@@ -1535,6 +1586,23 @@ module(basename(import.meta.filename), function () {
 
 function matchRealmEvent(events: MatrixEvent[], event: any) {
   return events.find(
-    (m) => m.type === event.type && isEqual(event.content, m.content),
+    (m) =>
+      m.type === event.type &&
+      isEqual(event.content, withoutGeneration(m.content)),
   );
+}
+
+// Incremental index events carry the committed realm generation, whose
+// value varies with the fixture's indexing history — matching and content
+// comparison ignore it; its shape is asserted separately.
+function withoutGeneration(content: any) {
+  if (
+    content &&
+    typeof content === 'object' &&
+    content.generation !== undefined
+  ) {
+    let { generation: _generation, ...rest } = content;
+    return rest;
+  }
+  return content;
 }

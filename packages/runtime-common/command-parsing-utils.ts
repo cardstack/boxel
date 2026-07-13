@@ -5,16 +5,19 @@ import { ensureTrailingSlash } from './paths.ts';
 export function parseBoxelHostCommandSpecifier(
   commandRef: string,
 ): ResolvedCodeRef | undefined {
+  // Both the tools/ spelling and the pre-rename commands/ spelling are
+  // accepted; the module is returned as authored (both resolve — the host
+  // shims each tool under both prefixes).
   let match = commandRef.match(
-    /^@cardstack\/boxel-host\/commands\/([^/?#\s]+)\/([^/?#\s]+)$/,
+    /^@cardstack\/boxel-host\/(tools|commands)\/([^/?#\s]+)\/([^/?#\s]+)$/,
   );
   if (!match) {
     return undefined;
   }
   return {
     module:
-      `@cardstack/boxel-host/commands/${match[1]}` as RealmResourceIdentifier,
-    name: match[2],
+      `@cardstack/boxel-host/${match[1]}/${match[2]}` as RealmResourceIdentifier,
+    name: match[3],
   };
 }
 

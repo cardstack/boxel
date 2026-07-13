@@ -157,6 +157,10 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get filteredUserRealmIdentifiers() {
+    // Render in list order: `_realm-auth` enumerates realms
+    // newest-created-first and realms created mid-session are prepended, so
+    // the workspace list is stable across sessions with new workspaces at
+    // the front.
     return this.filterByHosted(this.realmServer.userRealmIdentifiers);
   }
 

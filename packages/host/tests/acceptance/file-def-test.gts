@@ -3,9 +3,7 @@ import { waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { Deferred, baseRealm, type Realm } from '@cardstack/runtime-common';
-
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import { Deferred, type Realm } from '@cardstack/runtime-common';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -19,6 +17,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Acceptance | file def', function (hooks) {
   let realm: Realm;
@@ -59,17 +59,17 @@ module('Acceptance | file def', function (hooks) {
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let markdown: typeof import('https://cardstack.com/base/markdown');
-    let markdownFileDef: typeof import('https://cardstack.com/base/markdown-file-def');
-    let skillModule: typeof import('https://cardstack.com/base/skill');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let markdown: typeof import('@cardstack/base/markdown');
+    let markdownFileDef: typeof import('@cardstack/base/markdown-file-def');
+    let skillModule: typeof import('@cardstack/base/skill');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    markdown = await loader.import(`${baseRealm.url}markdown`);
-    markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);
-    skillModule = await loader.import(`${baseRealm.url}skill`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    markdown = await loader.import('@cardstack/base/markdown');
+    markdownFileDef = await loader.import('@cardstack/base/markdown-file-def');
+    skillModule = await loader.import('@cardstack/base/skill');
 
     let { field, contains, linksTo, Component, CardDef } = cardApi;
     let { default: StringField } = string;

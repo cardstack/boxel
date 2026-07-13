@@ -21,9 +21,9 @@ trap cleanup EXIT
 
 # Check if the database already has index data — if so, skip.
 ROW_COUNT=$(docker exec boxel-pg psql -U postgres -d "$DB_NAME" -tAc \
-  "SELECT COUNT(*) FROM realm_versions" 2>/dev/null) || ROW_COUNT=""
+  "SELECT COUNT(*) FROM realm_generations" 2>/dev/null) || ROW_COUNT=""
 if [ -n "$ROW_COUNT" ] && [ "$ROW_COUNT" -gt 0 ] 2>/dev/null; then
-  echo "Database already has index data ($ROW_COUNT realm versions), skipping cache import."
+  echo "Database already has index data ($ROW_COUNT realm generations), skipping cache import."
   exit 0
 fi
 
@@ -58,7 +58,7 @@ fi
 # Clear any partial data before importing.
 echo "Truncating index tables..."
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_versions, realm_meta"
+  "TRUNCATE boxel_index, prerendered_html, realm_generations, realm_meta"
 
 # Import the cache into the local database.
 # In BOXEL_ENVIRONMENT mode, remap URLs from CI standard mode (localhost:4201)
@@ -70,11 +70,17 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   # Match both http and https canonicals — local dev now stores
   # https://localhost:4201/... in the index (CS-11114), but older
   # cached snapshots still have http://. Either prefix in the snapshot
-  # gets remapped to the env-mode Traefik hostname.
+  # gets remapped to the env-mode Traefik hostname. Use `sed -E` (POSIX
+  # ERE) so the optional-`s` quantifier works under BSD sed too — the
+  # basic-regex `\?` form is a GNU extension that macOS sed treats as a
+  # literal, silently skipping the remap. The destinations are https:
+  # the env-mode realm server and icons host register their realms and
+  # URLs under https://<service>.<slug>.localhost, so http-form rows
+  # would never match a served realm and the cache would be ignored.
   gunzip -c "$CACHE_FILE" \
-    | sed \
-      -e "s|https\\?://localhost:4201|http://realm-server.${SLUG}.localhost|g" \
-      -e "s|http://localhost:4206|http://icons.${SLUG}.localhost|g" \
+    | sed -E \
+      -e "s|https?://localhost:4201|https://realm-server.${SLUG}.localhost|g" \
+      -e "s|https?://localhost:4206|https://icons.${SLUG}.localhost|g" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 else
   gunzip -c "$CACHE_FILE" \

@@ -32,21 +32,21 @@ describe('ingest-card helpers', () => {
   describe('extractImportSpecifiers', () => {
     it('captures value, type, namespace, re-export, and side-effect imports', () => {
       let src = `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
+        import { contains, field } from '@cardstack/base/card-api';
         import type { MortgageCalculator } from '../mortgage-calculator';
         import * as utils from './components/utils';
         export { Foo } from './foo';
         import './side-effect';
-        import StringField from 'https://cardstack.com/base/string';
+        import StringField from '@cardstack/base/string';
       `;
       expect(new Set(extractImportSpecifiers(src))).toEqual(
         new Set([
-          'https://cardstack.com/base/card-api',
+          '@cardstack/base/card-api',
           '../mortgage-calculator',
           './components/utils',
           './foo',
           './side-effect',
-          'https://cardstack.com/base/string',
+          '@cardstack/base/string',
         ]),
       );
     });
@@ -103,6 +103,14 @@ describe('ingest-card helpers', () => {
       expect(
         resolveSameRealmFile(
           'https://cardstack.com/base/string',
+          fromAbs,
+          realmRoot,
+          fileSet,
+        ),
+      ).toBeNull();
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/base/string',
           fromAbs,
           realmRoot,
           fileSet,

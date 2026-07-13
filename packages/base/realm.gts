@@ -14,7 +14,7 @@ import World from '@cardstack/boxel-icons/world';
 import { action } from '@ember/object';
 import { commandData } from './resources/command-data';
 import type { GetAllRealmMetasResult } from './command';
-import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import GetAllRealmMetasTool from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 type RealmMeta = {
   realmIdentifier: string;
@@ -28,7 +28,7 @@ type RealmMeta = {
 class EditComponent extends Component<typeof RealmField> {
   allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
     this,
-    GetAllRealmMetasCommand,
+    GetAllRealmMetasTool,
   );
 
   get writableRealms(): RealmMeta[] {

@@ -28,11 +28,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import {
-  coalesce,
-  extractCssVariables,
-  sanitizeHtmlSafe,
-} from '@cardstack/boxel-ui/helpers';
+import { coalesce, themeScope } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash-es';
 import { initSharedState } from './shared-state';
@@ -40,7 +36,7 @@ import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 import { concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
+import { guidFor } from '@ember/object/internals';
 import { resolveFieldConfiguration } from './field-support';
 
 export interface BoxComponentSignature {
@@ -90,7 +86,7 @@ const DEFAULT_CARD_CONTEXT = {
     modify() {}
   },
   actions: undefined,
-  commandContext: undefined,
+  toolContext: undefined,
   getCard: () => {},
   getCards: () => {},
   getCardCollection: () => {},
@@ -271,14 +267,10 @@ export function getBoxComponent(
     return false;
   }
 
-  function getThemeStyles(cardDef?: CardDef) {
-    if (!extractCssVariables) {
-      return htmlSafe('');
-    }
-    let css = isThemeCard(cardDef)
+  function themeCss(cardDef?: CardDef) {
+    return isThemeCard(cardDef)
       ? cardDef.cssVariables
       : cardDef?.cardTheme?.cssVariables;
-    return sanitizeHtmlSafe(extractCssVariables(css));
   }
 
   function hasTheme(cardDef?: CardDef) {
@@ -286,6 +278,10 @@ export function getBoxComponent(
       return Boolean(cardDef?.cssVariables?.trim());
     }
     return cardDef?.cardTheme != null;
+  }
+
+  function themeId(cardDef?: CardDef) {
+    return isThemeCard(cardDef) ? cardDef.id : cardDef?.cardTheme?.id;
   }
 
   function getCssImports(card?: CardDef) {
@@ -301,6 +297,26 @@ export function getBoxComponent(
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
+    // Scopes this card's theme stylesheet. Derived from the theme card's id
+    // plus a hash of its CSS (see themeScope) so every card sharing a theme
+    // emits an identical stylesheet instead of one copy per card, while
+    // scopes stay stable in persisted prerendered HTML — a per-process guid
+    // can repeat across prerender jobs, and since the scoped style rules are
+    // page-global, two cached cards with the same scope but different theme
+    // CSS would capture each other's theme variables. The guid fallback only
+    // covers unsaved theme cards previewing their own CSS, which are never
+    // persisted.
+    private get themeScopeId() {
+      let value = model.value;
+      if (isCard(value)) {
+        let scope = themeScope(themeId(value), themeCss(value));
+        if (scope) {
+          return scope;
+        }
+      }
+      return guidFor(this);
+    }
+
     // Compute merged configuration for this field based on the owning instance.
     // We intentionally do not expose the instance itself to templates.
     get resolvedConfiguration() {
@@ -349,6 +365,8 @@ export function getBoxComponent(
                           @displayBoundaries={{displayContainer}}
                           @isThemed={{hasTheme card}}
                           @cssImports={{getCssImports card}}
+                          @themeCss={{themeCss card}}
+                          @themeScope={{this.themeScopeId}}
                           class={{cn
                             'field-component-card'
                             (concat effectiveFormats.cardDef '-format')
@@ -360,7 +378,6 @@ export function getBoxComponent(
                             fieldType=field.fieldType
                             fieldName=field.name
                           }}
-                          style={{getThemeStyles card}}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
                           data-test-card={{card.id}}

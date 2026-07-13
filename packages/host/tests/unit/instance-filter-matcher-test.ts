@@ -19,9 +19,9 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { testRealmURL, p } from '../helpers';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
 
@@ -55,12 +55,12 @@ module('Unit | instance-filter-matcher', function (hooks) {
     });
 
     let cardApi = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
-    let string = await loader.import<any>(`${baseRealm.url}string`);
-    let number = await loader.import<any>(`${baseRealm.url}number`);
-    let boolean = await loader.import<any>(`${baseRealm.url}boolean`);
-    let date = await loader.import<any>(`${baseRealm.url}date`);
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
+    let string = await loader.import<any>('@cardstack/base/string');
+    let number = await loader.import<any>('@cardstack/base/number');
+    let boolean = await loader.import<any>('@cardstack/base/boolean');
+    let date = await loader.import<any>('@cardstack/base/date');
 
     api = {
       getQueryableValue: cardApi.getQueryableValue,
@@ -528,7 +528,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
   // -- unresolvable -----------------------------------------------------------
 
   test('a not-loaded linksTo target is reported as unresolvable', async function (assert) {
-    let cardApi = await loader.import<any>(`${baseRealm.url}card-api`);
+    let cardApi = await loader.import<any>('@cardstack/base/card-api');
     let doc = {
       data: {
         id: `${testRealmURL}lonely`,

@@ -7,6 +7,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 
 export interface WaitForReadyResult {
   ready: boolean;
@@ -58,6 +59,12 @@ export async function waitForReady(
       error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ready: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let readinessUrl = `${ensureTrailingSlash(realmUrl)}_readiness-check`;
   let startedAt = Date.now();

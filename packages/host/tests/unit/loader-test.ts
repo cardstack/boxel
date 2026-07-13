@@ -108,8 +108,8 @@ module('Unit | loader', function (hooks) {
           }
         `,
           'person.gts': `
-          import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -133,7 +133,7 @@ module('Unit | loader', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can dynamically load modules with cycles', async function (assert) {

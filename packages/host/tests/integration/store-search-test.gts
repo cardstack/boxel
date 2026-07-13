@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
-  baseRealm,
   baseFileRef,
   isCardResource,
   isFileMetaResource,
@@ -18,8 +17,6 @@ import {
 
 import { fileTreeFromIndex } from '@cardstack/host/resources/file-tree-from-index';
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -38,6 +35,8 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+
 module('Integration | store search public API', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -48,7 +47,7 @@ module('Integration | store search public API', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

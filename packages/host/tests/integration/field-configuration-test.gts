@@ -4,19 +4,12 @@ import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred, VirtualNetwork } from '@cardstack/runtime-common';
+import { Deferred, VirtualNetwork } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type {
-  CardStore,
-  CardDef as CardDefType,
-  StoreSearchResource,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,
@@ -40,6 +33,13 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type {
+  CardStore,
+  CardDef as CardDefType,
+  StoreSearchResource,
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 let loader: Loader;
 
@@ -196,7 +196,7 @@ module('Integration | field configuration', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class ColorField extends FieldDef {

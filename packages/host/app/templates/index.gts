@@ -35,22 +35,20 @@ import type IndexController from '@cardstack/host/controllers/index';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type CommandService from '@cardstack/host/services/command-service';
-
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
+import type HostModeService from '../services/host-mode-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type {
   CardContext,
   CardDef,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import type HostModeService from '../services/host-mode-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
+} from '@cardstack/base/card-api';
 
 export interface IndexComponentComponentSignature {
   Args: {
@@ -59,7 +57,7 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
   @service declare private matrixService: MatrixService;
@@ -83,8 +81,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   }
 
   @provide(CommandContextName)
-  private get commandContext() {
-    return this.commandService.commandContext;
+  private get toolContext() {
+    return this.toolService.toolContext;
   }
 
   // Remove this and onClose argument in OperatorModeContainer once we remove host mode and the card route, where closing operator mode will not be a thing anymore
@@ -145,7 +143,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
-      commandContext: this.commandContext,
+      toolContext: this.toolContext,
+      commandContext: this.toolContext,
       searchResultsComponent: SearchResults,
       mode: this.hostModeService.isActive ? 'host' : 'operator',
       submode: this.hostModeService.isActive

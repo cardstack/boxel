@@ -3,17 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
-
-import type * as AddressFieldModule from 'https://cardstack.com/base/address';
-import type * as ColorFieldModule from 'https://cardstack.com/base/color';
-import type * as CoordinateFieldModule from 'https://cardstack.com/base/coordinate';
-import type * as CountryFieldModule from 'https://cardstack.com/base/country';
-import type * as DateRangeFieldModule from 'https://cardstack.com/base/date-range-field';
-import type * as LLMModelFieldModule from 'https://cardstack.com/base/llm-model';
-import type * as PercentageFieldModule from 'https://cardstack.com/base/percentage';
-import type * as UrlFieldModule from 'https://cardstack.com/base/url';
-import type * as WebsiteFieldModule from 'https://cardstack.com/base/website';
+import type { Loader } from '@cardstack/runtime-common';
 
 import {
   BigIntegerField,
@@ -31,8 +21,20 @@ import {
   field,
   setupBaseRealm,
 } from '../../helpers/base-realm';
+
 import { renderCard } from '../../helpers/render-component';
+
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as AddressFieldModule from '@cardstack/base/address';
+import type * as ColorFieldModule from '@cardstack/base/color';
+import type * as CoordinateFieldModule from '@cardstack/base/coordinate';
+import type * as CountryFieldModule from '@cardstack/base/country';
+import type * as DateRangeFieldModule from '@cardstack/base/date-range-field';
+import type * as LLMModelFieldModule from '@cardstack/base/llm-model';
+import type * as PercentageFieldModule from '@cardstack/base/percentage';
+import type * as UrlFieldModule from '@cardstack/base/url';
+import type * as WebsiteFieldModule from '@cardstack/base/website';
 
 // Verifies the explicit `static markdown` templates added per CS-10786 to
 // specialized fields. Each primitive/composite field renders through a
@@ -63,39 +65,39 @@ module('Integration | field markdown specialized', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     AddressField = (
-      await loader.import<typeof AddressFieldModule>(`${baseRealm.url}address`)
+      await loader.import<typeof AddressFieldModule>('@cardstack/base/address')
     ).default;
     ColorField = (
-      await loader.import<typeof ColorFieldModule>(`${baseRealm.url}color`)
+      await loader.import<typeof ColorFieldModule>('@cardstack/base/color')
     ).default;
     CoordinateField = (
       await loader.import<typeof CoordinateFieldModule>(
-        `${baseRealm.url}coordinate`,
+        '@cardstack/base/coordinate',
       )
     ).default;
     CountryField = (
-      await loader.import<typeof CountryFieldModule>(`${baseRealm.url}country`)
+      await loader.import<typeof CountryFieldModule>('@cardstack/base/country')
     ).default;
     DateRangeField = (
       await loader.import<typeof DateRangeFieldModule>(
-        `${baseRealm.url}date-range-field`,
+        '@cardstack/base/date-range-field',
       )
     ).default;
     LLMModelField = (
       await loader.import<typeof LLMModelFieldModule>(
-        `${baseRealm.url}llm-model`,
+        '@cardstack/base/llm-model',
       )
     ).default;
     PercentageField = (
       await loader.import<typeof PercentageFieldModule>(
-        `${baseRealm.url}percentage`,
+        '@cardstack/base/percentage',
       )
     ).default;
     UrlField = (
-      await loader.import<typeof UrlFieldModule>(`${baseRealm.url}url`)
+      await loader.import<typeof UrlFieldModule>('@cardstack/base/url')
     ).default;
     WebsiteField = (
-      await loader.import<typeof WebsiteFieldModule>(`${baseRealm.url}website`)
+      await loader.import<typeof WebsiteFieldModule>('@cardstack/base/website')
     ).default;
   });
 

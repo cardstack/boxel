@@ -4,15 +4,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   provideConsumeContext,
@@ -35,6 +32,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
 const MANGO_URL = `${testRealmURL}Pet/mango`;
@@ -121,7 +120,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Realm holds Person/Pet plus two real Pets (`Pet/mango`, `Pet/vangogh`);
@@ -296,9 +295,9 @@ module(
         'pets.0': { links: { self: GHOST_URL } },
       });
 
-      let api = await loader.import<
-        typeof import('https://cardstack.com/base/card-api')
-      >(`${baseRealm.url}card-api`);
+      let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+        '@cardstack/base/card-api',
+      );
       let PersonComponent = api.getComponent(person);
 
       let renderCount = 0;

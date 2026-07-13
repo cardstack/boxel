@@ -1,9 +1,9 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   READ_REALM_FILE_TOOL_NAME,
-  fileLabelFromUrl,
+  readFilesLabel,
 } from '../read-realm-file.ts';
 import { thinkingMessage } from '../../constants.ts';
 import type ResponseState from '../response-state.ts';
@@ -12,7 +12,7 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
@@ -21,9 +21,9 @@ let log = logger('ai-bot');
 
 function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-): Partial<CommandRequest> {
+): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
-  let result = {} as Partial<CommandRequest>;
+  let result = {} as Partial<ToolRequest>;
   if (id) {
     result['id'] = id;
   }
@@ -42,14 +42,13 @@ function toCommandRequest(
   }
   // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
   // it in the timeline but never runs it, and give it a human label the
-  // timeline indicator can show ("Read file: <name>") since the raw arguments
-  // carry no description of their own.
+  // timeline indicator can show ("Read files: <names>") since the raw
+  // arguments carry no description of their own.
   if (result.name === READ_REALM_FILE_TOOL_NAME) {
     result.executedBy = AI_BOT_EXECUTOR;
-    let label = fileLabelFromUrl(result.arguments?.url);
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: label ? `Read file: ${label}` : 'Read file',
+      description: readFilesLabel(result.arguments?.urls),
     };
   }
   return result;

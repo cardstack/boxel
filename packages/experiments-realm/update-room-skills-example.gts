@@ -3,14 +3,14 @@ import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
-import UpdateRoomSkillsCommand from '@cardstack/boxel-host/commands/update-room-skills';
+import UpdateRoomSkillsTool from '@cardstack/boxel-host/commands/update-room-skills';
 
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -99,7 +99,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   @tracked isExecuting = false;
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get finalSkillsRealmURL() {
@@ -239,8 +239,8 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       return;
     }
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is not available. Open this card inside the host app.';
       return;
@@ -270,7 +270,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
     this.errorMessage = null;
 
     try {
-      let command = new UpdateRoomSkillsCommand(commandContext);
+      let command = new UpdateRoomSkillsTool(toolContext);
       await command.execute({
         roomId,
         skillCardIdsToActivate,
@@ -299,7 +299,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       <h1>Update Room Skills Command</h1>
       <p class='intro'>
         Use this card to experiment with
-        <code>UpdateRoomSkillsCommand</code>. Provide a Matrix room ID, pick the
+        <code>UpdateRoomSkillsTool</code>. Provide a Matrix room ID, pick the
         skills you want to toggle, then run the command to publish the new
         configuration.
       </p>
@@ -452,7 +452,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
         disabled={{this.isApplyDisabled}}
         {{on 'click' this.applySkills}}
       >
-        {{if this.isExecuting 'Updating skills…' 'Run UpdateRoomSkillsCommand'}}
+        {{if this.isExecuting 'Updating skills…' 'Run UpdateRoomSkillsTool'}}
       </Button>
     </div>
 

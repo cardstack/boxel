@@ -28,7 +28,7 @@ import {
   CardContextName,
   CardError,
   CodeRef,
-  CommandContext,
+  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -124,6 +124,10 @@ import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
 import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
+import FileDefAtomTemplate from './default-templates/file-def-atom';
+import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
+import FileDefFittedTemplate from './default-templates/file-def-fitted';
+import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -141,8 +145,8 @@ import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
 import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
-import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
-import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
+import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
+import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
 import { md5 } from 'super-fast-md5';
 
 import {
@@ -347,7 +351,11 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  commandContext?: CommandContext;
+  toolContext?: ToolContext;
+  // Pre-rename spelling of `toolContext`. Realm content reads
+  // `@context.commandContext`; populated with the same value until no
+  // deployed content references it.
+  commandContext?: ToolContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
@@ -3003,14 +3011,10 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
-  static embedded: BaseDefComponent = class View extends Component<
-    typeof this
-  > {
-    <template>{{@model.name}}</template>
-  };
-  static fitted = this.embedded;
-  static isolated = this.embedded;
-  static atom = this.embedded;
+  static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = FileDefFittedTemplate;
+  static isolated: BaseDefComponent = FileDefIsolatedTemplate;
+  static atom: BaseDefComponent = FileDefAtomTemplate;
   static edit: BaseDefComponent = FileDefEditTemplate;
   // Default `markdown` fallback (CS-10784): inherits from FieldDef but
   // restated explicitly so this class's own slot is set rather than relying on
@@ -3284,16 +3288,16 @@ export class Theme extends CardDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getMenuItems](params);
-    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+    if (params.menuContext === 'interact' && params.toolContext && this.id) {
       menuItems = [
         ...menuItems,
         {
           label: 'Copy and Edit',
           action: async () => {
-            if (!params.commandContext || !this.id) {
+            if (!params.toolContext || !this.id) {
               return;
             }
-            let cmd = new CopyAndEditCommand(params.commandContext);
+            let cmd = new CopyAndEditTool(params.toolContext);
             await cmd.execute({
               card: this,
             });
@@ -3304,7 +3308,7 @@ export class Theme extends CardDef {
         {
           label: 'Modify Theme via AI',
           action: async () => {
-            let cmd = new PatchThemeCommand(params.commandContext);
+            let cmd = new PatchThemeTool(params.toolContext);
             await cmd.execute({
               cardId: this.id as unknown as string,
             });
@@ -4809,15 +4813,33 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
-// The VirtualNetwork associated with an instance's store, for prefix/RRI
-// resolution outside this module. Returns undefined when the instance is
-// detached (no store, no loader-attached VN) — callers handle that by
-// degrading to URL math or throwing.
-export function virtualNetworkFor(
-  instance: BaseDef,
-): VirtualNetwork | undefined {
+// Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
+// relative to the instance's own location. Card definitions that must hand a
+// real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
+// AI source-file reader's `new URL(...)`) use this rather than reaching for the
+// VirtualNetwork object directly — they get back a URL, not the network itself.
+// Resolves through the instance's own store's VirtualNetwork, which may carry
+// realm mappings the module loader's does not (e.g. a card deserialized with an
+// explicit store). Returns undefined when none is available, or when the
+// reference can't be resolved, so callers can degrade to URL math.
+export function resolveInstanceURL(
+  instance: CardDef,
+  reference: string,
+): URL | undefined {
+  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    return getStore(instance).virtualNetwork;
+    virtualNetwork = getStore(instance).virtualNetwork;
+  } catch {
+    return undefined;
+  }
+  if (!virtualNetwork) {
+    return undefined;
+  }
+  try {
+    return virtualNetwork.resolveURL(
+      reference,
+      instance.id ?? instance[relativeTo],
+    );
   } catch {
     return undefined;
   }

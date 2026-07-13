@@ -8,5 +8,8 @@ export default class Index extends Route {
     cycleThemes: {
       refreshModel: false,
     },
+    mode: {
+      refreshModel: false,
+    },
   };
 }

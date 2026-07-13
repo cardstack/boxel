@@ -44,7 +44,7 @@ import { getBabelOptions } from './babel-options.ts';
 
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
+import type { FieldType } from '@cardstack/base/card-api';
 
 export type {
   PossibleCardOrFieldDeclaration,

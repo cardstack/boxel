@@ -33,14 +33,12 @@ import {
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
-import CheckDomainAvailabilityCommand from '@cardstack/host/commands/check-domain-availability';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -56,8 +54,10 @@ import type {
   SubdomainAvailabilityResult,
 } from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 type CustomSubdomainSelection = {
   url: string;
@@ -85,7 +85,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   #cardAPI?: typeof CardAPI;
@@ -802,8 +802,8 @@ export default class PublishRealmModal extends Component<Signature> {
       try {
         // Check availability through the same command exposed to boxel-cli so
         // the UI and headless callers share one path.
-        let command = new CheckDomainAvailabilityCommand(
-          this.commandService.commandContext,
+        let command = new CheckDomainAvailabilityTool(
+          this.toolService.toolContext,
         );
         let result = await command.execute({ type: 'custom', name: subdomain });
         this.customSubdomainAvailability = {

@@ -2,11 +2,12 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 
 // CS-10789 end-to-end tests for the markdown rendering pipeline (CS-10782
 // through CS-10787) as served via the realm HTTP endpoint added in CS-10798.
@@ -34,8 +35,8 @@ const BASIC_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Basic extends CardDef {
     static displayName = 'Basic';
@@ -58,7 +59,7 @@ const BASIC_CARD_GTS = `
 // prerender pipeline captures `textContent` for format=markdown, so the exact
 // whitespace must round-trip.
 const WHITESPACE_CARD_GTS = `
-  import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+  import { Component, CardDef } from '@cardstack/base/card-api';
 
   export class Whitespace extends CardDef {
     static displayName = 'Whitespace';
@@ -84,8 +85,8 @@ const FIELD_DELEGATION_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class FieldDelegation extends CardDef {
     static displayName = 'FieldDelegation';
@@ -105,8 +106,8 @@ const MARKDOWN_FIELD_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
+  } from '@cardstack/base/card-api';
+  import MarkdownField from '@cardstack/base/markdown';
 
   export class PassThrough extends CardDef {
     static displayName = 'PassThrough';
@@ -126,8 +127,8 @@ const ESCAPE_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Escape extends CardDef {
     static displayName = 'Escape';
@@ -147,8 +148,8 @@ const FALLBACK_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Fallback extends CardDef {
     static displayName = 'Fallback';
@@ -171,8 +172,8 @@ const OVERRIDE_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Override extends CardDef {
     static displayName = 'Override';
@@ -196,8 +197,8 @@ const FRONTMATTER_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Frontmatter extends CardDef {
     static displayName = 'Frontmatter';
@@ -221,8 +222,8 @@ const NESTED_CARD_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class NestedChild extends CardDef {
     static displayName = 'NestedChild';
@@ -251,8 +252,8 @@ const CACHE_CARD_INITIAL_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Cache extends CardDef {
     static displayName = 'Cache';
@@ -269,8 +270,8 @@ const CACHE_CARD_UPDATED_GTS = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Cache extends CardDef {
     static displayName = 'Cache';
@@ -285,19 +286,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
+  let testDbAdapter: DBAdapter;
 
   function onRealmSetup({
     testRealm: realm,
     testRealmHttpServer: server,
     request: req,
+    dbAdapter,
   }: {
     testRealm: Realm;
     testRealmHttpServer: Server;
     request: SuperTest<Test>;
+    dbAdapter: DBAdapter;
   }) {
     testRealm = realm;
     testRealmHttpServer = server;
     request = req;
+    testDbAdapter = dbAdapter;
   }
 
   hooks.afterEach(async function () {
@@ -697,6 +702,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     // its dependents. We await fullIndex to make assertions deterministic.
     await testRealm.write('cache.gts', CACHE_CARD_UPDATED_GTS);
     await testRealm.realmIndexUpdater.fullIndex();
+    // The served markdown comes from the prerendered_html channel, which a
+    // fire-and-forget prerender_html job populates after the index pass.
+    await settlePrerenderHtmlJobs(testDbAdapter, testRealm.url);
 
     let second = await request
       .get('/cache')

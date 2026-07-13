@@ -8,8 +8,6 @@ import { Deferred, SupportedMimeType } from '@cardstack/runtime-common';
 
 import type NetworkService from '@cardstack/host/services/network';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -29,6 +27,8 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const SUBJECTS_MODULE = `${testRealmURL}subjects`;
 const LINKSTO_URL = `${testRealmURL}linksto-subject`;

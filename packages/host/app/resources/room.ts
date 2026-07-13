@@ -16,13 +16,14 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  getToolRequests,
+  isToolResultRelType,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
@@ -30,7 +31,30 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import {
+  RoomMember,
+  type RoomMemberInterface,
+} from '../lib/matrix-classes/member';
+
+import MessageBuilder from '../lib/matrix-classes/message-builder';
+
+import {
+  getSkillSourceTools,
+  isMarkdownSkillId,
+  loadSkillSource,
+  peekSkillSource,
+} from '../lib/skill-tools';
+
+import type { Message } from '../lib/matrix-classes/message';
+
+import type Room from '../lib/matrix-classes/room';
+
+import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type RealmService from '../services/realm';
+import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
@@ -41,37 +65,12 @@ import type {
   CardMessageEvent,
   DebugMessageEvent,
   MessageEvent,
-  CommandResultEvent,
+  ToolResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
   ActiveLLMEvent,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
-
-import {
-  RoomMember,
-  type RoomMemberInterface,
-} from '../lib/matrix-classes/member';
-
-import MessageBuilder from '../lib/matrix-classes/message-builder';
-
-import {
-  getSkillSourceCommands,
-  isMarkdownSkillId,
-  loadSkillSource,
-  peekSkillSource,
-} from '../lib/skill-commands';
-
-import type { Message } from '../lib/matrix-classes/message';
-
-import type Room from '../lib/matrix-classes/room';
-
-import type CommandService from '../services/command-service';
-import type MatrixService from '../services/matrix-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type RealmService from '../services/realm';
-import type StoreService from '../services/store';
+} from '@cardstack/base/matrix-event';
+import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
@@ -112,7 +111,7 @@ export class RoomResource extends Resource<Args> {
   @tracked private llmModeBeingActivated: LLMMode | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
 
@@ -200,7 +199,8 @@ export class RoomResource extends Resource<Args> {
           case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
             await this.loadRoomMessage({ roomId, event, index });
             break;
-          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
+          case LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             await this.updateMessageCommandResult({ roomId, event, index });
             break;
           case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
@@ -339,8 +339,8 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
-  get commands() {
-    // Usable commands are all commands on *active* skills, whether the skill is
+  get tools() {
+    // Usable tools are all tools on *active* skills, whether the skill is
     // a Skill card or a skill-bearing markdown file.
     let commands = [];
     for (let skill of this.skills) {
@@ -349,7 +349,7 @@ export class RoomResource extends Resource<Args> {
       }
       let skillSource = peekSkillSource(this.store, skill.cardId);
       if (skillSource) {
-        commands.push(...getSkillSourceCommands(skillSource));
+        commands.push(...getSkillSourceTools(skillSource));
       }
     }
     return commands;
@@ -721,7 +721,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: CommandResultEvent;
+    event: ToolResultEvent;
     index: number;
   }) {
     // Locate the owning bot message by commandRequestId. The commandResult's
@@ -734,7 +734,7 @@ export class RoomResource extends Resource<Args> {
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.some(
+        getToolRequests(e.content)?.some(
           (cr: any) => cr.id === event.content.commandRequestId,
         ),
     ) as CardMessageEvent | undefined;
@@ -767,7 +767,7 @@ export class RoomResource extends Resource<Args> {
         index,
         events: this.events,
         skills: this.skills,
-        commandResultEvent: event,
+        toolResultEvent: event,
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
@@ -811,7 +811,7 @@ export class RoomResource extends Resource<Args> {
     event:
       | MessageEvent
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | DebugMessageEvent,
   ) {
@@ -820,8 +820,7 @@ export class RoomResource extends Resource<Args> {
     }
 
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
-      event.content['m.relates_to']?.rel_type ===
-        APP_BOXEL_COMMAND_RESULT_REL_TYPE
+      isToolResultRelType(event.content['m.relates_to']?.rel_type)
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }
@@ -874,14 +873,14 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  public isDisplayingCode(commandRequest: CommandRequest) {
-    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
+  public isDisplayingCode(toolRequest: ToolRequest) {
+    return this._isDisplayingViewCodeMap.get(toolRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: CommandRequest) {
+  public toggleViewCode(toolRequest: ToolRequest) {
     this._isDisplayingViewCodeMap.set(
-      commandRequest.id,
-      !this.isDisplayingCode(commandRequest),
+      toolRequest.id,
+      !this.isDisplayingCode(toolRequest),
     );
   }
 }

@@ -30,8 +30,7 @@ import {
   matchInstanceAgainstFilter,
   makeInstanceComparator,
   logger as runtimeLogger,
-  normalizeQueryForSignature,
-  buildQueryParamValue,
+  canonicalQuerySignature,
   parseSearchURL,
   ri,
   RealmPaths,
@@ -43,14 +42,14 @@ import {
 } from '@cardstack/runtime-common';
 import type { Filter, Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import { searchErrorEntry } from '../lib/search-error-entry';
 
+import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
@@ -153,6 +152,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
 export class SearchResource<
   T extends CardDef | FileDef = CardDef,
 > extends Resource<Args<T>> {
+  @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
@@ -356,9 +356,7 @@ export class SearchResource<
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
       if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
-        this.#previousQueryString = buildQueryParamValue(
-          normalizeQueryForSignature(seedQuery),
-        );
+        this.#previousQueryString = this.querySignature(seedQuery);
       }
       this.#previousQuery = query;
       if (seed.realms) {
@@ -396,9 +394,7 @@ export class SearchResource<
         // the recomputed query doesn't sneak a fetch back in.
         this.#previousRealms = realms;
         this.#previousQuery = query;
-        this.#previousQueryString = buildQueryParamValue(
-          normalizeQueryForSignature(query),
-        );
+        this.#previousQueryString = this.querySignature(query);
         return;
       }
     }
@@ -426,11 +422,18 @@ export class SearchResource<
             if (this.#previousQuery === undefined) {
               return;
             }
-            // we are only interested in incremental index events
-            if (
-              event.eventName !== 'index' ||
-              ('indexType' in event && event.indexType !== 'incremental')
-            ) {
+            // Re-run on incremental index events (the search doc changed)
+            // and on prerender_html events. The latter matter even to
+            // structured queries: this search excludes rows with an
+            // effective error, and a render error lands on the
+            // prerendered_html channel at-or-above the row's index
+            // generation — so membership can flip on a prerender_html event
+            // with no index event announcing it. (Full-text `matches`
+            // membership rides that channel too, via `markdown`.)
+            let isIncrementalIndex =
+              event.eventName === 'index' &&
+              (!('indexType' in event) || event.indexType === 'incremental');
+            if (!isIncrementalIndex && event.eventName !== 'prerender_html') {
               return;
             }
             this.trackStoreLoad(
@@ -442,7 +445,7 @@ export class SearchResource<
       });
     }
 
-    let queryString = buildQueryParamValue(normalizeQueryForSignature(query));
+    let queryString = this.querySignature(query);
     if (
       isEqual(queryString, this.#previousQueryString) &&
       isEqual(realms, this.#previousRealms)
@@ -462,6 +465,14 @@ export class SearchResource<
     this.#previousQueryString = queryString;
     this.trackStoreLoad(this.search.perform(query), 'search');
   }
+
+  // Spelling-tolerant query identity, so a server-produced seed query
+  // (URL-form refs) and the client's RRI-space rebuild of the same query
+  // compare equal and the seed can satisfy the initial search.
+  private querySignature(query: Query): string {
+    return canonicalQuerySignature(query, this.network.virtualNetwork);
+  }
+
   get isLoading() {
     return this.search.isRunning;
   }

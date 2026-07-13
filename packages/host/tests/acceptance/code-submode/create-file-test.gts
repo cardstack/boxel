@@ -19,8 +19,6 @@ import {
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   percySnapshot,
   setupLocalIndexing,
@@ -44,6 +42,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -1559,7 +1558,7 @@ export class TestCard extends Animal {
       let newFilePath = 'ai-created-card.gts';
       let newFileUrl = `${testRealmURL}${newFilePath}`;
       let newFileSource = `
-        import { CardDef } from 'https://cardstack.com/base/card-api';
+        import { CardDef } from '@cardstack/base/card-api';
         export default class AiCreatedCard extends CardDef {
           static displayName = 'Ai Created Card';
         }
@@ -1597,7 +1596,7 @@ export class TestCard extends Animal {
         },
       );
 
-      // Mirror WriteTextFileCommand exactly. `cardService.saveSource` with
+      // Mirror WriteTextFileTool exactly. `cardService.saveSource` with
       // saveType 'create-file' POSTs the new source to the realm and tags
       // the request with `X-Boxel-Client-Request-Id: create-file:<uuid>`,
       // which the realm echoes back in the `index/incremental` event.
@@ -1644,7 +1643,7 @@ export class TestCard extends Animal {
       let newFilePath = 'navigated-to-card.gts';
       let newFileUrl = `${testRealmURL}${newFilePath}`;
       let newFileSource = `
-        import { CardDef } from 'https://cardstack.com/base/card-api';
+        import { CardDef } from '@cardstack/base/card-api';
         export default class NavigatedToCard extends CardDef {
           static displayName = 'Navigated To Card';
         }

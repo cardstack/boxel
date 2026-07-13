@@ -48,8 +48,6 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
-
 import {
   detectStackItemTypeForTarget,
   StackItem,
@@ -57,15 +55,9 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
+import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
-
-import type {
-  CardContext,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
 
 import consumeContext from '../../helpers/consume-context';
 
@@ -87,7 +79,6 @@ import type { CardDefOrId } from './stack-item';
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -95,6 +86,9 @@ import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
+import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -143,7 +137,7 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
   @service declare private realm: Realm;
@@ -504,8 +498,8 @@ export default class InteractSubmode extends Component {
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardToStackCommand(
-            this.commandService.commandContext,
+          ({ newCardId } = await new CopyCardToStackTool(
+            this.toolService.toolContext,
           ).execute({
             sourceCard: card,
             targetStackIndex,
@@ -927,7 +921,7 @@ export default class InteractSubmode extends Component {
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
                 @deleteCard={{this.requestDeleteCard}}
-                @commandContext={{this.commandService.commandContext}}
+                @toolContext={{this.toolService.toolContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

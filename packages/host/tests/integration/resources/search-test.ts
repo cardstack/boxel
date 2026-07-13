@@ -24,8 +24,6 @@ import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -37,6 +35,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDocFiles } from '../../helpers';
+import type { CardDef } from '@cardstack/base/card-api';
 
 class StubRealmService extends RealmService {
   realmOf(_input: URL | string) {
@@ -62,8 +61,8 @@ module(`Integration | search resource`, function (hooks) {
   let loaderService: LoaderService;
   let storeService: StoreService;
   let realm: Realm;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
-  let string: typeof import('https://cardstack.com/base/string');
+  let cardApi: typeof import('@cardstack/base/card-api');
+  let string: typeof import('@cardstack/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -82,8 +81,8 @@ module(`Integration | search resource`, function (hooks) {
   });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { contains, field, CardDef, FieldDef, linksTo } = cardApi;
     let { default: StringField } = string;

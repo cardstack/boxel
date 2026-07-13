@@ -9,7 +9,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRRI, baseRealm } from '@cardstack/runtime-common';
+import { baseRRI } from '@cardstack/runtime-common';
 import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import {
@@ -28,7 +28,7 @@ name: Realm Sync
 description: Sync workspace files
 boxel:
   kind: skill
-  commands:
+  tools:
     - codeRef:
         module: '@cardstack/boxel-host/commands/realm-sync'
         name: SyncCommand
@@ -125,7 +125,7 @@ module('Integration | markdown skill search', function (hooks) {
     // rehydrates as its concrete subclass on read rather than the declared base.
     let loader = getService('loader-service').loader;
     let { SkillFrontmatterField } = await loader.import<any>(
-      `${baseRealm.url}skill-frontmatter-field`,
+      '@cardstack/base/skill-frontmatter-field',
     );
     let store = getService('store');
     let url = `${testRealmURL}skills/realm-sync/SKILL.md`;
@@ -137,14 +137,14 @@ module('Integration | markdown skill search', function (hooks) {
       'frontmatter rehydrated as SkillFrontmatterField, not the base FrontmatterField',
     );
     assert.strictEqual(
-      instance.frontmatter.commands.length,
+      instance.frontmatter.tools.length,
       1,
-      'typed commands survive the realm file-meta read',
+      'typed tools survive the realm file-meta read',
     );
     assert.strictEqual(
-      instance.frontmatter.commands[0].codeRef.name,
+      instance.frontmatter.tools[0].codeRef.name,
       'SyncCommand',
-      'command codeRef survives the realm file-meta read',
+      'tool codeRef survives the realm file-meta read',
     );
   });
 });

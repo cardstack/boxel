@@ -35,6 +35,7 @@ import {
   matrixURL,
   waitUntil,
 } from './helpers/index.ts';
+import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
@@ -329,13 +330,19 @@ module(basename(import.meta.filename), function () {
 
         // Verify that head_html in the published realm references the
         // published URL, not the source realm URL (the fullIndex after
-        // publish re-renders templates so og:url uses the correct URL)
-        let instanceWithHead = indexResults.find(
+        // publish re-renders templates so og:url uses the correct URL).
+        // The HTML lands on the prerendered_html channel via the
+        // fire-and-forget prerender_html job, so settle that first.
+        await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURL);
+        let htmlResults = await dbAdapter.execute(
+          `SELECT * FROM prerendered_html WHERE realm_url = '${publishedRealmURL}'`,
+        );
+        let instanceWithHead = htmlResults.find(
           (r) => r.type === 'instance' && r.head_html,
         );
         assert.ok(
           instanceWithHead,
-          'boxel_index should contain an instance row with head_html for the published realm',
+          'prerendered_html should contain an instance row with head_html for the published realm',
         );
         let headHtml = (instanceWithHead as any).head_html as string;
         assert.ok(
@@ -646,7 +653,7 @@ module(basename(import.meta.filename), function () {
         let linkedCardModuleResponse = await request
           .post(`${sourceRealmPath}linked-card.gts`)
           .set('Accept', 'application/vnd.card+source').send(`
-            import { CardDef } from "https://cardstack.com/base/card-api";
+            import { CardDef } from "@cardstack/base/card-api";
             import { linkedCardTitle } from "./linked-card-title";
 
             export const _linkedCardTitle = linkedCardTitle;
@@ -818,7 +825,7 @@ module(basename(import.meta.filename), function () {
         let moduleResponse = await request
           .post(`${sourceRealmPath}home.gts`)
           .set('Accept', 'application/vnd.card+source').send(`
-            import { CardDef } from "https://cardstack.com/base/card-api";
+            import { CardDef } from "@cardstack/base/card-api";
             export class Home extends CardDef {
               static displayName = "Home";
             }

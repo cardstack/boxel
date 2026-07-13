@@ -3,14 +3,14 @@ import {
   field,
   contains,
   primitive,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { concat, fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 
 let groupNumber = 0;
 class BodyBalance extends FieldDef {

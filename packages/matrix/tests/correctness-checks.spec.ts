@@ -13,10 +13,10 @@ import { getMatrixTestContext } from '../helpers/index.ts';
 import { registerUser, loginUser } from '../support/synapse/index.ts';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
 } from '../support/matrix-constants.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
@@ -99,7 +99,7 @@ test.describe('Correctness Checks', () => {
     );
 
     // Simulate a correctness check message from the AI bot (same approach as commands.spec.ts)
-    let commandRequests = [
+    let toolRequests = [
       {
         id: commandRequestId,
         name: 'checkCorrectness',
@@ -130,13 +130,13 @@ test.describe('Correctness Checks', () => {
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
       },
     );
 
     // Wait for the command to render
     let commandContainer = page.locator(
-      `[data-test-command-id="${commandRequestId}"]`,
+      `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await commandContainer.waitFor();
 
@@ -149,39 +149,39 @@ test.describe('Correctness Checks', () => {
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
     // Verify the command description is displayed
-    await expect(
-      commandContainer.locator('.command-description'),
-    ).toContainText('Check correctness');
+    await expect(commandContainer.locator('.tool-description')).toContainText(
+      'Check correctness',
+    );
 
     // Verify the command result event was dispatched with correct data
-    let commandResultEvent: any;
+    let toolResultEvent: any;
     await expect(async () => {
       let events = await getRoomEvents(username, password, roomId);
-      commandResultEvent = events.find(
-        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      toolResultEvent = events.find(
+        (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
-      expect(commandResultEvent).toBeDefined();
+      expect(toolResultEvent).toBeDefined();
     }).toPass();
 
     // Verify the command result has the correct structure
-    expect(commandResultEvent!.content.msgtype).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+    expect(toolResultEvent!.content.msgtype).toStrictEqual(
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    expect(toolResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.key).toStrictEqual(
+    expect(toolResultEvent!.content['m.relates_to']?.key).toStrictEqual(
       'applied',
     );
-    expect(commandResultEvent!.content.commandRequestId).toStrictEqual(
+    expect(toolResultEvent!.content.commandRequestId).toStrictEqual(
       commandRequestId,
     );
 
     // Verify the result contains a CorrectnessResultCard FileDef
     let commandResultData =
-      typeof commandResultEvent!.content.data === 'string'
-        ? JSON.parse(commandResultEvent!.content.data)
-        : commandResultEvent!.content.data;
+      typeof toolResultEvent!.content.data === 'string'
+        ? JSON.parse(toolResultEvent!.content.data)
+        : toolResultEvent!.content.data;
     expect(commandResultData.card).toBeDefined();
     expect(commandResultData.card.contentType).toStrictEqual(
       'application/vnd.card+json',
@@ -308,12 +308,12 @@ ${brokenContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: failingCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: failingCommandRequests,
       },
     );
 
     let failingCommandContainer = page.locator(
-      `[data-test-command-id="${failingCommandRequestId}"]`,
+      `[data-test-tool-call-id="${failingCommandRequestId}"]`,
     );
     await failingCommandContainer.waitFor();
 
@@ -326,7 +326,7 @@ ${brokenContent}
       let events = await getRoomEvents(username, password, roomId);
       failingCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === failingCommandRequestId,
       );
       expect(failingCommandResultEvent).toBeDefined();
@@ -450,12 +450,12 @@ ${originalContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: finalCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: finalCommandRequests,
       },
     );
 
     let finalCommandContainer = page.locator(
-      `[data-test-command-id="${finalCommandRequestId}"]`,
+      `[data-test-tool-call-id="${finalCommandRequestId}"]`,
     );
     await finalCommandContainer.waitFor();
     await finalCommandContainer
@@ -467,7 +467,7 @@ ${originalContent}
       let events = await getRoomEvents(username, password, roomId);
       finalCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === finalCommandRequestId,
       );
       expect(finalCommandResultEvent).toBeDefined();
@@ -632,7 +632,7 @@ ${brokenModuleContent}
       description: string,
       expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
     ) {
-      let commandRequests = [
+      let toolRequests = [
         {
           id: commandRequestId,
           name: 'checkCorrectness',
@@ -663,33 +663,33 @@ ${brokenModuleContent}
               agentId,
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
         },
       );
 
       let commandContainer = page.locator(
-        `[data-test-command-id="${commandRequestId}"]`,
+        `[data-test-tool-call-id="${commandRequestId}"]`,
       );
       await commandContainer.waitFor();
       await commandContainer
         .locator(`[data-test-apply-state="${expectedApplyState}"]`)
         .waitFor();
 
-      let commandResultEvent: any;
+      let toolResultEvent: any;
       await expect(async () => {
         let events = await getRoomEvents(username, password, roomId);
-        commandResultEvent = events.find(
+        toolResultEvent = events.find(
           (e: any) =>
-            e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
             e.content.commandRequestId === commandRequestId,
         );
-        expect(commandResultEvent).toBeDefined();
+        expect(toolResultEvent).toBeDefined();
       }).toPass();
 
       let commandResultData =
-        typeof commandResultEvent!.content.data === 'string'
-          ? JSON.parse(commandResultEvent!.content.data)
-          : commandResultEvent!.content.data;
+        typeof toolResultEvent!.content.data === 'string'
+          ? JSON.parse(toolResultEvent!.content.data)
+          : toolResultEvent!.content.data;
       expect(commandResultData.card).toBeDefined();
       expect(commandResultData.card.url).toBeDefined();
 

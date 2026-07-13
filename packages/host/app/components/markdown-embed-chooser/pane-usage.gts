@@ -11,10 +11,10 @@ import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import EmbedFormatSelection from './format-selection';
 import MarkdownEmbedPreviewPane from './pane';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 export default class MarkdownEmbedPreviewPaneUsage extends Component {
   @service declare private store: StoreService;

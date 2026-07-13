@@ -67,7 +67,6 @@ import ElementTracker, {
 } from '@cardstack/host/resources/element-tracker';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -79,16 +78,7 @@ import type { RecentCard } from '@cardstack/host/services/recent-cards-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
-
-import type {
-  CardContext,
-  CardDef,
-  FieldDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import SearchResults from '../../../card-search/search-results';
 import CardError from '../../card-error';
@@ -99,6 +89,16 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
+
+import type {
+  CardContext,
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 export type SelectedInstance = {
   card: CardDef | FileDef;
@@ -127,7 +127,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -223,7 +223,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
-        commandContext: this.commandService.commandContext,
+        toolContext: this.toolService.toolContext,
         format: this.format,
       }) || [],
     );
