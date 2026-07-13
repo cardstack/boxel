@@ -5293,6 +5293,56 @@ module(basename(import.meta.filename), function () {
           'the recovered card is searchable with its new content',
         );
       });
+
+      test('a failed visit for a brand-new card records an instance error via the source-parse fallback', async function (assert) {
+        // A brand-new file has no prior index row, so the batch's
+        // tombstoned-types oracle can't identify it as a card — this is
+        // the path where the source re-parse fallback must decide.
+        failVisitsFor = 'pistachio.json';
+        await realm.write(
+          'pistachio.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Pistachio' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let rows = (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}pistachio.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          error_message: string | null;
+        }[];
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both file and instance error rows are recorded for the new card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(row.is_deleted, `the ${row.type} row is not deleted`);
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
+      });
     });
   });
 });

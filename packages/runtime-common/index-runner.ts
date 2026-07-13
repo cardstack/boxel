@@ -667,16 +667,18 @@ export class IndexRunner {
         );
         return;
       }
-      // A transport-level failure (prerender timeout/abort, network error)
-      // never reaches performCardIndexing/performFileIndexing's own
-      // error-entry construction — visitFileForIndexing rethrows
-      // before calling indexCardWithResult/indexFileWithResults. Left
-      // uncaught here, one file's failure propagates out of the
-      // fromScratch/incremental visit loop, skips batch.done(), and
-      // discards every other successfully-visited file's rows for the
-      // whole job. Persist a file-error row instead so the failure is
-      // isolated to this URL, matching the error_doc pattern used for
-      // in-band render errors.
+      // A transport-level failure of the index visit — its
+      // prerender-server request timing out/aborting, or a reader/network
+      // error — never reaches performCardIndexing/performFileIndexing's
+      // own error-entry construction: visitFileForIndexing rethrows
+      // before calling indexCardWithResult/indexFileWithResults. (HTML
+      // prerendering is a separate job; the request here is the index
+      // pass's own visit.) Left uncaught, one file's failure propagates
+      // out of the fromScratch/incremental visit loop, skips
+      // batch.done(), and discards every other successfully-visited
+      // file's rows for the whole job. Persist a file-error row instead
+      // so the failure is isolated to this URL, matching the error_doc
+      // pattern used for in-band render errors.
       let message = coerceErrorMessage(
         err,
         `Indexing failed for ${url.href} with no error message (${jobIdentity(this.#jobInfo)})`,
@@ -704,30 +706,35 @@ export class IndexRunner {
       // `instance` and `file`. Overwriting only the `file` tombstone
       // above would let batch.done() promote the untouched `instance`
       // tombstone, silently removing a previously-good card from search
-      // over a transient error. Re-parse the file ourselves (the throw
-      // above lost visitFileForIndexing's internal determination)
-      // and write a matching instance-error row when it's a card, so
-      // the last-known-good instance survives the same as the in-band
-      // render-error path.
-      if (url.href.endsWith('.json')) {
+      // over a transient error. The index is the oracle for "was this a
+      // card?": the batch records which live row types it tombstoned, so
+      // an existing card is protected even when the file can't be read —
+      // which may be exactly how the visit failed. Re-parsing the source
+      // is only the fallback for a brand-new file, which has no prior
+      // row to protect but should still surface its failure as an
+      // instance error when it's a card.
+      let isCardInstance =
+        this.batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
+      if (!isCardInstance && url.href.endsWith('.json')) {
         try {
           let fileRef = await this.#reader.readFile(url);
           let resource = fileRef?.content
             ? (JSON.parse(fileRef.content)?.data as unknown)
             : undefined;
-          if (resource && isCardResource(resource)) {
-            let instanceEntry: InstanceErrorIndexEntry = {
-              type: 'instance-error',
-              error,
-            };
-            await this.batch.updateEntry(url, instanceEntry);
-            this.stats.instanceErrors++;
-          }
+          isCardInstance = Boolean(resource && isCardResource(resource));
         } catch (parseErr) {
           this.#log.warn(
             `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
           );
         }
+      }
+      if (isCardInstance) {
+        let instanceEntry: InstanceErrorIndexEntry = {
+          type: 'instance-error',
+          error,
+        };
+        await this.batch.updateEntry(url, instanceEntry);
+        this.stats.instanceErrors++;
       }
     }
   }
