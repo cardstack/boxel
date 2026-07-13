@@ -386,6 +386,32 @@ module('executeReadRealmFile markdown file-meta', () => {
     assert.false('tools' in ok, 'no tools key when the file declares none');
   });
 
+  test('non-object tool entries are dropped', async () => {
+    let sessions = stubSessions({ token: 'unused' });
+    let { fetch } = recordingFetch(() =>
+      fileMetaResponse({
+        content: BODY,
+        frontmatter: {
+          tools: [null, 'bogus', ['not', 'a', 'tool'], 7, STAMPED_TOOL],
+        },
+      }),
+    );
+
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
+
+    assert.true(result.ok);
+    assert.deepEqual(
+      (result as { ok: true; tools?: unknown[] }).tools,
+      [STAMPED_TOOL],
+      'only object entries survive — arrays are objects to typeof, so the ' +
+        'filter must exclude them explicitly',
+    );
+  });
+
   test('an unindexed .md (file-meta 404) falls back to raw source', async () => {
     let sessions = stubSessions({ token: 'unused' });
     let raw = '---\nname: trip\n---\n# Raw body';

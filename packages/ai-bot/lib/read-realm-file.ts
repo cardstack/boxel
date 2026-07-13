@@ -174,7 +174,7 @@ function parseFileMetaBody(
   let tools = Array.isArray(rawTools)
     ? rawTools.filter(
         (tool): tool is ReadRealmFileTool =>
-          typeof tool === 'object' && tool !== null,
+          typeof tool === 'object' && tool !== null && !Array.isArray(tool),
       )
     : [];
   return { content, ...(tools.length ? { tools } : {}) };
