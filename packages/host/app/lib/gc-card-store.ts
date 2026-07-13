@@ -194,19 +194,34 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // ── Job-scoped wire-document cache ─────────────────────────────────────
   // Successful card-source / file-meta documents fetched during an indexing
   // render, keyed by URL and scoped to the indexing job identity
-  // (`__boxelJobId`). Within one job the realm's source files are stable —
-  // a write that lands mid-job is picked up by the follow-up job its
-  // invalidation enqueues, the same one-consolidated-view-per-job contract
-  // the realm-server's job-scoped search cache serves — so a shared link
-  // target (one Policy referenced by hundreds of Claims) fetches once per
-  // job instead of once per referencing card. The identity map already
-  // short-circuits most repeat loads while a target instance stays
-  // resident; this cache covers the window after the GC sweep evicts an
-  // unreferenced target, turning its re-load into a local deserialize
-  // instead of a network round-trip. The wire-level sibling of the store
-  // service's resolved-doc search cache: gated to prerender + job id,
-  // cleared the first time a different job id is observed, never consulted
-  // by the live app.
+  // (`__boxelJobId`), so a shared link target (one Policy referenced by
+  // hundreds of Claims) fetches once per job instead of once per
+  // referencing card. The identity map already short-circuits most repeat
+  // loads while a target instance stays resident; this cache covers the
+  // window after the GC sweep evicts an unreferenced target, turning its
+  // re-load into a local deserialize instead of a network round-trip.
+  //
+  // Staleness contract — one consistent view of every target per job. For
+  // the indexed realm's own files this is exact: the job serializes with
+  // that realm's writes, and a mid-job write is picked up by the follow-up
+  // job its invalidation enqueues. A cross-realm target CAN change mid-job,
+  // and the cache pins the version first observed — deliberately, matching
+  // the job-scoped instance reuse in the link getter's lazy-load path,
+  // which pins any target the moment its instance enters the store. The
+  // delta this cache adds is bounded to the job: only a post-GC-eviction
+  // re-load could have observed a newer cross-realm version mid-job, and
+  // one pinned version beats mixing pre- and post-write versions across a
+  // single job's rows. Across jobs nothing changes: entries die with the
+  // job, and cross-realm freshness between jobs is governed by what
+  // re-indexes the consumer (dep-driven invalidation fans out within a
+  // realm; a consumer of a peer realm's card is refreshed by its own
+  // realm's next index of it). This is a looser gate than the resolved-doc
+  // search cache's same-realm-only rule because the pinned unit is
+  // narrower: a document fetched by URL, not a query result whose
+  // membership can silently change under a peer realm's swap.
+  //
+  // Gated to prerender + job id, cleared the first time a different job id
+  // is observed, never consulted by the live app.
   #jobScopedDocCache = new Map<
     string,
     SingleCardDocument | SingleFileMetaDocument
@@ -223,8 +238,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // per from-scratch job, so this holds several such working sets; beyond
   // it, least-recently-used entries fall out first (Map iteration order is
   // insertion order and hits re-insert), which preserves the hot shared
-  // targets that make the cache worthwhile.
-  static #MAX_JOB_SCOPED_DOC_CACHE_ENTRIES = 2048;
+  // targets that make the cache worthwhile. Public so the eviction test can
+  // size its fill against the real cap.
+  static MAX_JOB_SCOPED_DOC_CACHE_ENTRIES = 2048;
 
   // Resolve the cache slot for a document load: undefined outside an
   // indexing render (no `__boxelRenderContext`/`__boxelJobId`), so the live
@@ -277,7 +293,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#jobScopedDocCache.set(key, structuredClone(doc));
     if (
       this.#jobScopedDocCache.size >
-      CardStoreWithGarbageCollection.#MAX_JOB_SCOPED_DOC_CACHE_ENTRIES
+      CardStoreWithGarbageCollection.MAX_JOB_SCOPED_DOC_CACHE_ENTRIES
     ) {
       let oldest = this.#jobScopedDocCache.keys().next().value;
       if (oldest !== undefined) {

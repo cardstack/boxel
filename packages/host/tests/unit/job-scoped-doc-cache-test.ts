@@ -22,10 +22,14 @@ module('Unit | job-scoped wire-document cache', function (hooks) {
 
   let fetchCount = 0;
   let fetchStatus = 200;
+  // When set, every stub fetch awaits this before responding — lets a test
+  // hold a load in flight across a cache clear.
+  let fetchGate: Promise<void> | undefined;
 
   hooks.beforeEach(function () {
     fetchCount = 0;
     fetchStatus = 200;
+    fetchGate = undefined;
     (globalThis as any).__boxelRenderContext = true;
     (globalThis as any).__boxelJobId = '17.23';
   });
@@ -75,6 +79,9 @@ module('Unit | job-scoped wire-document cache', function (hooks) {
       init?: RequestInit,
     ): Promise<Response> => {
       fetchCount++;
+      if (fetchGate) {
+        await fetchGate;
+      }
       if (fetchStatus !== 200) {
         return new Response('not found', { status: fetchStatus });
       }
@@ -200,5 +207,71 @@ module('Unit | job-scoped wire-document cache', function (hooks) {
     let second = await store.loadFileMetaDocument(url);
     assert.strictEqual(fetchCount, 1, 'only the first load fetched');
     assert.deepEqual(second, first, 'the cached document is equivalent');
+  });
+
+  test('a load resolving across a cache clear does not seed the cleared cache', async function (assert) {
+    let store = makeStore();
+    let url = 'http://localhost:4201/test/hassan';
+    let releaseFetch!: () => void;
+    fetchGate = new Promise<void>((resolve) => (releaseFetch = resolve));
+    let inFlight = store.loadCardDocument(url);
+    // The clear lands while the fetch is still held open; the resolving
+    // load's populate must be skipped, not written into the fresh cache.
+    store.reset();
+    releaseFetch();
+    await inFlight;
+    fetchGate = undefined;
+    await store.loadCardDocument(url);
+    assert.strictEqual(
+      fetchCount,
+      2,
+      'the post-clear load re-fetches instead of hitting a stale populate',
+    );
+  });
+
+  test('eviction drops the least-recently-used entry and a hit rescues one', async function (assert) {
+    let store = makeStore();
+    let cap = CardStore.MAX_JOB_SCOPED_DOC_CACHE_ENTRIES;
+    let urlFor = (n: number) => `http://localhost:4201/test/card-${n}`;
+    // Fill to the cap, then touch the first entry so the second becomes the
+    // least-recently-used.
+    for (let n = 0; n < cap; n++) {
+      await store.loadCardDocument(urlFor(n));
+    }
+    assert.strictEqual(fetchCount, cap, 'the fill fetched once per URL');
+    await store.loadCardDocument(urlFor(0));
+    assert.strictEqual(fetchCount, cap, 'the touch was a cache hit');
+    // One more distinct URL pushes the cache over the cap.
+    await store.loadCardDocument(urlFor(cap));
+    assert.strictEqual(fetchCount, cap + 1, 'the overflow entry fetched');
+    await store.loadCardDocument(urlFor(0));
+    assert.strictEqual(
+      fetchCount,
+      cap + 1,
+      'the touched entry survived eviction',
+    );
+    await store.loadCardDocument(urlFor(1));
+    assert.strictEqual(
+      fetchCount,
+      cap + 2,
+      'the least-recently-used entry was evicted',
+    );
+  });
+
+  test('card and file-meta entries for the same URL do not share a slot', async function (assert) {
+    let store = makeStore();
+    let url = 'http://localhost:4201/test/dual.json';
+    let cardDoc = (await store.loadCardDocument(url)) as any;
+    let fileDoc = (await store.loadFileMetaDocument(url)) as any;
+    assert.strictEqual(fetchCount, 2, 'each kind fetched its own document');
+    assert.strictEqual(cardDoc.data.type, 'card', 'the card slot holds a card');
+    assert.strictEqual(
+      fileDoc.data.type,
+      'file-meta',
+      'the file slot holds file meta',
+    );
+    await store.loadCardDocument(url);
+    await store.loadFileMetaDocument(url);
+    assert.strictEqual(fetchCount, 2, 'both kinds hit their own entries');
   });
 });

@@ -163,8 +163,9 @@ export interface PrerenderMetaDiagnostics {
   // include targeted `searchable`-route loads it consumed inline — the
   // first walk to reach a target performs its load, and a first-walk-stable
   // card performs them all here. Each such load is itemized in
-  // `searchDocLinkLoads`, so subtract those entries to read pure evaluation
-  // time.
+  // `searchDocLinkLoads`; because loads run concurrently their entries
+  // overlap, so read a load-entry-bearing `searchDocMs` as an upper bound
+  // on evaluation time rather than subtracting the entries out.
   searchDocMs?: number;
   // Wall-clock spent driving the card's getter-fired link loads to
   // quiescence before the walk that produced the doc: the discarded walk
