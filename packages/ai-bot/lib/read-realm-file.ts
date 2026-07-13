@@ -1,5 +1,8 @@
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  ensureTrailingSlash,
+  isMarkdownFile,
+} from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import type { Tool } from '@cardstack/base/matrix-event';
 import type {
@@ -31,7 +34,10 @@ export const readRealmFileTool: Tool = {
       'reference files it lists. Reads all the given URLs at once, so when ' +
       'you already know several files you need (a skill’s reference ' +
       'list usually tells you), request them all in a single call rather ' +
-      'than a few at a time — every extra round of reads delays your answer.',
+      'than a few at a time — every extra round of reads delays your answer. ' +
+      "Reading a skill's markdown file also unlocks the tools that skill " +
+      'declares: they become callable on your next turn, so read the skill ' +
+      'file first when you intend to use its tools.',
     parameters: {
       type: 'object',
       properties: {
@@ -63,33 +69,137 @@ export interface ReadRealmFileArgs {
 // without the model having to name it (and get it wrong).
 const REALM_URL_HEADER = 'x-boxel-realm-url';
 
+// One tool entry from a skill markdown file's indexed frontmatter, as
+// stamped by the realm indexer: resolved absolute codeRef, functionName,
+// requiresApproval, and — once the skill's realm has indexed with schema
+// enrichment — the ready-to-use LLM tool `definition`. Passed through
+// structurally (no validation beyond "is an object") so the fulfillment
+// layer decides what a usable entry is.
+export interface ReadRealmFileTool {
+  codeRef?: { module?: string; name?: string };
+  functionName?: string;
+  requiresApproval?: boolean;
+  definition?: Tool;
+  [key: string]: unknown;
+}
+
 export type ReadRealmFileResult =
-  | { ok: true; url: string; content: string }
+  | {
+      ok: true;
+      url: string;
+      content: string;
+      // Present only when the file is a markdown file whose indexed
+      // frontmatter declares tools (i.e. a skill read via file-meta).
+      tools?: ReadRealmFileTool[];
+    }
   | { ok: false; error: string };
 
-// Reads one of a readRealmFile call's files inside the bot process: GETs the
-// file as raw source, discovering the owning realm from the response so a
-// delegated, read-only token can be minted for `onBehalfOf` only when the
-// realm actually gates the file. A public file (e.g. anything in the skills
-// realm) is returned from the first unauthenticated fetch with no token at
-// all. Never throws — returns a result the caller hands back to the model as
-// part of the tool result, so a missing file or a permission failure becomes
+interface ReadRealmFileOptions {
+  onBehalfOf: string;
+  delegatedUserRealmSessions: Pick<
+    DelegatedUserRealmSessionManager,
+    'getToken' | 'invalidate'
+  >;
+  fetch?: typeof globalThis.fetch;
+}
+
+// Reads one of a readRealmFile call's files inside the bot process. Never
+// throws — returns a result the caller hands back to the model as part of
+// the tool result, so a missing file or a permission failure becomes
 // information the model can act on rather than a crashed turn.
+//
+// Markdown files are fetched as their indexed file-meta document, which
+// yields the frontmatter-stripped body as `content` (the prompt-inlining
+// path downstream is unchanged) plus the skill's frontmatter tools
+// structurally. When the index can't serve a usable document — no row yet
+// for a just-written file, an error-state row, or a document without a
+// `content` string — the read degrades to raw source and returns
+// instructions-only: index lag must never fail a read. Every other file is
+// fetched as raw source, exactly as before.
 export async function executeReadRealmFile(
   url: string,
+  options: ReadRealmFileOptions,
+): Promise<ReadRealmFileResult> {
+  if (isMarkdownFile(url)) {
+    let fileMeta = await fetchRealmFile(
+      url,
+      SupportedMimeType.FileMeta,
+      options,
+    );
+    if (fileMeta.ok) {
+      let parsed = parseFileMetaBody(fileMeta.body);
+      if (parsed) {
+        return {
+          ok: true,
+          url,
+          content: parsed.content,
+          ...(parsed.tools ? { tools: parsed.tools } : {}),
+        };
+      }
+      log.info(
+        `readRealmFile: file-meta for ${url} had no usable content; falling back to raw source`,
+      );
+    } else if (fileMeta.kind !== 'http') {
+      // Auth and network failures would fail the raw-source fetch the same
+      // way; only an HTTP failure (404 for an unindexed file, an
+      // error-state row's 5xx, …) is worth the fallback.
+      return { ok: false, error: fileMeta.error };
+    }
+  }
+  let raw = await fetchRealmFile(url, SupportedMimeType.CardSource, options);
+  return raw.ok
+    ? { ok: true, url, content: raw.body }
+    : { ok: false, error: raw.error };
+}
+
+// The `attributes.content` and `attributes.frontmatter.tools` of a file-meta
+// document, or undefined when the body isn't a document carrying a string
+// `content` (malformed JSON, an error document, a row indexed without a
+// body). Tools pass through as indexed.
+function parseFileMetaBody(
+  body: string,
+): { content: string; tools?: ReadRealmFileTool[] } | undefined {
+  let document: any;
+  try {
+    document = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  let attributes = document?.data?.attributes;
+  let content = attributes?.content;
+  if (typeof content !== 'string') {
+    return undefined;
+  }
+  let rawTools = attributes?.frontmatter?.tools;
+  let tools = Array.isArray(rawTools)
+    ? rawTools.filter(
+        (tool): tool is ReadRealmFileTool =>
+          typeof tool === 'object' && tool !== null,
+      )
+    : [];
+  return { content, ...(tools.length ? { tools } : {}) };
+}
+
+type RealmFileFetch =
+  | { ok: true; body: string }
+  // `kind` routes the markdown fallback: only 'http' failures degrade to a
+  // raw-source retry — 'auth' and 'network' would fail it identically.
+  | { ok: false; error: string; kind: 'http' | 'auth' | 'network' };
+
+// GETs a realm file under the given Accept type, discovering the owning
+// realm from the response so a delegated, read-only token can be minted for
+// `onBehalfOf` only when the realm actually gates the file. A public file
+// (e.g. anything in the skills realm) is returned from the first
+// unauthenticated fetch with no token at all.
+async function fetchRealmFile(
+  url: string,
+  accept: SupportedMimeType,
   {
     onBehalfOf,
     delegatedUserRealmSessions,
     fetch = globalThis.fetch,
-  }: {
-    onBehalfOf: string;
-    delegatedUserRealmSessions: Pick<
-      DelegatedUserRealmSessionManager,
-      'getToken' | 'invalidate'
-    >;
-    fetch?: typeof globalThis.fetch;
-  },
-): Promise<ReadRealmFileResult> {
+  }: ReadRealmFileOptions,
+): Promise<RealmFileFetch> {
   // `redirect: 'manual'` keeps a stray redirect from being silently followed
   // (it surfaces as a non-2xx instead). No Authorization on the first try:
   // public files (the skills realm) come back 200, and a gated file comes back
@@ -98,7 +208,7 @@ export async function executeReadRealmFile(
     fetch(url, {
       redirect: 'manual',
       headers: {
-        Accept: SupportedMimeType.CardSource,
+        Accept: accept,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
@@ -108,12 +218,12 @@ export async function executeReadRealmFile(
     response = await get();
   } catch (e: any) {
     log.error(`readRealmFile: fetch failed for ${url}: ${e?.message ?? e}`);
-    return { ok: false, error: `could not fetch ${url}` };
+    return { ok: false, error: `could not fetch ${url}`, kind: 'network' };
   }
 
   // Public read (or an already-authorized cache/CDN hit): done, no token.
   if (response.ok) {
-    return { ok: true, url, content: await response.text() };
+    return { ok: true, body: await response.text() };
   }
 
   // Anything other than an auth challenge is a real failure (404, 302, …).
@@ -121,6 +231,7 @@ export async function executeReadRealmFile(
     return {
       ok: false,
       error: `could not load ${url} (HTTP ${response.status})`,
+      kind: 'http',
     };
   }
 
@@ -130,6 +241,7 @@ export async function executeReadRealmFile(
     return {
       ok: false,
       error: `could not determine which realm ${url} belongs to`,
+      kind: 'auth',
     };
   }
   let realm = ensureTrailingSlash(realmHeader);
@@ -144,12 +256,13 @@ export async function executeReadRealmFile(
     return {
       ok: false,
       error: `could not load ${url}: it does not belong to the realm that claimed it (${realm})`,
+      kind: 'auth',
     };
   }
 
   let authorized = async (): Promise<{
     response?: Response;
-    error?: string;
+    failure?: { error: string; kind: 'auth' | 'network' };
   }> => {
     let token: string;
     try {
@@ -158,12 +271,17 @@ export async function executeReadRealmFile(
       if (e instanceof DelegatedUserRealmSessionError) {
         if (e.kind === 'disabled') {
           return {
-            error:
-              'reading realm files is unavailable (delegation is not configured)',
+            failure: {
+              error:
+                'reading realm files is unavailable (delegation is not configured)',
+              kind: 'auth',
+            },
           };
         }
         if (e.kind === 'forbidden') {
-          return { error: `no read access to ${realm}` };
+          return {
+            failure: { error: `no read access to ${realm}`, kind: 'auth' },
+          };
         }
       }
       log.error(
@@ -171,27 +289,34 @@ export async function executeReadRealmFile(
           e?.message ?? e
         }`,
       );
-      return { error: `could not obtain realm access for ${realm}` };
+      return {
+        failure: {
+          error: `could not obtain realm access for ${realm}`,
+          kind: 'auth',
+        },
+      };
     }
     try {
       return { response: await get(token) };
     } catch (e: any) {
       log.error(`readRealmFile: fetch failed for ${url}: ${e?.message ?? e}`);
-      return { error: `could not fetch ${url}` };
+      return {
+        failure: { error: `could not fetch ${url}`, kind: 'network' },
+      };
     }
   };
 
-  let { response: authed, error } = await authorized();
-  if (error) {
-    return { ok: false, error };
+  let { response: authed, failure } = await authorized();
+  if (failure) {
+    return { ok: false, ...failure };
   }
   // A cached token whose access was revoked inside its staleness window gets a
   // 401/403. Drop it and try once with a freshly minted token before failing.
   if (authed && (authed.status === 401 || authed.status === 403)) {
     delegatedUserRealmSessions.invalidate({ onBehalfOf, realm });
-    ({ response: authed, error } = await authorized());
-    if (error) {
-      return { ok: false, error };
+    ({ response: authed, failure } = await authorized());
+    if (failure) {
+      return { ok: false, ...failure };
     }
   }
 
@@ -199,10 +324,14 @@ export async function executeReadRealmFile(
     return {
       ok: false,
       error: `could not load ${url} (HTTP ${authed?.status ?? 'unknown'})`,
+      kind:
+        authed && (authed.status === 401 || authed.status === 403)
+          ? 'auth'
+          : 'http',
     };
   }
 
-  return { ok: true, url, content: await authed.text() };
+  return { ok: true, body: await authed.text() };
 }
 
 export interface ClassifiedToolCalls {

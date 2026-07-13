@@ -182,3 +182,21 @@ export function ensureTrailingSlash(url: string) {
 //    http://example.com/my-realm/hello/world/ maps to local path "hello/world"
 //
 export type LocalPath = string;
+
+const MARKDOWN_FILE_EXTENSION = /\.(md|markdown)$/i;
+
+// True when the id/URL names a markdown file (`.md` / `.markdown`). Matches
+// on the URL pathname so a querystring or fragment can't confuse the test; a
+// value that isn't a parseable URL (e.g. a bare local path) is tested as-is.
+// The one definition of "is a markdown file" — markdown ids dispatch to
+// file-meta reads (host skill loading, ai-bot readRealmFile) rather than
+// card/raw-source reads.
+export function isMarkdownFile(id: string): boolean {
+  let pathname: string;
+  try {
+    pathname = new URL(id).pathname;
+  } catch {
+    pathname = id;
+  }
+  return MARKDOWN_FILE_EXTENSION.test(pathname);
+}

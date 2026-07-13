@@ -1,4 +1,4 @@
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, isMarkdownFile } from '@cardstack/runtime-common';
 
 import { isSkillCard } from './file-def-manager';
 
@@ -12,8 +12,6 @@ import type * as SkillModule from '@cardstack/base/skill';
 // Both fields are `containsMany(ToolField)`, so once gathered the
 // `ToolField` instances feed the command-definition upload flow identically.
 export type SkillSource = SkillModule.Skill | MarkdownDef;
-
-const MARKDOWN_EXTENSION = /\.(md|markdown)$/i;
 
 // A markdown skill carries its kind on the indexed `MarkdownDef.kind` field.
 export const SKILL_MARKDOWN_KIND = 'skill';
@@ -63,15 +61,10 @@ export function getSkillSourceTools(
 }
 
 // True for ids that name a markdown file (skills live in `*.md` / `*.markdown`
-// files). Such ids load through the `file-meta` read type rather than as cards.
+// files). Such ids load through the `file-meta` read type rather than as
+// cards. Skill-flavored spelling of the shared markdown-file predicate.
 export function isMarkdownSkillId(id: string): boolean {
-  let pathname: string;
-  try {
-    pathname = new URL(id).pathname;
-  } catch {
-    pathname = id;
-  }
-  return MARKDOWN_EXTENSION.test(pathname);
+  return isMarkdownFile(id);
 }
 
 // Loads a skill by id, dispatching markdown files to the `file-meta` read type
