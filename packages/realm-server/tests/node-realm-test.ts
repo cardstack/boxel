@@ -193,7 +193,7 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
       // rather than surfacing a raw scandir ENOENT, which would otherwise
       // escape the traversal as an unhandled rejection.
       let vanished: string[] = [];
-      for await (let entry of adapter.readdir('published/vanished/')) {
+      for await (let entry of adapter.readdir('published/vanished')) {
         vanished.push(entry.path);
       }
       assert.deepEqual(
@@ -208,7 +208,7 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
       fsExtra.writeFileSync(join(dir, 'plain.txt'), 'hello');
       let notDirError: NodeJS.ErrnoException | undefined;
       try {
-        await adapter.readdir('plain.txt/').next();
+        await adapter.readdir('plain.txt').next();
       } catch (err) {
         notDirError = err as NodeJS.ErrnoException;
       }
@@ -222,7 +222,7 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
       fsExtra.ensureDirSync(join(dir, 'real'));
       fsExtra.writeFileSync(join(dir, 'real', 'card.json'), '{}');
       let names: string[] = [];
-      for await (let entry of adapter.readdir('real/')) {
+      for await (let entry of adapter.readdir('real')) {
         names.push(entry.name);
       }
       assert.deepEqual(
