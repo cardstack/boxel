@@ -110,6 +110,14 @@ export class Prerenderer {
             `batch ownership cleared for ${affinityKey} due to affinity disposal`,
           );
         }
+        // Drop the affinity's icon memo with the rest of its warm state.
+        // Disposal also clears the ownership entry above, which makes the
+        // owner-matched clear in `releaseBatch` a no-op for this affinity —
+        // without this, a job whose affinity is disposed mid-run (cancel,
+        // idle eviction, capacity pressure) would leave its memo behind
+        // until another job for the same realm replaced it. A still-running
+        // job just re-renders each type's icon once as the memo re-warms.
+        this.#renderRunner.clearIconMemo(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({

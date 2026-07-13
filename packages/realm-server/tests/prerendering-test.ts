@@ -7910,6 +7910,23 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('disposing the affinity drops the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-dispose.1' });
+        assert.ok(
+          prerenderer.getIconMemo(affinityKey),
+          'memo established by the visit',
+        );
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'affinity disposal drops the memo with the rest of the warm state',
+        );
+      });
+
       test('a clearCache visit bypasses the memo read and releaseBatch drops the memo', async function (assert) {
         let jobId = 'icon-memo-clear.1';
         let batchId = 'icon-memo-clear-batch';
