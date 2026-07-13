@@ -10,6 +10,7 @@ import {
   type Realm,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import { ensureRealmOwnerPermissions } from '@cardstack/runtime-common/tasks/indexer';
 import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
@@ -220,8 +221,15 @@ async function validateCommandModules({
     return [];
   }
 
-  let owner = await realm.getRealmOwnerUsername();
-  let permissions = await fetchUserPermissions(dbAdapter, { userId: owner });
+  // Same auth recipe as the indexer's render path: permissions rows are
+  // keyed by the full Matrix user id (not the bare username), and the owner
+  // is guaranteed read access to the realm being validated even when the
+  // permissions table has no row for it (e.g. bootstrap realms).
+  let owner = await realm.getRealmOwnerUserId();
+  let permissions = ensureRealmOwnerPermissions(
+    await fetchUserPermissions(dbAdapter, { userId: owner }),
+    realm.url,
+  );
   let auth = createPrerenderAuth(owner, permissions);
 
   // One prerender per unique module; the prerender server's admission

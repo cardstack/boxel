@@ -170,15 +170,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           ]),
           'no-commands-skill.json': skillDoc([]),
         },
+        // Owner-only (no `*` read): the command module can't be fetched
+        // anonymously, so this passes only when the endpoint mints prerender
+        // auth for the realm owner's full Matrix user id — permission rows
+        // are keyed by full user id, and a bare username matches none.
         permissions: {
-          '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
         },
         onRealmSetup(args) {
           request = args.request;
         },
       });
 
-      test('passes when every command codeRef resolves', async function (assert) {
+      test('passes when every command codeRef resolves in a private realm', async function (assert) {
         let response = await request
           .get(
             `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
