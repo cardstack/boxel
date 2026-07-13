@@ -40,14 +40,16 @@ export type Model = PrerenderMeta | RenderError | undefined;
 
 const computePerfLog = logger('host:computed-perf');
 
-// Pass cap for the walk-until-stable loop below (matches the
-// READY_SETTLE_MAX_PASSES cap of the /render route's template settle), so a
-// pathological graph can't loop forever. Unlike a template render — whose
-// afterRender hooks can schedule further work that only a repeated
+// Cap on DISCARDED walk passes in the walk-until-stable loop below (matches
+// the READY_SETTLE_MAX_PASSES cap of the /render route's template settle),
+// so a pathological graph can't loop forever. Unlike a template render —
+// whose afterRender hooks can schedule further work that only a repeated
 // render-and-wait can flush — a searchable walk is a pure function of the
 // store's settled load state, so a single pass that fired no tracked loads
 // is already authoritative: re-running it against the same state would
-// produce the same doc. One stable pass therefore terminates the loop.
+// produce the same doc. One stable pass therefore terminates the loop. At
+// the cap, one final walk runs against the drained store and its output is
+// used regardless of stability (with a warning when still unstable).
 const SEARCHABLE_SETTLE_MAX_PASSES = 20;
 
 // Persistence bounds for the per-field / per-link-load search-doc timings.
@@ -391,7 +393,9 @@ export default class RenderMetaRoute extends Route<Model> {
   // resident/cache hits, so it measures evaluation); `settleMs` is
   // everything before and around it — the discarded walks and the load
   // drains; `settlePasses` counts the discarded walks (0 when the first
-  // walk settles).
+  // walk settles). A graph that never stabilizes within the discarded-walk
+  // cap gets one forced final walk against the drained store; its output is
+  // used (or its throw propagated) with a warning.
   async #searchDocUntilSettled(
     instance: CardDef,
     searchable: Awaited<ReturnType<CardService['getSearchable']>>,
@@ -406,7 +410,13 @@ export default class RenderMetaRoute extends Route<Model> {
   }> {
     let linkLoads: SearchDocLinkLoad[] = [];
     let loopStart = performance.now();
-    for (let pass = 0; pass < SEARCHABLE_SETTLE_MAX_PASSES; pass++) {
+    // Up to SEARCHABLE_SETTLE_MAX_PASSES discarded walks, plus one forced
+    // final walk at the cap. The forced walk runs AFTER the capped pass's
+    // loads drained, so it sees the most-settled state reachable within the
+    // budget — its output is used even when it is itself unstable, rather
+    // than the pre-drain output of the pass that hit the cap.
+    for (let pass = 0; pass <= SEARCHABLE_SETTLE_MAX_PASSES; pass++) {
+      let forcedFinalPass = pass === SEARCHABLE_SETTLE_MAX_PASSES;
       let observedGeneration = this.store.loadGeneration;
       let searchableDeps = new Set<string>();
       let timings: SearchDocTimings = { fieldsMs: {}, linkLoads };
@@ -427,8 +437,7 @@ export default class RenderMetaRoute extends Route<Model> {
       let searchDocMs = performance.now() - walkStart;
       await this.store.loaded();
       let stable = this.store.loadGeneration === observedGeneration;
-      let lastAllowedPass = pass === SEARCHABLE_SETTLE_MAX_PASSES - 1;
-      if (!stable && !lastAllowedPass) {
+      if (!stable && !forcedFinalPass) {
         continue;
       }
       if (!stable) {
@@ -449,7 +458,7 @@ export default class RenderMetaRoute extends Route<Model> {
         settlePasses: pass,
       };
     }
-    // Unreachable: the final loop iteration always returns or throws.
+    // Unreachable: the forced final pass always returns or throws.
     throw new Error(
       `bug: searchable walk loop for ${instance.id} exited without settling`,
     );
