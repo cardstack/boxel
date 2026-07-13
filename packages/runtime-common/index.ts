@@ -103,6 +103,39 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// One performed load of a link target during search-doc production. `path`
+// is the dotted field path (from the indexed card's root) of the `linksTo` /
+// `linksToMany` field that owns the link; `target` is the resolved
+// (absolute) URL that was loaded. A `linksToMany` field produces one entry
+// per loaded slot, all sharing the field's `path` and distinguished by
+// `target`. A load fired through a field getter — a computed reading a link
+// loads via the getter's lazy path, not the generator's targeted loading —
+// carries an empty `path`, since the store observing it can't name the
+// owning field. Only actual loads are represented — a target already
+// resident in the store records a near-zero entry that the persistence
+// floor drops.
+export interface SearchDocLinkLoad {
+  path: string;
+  target: string;
+  ms: number;
+}
+
+// Mutable out-param collector `searchDocFromFields` fills in place while it
+// walks the card. Each sub-collector is opt-in: the generator only spends
+// timer calls on the channels the caller supplies. Values are raw
+// (unbounded, unrounded) — the render.meta route prunes to the slowest
+// entries before persisting onto `boxel_index.diagnostics`.
+export interface SearchDocTimings {
+  // Dotted field path → inclusive evaluation wall-clock. A parent field's
+  // time includes its nested fields' (and its link loads'), so a slow leaf
+  // surfaces alongside every ancestor on its path — the drill-down reads
+  // directly from the keys. Plural fields accumulate across their items
+  // under one key.
+  fieldsMs?: Record<string, number>;
+  // One entry per link-target load the walk performed.
+  linkLoads?: SearchDocLinkLoad[];
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -123,6 +156,34 @@ export interface PrerenderMetaDiagnostics {
   serializeMs?: number;
   // Wall-clock of the host-side searchDoc call.
   searchDocMs?: number;
+  // Wall-clock of the searchable load-settle loop that runs before the
+  // timed searchDoc call: the passes that drive the card's searchable-path
+  // link loads (and the links its contained/computed fields read) to
+  // quiescence. Link-load cost lives HERE, not inside `searchDocMs` — by
+  // the time the timed generation runs, its targets are resident. Read
+  // `searchDocLinkLoads` for the per-target breakdown of this time.
+  searchDocSettleMs?: number;
+  // How many settle passes ran before the store's load generation held
+  // steady. Each pass loads one more dependency-depth wave, so a high count
+  // means a deep searchable/computed link chain (capped host-side; the cap
+  // logs a warning).
+  searchDocSettlePasses?: number;
+  // Per-field inclusive evaluation timings from the timed searchDoc walk,
+  // keyed by dotted field path from the indexed card's root (a parent's
+  // time includes its children's, so a slow leaf appears alongside its
+  // ancestors). Bounded: only the slowest fields at/over a floor are
+  // persisted, so a typical ~1 ms search doc records nothing and a slow one
+  // records its hot paths — the retained entries' (top-level) sum accounts
+  // for `searchDocMs`. A large `searchDocMs` with NO entries means death by
+  // a thousand cheap fields rather than one hot path. Omitted when empty.
+  searchDocFieldsMs?: Record<string, number>;
+  // The slowest searchable link-target loads performed while producing this
+  // row's search doc — the settle passes' loads plus any the timed walk
+  // still performed — same bounding as `searchDocFieldsMs`. Separates "the
+  // linked instance was slow to load" (an entry here) from "the field was
+  // expensive to compute" (a hot `searchDocFieldsMs` path with no matching
+  // load). Omitted when empty.
+  searchDocLinkLoads?: SearchDocLinkLoad[];
   // Broken `linksTo` / `linksToMany` targets found on the rendered
   // instance after the store settled. Captured by the render.meta scan
   // and persisted to `boxel_index.diagnostics.brokenLinks` so

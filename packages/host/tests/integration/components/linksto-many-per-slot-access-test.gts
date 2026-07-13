@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
@@ -88,7 +87,7 @@ module(
 
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     // Build a Person whose `pets` array holds two present cards (Mango, Van Gogh)

@@ -7,7 +7,7 @@ import type {
   Realm,
   Loader,
 } from '@cardstack/runtime-common';
-import { baseRealm, baseRRI, rri } from '@cardstack/runtime-common';
+import { baseRRI, rri } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -59,7 +59,7 @@ export function setupOperatorModeTests(
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -75,11 +75,11 @@ export function setupOperatorModeTests(
     let cardsGrid: typeof import('@cardstack/base/cards-grid');
     let spec: typeof import('@cardstack/base/spec');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    textArea = await loader.import('@cardstack/base/text-area');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
+    spec = await loader.import('@cardstack/base/spec');
 
     let {
       field,

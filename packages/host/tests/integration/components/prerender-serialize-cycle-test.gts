@@ -2,7 +2,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type Permissions,
 } from '@cardstack/runtime-common';
@@ -66,7 +65,7 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('queryableValue collapses a fresh-object cycle by id (object-identity alone would expand/recurse it)', async function (assert) {
@@ -92,7 +91,7 @@ module('Integration | prerender serialize cycle guard', function (hooks) {
     }
     loader.shimModule(`${testRealmURL}test-cards`, { Node });
     let api = (await loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     )) as typeof import('@cardstack/base/card-api');
 
     let a = new Node({ firstName: 'A-canonical' });

@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   PermissionsContextName,
   type LooseCardResource,
   type Permissions,
@@ -113,7 +112,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     provideConsumeContext(PermissionsContextName, permissions);
     loader = getService('loader-service').loader;
     let fieldSupport = await loader.import<typeof FieldSupportModule>(
-      `${baseRealm.url}field-support`,
+      '@cardstack/base/field-support',
     );
     isLinkError = fieldSupport.isLinkError;
     isLinkNotFound = fieldSupport.isLinkNotFound;
@@ -121,7 +120,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   // Realm holds the Person/Pet module and one real Pet, but never `Pet/ghost`

@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
-  baseRealm,
   baseFileRef,
   isCardResource,
   isFileMetaResource,
@@ -48,7 +47,7 @@ module('Integration | store search public API', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

@@ -81,8 +81,8 @@ module(`Integration | search resource`, function (hooks) {
   });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { contains, field, CardDef, FieldDef, linksTo } = cardApi;
     let { default: StringField } = string;

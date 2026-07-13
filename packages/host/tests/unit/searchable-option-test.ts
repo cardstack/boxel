@@ -65,9 +65,9 @@ module('Unit | searchable option', function (hooks) {
       virtualNetwork,
     });
 
-    api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let string = await loader.import<typeof import('@cardstack/base/string')>(
-      `${baseRealm.url}string`,
+      '@cardstack/base/string',
     );
 
     let {

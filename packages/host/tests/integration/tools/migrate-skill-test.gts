@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import { parse as parseYaml } from 'yaml';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -83,7 +82,7 @@ module('Integration | tools | migrate-skill', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   setupRealmCacheTeardown(hooks);

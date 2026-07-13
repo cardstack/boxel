@@ -147,6 +147,7 @@ class Isolated extends Component<typeof StructuredTheme> {
     <ThemeDashboard
       class='structured-theme-card'
       @themeCss={{@model.cssVariables}}
+      @themeId={{@model.id}}
       @title={{@model.cardTitle}}
       @description={{@model.cardDescription}}
       @isDarkMode={{this.isDarkMode}}

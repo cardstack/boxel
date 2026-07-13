@@ -49,7 +49,7 @@ module('Integration | overlay-menu-items', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -79,9 +79,9 @@ module('Integration | overlay-menu-items', function (hooks) {
     let cardApi: typeof import('@cardstack/base/card-api');
     let string: typeof import('@cardstack/base/string');
     let markdownFileDef: typeof import('@cardstack/base/markdown-file-def');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    markdownFileDef = await loader.import('@cardstack/base/markdown-file-def');
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;

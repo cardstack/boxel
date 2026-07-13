@@ -6,10 +6,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  baseRealm,
-} from '@cardstack/runtime-common';
+import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -63,7 +60,7 @@ module('Integration | Command | update-room-skills', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   module('command metadata', function () {
@@ -98,7 +95,7 @@ module('Integration | Command | update-room-skills', function (hooks) {
       let loader = getService('loader-service').loader;
       let mappings = await basicMappings(loader);
       let cardAPI = await loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
+        '@cardstack/base/card-api',
       );
       const inputSchema = await command.getInputJsonSchema(cardAPI, mappings);
       assert.deepEqual(

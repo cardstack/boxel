@@ -8,7 +8,6 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
   baseRRI,
   testRealmURL,
 } from '@cardstack/runtime-common';
@@ -69,7 +68,7 @@ module('Integration | RichMarkdownField', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('renders markdown as HTML', async function (assert) {
@@ -484,7 +483,7 @@ module('Integration | RichMarkdownField', function (hooks) {
       );
 
       let CodeMirrorEditor = (
-        (await loader.import(`${baseRealm.url}codemirror-editor`)) as {
+        (await loader.import('@cardstack/base/codemirror-editor')) as {
           default: unknown;
         }
       ).default;

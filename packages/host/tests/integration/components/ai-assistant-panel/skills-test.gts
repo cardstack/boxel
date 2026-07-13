@@ -10,7 +10,6 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -74,7 +73,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

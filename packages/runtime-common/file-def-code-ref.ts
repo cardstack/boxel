@@ -77,13 +77,27 @@ export function isFileDefCodeRef(
   return false;
 }
 
+function extensionOf(url: URL): string {
+  let name = url.pathname.split('/').pop() ?? '';
+  let dot = name.lastIndexOf('.');
+  return dot <= 0 ? '' : name.slice(dot).toLowerCase();
+}
+
+// Whether a URL names a file rather than a card, judged by a known FileDef
+// extension on the last path segment. Card ids never end in one (an
+// instance's `.json` is stripped from its id) — but a bare "has a dot"
+// check would misfire on card ids that legitimately contain dots (e.g. a
+// `ModelConfiguration/claude-sonnet-4.6` instance), so only registered
+// file extensions count.
+export function urlNamesFile(url: URL): boolean {
+  return extensionOf(url) in FILEDEF_CODE_REF_BY_EXTENSION;
+}
+
 export function resolveFileDefCodeRef(
   fileURL: URL,
   virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
-  let name = fileURL.pathname.split('/').pop() ?? '';
-  let dot = name.lastIndexOf('.');
-  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
+  let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;
