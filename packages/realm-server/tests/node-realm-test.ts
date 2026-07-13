@@ -202,17 +202,20 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
         'a missing directory yields no entries instead of throwing ENOENT',
       );
 
-      // A path nested under a regular file lists as empty too (ENOTDIR), the
-      // same way openFile/lastModified report it as nonexistent.
+      // A path whose target is a regular file is a genuine not-a-directory:
+      // it must still surface ENOTDIR so directory-listing callers can reject
+      // it, rather than being masked as a successful empty listing.
       fsExtra.writeFileSync(join(dir, 'plain.txt'), 'hello');
-      let underFile: string[] = [];
-      for await (let entry of adapter.readdir('plain.txt/nested/')) {
-        underFile.push(entry.path);
+      let notDirError: NodeJS.ErrnoException | undefined;
+      try {
+        await adapter.readdir('plain.txt/').next();
+      } catch (err) {
+        notDirError = err as NodeJS.ErrnoException;
       }
-      assert.deepEqual(
-        underFile,
-        [],
-        'a path nested under a regular file yields no entries instead of throwing ENOTDIR',
+      assert.strictEqual(
+        notDirError?.code,
+        'ENOTDIR',
+        'listing a regular file still throws ENOTDIR',
       );
 
       // A directory that exists still lists its entries.
