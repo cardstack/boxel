@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`, and (8) decomposing the between-visit / non-render slice of an index job's wall — the once-per-job phases (invalidation discovery, dependency ordering, module pre-warm, aggregate row writes, the final swap) on `jobs.result.phaseTimings` plus the per-row client overhead (file read / render round-trip transport / post-render bookkeeping) on `boxel_index.diagnostics.indexVisitClientMs` — the wall that runs serially between the server renders and is invisible in the per-row `totalElapsedMs`. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -14,19 +14,21 @@ Every indexer write (`IndexWriter.updateEntry`) persists a diagnostic blob on th
 - **Whether module pre-warm is effective** — confirm the pre-warm phase populates the definition cache under a key the indexer / on-demand reads actually hit (not a silent no-op), using the `definition-cache-key` hit/miss log channel. This one isn't about the `diagnostics` column — it reads the logs. See [Mode F](#mode-f--module-pre-warm-and-definition-cache-hitmiss).
 - **Why an in-render `_search` was slow to come back** — when a render stalls in `waiting-stability` waiting on a query-backed `linksTo` / `linksToMany` search (the `boxel_index.diagnostics` shows it client-side as `queryLoadsInFlight` aging) but the SQL is fast, attribute the realm-server's request→response time across its stages (parse / SQL / loadLinks / serialize) and tell handler-time from queued-before-handler / event-loop saturation. Log-based, keyed by the correlation id. See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
 - **A search doc that was slow to build** — attribute a slow index visit inside the search-doc build itself: the settle loop's link loads (`searchDocSettleMs`, per target in `searchDocLinkLoads`) vs the field walk (`searchDocMs`, per dotted field path in `searchDocFieldsMs`). See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).
+- **The index job's wall didn't add up to its visits** — decompose the between-visit / non-render slice of an index job's wall (invalidation discovery, dependency ordering, module pre-warm, the serial per-visit client overhead, aggregate row writes, the final swap) into measured buckets: the once-per-job phases on `jobs.result.phaseTimings`, and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. This is the wall that runs _between_ the server renders, so it's invisible in the per-row `totalElapsedMs` the other modes read. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
 
 The first three read from the same `diagnostics` column; the difference is the query you start with. Modes F and G are log-based.
 
 ## Where the diagnostics live
 
-Six places, all correlated:
+Seven places, all correlated:
 
-1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`) and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
+1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`) and three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries an `indexVisitClientMs` block (`read` / `renderRpc` / `bookkeeping`) — the indexer's per-row client-side overhead _outside_ the server render, i.e. this row's slice of the between-visit wall (see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)) — and a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note `brokenLinks` is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so it's the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
 2. **`prerendered_html.diagnostics` (and `prerendered_html_working.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
 3. **`modules.diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
 4. **`error_doc.diagnostics`** — derived copy of the same table's `diagnostics`, written only for error rows: an index error's copy rides `boxel_index.error_doc`, a render error's rides `prerendered_html.error_doc` (an instance's effective error is the union of the two). Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
 5. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same id lands on `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'` — and, for the render channel, on `prerendered_html.diagnostics->>'prerenderHtmlRequestId'` — so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 6. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
+7. **`jobs.result.phaseTimings`** — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`discoverMs`, `orderMs`, `preWarmMs`, `swapMs`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -43,10 +45,10 @@ When wrapping a query below into the staging/prod form, run it through the `psql
 
 A URL is produced by two prerender visits on two channels, and each visit's diagnostics follow its writes:
 
-| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the search-doc build (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, the per-field `searchDocFieldsMs` and per-link-load `searchDocLinkLoads` detail, `computedCalls`/`computedCacheHits`), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`. |
-| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain). HTTP id: `prerenderHtmlRequestId`.       |
+| where                          | visit                | what's in it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boxel_index.diagnostics`      | index visit          | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`), the search-doc build (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, the per-field `searchDocFieldsMs` and per-link-load `searchDocLinkLoads` detail, `computedCalls`/`computedCacheHits`), the indexer's own per-row client overhead outside the render (`indexVisitClientMs`: `read` / `renderRpc` / `bookkeeping` — see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)), `brokenLinks`, and the write-side stamps (`invalidationId`, `indexedAt`). HTTP id: `requestId`. |
+| `prerendered_html.diagnostics` | prerender-html visit | that visit's server timings (`launchMs`, `waits`, `renderElapsedMs`, `totalElapsedMs`) plus `renderFormatsMs` — per-format wall-clock, split into a `card` and a `file` block with one number per html-route step (`isolated`, `head`, `atom`, `markdown`, `fitted`, `embedded`; the ancestor-driven `fitted`/`embedded` numbers each cover the whole ancestor chain). HTTP id: `prerenderHtmlRequestId`.                                                                                                                                                                                                                 |
 
 So "why was indexing this card slow?" and "why was rendering this card slow?" are separately answerable per row: the index cost is `boxel_index.diagnostics`, the render cost is `prerendered_html.diagnostics`, and inside the render cost `renderFormatsMs` names the format that dominated (a slow `isolated` template vs a `fitted` render fanning out across many ancestors).
 
@@ -1133,6 +1135,98 @@ A large `searchDocMs` with **no** `searchDocFieldsMs` entries means no single fi
 - **Nothing below the field grain.** A hot leaf field's time is one number; profiling inside its `computeVia` is Mode H territory.
 - **A row can predate the instrumentation.** A row whose producing host build didn't emit these fields carries none of them; absence means "not measured", not "fast". Check `indexedAt` against when the realm was last reindexed.
 - **The bounded lists drop the tail.** Entries below the floor (or beyond the slowest 20) aren't persisted; the aggregates (`searchDocSettleMs`, `searchDocMs`) still carry the total, so the un-itemized remainder is the difference.
+
+## Mode K — the index job's between-visit wall (non-render overhead)
+
+**When to use this mode.** The other modes attribute time _inside_ a file visit — the server render (`totalElapsedMs`) and the search-doc build. But an index job's wall is more than the sum of its visits: it also runs invalidation discovery, dependency ordering, module pre-warm, the per-row client-side overhead the indexer pays around each render, the row writes, and the final swap — all **serial** with the visits, because the job runs one thing at a time. On a benchmark from-scratch, that between-visit slice was ~24% of the wall (Σ visit `totalElapsedMs` accounted for the other 76%). Use this mode when the job wall is much larger than the visit sum and you need to know _which_ non-render phase ate the difference — e.g. deciding whether pipelining the row writes behind the next visit is worth it, or whether discovery / swap dominate instead.
+
+This mode reads **two** sources that together reconstruct the whole wall:
+
+- **`jobs.result.phaseTimings`** — the once-per-job phases. Not attributable to a row, so they live on the job result.
+- **`boxel_index.diagnostics.indexVisitClientMs`** — the per-row client overhead the indexer paid around that row's render (`read` before it, `renderRpc` transport, `bookkeeping` after). Summed across the job's rows, this is the per-visit share of the wall that isn't server render and isn't the row write.
+
+### The decomposition identity
+
+For one index job:
+
+```
+totalMs  ≈  mtimesMs + discoverMs + orderMs + preWarmMs + visitLoopMs + swapMs        (job phases)
+
+visitLoopMs  ≈  Σ totalElapsedMs        (server render, per row — the well-instrumented 76%)
+              + Σ indexVisitClientMs.*  (read + renderRpc + bookkeeping, per row)
+              + writeMs                 (aggregate row writes — the I/O the tab doesn't need)
+```
+
+The `≈` covers small un-bucketed residue (loop control, progress events, resumed-row skips). `mtimesMs` / `preWarmMs` are from-scratch-only (incremental omits both). `writeMs` is aggregate on the job, **not** per row — a row can't time its own INSERT, so per-row `indexVisitClientMs` stops at `bookkeeping` (the pre-write window) and the writes roll up here. `swapMs` is the `batch.done()` transaction (realm-meta update + working→main promotion + obsolete-row prune), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
+
+### Step 1 — pull the job's phase breakdown
+
+```sql
+SELECT id,
+       job_type,
+       status,
+       extract(epoch FROM (finished_at - started_at)) * 1000 AS wall_ms,
+       result->>'generation'      AS generation,
+       result->'phaseTimings'     AS phase_timings
+FROM jobs
+WHERE concurrency_group = 'indexing:<realm-url>'   -- e.g. indexing:https://app.example/team/realm/
+  AND status = 'resolved'
+ORDER BY id DESC
+LIMIT 5;
+```
+
+`phase_timings` is `{ totalMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs }` (ms). Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+
+### Step 2 — sum the per-row halves for the same job
+
+Correlate rows to the job by the generation it committed (every from-scratch row is stamped with it; an incremental stamps the rows it revisited):
+
+```sql
+SELECT count(*)                                                          AS rows,
+       round(sum((diagnostics->>'totalElapsedMs')::numeric))            AS server_render_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'read')::numeric))        AS read_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'renderRpc')::numeric))   AS render_rpc_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'bookkeeping')::numeric)) AS bookkeeping_ms
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND generation = <generation-from-step-1>;
+```
+
+Now `visitLoopMs` (step 1) ≈ `server_render_ms` + `read_ms` + `render_rpc_ms` + `bookkeeping_ms` + `writeMs`. Whatever bucket is largest after `server_render_ms` is where the between-visit wall went — and whether it's worth pipelining.
+
+### Step 3 — find the rows whose overhead dominates
+
+The aggregates say _how much_; this says _which rows_ (a card whose `bookkeeping` is an outlier is doing heavy dependency resolution — many `deps`, a deep relationship fan-out):
+
+```sql
+SELECT url,
+       (diagnostics->'indexVisitClientMs'->>'bookkeeping')::numeric AS bookkeeping_ms,
+       (diagnostics->'indexVisitClientMs'->>'read')::numeric        AS read_ms,
+       (diagnostics->'indexVisitClientMs'->>'renderRpc')::numeric   AS render_rpc_ms,
+       (diagnostics->>'totalElapsedMs')::numeric                    AS server_render_ms,
+       array_length(deps, 1)                                        AS dep_count
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND generation = <generation>
+  AND type = 'instance'
+ORDER BY bookkeeping_ms DESC NULLS LAST
+LIMIT 20;
+```
+
+### Reading each bucket
+
+- **`read`** — file read + the file-metadata lookups (`ensureFileCreatedAt`, content hash/size). Usually small; a large `read` fleet-wide points at slow EFS / reader, not the render.
+- **`renderRpc`** — the client-observed prerender round-trip minus the server's own `totalElapsedMs`: serialization + the wire hop to the prerender server + any wait the server doesn't count. Large `renderRpc` with small server render means the transport/queue is the cost, not the render. ~0 on the fused / in-browser path (no wire hop).
+- **`bookkeeping`** — dependency resolution + index-entry construction between the render finishing and the write. The per-row cost that varies with a card's dependency shape; the top of step 3 names the heavy cards.
+- **`writeMs`** (job-level) — the Σ of the working-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
+- **`discoverMs` / `swapMs`** (job-level) — the serial bookends. `discoverMs` runs before the first visit, `swapMs` after the last, so neither can overlap a visit; they're the floor the pipelining can't remove.
+
+### What Mode K can't tell you
+
+- **Per-row write time.** Rolled into the job's `writeMs` only — a row can't stamp its own INSERT duration. If you need to know whether one row's write was pathological, that's not captured; the aggregate is.
+- **Resumed rows carry no `indexVisitClientMs`.** A row a prior attempt already wrote and this attempt promoted without re-visiting keeps its old diagnostics (no fresh overhead) — so step 2's sums undercount on a resumed job. `phaseTimings` still covers the whole job wall.
+- **A job predating the instrumentation** has no `phaseTimings` on its result and no `indexVisitClientMs` on its rows; absence means "not measured", not "zero". Reindex to populate.
+- **Inflated `renderRpc` on the fused path.** The in-browser / SQLite prerenderer runs in-process with no server-observed `totalElapsedMs` to subtract, so `renderRpc` there absorbs the whole in-process render wall rather than just transport. Only trust `renderRpc` as "transport" on the split (real prerender-server) path.
 
 ## Field-by-field reading
 
