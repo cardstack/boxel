@@ -114,12 +114,13 @@ export const FRONTMATTER_FILE_META_VALUE_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-file-meta-value',
 );
 
-// Same symbol-channel pattern for the `ToolSchemaError[]` a skill's
-// frontmatter enrichment produced; the host file extractor lifts it into the
-// extract result so the indexer can persist it onto
-// `diagnostics.toolSchemaErrors`.
-export const TOOL_SCHEMA_ERRORS_SYMBOL = Symbol.for(
-  'boxel:file-tool-schema-errors',
+// Same symbol-channel pattern for the `Partial<Diagnostics>` a
+// `FrontmatterField` subclass contributes to the indexed row (e.g. a skill's
+// `toolSchemaErrors`); the host file extractor lifts it into the extract
+// result so the indexer can merge it onto the row's `diagnostics`. Which
+// keys the bag carries is the subclass's own knowledge.
+export const FRONTMATTER_DIAGNOSTICS_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-diagnostics',
 );
 
 // One tool a skill's frontmatter declared whose schema generation failed
@@ -499,12 +500,12 @@ export interface FileExtractResponse {
   // the file indexer merges this onto `diagnostics.frontmatterParseError` so
   // the failure surfaces via `/_indexing-errors` instead of vanishing.
   frontmatterParseError?: FrontmatterParseError;
-  // Set when one or more of a skill's frontmatter tools failed schema
-  // generation during the extract. The extract still succeeds (the skill
-  // indexes with the tools that did enrich); the file indexer merges this
-  // onto `diagnostics.toolSchemaErrors` so each failure surfaces via
-  // `/_indexing-errors`.
-  toolSchemaErrors?: ToolSchemaError[];
+  // Diagnostics findings the file's frontmatter contributed during the
+  // extract (e.g. a skill's `toolSchemaErrors`). The extract still succeeds;
+  // the file indexer merges the bag onto the row's `diagnostics` so each
+  // finding surfaces via `/_indexing-errors`. Which keys the bag carries is
+  // the producing `FrontmatterField` subclass's own knowledge.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 }
 
 export interface FileRenderResponse {

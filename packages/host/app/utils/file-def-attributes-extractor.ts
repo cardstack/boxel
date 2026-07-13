@@ -3,14 +3,15 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
+  FRONTMATTER_DIAGNOSTICS_SYMBOL,
   FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
-  TOOL_SCHEMA_ERRORS_SYMBOL,
   type CodeRef,
+  type Diagnostics,
   type FileMetaResource,
   type FrontmatterParseError,
   type QueryFieldMeta,
@@ -18,7 +19,6 @@ import {
   type RenderError,
   type ResolvedCodeRef,
   type ToolContext,
-  type ToolSchemaError,
 } from '@cardstack/runtime-common';
 import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
 
@@ -57,10 +57,10 @@ export type FileDefExtractResult = {
   // indexes body-only); lifted out of the searchDoc here so the indexer can
   // persist it onto `diagnostics.frontmatterParseError`. See markdown-file-def.
   frontmatterParseError?: FrontmatterParseError;
-  // Skill frontmatter tools whose schema generation failed. The extract
-  // still succeeds (the skill indexes with the tools that did enrich); the
-  // indexer persists these onto `diagnostics.toolSchemaErrors`.
-  toolSchemaErrors?: ToolSchemaError[];
+  // Diagnostics findings the frontmatter contributed (e.g. a skill's
+  // `toolSchemaErrors`). The extract still succeeds; the indexer merges the
+  // bag onto the row's `diagnostics`.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 };
 
 export class FileDefAttributesExtractor {
@@ -253,13 +253,13 @@ export class FileDefAttributesExtractor {
         if (frontmatterParseError) {
           delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
         }
-        // And for a skill's tool schema failures, persisted onto
-        // `diagnostics.toolSchemaErrors`.
-        let toolSchemaErrors = cleanedBag[TOOL_SCHEMA_ERRORS_SYMBOL] as
-          | ToolSchemaError[]
-          | undefined;
-        if (toolSchemaErrors) {
-          delete cleanedBag[TOOL_SCHEMA_ERRORS_SYMBOL];
+        // And for any diagnostics findings the frontmatter contributed,
+        // merged onto the row's `diagnostics` by the indexer.
+        let frontmatterDiagnostics = cleanedBag[
+          FRONTMATTER_DIAGNOSTICS_SYMBOL
+        ] as Partial<Diagnostics> | undefined;
+        if (frontmatterDiagnostics) {
+          delete cleanedBag[FRONTMATTER_DIAGNOSTICS_SYMBOL];
         }
         // A frontmatter value enriched for the index (e.g. a skill's
         // generated tool definitions) replaces the resource's `frontmatter`
@@ -292,7 +292,7 @@ export class FileDefAttributesExtractor {
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
           ...(frontmatterParseError ? { frontmatterParseError } : {}),
-          ...(toolSchemaErrors ? { toolSchemaErrors } : {}),
+          ...(frontmatterDiagnostics ? { frontmatterDiagnostics } : {}),
         };
       }
     }

@@ -108,7 +108,9 @@ export class SkillFrontmatterField extends FrontmatterField {
     return {
       attributes,
       fileMetaAttributes: { ...attributes, tools },
-      ...(toolSchemaErrors.length ? { toolSchemaErrors } : {}),
+      // Only this subclass knows the diagnostics key its findings live
+      // under; the plumbing back to the indexed row is kind-agnostic.
+      ...(toolSchemaErrors.length ? { diagnostics: { toolSchemaErrors } } : {}),
     };
   }
 

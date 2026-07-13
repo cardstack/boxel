@@ -191,20 +191,20 @@ export async function performFileIndexing({
     _title: name,
   };
 
-  // A frontmatter parse failure or a skill tool's schema-generation failure
-  // doesn't fail the file (it still indexes, body-only / minus that tool's
-  // schema), so each rides on the row's diagnostics — mirroring brokenLinks —
-  // where `/_indexing-errors` surfaces it for the author. Merge them onto
-  // whatever render-side diagnostics the visit already produced. Computed
-  // before the dependency-error branch below so those findings persist on
-  // dependency-error rows too.
-  let { frontmatterParseError, toolSchemaErrors } = extractResult;
+  // A frontmatter parse failure — or any diagnostics bag the frontmatter
+  // contributed (e.g. a skill's tool schema failures) — doesn't fail the
+  // file (it still indexes), so each rides on the row's diagnostics —
+  // mirroring brokenLinks — where `/_indexing-errors` surfaces it for the
+  // author. Merge them onto whatever render-side diagnostics the visit
+  // already produced. Computed before the dependency-error branch below so
+  // those findings persist on dependency-error rows too.
+  let { frontmatterParseError, frontmatterDiagnostics } = extractResult;
   let fileDiagnostics: Diagnostics | undefined =
-    frontmatterParseError || toolSchemaErrors
+    frontmatterParseError || frontmatterDiagnostics
       ? {
           ...(diagnostics ?? {}),
+          ...(frontmatterDiagnostics ?? {}),
           ...(frontmatterParseError ? { frontmatterParseError } : {}),
-          ...(toolSchemaErrors ? { toolSchemaErrors } : {}),
         }
       : diagnostics;
 

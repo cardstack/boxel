@@ -2,10 +2,10 @@ import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
+  FRONTMATTER_DIAGNOSTICS_SYMBOL,
   FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
-  TOOL_SCHEMA_ERRORS_SYMBOL,
   type FrontmatterParseError,
   type ToolContext,
 } from '@cardstack/runtime-common';
@@ -650,7 +650,7 @@ export class MarkdownDef extends FileDef {
     // and produces any index-time enrichment of it (e.g. a skill's generated
     // tool definitions). MarkdownDef stays ignorant of any kind's schema. A
     // recognized kind is recorded so the field rehydrates as that subclass on
-    // read; the enriched copy and any tool schema errors ride out-of-band on
+    // read; the enriched copy and any diagnostics findings ride out-of-band on
     // the same symbol channels the parse error uses, so neither leaks into the
     // flat `search_doc`.
     if (Object.keys(frontmatterData).length > 0) {
@@ -665,8 +665,8 @@ export class MarkdownDef extends FileDef {
         bag[FRONTMATTER_FILE_META_VALUE_SYMBOL] =
           frontmatterResult.fileMetaAttributes;
       }
-      if (frontmatterResult.toolSchemaErrors?.length) {
-        bag[TOOL_SCHEMA_ERRORS_SYMBOL] = frontmatterResult.toolSchemaErrors;
+      if (frontmatterResult.diagnostics) {
+        bag[FRONTMATTER_DIAGNOSTICS_SYMBOL] = frontmatterResult.diagnostics;
       }
       if (isKnownFrontmatterKind(kind)) {
         let adoptsFrom = identifyCard(frontmatterFieldClass);

@@ -1,4 +1,4 @@
-import type { ToolContext, ToolSchemaError } from '@cardstack/runtime-common';
+import type { Diagnostics, ToolContext } from '@cardstack/runtime-common';
 
 import {
   Component,
@@ -32,9 +32,12 @@ export interface FromFrontmatterResult {
   // definitions) destined for the file-meta resource. Kept separate because
   // multi-KB generated content must never land in `search_doc`.
   fileMetaAttributes?: Record<string, unknown>;
-  // Skill frontmatter tools whose schema generation failed. The extract
-  // still succeeds; these surface via `diagnostics.toolSchemaErrors`.
-  toolSchemaErrors?: ToolSchemaError[];
+  // Diagnostics findings this frontmatter contributes to the indexed row,
+  // merged onto the row's `diagnostics` by the file indexer and surfaced via
+  // `/_indexing-errors`. The extract still succeeds — findings never fail the
+  // row. Which keys a subclass populates is its own knowledge (the base
+  // contract is just "a bag of Diagnostics").
+  diagnostics?: Partial<Diagnostics>;
 }
 
 // The parsed YAML frontmatter of a markdown file, captured as JSON. The base

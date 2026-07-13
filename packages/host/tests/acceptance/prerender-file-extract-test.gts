@@ -342,9 +342,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(
-      result.toolSchemaErrors,
+      result.frontmatterDiagnostics,
       undefined,
-      'no tool schema errors',
+      'no frontmatter diagnostics',
     );
 
     let tools = (result.resource?.attributes as Record<string, any>)
@@ -436,8 +436,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready', 'extract still succeeds');
 
-    assert.strictEqual(result.toolSchemaErrors?.length, 1);
-    let [toolError] = result.toolSchemaErrors!;
+    let toolSchemaErrors = result.frontmatterDiagnostics?.toolSchemaErrors;
+    assert.strictEqual(toolSchemaErrors?.length, 1);
+    let [toolError] = toolSchemaErrors!;
     assert.strictEqual(
       toolError.module,
       fileURL('skills/broken-tool/missing-tool'),
@@ -483,9 +484,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(
-      result.toolSchemaErrors,
+      result.frontmatterDiagnostics,
       undefined,
-      'no tool schema errors',
+      'no frontmatter diagnostics',
     );
     // A non-skill kind keeps only the raw frontmatter (no typed `tools`
     // field), and the kind gate skips enrichment before ever looking.
