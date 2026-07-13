@@ -533,6 +533,32 @@ export interface PrerenderResponseMeta {
   requestId?: string;
 }
 
+// Per-visit client-side overhead the indexer spent producing a row, measured
+// outside the server-observed render timings (`totalElapsedMs` /
+// `renderElapsedMs`). The index job runs its file visits serially, so this
+// overhead serializes with the render and is otherwise invisible next to it;
+// summed across a job's rows it accounts for most of the wall the job spends
+// between server renders. The once-per-job phases (discovery, dependency
+// ordering, module pre-warm, the final swap) and the aggregate row-write time
+// are not attributable to a single row and live on the job result's
+// `phaseTimings` (`jobs.result.phaseTimings`) instead.
+export interface IndexVisitClientTimings {
+  // Wall before the render request: reading the file bytes and the
+  // file-metadata lookups (created-at, content hash/size).
+  read?: number;
+  // Render round-trip transport: the client-observed wall of the prerender
+  // visit(s) minus the server-observed `totalElapsedMs` — the request/response
+  // plumbing between the indexer and the prerender server (serialization,
+  // network/IPC, waits not counted server-side). ~0 for the in-process (fused
+  // / in-browser) prerenderer, where there is no wire hop.
+  renderRpc?: number;
+  // Post-render bookkeeping: dependency resolution and index-entry construction
+  // between the render completing and the row write. Excludes the write itself
+  // (a row cannot time its own INSERT); the job's aggregate write time lives on
+  // the job result's `phaseTimings.writeMs` (`jobs.result.phaseTimings.writeMs`).
+  bookkeeping?: number;
+}
+
 // The shape persisted to the `diagnostics` columns — `boxel_index` for the
 // index visit's breakdown, `prerendered_html` for the prerender-html visit's
 // (the two visits' costs are independently queryable per row; join them on
@@ -579,6 +605,12 @@ export interface Diagnostics
   // by the file indexer from the extract response. Absent when the
   // frontmatter parsed (or there was none).
   frontmatterParseError?: FrontmatterParseError;
+  // Per-visit client-side overhead of producing this row (file read, render
+  // round-trip transport, post-render bookkeeping) — the index-job wall spent
+  // on this row outside the server render. See `IndexVisitClientTimings`.
+  // Omitted when nothing was measured (e.g. a resumed row promoted without a
+  // fresh visit).
+  indexVisitClientMs?: IndexVisitClientTimings;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to

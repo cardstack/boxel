@@ -67,6 +67,23 @@ export async function performCardIndexing({
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
+  // Post-render bookkeeping for this row starts now — dependency resolution and
+  // entry construction between the render completing and the row write. Stamped
+  // onto the diagnostics blob just before each write (which ends the
+  // bookkeeping window and starts the write the row can't time itself).
+  let bookkeepingStart = Date.now();
+  let withBookkeeping = (
+    d: Diagnostics | undefined,
+  ): Diagnostics | undefined =>
+    d
+      ? {
+          ...d,
+          indexVisitClientMs: {
+            ...(d.indexVisitClientMs ?? {}),
+            bookkeeping: Date.now() - bookkeepingStart,
+          },
+        }
+      : d;
   let uncaughtError: Error | undefined;
   let renderResult: RenderResponse = precomputedRenderResult;
 
@@ -202,7 +219,10 @@ export async function performCardIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(instanceURL, { ...renderError, diagnostics });
+    await updateEntry(instanceURL, {
+      ...renderError,
+      diagnostics: withBookkeeping(diagnostics),
+    });
     return;
   }
 
@@ -247,7 +267,7 @@ export async function performCardIndexing({
         typeof searchDoc?._cardType === 'string'
           ? searchDoc._cardType
           : undefined,
-      diagnostics,
+      diagnostics: withBookkeeping(diagnostics),
     });
     return;
   }
@@ -268,6 +288,6 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
-    diagnostics,
+    diagnostics: withBookkeeping(diagnostics),
   });
 }

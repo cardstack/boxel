@@ -521,6 +521,40 @@ module(basename(import.meta.filename), function () {
         'the job completed successfully',
       );
       assert.ok(indexJob.finished_at, 'the job was marked with a finish time');
+
+      // The between-visit phase decomposition rides on the job result so the
+      // ~one-in-four of the wall the job spends outside the per-row server
+      // render is queryable per job (`jobs.result.phaseTimings`).
+      let indexResult = indexJob.result as {
+        phaseTimings?: Record<string, unknown>;
+      } | null;
+      let phaseTimings = indexResult?.phaseTimings;
+      assert.ok(
+        phaseTimings,
+        `the from-scratch index job result carries a phaseTimings breakdown, got: ${JSON.stringify(
+          indexResult,
+        )}`,
+      );
+      for (let phase of [
+        'totalMs',
+        'setupMs',
+        'mtimesMs',
+        'discoverMs',
+        'orderMs',
+        'preWarmMs',
+        'visitLoopMs',
+        'writeMs',
+        'swapMs',
+      ]) {
+        assert.strictEqual(
+          typeof phaseTimings?.[phase],
+          'number',
+          `phaseTimings.${phase} is measured on the from-scratch job result, got: ${JSON.stringify(
+            phaseTimings?.[phase],
+          )}`,
+        );
+      }
+
       assert.strictEqual(
         prerenderJob.job_type,
         'prerender_html',
@@ -808,6 +842,26 @@ module(basename(import.meta.filename), function () {
         'number',
         `diagnostics.searchDocSettlePasses persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettlePasses)}`,
       );
+
+      // The per-visit client overhead (file read, render round-trip transport,
+      // post-render bookkeeping) rides the same channel — the part of the index
+      // job's between-render wall attributable to this row.
+      let clientMs = (
+        diagRow?.diagnostics as {
+          indexVisitClientMs?: {
+            read?: unknown;
+            renderRpc?: unknown;
+            bookkeeping?: unknown;
+          };
+        } | null
+      )?.indexVisitClientMs;
+      for (let bucket of ['read', 'renderRpc', 'bookkeeping'] as const) {
+        assert.strictEqual(
+          typeof clientMs?.[bucket],
+          'number',
+          `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
+        );
+      }
     });
 
     // Note this particular test should only be a server test as the nature of

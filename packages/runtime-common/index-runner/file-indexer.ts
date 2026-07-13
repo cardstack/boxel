@@ -74,6 +74,21 @@ export async function performFileIndexing({
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
+  // See the card indexer: bookkeeping is the post-render, pre-write window for
+  // this file's row, stamped onto the diagnostics blob just before each write.
+  let bookkeepingStart = Date.now();
+  let withBookkeeping = (
+    d: Diagnostics | undefined,
+  ): Diagnostics | undefined =>
+    d
+      ? {
+          ...d,
+          indexVisitClientMs: {
+            ...(d.indexVisitClientMs ?? {}),
+            bookkeeping: Date.now() - bookkeepingStart,
+          },
+        }
+      : d;
   let entryURL = new URL(fileURL);
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
@@ -152,7 +167,10 @@ export async function performFileIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(entryURL, { ...renderError, diagnostics });
+    await updateEntry(entryURL, {
+      ...renderError,
+      diagnostics: withBookkeeping(diagnostics),
+    });
     return 'error';
   }
 
@@ -208,7 +226,7 @@ export async function performFileIndexing({
       error: normalizedDependencyError,
       searchData,
       types: fileTypes,
-      diagnostics,
+      diagnostics: withBookkeeping(diagnostics),
     });
     return 'error';
   }
@@ -254,7 +272,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    diagnostics: fileDiagnostics,
+    diagnostics: withBookkeeping(fileDiagnostics),
   });
 
   return 'indexed';
