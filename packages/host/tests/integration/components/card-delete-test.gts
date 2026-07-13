@@ -61,13 +61,13 @@ module('Integration | card-delete', function (hooks) {
   setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -103,8 +103,8 @@ module('Integration | card-delete', function (hooks) {
     };
     let cardApi: typeof import('@cardstack/base/card-api');
     let string: typeof import('@cardstack/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;

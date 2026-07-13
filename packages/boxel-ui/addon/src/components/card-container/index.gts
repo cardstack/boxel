@@ -9,6 +9,9 @@ interface Signature {
   Args: {
     cssImports?: string[];
     displayBoundaries?: boolean;
+    // Deprecated: the theme-driven token derivation now applies to every
+    // container (the semantic token contract in theme.css is always
+    // satisfied). This arg only stamps the `--themed` marker class.
     isThemed?: boolean;
     tag?: keyof HTMLElementTagNameMap;
     // Raw theme CSS variable definitions (`:root` + optional `.dark`). Scoped to
@@ -51,7 +54,10 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
       {{#if @themeCss}}
         {{! template-lint-disable require-scoped-style  }}
-        <style>
+        {{! data-boxel-theme-style marks this as a dedupable theme stylesheet;
+            the attribute survives serialization, so prerendered fragments
+            stay recognizable when re-inserted }}
+        <style data-boxel-theme-style>
           {{themeScopedCss @themeScope @themeCss}}
         </style>
         {{! template-lint-enable require-scoped-style  }}
@@ -81,7 +87,12 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       box-shadow: 0 0 0 1px var(--border, var(--boxel-border-color));
     }
 
-    :global(.boxel-card-container--themed) {
+    /* Theme-driven derivation of the --boxel-* system from the semantic
+       knobs (--spacing, --radius, --font-sans, --theme-*). theme.css always
+       supplies defaults that resolve to the legacy --boxel-* values, so this
+       applies to every container — themed cards differ only in the knob
+       values their scoped theme stylesheet provides. */
+    :global(.boxel-card-container) {
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
       --_boxel-scale: var(--theme-scale, var(--boxel-ratio));
       --theme-spacing: calc(var(--spacing) * 4);
@@ -178,11 +189,11 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-section-heading-line-height: var(
         --theme-section-heading-line-height,
-        var(--boxel-heading-line-height)
+        var(--theme-heading-line-height, var(--boxel-line-height-md))
       );
       --boxel-section-heading-font-weight: var(
         --theme-section-heading-font-weight,
-        var(--boxel-heading-font-weight, 500)
+        var(--theme-heading-font-weight, 500)
       );
 
       /* h3 */
@@ -196,7 +207,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-subheading-line-height: var(
         --theme-subheading-line-height,
-        var(--boxel-heading-line-height)
+        var(--theme-heading-line-height, var(--boxel-line-height))
       );
       --boxel-subheading-font-weight: var(--theme-subheading-font-weight, 500);
 
@@ -230,7 +241,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       font-family: var(--boxel-body-font-family);
       font-size: var(--boxel-body-font-size);
       font-weight: var(--boxel-body-font-weight);
-      letter-spacing: var(--tracking-normal);
       line-height: var(--boxel-body-line-height);
     }
 

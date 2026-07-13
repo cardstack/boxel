@@ -28,7 +28,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { coalesce } from '@cardstack/boxel-ui/helpers';
+import { coalesce, themeScope } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash-es';
 import { initSharedState } from './shared-state';
@@ -86,7 +86,7 @@ const DEFAULT_CARD_CONTEXT = {
     modify() {}
   },
   actions: undefined,
-  commandContext: undefined,
+  toolContext: undefined,
   getCard: () => {},
   getCards: () => {},
   getCardCollection: () => {},
@@ -280,6 +280,10 @@ export function getBoxComponent(
     return cardDef?.cardTheme != null;
   }
 
+  function themeId(cardDef?: CardDef) {
+    return isThemeCard(cardDef) ? cardDef.id : cardDef?.cardTheme?.id;
+  }
+
   function getCssImports(card?: CardDef) {
     // for cards like Theme card and its descendants, directly use the `cssImports` field;
     // for all other cards, get imports via the Theme card linked from cardInfo
@@ -293,15 +297,24 @@ export function getBoxComponent(
   }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
-    // Scopes this card's theme stylesheet. Derived from the card id so the
-    // scope stays stable in persisted prerendered HTML — a per-process guid
+    // Scopes this card's theme stylesheet. Derived from the theme card's id
+    // plus a hash of its CSS (see themeScope) so every card sharing a theme
+    // emits an identical stylesheet instead of one copy per card, while
+    // scopes stay stable in persisted prerendered HTML — a per-process guid
     // can repeat across prerender jobs, and since the scoped style rules are
-    // page-global, two cached cards with the same scope would capture each
-    // other's theme variables. The guid fallback only covers unsaved cards,
-    // which are never persisted.
+    // page-global, two cached cards with the same scope but different theme
+    // CSS would capture each other's theme variables. The guid fallback only
+    // covers unsaved theme cards previewing their own CSS, which are never
+    // persisted.
     private get themeScopeId() {
       let value = model.value;
-      return (isCard(value) && value.id) || guidFor(this);
+      if (isCard(value)) {
+        let scope = themeScope(themeId(value), themeCss(value));
+        if (scope) {
+          return scope;
+        }
+      }
+      return guidFor(this);
     }
 
     // Compute merged configuration for this field based on the owning instance.

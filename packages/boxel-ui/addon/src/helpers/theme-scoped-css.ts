@@ -19,6 +19,43 @@ function sanitizeDeclarations(declarations: string): string {
   return sanitizeHtml(declarations).replace(/[{}]/g, '');
 }
 
+function fnv1a(text: string, seed: number): string {
+  let hash = seed;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+// 64-bit stable fingerprint of the theme CSS for scope values: two 32-bit
+// FNV-1a passes with different seeds (the standard offset basis, then the
+// upper half of the 64-bit offset basis), hex-encoded fixed-width. Not
+// cryptographic, but wide enough that two versions of a theme colliding —
+// which would let their scoped rules restyle each other's cards — is not a
+// practical concern, where a single 32-bit pass would leave that to chance.
+function fingerprint(text: string): string {
+  return fnv1a(text, 0x811c9dc5) + fnv1a(text, 0xcbf29ce4);
+}
+
+// Derives a `data-boxel-theme-scope` value from a theme's identity plus a
+// fingerprint of its CSS. Every card sharing a theme gets the same scope, so
+// their emitted stylesheets are byte-identical — harmless as duplicate rules,
+// and dedupable by consumers. The content hash keeps scopes from *different
+// versions* of a theme distinct: prerendered fragments are cached at
+// different times, so a page can mix a card captured before a theme edit with
+// one captured after, and because the scoped rules are page-global, equal
+// scopes with unequal declarations would restyle each other's cards.
+export function themeScope(
+  themeId: string | null | undefined,
+  cssVariables: string | null | undefined,
+): string | undefined {
+  if (!themeId || !cssVariables) {
+    return undefined;
+  }
+  return `${themeId}-${fingerprint(cssVariables)}`;
+}
+
 export function themeScopedCss(
   scope?: string,
   cssVariables?: string | null,

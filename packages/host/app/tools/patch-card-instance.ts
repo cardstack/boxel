@@ -31,10 +31,10 @@ export default class PatchCardInstanceTool extends HostBaseTool<
   static actionVerb = 'Update Card';
 
   constructor(
-    commandContext: ToolContext,
+    toolContext: ToolContext,
     private readonly configuration: Configuration,
   ) {
-    super(commandContext);
+    super(toolContext);
   }
 
   async getInputType() {

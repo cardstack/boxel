@@ -26,8 +26,8 @@ export function indexURLCandidates(cardURL: URL): string[] {
 export function indexCandidateExpressions(
   candidates: string[],
   // Table alias to qualify `url` / `file_alias` with. Required when the query
-  // joins another table that also carries these columns (e.g. the dual-read
-  // join to `prerendered_html`), so the references are unambiguous.
+  // joins another table that also carries these columns (e.g. the join to
+  // `prerendered_html`), so the references are unambiguous.
   alias?: string,
 ): Expression {
   let prefix = alias ? `${alias}.` : '';

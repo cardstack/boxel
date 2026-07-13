@@ -49,12 +49,12 @@ export class AiAppGenerator extends CardDef {
     };
 
     askAi = restartableTask(async () => {
-      let commandContext = this.args.context?.commandContext;
-      if (!commandContext) {
+      let toolContext = this.args.context?.toolContext;
+      if (!toolContext) {
         throw new Error('No command context found');
       }
 
-      let command = new AskAiTool(commandContext);
+      let command = new AskAiTool(toolContext);
       await command.execute(
         new AskAiInput({
           prompt: this.args.model.promptValue,

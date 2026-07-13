@@ -30,7 +30,7 @@ export default class PreviewFormatTool extends HostBaseTool<
     input: BaseToolModule.PreviewFormatInput,
   ): Promise<undefined> {
     // 1. Switch to code submode
-    await new SwitchSubmodeTool(this.commandContext).execute({
+    await new SwitchSubmodeTool(this.toolContext).execute({
       submode: 'code',
       codePath: input.modulePath,
     });
@@ -42,7 +42,7 @@ export default class PreviewFormatTool extends HostBaseTool<
     );
 
     // 3. Show the card in the specified format using ShowCardTool
-    let showCardCommand = new ShowCardTool(this.commandContext);
+    let showCardCommand = new ShowCardTool(this.toolContext);
     await showCardCommand.execute({
       cardId: input.cardId,
       format: input.format,

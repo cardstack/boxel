@@ -499,7 +499,7 @@ export default class InteractSubmode extends Component {
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
           ({ newCardId } = await new CopyCardToStackTool(
-            this.toolService.commandContext,
+            this.toolService.toolContext,
           ).execute({
             sourceCard: card,
             targetStackIndex,
@@ -921,7 +921,7 @@ export default class InteractSubmode extends Component {
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
                 @deleteCard={{this.requestDeleteCard}}
-                @commandContext={{this.toolService.commandContext}}
+                @toolContext={{this.toolService.toolContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

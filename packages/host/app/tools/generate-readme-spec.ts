@@ -61,7 +61,7 @@ Requirements:
 
     // Generate the README using the existing command
     const generateReadmeCommand = new OneShotLlmRequestTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
 
     let userPrompt = GenerateReadmeSpecTool.getUserPrompt(
@@ -85,7 +85,7 @@ Requirements:
     if (input.spec.id) {
       try {
         const patchCardInstanceCommand = new PatchCardInstanceTool(
-          this.toolService.commandContext,
+          this.toolService.toolContext,
           { cardType: input.spec.constructor as typeof CardDef }, //is this correct?
         );
 

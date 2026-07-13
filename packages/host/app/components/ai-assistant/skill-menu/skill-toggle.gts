@@ -100,7 +100,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   }
 
   private async openSkillCard() {
-    let showCardCommand = new ShowCardTool(this.toolService.commandContext);
+    let showCardCommand = new ShowCardTool(this.toolService.toolContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });

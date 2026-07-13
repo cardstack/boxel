@@ -43,7 +43,7 @@ export default class ApplyMarkdownEditTool extends HostBaseTool<
     }
 
     // Get the card
-    const getCard = new GetCardTool(this.commandContext);
+    const getCard = new GetCardTool(this.toolContext);
     const card = await getCard.execute({ cardId: input.cardId });
 
     if (!card) {
@@ -130,7 +130,7 @@ export default class ApplyMarkdownEditTool extends HostBaseTool<
     };
 
     const response = await new SendRequestViaProxyTool(
-      this.commandContext,
+      this.toolContext,
     ).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
       method: 'POST',
@@ -191,7 +191,7 @@ export default class ApplyMarkdownEditTool extends HostBaseTool<
     }
 
     // Patch only the specific markdown field
-    await new PatchFieldsTool(this.commandContext).execute({
+    await new PatchFieldsTool(this.toolContext).execute({
       cardId: input.cardId,
       fieldUpdates: {
         [input.fieldPath]: finalContent,

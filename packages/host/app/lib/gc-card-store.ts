@@ -204,8 +204,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#storeHooks = storeHooks;
   }
 
-  get virtualNetwork(): VirtualNetwork {
-    return this.#virtualNetwork;
+  resolveURL(reference: string, base?: string): URL | undefined {
+    try {
+      return this.#virtualNetwork.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
   }
 
   getCard(id: string): CardDef | undefined {

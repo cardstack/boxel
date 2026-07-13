@@ -5,7 +5,7 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -75,7 +75,7 @@ function commonSetup(hooks: NestedHooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
   setupRealmCacheTeardown(hooks);
 }

@@ -7343,7 +7343,7 @@ module('markdown skills', () => {
   });
 });
 
-module('markdown skill commands', (hooks) => {
+module('markdown skill tools', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;

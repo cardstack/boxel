@@ -1531,6 +1531,61 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('card prerender records the search-doc settle aggregates on meta.diagnostics for persistence', async function (assert) {
+        // The settle aggregates ride the same consolidated diagnostics
+        // channel as the timings and broken-link findings: render.meta
+        // stamps searchDocSettleMs / searchDocSettlePasses on every card
+        // visit, and the Prerenderer lifts them onto
+        // `response.meta.diagnostics` — the blob the indexer flattens into
+        // `boxel_index.diagnostics`. The per-field / per-link-load detail
+        // (searchDocFieldsMs / searchDocLinkLoads) is floor-bounded so its
+        // presence depends on real timings; only its shape is asserted when
+        // it appears.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}1.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(result.response.card?.error, 'prerender succeeds');
+        let diagnostics = result.response.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettleMs,
+          'number',
+          `searchDocSettleMs is stamped, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettleMs ?? -1) >= 0,
+          `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettlePasses ?? 0) >= 2,
+          `searchDocSettlePasses counts at least the two stability passes, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        if (diagnostics?.searchDocFieldsMs !== undefined) {
+          assert.ok(
+            Object.values(diagnostics.searchDocFieldsMs).every(
+              (ms) => typeof ms === 'number' && ms >= 1,
+            ),
+            'retained per-field timings are all at/over the persistence floor',
+          );
+        }
+        if (diagnostics?.searchDocLinkLoads !== undefined) {
+          assert.ok(
+            diagnostics.searchDocLinkLoads.every(
+              (l) =>
+                typeof l.path === 'string' &&
+                typeof l.target === 'string' &&
+                l.ms >= 1,
+            ),
+            'retained link loads carry path + target and are at/over the floor',
+          );
+        }
+      });
+
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
@@ -2622,12 +2677,7 @@ module(basename(import.meta.filename), function () {
         let alternate = url.endsWith('.json')
           ? url.replace(/\.json$/, '')
           : `${url}.json`;
-        // The isolated-HTML injection dual-reads from prerendered_html (falling
-        // back to boxel_index), so override both channels for the row.
-        await dbAdapter.execute(
-          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
-          { bind: [html, url, alternate] },
-        );
+        // The isolated-HTML injection reads from prerendered_html.
         await dbAdapter.execute(
           `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 OR url = $3`,
           { bind: [html, url, alternate] },

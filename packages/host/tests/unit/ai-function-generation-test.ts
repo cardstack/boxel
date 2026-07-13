@@ -3,7 +3,6 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import {
   generateJsonSchemaForCardType,
   basicMappings,
@@ -39,15 +38,15 @@ module('Unit | ai-function-generation-test', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
     primitive = cardApi.primitive;
-    string = await loader.import(`${baseRealm.url}string`);
-    number = await loader.import(`${baseRealm.url}number`);
-    biginteger = await loader.import(`${baseRealm.url}big-integer`);
-    date = await loader.import(`${baseRealm.url}date`);
-    datetime = await loader.import(`${baseRealm.url}datetime`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
-    enumModule = await loader.import(`${baseRealm.url}enum`);
+    string = await loader.import('@cardstack/base/string');
+    number = await loader.import('@cardstack/base/number');
+    biginteger = await loader.import('@cardstack/base/big-integer');
+    date = await loader.import('@cardstack/base/date');
+    datetime = await loader.import('@cardstack/base/datetime');
+    boolean = await loader.import('@cardstack/base/boolean');
+    enumModule = await loader.import('@cardstack/base/enum');
     mappings = await basicMappings(loader);
   });
 
@@ -55,7 +54,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =

@@ -76,7 +76,7 @@ export default class SwitchSubmodeTool extends HostBaseTool<
           input.createFile &&
           currentSubmode === Submodes.Interact
         ) {
-          let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
+          let writeTextFileCommand = new WriteTextFileTool(this.toolContext);
           let writeResult = await writeTextFileCommand.execute({
             path: codeRRI,
             content: '',

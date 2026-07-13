@@ -109,7 +109,7 @@ export class SystemCard extends CardDef {
       {
         label: 'Set as My System Card',
         action: async () => {
-          await new SetUserSystemCardTool(params.commandContext).execute({
+          await new SetUserSystemCardTool(params.toolContext).execute({
             cardId: this.id,
           });
         },
@@ -136,14 +136,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   }
 
   loadActiveSystemCard = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.hasLoaded = true;
       return;
     }
     try {
       let result =
-        await new GetUserSystemCardTool(commandContext).execute();
+        await new GetUserSystemCardTool(toolContext).execute();
       this.activeSystemCardId = result.cardId ?? undefined;
       this.activeIsDefault = result.isDefault ?? false;
     } finally {
@@ -210,20 +210,20 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   cloneTask = task(async (targetRealmUrl: string, realmName: string) => {
     this.cloningToRealmName = realmName;
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext || !this.args.model.id) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext || !this.args.model.id) {
       this.cloningToRealmName = undefined;
       return;
     }
     try {
       let copyResult = await new CopyCardToRealmTool(
-        commandContext,
+        toolContext,
       ).execute({
         sourceCard: this.args.model as CardDef,
         targetRealm: targetRealmUrl,
       });
       if (copyResult.newCardId) {
-        await new ShowCardTool(commandContext).execute({
+        await new ShowCardTool(toolContext).execute({
           cardId: copyResult.newCardId,
           format: 'isolated',
         });
@@ -248,17 +248,17 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   };
 
   setAsActiveTask = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext || !this.args.model.id) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext || !this.args.model.id) {
       return;
     }
-    await new SetUserSystemCardTool(commandContext).execute({
+    await new SetUserSystemCardTool(toolContext).execute({
       cardId: this.args.model.id,
     });
     this.activeSystemCardId = this.args.model.id;
     // Re-check default status after setting active
     let result =
-      await new GetUserSystemCardTool(commandContext).execute();
+      await new GetUserSystemCardTool(toolContext).execute();
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
   });
@@ -268,14 +268,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   };
 
   restoreDefaultTask = restartableTask(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       return;
     }
-    await new SetUserSystemCardTool(commandContext).execute({});
+    await new SetUserSystemCardTool(toolContext).execute({});
     // Reload to pick up the new active system card (the default)
     let result =
-      await new GetUserSystemCardTool(commandContext).execute();
+      await new GetUserSystemCardTool(toolContext).execute();
     this.activeSystemCardId = result.cardId ?? undefined;
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;

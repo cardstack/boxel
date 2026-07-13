@@ -7,7 +7,6 @@ import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   baseRealmRRI,
   rri,
   searchEntryWireQueryFromQuery,
@@ -68,7 +67,7 @@ module('Integration | realm', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function handle(realm: Realm, ...args: Parameters<Realm['handle']>) {

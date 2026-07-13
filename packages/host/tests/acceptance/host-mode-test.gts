@@ -12,7 +12,6 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
@@ -89,8 +88,8 @@ module('Acceptance | host mode tests', function (hooks) {
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('@cardstack/base/card-api');
     let string: typeof import('@cardstack/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;

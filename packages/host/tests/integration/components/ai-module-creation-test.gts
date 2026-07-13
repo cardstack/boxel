@@ -7,7 +7,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, skip } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
@@ -66,7 +65,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {

@@ -232,6 +232,10 @@
   --boxel-light-600: var(--boxel-300);
 
   /* Status colors */
+  --boxel-destructive: var(--boxel-danger);
+  --boxel-warning: var(--boxel-yellow);
+  --boxel-success: var(--boxel-dark-green);
+
   --boxel-error-100: #dc0202; /* alert - attention - error */
   --boxel-error-200: #ed0000;
   --boxel-error-300: #ff0000;

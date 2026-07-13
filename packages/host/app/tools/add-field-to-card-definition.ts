@@ -65,7 +65,7 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
       computedFieldFunctionSourceCode: input.computedFieldFunctionSourceCode,
     });
 
-    let writeTextFileCommand = new WriteTextFileTool(this.commandContext);
+    let writeTextFileCommand = new WriteTextFileTool(this.toolContext);
     await writeTextFileCommand.execute({
       content: moduleSyntax.code(),
       realm: input.realm,

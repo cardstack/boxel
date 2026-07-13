@@ -20,7 +20,6 @@ import {
   type SearchablePathDiagnostic,
   isBaseDef,
   baseCardRef,
-  baseRealm,
   Deferred,
   loadCardDef,
   internalKeyFor,
@@ -401,7 +400,7 @@ async function validateModuleSearchablePaths(
   }
   try {
     let loader = context.loaderService.loader;
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let lookupDefinition = async (
       codeRef: CodeRef,
     ): Promise<Definition | undefined> => {
@@ -460,7 +459,7 @@ async function makeDefinition(
   let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;

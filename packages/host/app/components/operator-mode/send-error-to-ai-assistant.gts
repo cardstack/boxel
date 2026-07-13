@@ -126,15 +126,15 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     return truncateForAi(assembled, AI_PROMPT_TOTAL_MAX_CHARS) ?? assembled;
   }
 
-  get commandContext() {
-    return this.toolService.commandContext;
+  get toolContext() {
+    return this.toolService.toolContext;
   }
 
   private sendToAiAssistant = restartableTask(async () => {
-    await new OpenAiAssistantRoomTool(this.commandContext).execute({
+    await new OpenAiAssistantRoomTool(this.toolContext).execute({
       roomId: this.matrixService.currentRoomId,
     });
-    await new SendAiAssistantMessageTool(this.commandContext).execute({
+    await new SendAiAssistantMessageTool(this.toolContext).execute({
       roomId: this.matrixService.currentRoomId,
       prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       attachedFileIdentifiers: this.args.fileToAttach

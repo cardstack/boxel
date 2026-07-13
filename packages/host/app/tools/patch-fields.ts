@@ -34,10 +34,10 @@ export default class PatchFieldsTool extends HostBaseTool<
   requireInputFields = ['cardId', 'fieldUpdates'];
 
   constructor(
-    commandContext: ToolContext,
+    toolContext: ToolContext,
     private readonly configuration?: Configuration,
   ) {
-    super(commandContext);
+    super(toolContext);
   }
 
   async getInputType() {

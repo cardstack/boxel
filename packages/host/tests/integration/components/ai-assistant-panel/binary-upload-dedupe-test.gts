@@ -9,7 +9,6 @@ import { module, test } from 'qunit';
 
 import { md5 } from 'super-fast-md5';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -77,7 +76,7 @@ module(
     setupOnSave(hooks);
     setupCardLogs(
       hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
+      async () => await loader.import('@cardstack/base/card-api'),
     );
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

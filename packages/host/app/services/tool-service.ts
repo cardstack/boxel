@@ -36,7 +36,7 @@ import PatchCodeTool from '@cardstack/host/tools/patch-code';
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
-  isAutoExecutableCommand,
+  isAutoExecutableTool,
 } from '../lib/tool-auto-execute';
 
 import type LoaderService from './loader-service';
@@ -65,7 +65,7 @@ type GenericCommand = Command<
   typeof CardDef | undefined
 >;
 
-const commandProcessingWaiter = buildWaiter('tool-service:command-processing');
+const toolProcessingWaiter = buildWaiter('tool-service:command-processing');
 
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
@@ -96,9 +96,9 @@ export default class ToolService extends Service {
     string,
     { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
   >();
-  private commandProcessingEventQueue: string[] = [];
+  private toolProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
-  private flushCommandProcessingQueue: Promise<void> | undefined;
+  private flushToolProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
   constructor(owner: Owner) {
@@ -118,9 +118,9 @@ export default class ToolService extends Service {
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
       this.cleanupInvalidationWaiter(key);
     }
-    this.commandProcessingEventQueue = [];
+    this.toolProcessingEventQueue = [];
     this.codePatchProcessingEventQueue = [];
-    this.flushCommandProcessingQueue = undefined;
+    this.flushToolProcessingQueue = undefined;
     this.flushCodePatchProcessingQueue = undefined;
   }
 
@@ -269,11 +269,11 @@ export default class ToolService extends Service {
       );
     }
     let compoundKey = `${roomId}|${eventId}`;
-    if (this.commandProcessingEventQueue.includes(compoundKey)) {
+    if (this.toolProcessingEventQueue.includes(compoundKey)) {
       return;
     }
 
-    this.commandProcessingEventQueue.push(compoundKey);
+    this.toolProcessingEventQueue.push(compoundKey);
 
     debounce(this, this.drainToolProcessingQueue, 100);
   }
@@ -305,20 +305,20 @@ export default class ToolService extends Service {
   }
 
   private async drainToolProcessingQueue() {
-    let waiterToken = commandProcessingWaiter.beginAsync();
+    let waiterToken = toolProcessingWaiter.beginAsync();
     try {
-      await this.flushCommandProcessingQueue;
+      await this.flushToolProcessingQueue;
 
-      let finishedProcessingCommands: () => void;
-      this.flushCommandProcessingQueue = new Promise(
-        (res) => (finishedProcessingCommands = res),
+      let finishedProcessingTools: () => void;
+      this.flushToolProcessingQueue = new Promise(
+        (res) => (finishedProcessingTools = res),
       );
 
-      let commandSpecs = [...this.commandProcessingEventQueue];
-      this.commandProcessingEventQueue = [];
+      let toolSpecs = [...this.toolProcessingEventQueue];
+      this.toolProcessingEventQueue = [];
 
-      while (commandSpecs.length > 0) {
-        let [roomId, eventId] = commandSpecs.shift()!.split('|');
+      while (toolSpecs.length > 0) {
+        let [roomId, eventId] = toolSpecs.shift()!.split('|');
 
         let roomResource = this.matrixService.roomResources.get(roomId!);
         if (!roomResource) {
@@ -356,7 +356,7 @@ export default class ToolService extends Service {
           console.error(
             `Room resource for room ${roomId} seems to be stuck processing, invalidating auto-executable commands on event ${eventId}`,
           );
-          await this.invalidateAutoExecutableCommandsForStuckProcessing(
+          await this.invalidateAutoExecutableToolsForStuckProcessing(
             roomResource,
             roomId!,
             eventId!,
@@ -374,32 +374,32 @@ export default class ToolService extends Service {
         }
 
         // Collect all ready commands for this message
-        let readyCommands: any[] = [];
-        for (let messageCommand of message.tools) {
+        let readyTools: any[] = [];
+        for (let messageTool of message.tools) {
           // ai-bot ran this one itself (e.g. readRealmFile). The host neither
           // validates nor runs it — it has no command class to resolve, and the
           // bot posts its own result. Must come before validate(), which would
           // otherwise mark it "No command found".
-          if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
+          if (messageTool.executedBy === AI_BOT_EXECUTOR) {
             continue;
           }
-          if (this.currentlyExecutingToolRequestIds.has(messageCommand.id!)) {
+          if (this.currentlyExecutingToolRequestIds.has(messageTool.id!)) {
             continue;
           }
-          if (this.executedToolRequestIds.has(messageCommand.id!)) {
+          if (this.executedToolRequestIds.has(messageTool.id!)) {
             continue;
           }
           if (
-            messageCommand.status === 'applied' ||
-            messageCommand.status === 'invalid'
+            messageTool.status === 'applied' ||
+            messageTool.status === 'invalid'
           ) {
             continue;
           }
-          if (!messageCommand.name) {
+          if (!messageTool.name) {
             continue;
           }
 
-          let isValid = await this.validate(messageCommand);
+          let isValid = await this.validate(messageTool);
           if (!isValid) {
             continue;
           }
@@ -413,22 +413,18 @@ export default class ToolService extends Service {
           // every command reaching this point is owned by the current
           // agent.
           if (
-            isAutoExecutableCommand(
-              messageCommand,
-              activeModeAtMessageTime,
-              true,
-            )
+            isAutoExecutableTool(messageTool, activeModeAtMessageTime, true)
           ) {
-            readyCommands.push(messageCommand);
+            readyTools.push(messageTool);
           }
         }
 
         // Execute ready commands, tracking accept-all state if multiple commands
-        if (readyCommands.length > 0) {
+        if (readyTools.length > 0) {
           // This is an "accept all" operation - multiple commands ready for execution
           this.acceptingAllRoomIds.add(roomId!);
           try {
-            for (let command of readyCommands) {
+            for (let command of readyTools) {
               this.run.perform(command);
             }
           } finally {
@@ -436,13 +432,13 @@ export default class ToolService extends Service {
           }
         }
       }
-      finishedProcessingCommands!();
+      finishedProcessingTools!();
     } finally {
-      commandProcessingWaiter.endAsync(waiterToken);
+      toolProcessingWaiter.endAsync(waiterToken);
     }
   }
 
-  private async invalidateAutoExecutableCommandsForStuckProcessing(
+  private async invalidateAutoExecutableToolsForStuckProcessing(
     roomResource: RoomResource,
     roomId: string,
     eventId: string,
@@ -457,13 +453,13 @@ export default class ToolService extends Service {
     let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
       message.eventId,
     );
-    for (let messageCommand of message.tools) {
+    for (let messageTool of message.tools) {
       // ai-bot ran this one itself (e.g. readRealmFile): not the host's to run,
       // so not the host's to invalidate when processing wedges.
-      if (messageCommand.executedBy === AI_BOT_EXECUTOR) {
+      if (messageTool.executedBy === AI_BOT_EXECUTOR) {
         continue;
       }
-      let commandRequestId = messageCommand.toolRequest.id;
+      let commandRequestId = messageTool.toolRequest.id;
       // Without a tool call id we can't address a command result event, so
       // there's nothing to invalidate.
       if (!commandRequestId) {
@@ -476,26 +472,24 @@ export default class ToolService extends Service {
         continue;
       }
       if (
-        messageCommand.status === 'applied' ||
-        messageCommand.status === 'invalid'
+        messageTool.status === 'applied' ||
+        messageTool.status === 'invalid'
       ) {
         continue;
       }
-      if (!messageCommand.name) {
+      if (!messageTool.name) {
         continue;
       }
       // The outer agentId gate already verified ownership, so this command
       // is owned by the current agent.
-      if (
-        !isAutoExecutableCommand(messageCommand, activeModeAtMessageTime, true)
-      ) {
+      if (!isAutoExecutableTool(messageTool, activeModeAtMessageTime, true)) {
         // Manual-approval commands stay 'ready' — the action bar's Run
         // button is still the user's fallback for those.
         continue;
       }
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
-        messageCommand.eventId;
+        messageTool.eventId;
       await this.matrixService.sendToolResultEvent({
         roomId,
         invokedToolFromEventId,
@@ -510,7 +504,7 @@ export default class ToolService extends Service {
   }
 
   private async drainCodePatchProcessingQueue() {
-    let waiterToken = commandProcessingWaiter.beginAsync();
+    let waiterToken = toolProcessingWaiter.beginAsync();
     try {
       await this.flushCodePatchProcessingQueue;
 
@@ -619,11 +613,18 @@ export default class ToolService extends Service {
       }
       finishedProcessingCodePatches!();
     } finally {
-      commandProcessingWaiter.endAsync(waiterToken);
+      toolProcessingWaiter.endAsync(waiterToken);
     }
   }
 
+  // Pre-rename spelling of `toolContext`: realm content constructs tools with
+  // `getService('tool-service').commandContext` (and via the command-service
+  // registration alias). Stays until no deployed content references it.
   get commandContext(): ToolContext {
+    return this.toolContext;
+  }
+
+  get toolContext(): ToolContext {
     let result = {
       [ToolContextStamp]: true,
     };
@@ -697,32 +698,32 @@ export default class ToolService extends Service {
       this.matrixService.failedToolState.delete(commandRequestId!);
       this.currentlyExecutingToolRequestIds.add(commandRequestId!);
 
-      let commandToRun;
+      let toolToRun;
 
       // If we don't find it in the one-offs, start searching for
       // one in the skills we can construct
-      let commandCodeRef = command.codeRef;
-      if (commandCodeRef) {
+      let toolCodeRef = command.codeRef;
+      if (toolCodeRef) {
         let ToolConstructor = (await getClass(
-          commandCodeRef,
+          toolCodeRef,
           this.loaderService.loader,
         )) as { new (context: ToolContext): Command<any, any> };
-        commandToRun = new ToolConstructor(this.commandContext);
+        toolToRun = new ToolConstructor(this.toolContext);
       }
 
-      if (!commandToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-        commandToRun = new CheckCorrectnessTool(this.commandContext);
+      if (!toolToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+        toolToRun = new CheckCorrectnessTool(this.toolContext);
       }
 
-      if (commandToRun) {
-        let typedInput = await this.instantiateCommandInput(
-          commandToRun,
+      if (toolToRun) {
+        let typedInput = await this.instantiateToolInput(
+          toolToRun,
           payload?.attributes,
           payload?.relationships,
         );
 
         [resultCard] = await all([
-          await commandToRun.execute(typedInput as any),
+          await toolToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
       } else if (command.name === 'patchCardInstance') {
@@ -803,28 +804,28 @@ export default class ToolService extends Service {
       return true;
     }
 
-    let commandCodeRef = command.codeRef;
-    let commandInstance: GenericCommand | undefined;
+    let toolCodeRef = command.codeRef;
+    let toolInstance: GenericCommand | undefined;
 
     if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-      commandInstance = new CheckCorrectnessTool(this.commandContext);
-    } else if (!commandCodeRef) {
+      toolInstance = new CheckCorrectnessTool(this.toolContext);
+    } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
       let ToolConstructor = (await getClass(
-        commandCodeRef,
+        toolCodeRef,
         this.loaderService.loader,
       )) as { new (context: ToolContext): Command<any, any> };
       if (!ToolConstructor) {
         error = `No command for the name "${command.name}" was found`;
       } else {
-        commandInstance = new ToolConstructor(this.commandContext);
+        toolInstance = new ToolConstructor(this.toolContext);
       }
     }
 
-    if (commandInstance && !error) {
+    if (toolInstance && !error) {
       let loader = (
-        getOwner(this.commandContext)!.lookup(
+        getOwner(this.toolContext)!.lookup(
           'service:loader-service',
         ) as LoaderService
       ).loader;
@@ -835,7 +836,7 @@ export default class ToolService extends Service {
           description: {
             type: 'string',
           },
-          ...(await commandInstance.getInputJsonSchema(
+          ...(await toolInstance.getInputJsonSchema(
             this.matrixService.cardAPI,
             mappings,
           )),
@@ -875,7 +876,7 @@ export default class ToolService extends Service {
 
   // Construct a new instance of the input type with the
   // The input is undefined if the command has no input type
-  private async instantiateCommandInput(
+  private async instantiateToolInput(
     command: GenericCommand,
     attributes: Record<string, any> | undefined,
     relationships: Record<string, any> | undefined,
@@ -931,7 +932,7 @@ export default class ToolService extends Service {
     let finalFileIdentifier: string | undefined;
 
     try {
-      let patchCodeCommand = new PatchCodeTool(this.commandContext);
+      let patchCodeCommand = new PatchCodeTool(this.toolContext);
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileIdentifier: fileUrl,

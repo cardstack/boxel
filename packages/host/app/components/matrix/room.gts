@@ -57,7 +57,7 @@ import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
-import { isAutoExecutableCommand } from '@cardstack/host/lib/tool-auto-execute';
+import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { isReady } from '@cardstack/host/resources/file';
 import type { RoomResource } from '@cardstack/host/resources/room';
@@ -1759,7 +1759,7 @@ export default class Room extends Component<Signature> {
 
   private updateSkillIsActiveTask = task(
     async (isActive: boolean, skillCardId?: string) => {
-      await new UpdateRoomSkillsTool(this.toolService.commandContext).execute({
+      await new UpdateRoomSkillsTool(this.toolService.toolContext).execute({
         roomId: this.args.roomId,
         skillCardIdsToActivate: isActive ? [skillCardId!] : [],
         skillCardIdsToDeactivate: isActive ? [] : [skillCardId!],
@@ -1809,7 +1809,7 @@ export default class Room extends Component<Signature> {
 
   private attachSkillTask = task(async (cardId: string) => {
     let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
 
     await updateRoomSkillsCommand.execute({
@@ -1856,7 +1856,7 @@ export default class Room extends Component<Signature> {
   }
 
   @cached
-  private get readyCommands() {
+  private get readyTools() {
     let lastMessage = this.messages[this.messages.length - 1];
 
     if (!lastMessage || !lastMessage.tools) {
@@ -1878,7 +1878,7 @@ export default class Room extends Component<Signature> {
         // tool-service flips `acceptingAllRoomIds`. Without this filter,
         // the bar paints and then yanks itself once auto-execution starts,
         // which is the CS-11647 glitch.
-        !isAutoExecutableCommand(command, activeMode, isOwnedByCurrentAgent),
+        !isAutoExecutableTool(command, activeMode, isOwnedByCurrentAgent),
     );
   }
 
@@ -1919,14 +1919,14 @@ export default class Room extends Component<Signature> {
     return (
       this.showUnreadIndicator ||
       this.generatingResults ||
-      this.readyCommands.length > 0 ||
+      this.readyTools.length > 0 ||
       this.readyCodePatches.length > 0 ||
       this.isAcceptingAll
     );
   }
 
   private async executeReadyCommands() {
-    for (let command of this.readyCommands) {
+    for (let command of this.readyTools) {
       this.acceptingAllLabel = command.actionVerb;
       await this.toolService.run.unlinked().perform(command);
       this.acceptingAllLabel = undefined;

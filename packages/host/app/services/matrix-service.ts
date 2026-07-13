@@ -170,6 +170,11 @@ const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
+// Bound on the test-only `postLoginCompleted` transition record below. A boot
+// records one →true and a teardown one →false, so a handful of entries covers
+// even a re-entrant boot; keeping the most recent dozen is ample.
+const MAX_POST_LOGIN_TRANSITIONS = 12;
+
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private loggerService: LoggerService;
@@ -187,6 +192,19 @@ export default class MatrixService extends Service {
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
+  // Test-only provenance for the intermittent cold-boot "operator-mode renders
+  // the login form" flake: a bounded record of every `postLoginCompleted`
+  // transition (direction + reason + wall-clock + stack). The CI console output
+  // is a rolling buffer that evicts the causal reset before the post-timeout
+  // diagnostic runs, so this structured record — sampled into that diagnostic
+  // (see host tests/helpers/setup.ts) — survives to name which caller flipped
+  // the flag and when. Written only under `isTesting()`; never in production.
+  #postLoginTransitions: {
+    to: boolean;
+    reason: string;
+    atMs: number;
+    stack: string;
+  }[] = [];
   // When true, `app.boxel.realm-servers` is the authoritative source of
   // the user's realm list and `app.boxel.realms` events are ignored for
   // `setAvailableRealmIdentifiers`. Set during boot from whether that key
@@ -487,14 +505,52 @@ export default class MatrixService extends Service {
 
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
-  // decides to render <Auth/>. No production caller.
+  // decides to render <Auth/>, plus a compact tail of the `postLoginCompleted`
+  // transitions that got it there. No production caller.
   get loginReadinessDebug() {
+    let now = Date.now();
     return {
       authPresent: Boolean(this.getAuth()),
       clientExists: Boolean(this._client),
       clientLoggedIn: this._client?.isLoggedIn() === true,
       postLoginCompleted: this.postLoginCompleted,
+      postLoginTransitions: this.#postLoginTransitions.map(
+        (t) =>
+          `${t.to ? '→true' : '→false'}(${t.reason}, ${now - t.atMs}ms ago)`,
+      ),
     };
+  }
+
+  // Full `postLoginCompleted` transition provenance, with stacks, for the
+  // eviction-proof timeout diagnostic. `msAgo` is computed at read time so it
+  // stays meaningful after a snapshot survives owner teardown. Test-only.
+  get postLoginTransitionsDebug() {
+    let now = Date.now();
+    return this.#postLoginTransitions.map((t) => ({
+      to: t.to,
+      reason: t.reason,
+      msAgo: now - t.atMs,
+      stack: t.stack,
+    }));
+  }
+
+  // Route every `postLoginCompleted` write through here so the transition
+  // record above captures which caller flipped it and when. The recording is
+  // `isTesting()`-gated, so in production this is just the field assignment —
+  // no runtime behavior change.
+  private setPostLoginCompleted(value: boolean, reason: string) {
+    if (isTesting()) {
+      this.#postLoginTransitions.push({
+        to: value,
+        reason,
+        atMs: Date.now(),
+        stack: new Error().stack ?? '<no stack>',
+      });
+      if (this.#postLoginTransitions.length > MAX_POST_LOGIN_TRANSITIONS) {
+        this.#postLoginTransitions.shift();
+      }
+    }
+    this.postLoginCompleted = value;
   }
 
   // Test-only diagnostic exposing which boot path the current session is on.
@@ -622,7 +678,7 @@ export default class MatrixService extends Service {
             new Error().stack,
         );
       }
-      this.postLoginCompleted = false;
+      this.setPostLoginCompleted(false, 'logout');
       // Logout is the explicit boundary where we forget persisted workspace UI
       // state for the signed-in user. Generic reset paths must stay in-memory
       // only so tests and app reloads do not accidentally wipe durable state.
@@ -1084,7 +1140,7 @@ export default class MatrixService extends Service {
         if (isTesting()) console.warn('[start-phase] loginToRealms');
         await this.loginToRealms();
 
-        this.postLoginCompleted = true;
+        this.setPostLoginCompleted(true, 'start-success');
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
 
         // If any trusted server was unreachable during boot assembly, keep
@@ -1421,10 +1477,10 @@ export default class MatrixService extends Service {
     if (validCommandDefinitions.length === 0) {
       return [];
     }
-    let commandFileDefs = await this.client.uploadToolDefinitions(
+    let toolFileDefs = await this.client.uploadToolDefinitions(
       validCommandDefinitions,
     );
-    return commandFileDefs;
+    return toolFileDefs;
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
@@ -1744,7 +1800,7 @@ export default class MatrixService extends Service {
     // Generate tool calls for patching currently open cards permitted for modification
     tools = tools.concat(
       await addPatchTools(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
         patchableCards,
         this.cardAPI,
       ),
@@ -1993,7 +2049,7 @@ export default class MatrixService extends Service {
           new Error().stack,
       );
     }
-    this.postLoginCompleted = false;
+    this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
@@ -2815,7 +2871,7 @@ export default class MatrixService extends Service {
     }
 
     let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     );
     let defaultSkillIds = await this.loadDefaultSkills('code');
     await updateRoomSkillsCommand.execute({

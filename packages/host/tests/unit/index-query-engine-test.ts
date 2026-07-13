@@ -77,12 +77,12 @@ module('Unit | query', function (hooks) {
       virtualNetwork,
     });
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    date = await loader.import(`${baseRealm.url}date`);
-    number = await loader.import(`${baseRealm.url}number`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    date = await loader.import('@cardstack/base/date');
+    number = await loader.import('@cardstack/base/number');
+    boolean = await loader.import('@cardstack/base/boolean');
+    codeRef = await loader.import('@cardstack/base/code-ref');
 
     let {
       field,
@@ -225,7 +225,7 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
 
     async function buildDefinition(cardDef: typeof CardDef) {
       let { fields, fieldDefs } = getFieldDefinitions(api, cardDef);

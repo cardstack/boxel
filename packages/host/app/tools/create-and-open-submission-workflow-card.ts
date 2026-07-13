@@ -21,7 +21,7 @@ export default class CreateAndOpenSubmissionWorkflowCardTool extends HostBaseToo
   protected async run(
     input: BaseToolModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
-    await new CreateSubmissionWorkflowTool(this.commandContext).execute({
+    await new CreateSubmissionWorkflowTool(this.toolContext).execute({
       realm: input.realm,
       listingId: input.listingId,
       listingName: input.listingName,

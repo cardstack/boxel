@@ -48,7 +48,7 @@ import {
   entriesToCssRuleMap,
   normalizeCssRuleMap,
 } from './helpers/theme-css.ts';
-import { themeScopedCss } from './helpers/theme-scoped-css.ts';
+import { themeScope, themeScopedCss } from './helpers/theme-scoped-css.ts';
 import {
   and,
   bool,
@@ -122,6 +122,7 @@ export {
   sanitizeHtmlSafe,
   substring,
   subtract,
+  themeScope,
   themeScopedCss,
   toMenuItems,
 };

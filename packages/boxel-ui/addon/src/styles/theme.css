@@ -112,6 +112,13 @@
   --shadow-xl:
     0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  /* status */
+  --success: var(--boxel-success);
+  --warning: var(--boxel-warning);
+
+  /* other */
+  --boxel-switch-background: var(--boxel-400);
 }
 
 /* Themed-card boundary reset for the --theme-* knobs (typography roles, base
@@ -145,6 +152,9 @@
   --theme-caption-font-size: initial;
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
+  --boxel-switch-background: initial;
+  --success: initial;
+  --warning: initial;
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────

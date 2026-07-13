@@ -791,6 +791,23 @@ module(basename(import.meta.filename), function () {
         ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
         `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
       );
+
+      // The search-doc settle aggregates ride the same channel onto the
+      // persisted row: render.meta stamps them on every card visit.
+      let diagnostics = diagRow?.diagnostics as
+        | { searchDocSettleMs?: unknown; searchDocSettlePasses?: unknown }
+        | null
+        | undefined;
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettleMs,
+        'number',
+        `diagnostics.searchDocSettleMs persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettleMs)}`,
+      );
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettlePasses,
+        'number',
+        `diagnostics.searchDocSettlePasses persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettlePasses)}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
