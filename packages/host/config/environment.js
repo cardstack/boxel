@@ -166,14 +166,6 @@ module.exports = function (environment) {
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    // Same value as resolvedCatalogRealmURL, but never nulled out by the
-    // `environment === 'test'` block below. Live tests (testem-live.js) run
-    // against a real catalog realm, unlike the mocked qunit suite, so
-    // NetworkService falls back to this to restore the @cardstack/catalog/
-    // mapping specifically for live-test runs.
-    rawCatalogRealmURL: skipCatalog
-      ? undefined
-      : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
