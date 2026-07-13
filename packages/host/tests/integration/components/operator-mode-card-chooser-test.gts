@@ -440,9 +440,12 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
-    await fillIn(`[data-test-search-field]`, 'Mark J');
-    // Wait for the specific result (Author/mark matches "Mark J" via its
-    // cardTitle "Mark Jackson") rather than polling the label's innerText;
+    // "Mark Jackson" (Author/mark's cardTitle) rather than a shorter prefix:
+    // the sheet spans files too, and full-text word-AND matching would let a
+    // vaguer term (e.g. "Mark J") also hit skills-realm docs that contain
+    // "mark" and "j" — this assertion wants exactly the one card.
+    await fillIn(`[data-test-search-field]`, 'Mark Jackson');
+    // Wait for the specific result rather than polling the label's innerText;
     // DOM-element waits aren't racy against the transient "Searching…" state.
     await waitFor(`[data-test-search-result="${testRealmURL}Author/mark"]`, {
       timeout: 15000,

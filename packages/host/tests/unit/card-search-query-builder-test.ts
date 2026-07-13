@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   baseCardRef,
+  baseRef,
   excludeCardInstanceFileRows,
   specRef,
   type Filter,
@@ -65,8 +66,13 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
-    test('a positively-typed baseFilter passes through alone — the picked type already selects one kind', function (assert) {
-      let baseFilter: Filter = { type: baseCardRef };
+    test('a narrowing-typed baseFilter passes through alone — the picked type already selects one kind', function (assert) {
+      let baseFilter: Filter = {
+        type: {
+          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          name: 'Author',
+        },
+      };
       let query = buildSearchQuery('', SORT_AZ, baseFilter);
       assert.deepEqual(query, {
         filter: baseFilter,
@@ -74,8 +80,13 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
-    test('baseFilter with non-empty search wraps in every and OR-combines matches + _title', function (assert) {
-      let baseFilter: Filter = { type: baseCardRef };
+    test('narrowing baseFilter with non-empty search wraps in every and OR-combines matches + _title', function (assert) {
+      let baseFilter: Filter = {
+        type: {
+          module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+          name: 'Author',
+        },
+      };
       let query = buildSearchQuery('puppy', SORT_AZ, baseFilter);
       assert.deepEqual(query, {
         filter: {
@@ -88,6 +99,55 @@ module('Unit | card-search/query-builder', function () {
         },
         sort: SORT_AZ.sort,
       });
+    });
+
+    test('a kind-spanning root baseFilter keeps the card-json dedup', function (assert) {
+      // The search sheet's base filter: BaseDef spans cards and files, so a
+      // card's dual-indexed `.json` file row matches it too and must still be
+      // deduped — unlike a narrowing type, a root ref doesn't select one kind.
+      let baseFilter: Filter = { type: baseRef };
+      let query = buildSearchQuery('mango', SORT_AZ, baseFilter);
+      assert.deepEqual(query, {
+        filter: {
+          every: [
+            baseFilter,
+            {
+              any: [{ matches: 'mango' }, { contains: { _title: 'mango' } }],
+            },
+            DEDUP_FILTER,
+          ],
+        },
+        sort: SORT_AZ.sort,
+      });
+    });
+
+    test('root refs inside a compound baseFilter also keep the dedup', function (assert) {
+      let baseFilter: Filter = {
+        any: [{ type: baseCardRef }, { type: baseRef }],
+      };
+      let query = buildSearchQuery('', SORT_AZ, baseFilter);
+      assert.deepEqual(query, {
+        filter: { every: [baseFilter, DEDUP_FILTER] },
+        sort: SORT_AZ.sort,
+      });
+    });
+
+    test('a picked type strips the root baseFilter and skips the dedup', function (assert) {
+      let markdownRef = {
+        module:
+          'https://cardstack.com/base/markdown-file-def' as RealmResourceIdentifier,
+        name: 'MarkdownDef',
+      };
+      let typeKey = `${markdownRef.module}/${markdownRef.name}`;
+      let query = buildSearchQuery('', SORT_AZ, { type: baseRef }, [typeKey]);
+      assert.deepEqual(
+        query,
+        {
+          filter: { type: markdownRef },
+          sort: SORT_AZ.sort,
+        },
+        'the picked file type must stay free to surface card .json file rows',
+      );
     });
 
     test('search with a selected type produces a type filter alongside the search-term filter', function (assert) {
@@ -180,13 +240,10 @@ module('Unit | card-search/query-builder', function () {
       assert.strictEqual(searchScopeForOptions({ cardsOnly: true }), 'cards');
     });
 
-    test('the mixed default leaves the scope unset (all)', function (assert) {
-      assert.strictEqual(searchScopeForOptions({}), undefined);
-      assert.strictEqual(searchScopeForOptions(undefined), undefined);
-      assert.strictEqual(
-        searchScopeForOptions({ cardsOnly: false }),
-        undefined,
-      );
+    test('anything else is the mixed "all" wire scope', function (assert) {
+      assert.strictEqual(searchScopeForOptions({}), 'all');
+      assert.strictEqual(searchScopeForOptions(undefined), 'all');
+      assert.strictEqual(searchScopeForOptions({ cardsOnly: false }), 'all');
     });
   });
 

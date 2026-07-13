@@ -23,8 +23,7 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 import {
   type Filter,
   type ResolvedCodeRef,
-  baseCardRef,
-  baseFieldRef,
+  baseRef,
 } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -80,9 +79,12 @@ const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
     element.removeEventListener('transitionend', handler as EventListener);
 });
 
-const BASE_FILTER: Filter = {
-  any: [{ type: baseCardRef }, { type: baseFieldRef }],
-};
+// The sheet searches everything the index knows — cards (including specs,
+// which the default `not: specRef` query path excludes), field instances, and
+// files. BaseDef is the common ancestor stamped on both instance and file type
+// chains, so this one ref spans all kinds; `scope: 'all'` rides the wire
+// alongside (see `searchScopeForOptions`).
+const BASE_FILTER: Filter = { type: baseRef };
 
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
@@ -122,7 +124,7 @@ export default class SearchSheet extends Component<Signature> {
       mode == SearchSheetModes.SearchPrompt ||
       mode == SearchSheetModes.ChoosePrompt
     ) {
-      return 'Search for cards or enter card URL';
+      return 'Search for cards and files or enter card URL';
     }
     return 'Search for…';
   }

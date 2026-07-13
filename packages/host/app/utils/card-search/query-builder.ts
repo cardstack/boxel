@@ -6,6 +6,10 @@ import type {
   SearchEntryScope,
 } from '@cardstack/runtime-common';
 import {
+  baseCardRef,
+  baseFieldRef,
+  baseFileRef,
+  baseRef,
   codeRefFromInternalKey,
   excludeCardInstanceFileRows,
   getTypeRefsFromFilter,
@@ -13,6 +17,7 @@ import {
   isCardTypeFilter,
   isEveryFilter,
   isNotFilter,
+  isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 
@@ -105,32 +110,59 @@ function buildSearchTermFilter(searchTerm: string): Filter {
 // `searchScopeForOptions`), which pins `boxel_index.type` to instance rows
 // server-side — no filter anchor needed, and immune to a stray file-type filter
 // (which just yields no results rather than leaking files). The mixed sheet
-// (no `cardsOnly`, default `scope: 'all'`) still discriminates the one case
-// scope can't: dropping a card's dual-indexed `.json` file row so the card
-// shows once. See `scopeFilters`.
+// (no `cardsOnly`, `scope: 'all'`) still discriminates the one case scope
+// can't: dropping a card's dual-indexed `.json` file row so the card shows
+// once. See `scopeFilters`.
 export interface BuildQueryOptions {
   cardsOnly?: boolean;
 }
 
-// The wire scope for a set of build options. cardsOnly pins card-instance rows;
-// the mixed default leaves scope unset ('all').
+// The wire scope for a set of build options. cardsOnly pins card-instance
+// rows; anything else is the mixed cards + files search.
 export function searchScopeForOptions(
   opts: BuildQueryOptions | undefined,
-): SearchEntryScope | undefined {
-  return opts?.cardsOnly ? 'cards' : undefined;
+): SearchEntryScope {
+  return opts?.cardsOnly ? 'cards' : 'all';
 }
 
-function hasPositiveTypeRef(filter: Filter | undefined): boolean {
+// The root refs span kinds rather than narrowing to one — BaseDef is the
+// common ancestor of every row, and CardDef/FieldDef/FileDef are each kind's
+// own root (see `getRootTypeKeys` in type-filter.ts for the picker-side
+// analogue). A base filter built from them (e.g. the search sheet's
+// `{ type: baseRef }`) matches a card's dual-indexed `.json` file row too, so
+// it must not suppress the mixed-scope dedup the way a genuinely narrowing
+// type ref does.
+const ROOT_TYPE_REFS: ResolvedCodeRef[] = [
+  baseRef,
+  baseCardRef,
+  baseFieldRef,
+  baseFileRef,
+];
+
+function isRootTypeRef(ref: CodeRef): boolean {
+  return (
+    isResolvedCodeRef(ref) &&
+    ROOT_TYPE_REFS.some(
+      (root) => root.module === ref.module && root.name === ref.name,
+    )
+  );
+}
+
+function hasNarrowingPositiveTypeRef(filter: Filter | undefined): boolean {
   if (!filter) {
     return false;
   }
-  return getTypeRefsFromFilter(filter)?.some((r) => !r.negated) ?? false;
+  return (
+    getTypeRefsFromFilter(filter)?.some(
+      (r) => !r.negated && !isRootTypeRef(r.ref),
+    ) ?? false
+  );
 }
 
 function scopeFilters(
   filters: Filter[],
   opts: BuildQueryOptions | undefined,
-  hasPositiveType: boolean,
+  hasNarrowingType: boolean,
 ): Filter[] {
   // cardsOnly is enforced by `scope: 'cards'` on the wire, so nothing to add.
   if (opts?.cardsOnly) {
@@ -138,10 +170,12 @@ function scopeFilters(
   }
   // Mixed (`scope: 'all'`) sheet: drop a card's dual-indexed `.json` file row so
   // the card shows once (via its instance row). Skipped when the filter already
-  // carries a positive type ref — a picked card type matches only instance rows
-  // (no dupe to drop), and a picked file type must stay free to surface a
-  // `.json` file row that legitimately matches it.
-  if (hasPositiveType) {
+  // carries a kind-narrowing positive type ref — a picked card type matches only
+  // instance rows (no dupe to drop), and a picked file type must stay free to
+  // surface a `.json` file row that legitimately matches it. Root refs
+  // (BaseDef/CardDef/FieldDef/FileDef) don't count: they span kinds, so the
+  // dedup is still needed (see `hasNarrowingPositiveTypeRef`).
+  if (hasNarrowingType) {
     return filters;
   }
   return [...filters, excludeCardInstanceFileRows()];
@@ -179,7 +213,7 @@ export function buildSearchQuery(
   filters = scopeFilters(
     filters,
     opts,
-    Boolean(typeFilter) || hasPositiveTypeRef(baseFilter),
+    Boolean(typeFilter) || hasNarrowingPositiveTypeRef(baseFilter),
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
@@ -231,7 +265,7 @@ export function buildRecentsQuery(
   filters = scopeFilters(
     filters,
     opts,
-    Boolean(typeFilter) || hasPositiveTypeRef(baseFilter),
+    Boolean(typeFilter) || hasNarrowingPositiveTypeRef(baseFilter),
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
