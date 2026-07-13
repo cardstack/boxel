@@ -1,3 +1,5 @@
+import type { ToolContext, ToolSchemaError } from '@cardstack/runtime-common';
+
 import {
   Component,
   FieldDef,
@@ -6,6 +8,34 @@ import {
   type BaseDefComponent,
 } from './card-api';
 import { JsonField } from './json-field';
+
+// Extraction-time inputs handed to `fromFrontmatter` by
+// `MarkdownDef.extractAttributes`.
+export interface FromFrontmatterContext {
+  // The markdown file's URL; relative references in the frontmatter (e.g. a
+  // skill tool's codeRef module) resolve against it.
+  fileURL: string;
+  // Owner-carrying context for constructing tool classes during index-time
+  // schema generation. Only the indexing path provides one; its presence is
+  // what enables the (module-loading, hence costly) schema work, so
+  // interactive extract paths never pay for it.
+  toolContext?: ToolContext;
+}
+
+// What `fromFrontmatter` hands back to `MarkdownDef.extractAttributes`.
+export interface FromFrontmatterResult {
+  // The frontmatter field's serialized attributes — the value that lands in
+  // the search doc and, absent `fileMetaAttributes`, in the file-meta
+  // resource too.
+  attributes: Record<string, unknown>;
+  // Index-only enrichment of `attributes` (e.g. a skill's generated tool
+  // definitions) destined for the file-meta resource. Kept separate because
+  // multi-KB generated content must never land in `search_doc`.
+  fileMetaAttributes?: Record<string, unknown>;
+  // Skill frontmatter tools whose schema generation failed. The extract
+  // still succeeds; these surface via `diagnostics.toolSchemaErrors`.
+  toolSchemaErrors?: ToolSchemaError[];
+}
 
 // The parsed YAML frontmatter of a markdown file, captured as JSON. The base
 // type holds the entire frontmatter in `rawContent`; when the frontmatter
@@ -22,12 +52,13 @@ export class FrontmatterField extends FieldDef {
 
   // Map a file's parsed frontmatter into this field's serialized attributes.
   // The base keeps the whole frontmatter as the raw copy; subclasses add their
-  // own typed fields. A subclass is the only thing that knows its own
-  // frontmatter schema.
-  static fromFrontmatter(
+  // own typed fields and any index-time enrichment of them. A subclass is the
+  // only thing that knows its own frontmatter schema.
+  static async fromFrontmatter(
     frontmatter: Record<string, unknown>,
-  ): Record<string, unknown> {
-    return { rawContent: frontmatter };
+    _context?: FromFrontmatterContext,
+  ): Promise<FromFrontmatterResult> {
+    return { attributes: { rawContent: frontmatter } };
   }
 
   static embedded: BaseDefComponent = class Embedded extends Component<
@@ -39,8 +70,6 @@ export class FrontmatterField extends FieldDef {
         | undefined;
       return raw?.boxel?.kind ?? '';
     }
-    <template>
-      {{this.kind}}
-    </template>
+    <template>{{this.kind}}</template>
   };
 }
