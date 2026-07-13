@@ -34,7 +34,7 @@ module('Integration | Component | broken-link', function (hooks) {
           @errorDoc={{notFoundDoc}}
           @state='not-found'
           @format='embedded'
-          @typeName='Author'
+          @displayName='Author'
         />
       </template>,
     );
@@ -68,7 +68,7 @@ module('Integration | Component | broken-link', function (hooks) {
           @errorDoc={{errorDoc}}
           @state='error'
           @format='isolated'
-          @typeName='Author'
+          @displayName='Author'
         />
       </template>,
     );
@@ -91,7 +91,7 @@ module('Integration | Component | broken-link', function (hooks) {
           @errorDoc={{notFoundDoc}}
           @state='not-found'
           @format='embedded'
-          @typeName='Author'
+          @displayName='Author'
         />
       </template>,
     );
@@ -106,7 +106,7 @@ module('Integration | Component | broken-link', function (hooks) {
           @errorDoc={{errorDoc}}
           @state='error'
           @format='embedded'
-          @typeName='Author'
+          @displayName='Author'
         />
       </template>,
     );
@@ -119,7 +119,7 @@ module('Integration | Component | broken-link', function (hooks) {
       .includesText('Internal Server Error');
   });
 
-  test('the headline noun defaults to "card" and honors an override', async function (assert) {
+  test('the headline itemType defaults to "card" and honors an override', async function (assert) {
     await render(
       <template>
         <BrokenLinkTemplate
@@ -127,8 +127,8 @@ module('Integration | Component | broken-link', function (hooks) {
           @errorDoc={{notFoundDoc}}
           @state='not-found'
           @format='embedded'
-          @typeName='notes.md'
-          @noun='file'
+          @displayName='notes.md'
+          @itemType='file'
         />
       </template>,
     );
@@ -136,7 +136,24 @@ module('Integration | Component | broken-link', function (hooks) {
       .dom('[data-test-broken-link-headline]')
       .hasText(
         'Linked file not found',
-        'the supplied noun drives the headline',
+        'the supplied itemType drives the headline',
       );
+  });
+
+  test('the label falls back to the capitalized itemType when no displayName is given', async function (assert) {
+    await render(
+      <template>
+        <BrokenLinkTemplate
+          @brokenUrl={{BROKEN_URL}}
+          @errorDoc={{notFoundDoc}}
+          @state='not-found'
+          @format='embedded'
+          @itemType='file'
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-broken-link-type]')
+      .hasText('File', 'the label capitalizes the itemType fallback');
   });
 });

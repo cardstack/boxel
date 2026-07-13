@@ -296,7 +296,7 @@ module('Integration | markdown-embed-preview', function (hooks) {
         <PreviewBox>
           <MarkdownEmbedPreview
             @brokenUrl={{brokenUrl}}
-            @brokenTypeName='Book'
+            @brokenDisplayName='Book'
             @errorDoc={{errorDoc}}
             @brokenState='not-found'
             @format='embedded'
@@ -329,7 +329,7 @@ module('Integration | markdown-embed-preview', function (hooks) {
         <PreviewBox>
           <MarkdownEmbedPreview
             @brokenUrl={{brokenUrl}}
-            @brokenTypeName='Book'
+            @brokenDisplayName='Book'
             @errorDoc={{errorDoc}}
             @brokenState='error'
             @format='fitted'
@@ -357,8 +357,8 @@ module('Integration | markdown-embed-preview', function (hooks) {
         <PreviewBox>
           <MarkdownEmbedPreview
             @brokenUrl={{brokenUrl}}
-            @brokenTypeName='notes.md'
-            @brokenNoun='file'
+            @brokenDisplayName='notes.md'
+            @brokenItemType='file'
             @errorDoc={{errorDoc}}
             @brokenState='not-found'
             @format='embedded'
@@ -387,7 +387,7 @@ module('Integration | markdown-embed-preview', function (hooks) {
         <PreviewBox>
           <MarkdownEmbedPreview
             @brokenUrl={{brokenUrl}}
-            @brokenTypeName='Book'
+            @brokenDisplayName='Book'
             @errorDoc={{errorDoc}}
             @brokenState='not-found'
             @format='fitted'
@@ -414,5 +414,47 @@ module('Integration | markdown-embed-preview', function (hooks) {
       style.includes('overflow'),
       'the broken root does not set overflow, so the reveal overlay is not clipped',
     );
+  });
+
+  test('an inline broken ref previews inline, matching how it serializes (not as a block)', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='embedded'
+            @kind='inline'
+          />
+        </PreviewBox>
+      </template>,
+    );
+    let wrapper = document.querySelector('.broken-embed');
+    assert.ok(wrapper, 'the broken ref is wrapped for placement');
+    assert.strictEqual(
+      wrapper?.tagName,
+      'SPAN',
+      'inline kind wraps the broken ref in a span (inline placement), not a block div',
+    );
+    // A non-atom inline ref takes the inline-block placement class — the same
+    // treatment a resolved inline embed gets — so it flows within text instead
+    // of collapsing to a block. (Computed display can't be asserted here: the
+    // PreviewBox flex parent blockifies its items.)
+    assert.ok(
+      wrapper?.classList.contains('broken-embed--inline-embed'),
+      'an inline embedded broken ref uses the inline-block placement class',
+    );
+    assert
+      .dom('.broken-embed [data-test-broken-link-template="embedded"]')
+      .exists('the broken template renders inside the inline wrapper');
   });
 });

@@ -6,6 +6,7 @@ import BasicFitted from './components/basic-fitted/index.gts';
 import BrokenLink, {
   type BrokenLinkErrorDoc,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
   type BrokenLinkState,
   type BrokenLinkTemplateArgs,
   type BrokenLinkViewFn,
@@ -104,6 +105,7 @@ import ViewSelector, {
 export {
   type BrokenLinkErrorDoc,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
   type BrokenLinkState,
   type BrokenLinkTemplateArgs,
   type BrokenLinkViewFn,

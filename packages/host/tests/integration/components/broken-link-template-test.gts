@@ -47,9 +47,9 @@ type Scenario = {
 };
 
 async function renderTemplate(scenario: Scenario) {
-  // The type-name label is now a caller-supplied prop; base card sites pass
+  // The display-name label is now a caller-supplied prop; base card sites pass
   // `cardTypeName(reference)`, so derive it the same way here.
-  let typeName = cardTypeName(scenario.brokenUrl);
+  let displayName = cardTypeName(scenario.brokenUrl);
   await render(
     <template>
       <BrokenLinkTemplate
@@ -57,7 +57,7 @@ async function renderTemplate(scenario: Scenario) {
         @errorDoc={{scenario.errorDoc}}
         @state={{scenario.state}}
         @format={{scenario.format}}
-        @typeName={{typeName}}
+        @displayName={{displayName}}
       />
     </template>,
   );

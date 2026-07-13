@@ -308,7 +308,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                     @errorDoc={{entry.broken.errorDoc}}
                     @state={{entry.broken.kind}}
                     @format='fitted'
-                    @typeName={{cardTypeName entry.broken.reference}}
+                    @displayName={{cardTypeName entry.broken.reference}}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{entry.index}}
                   />
@@ -464,7 +464,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
                     @errorDoc={{broken.errorDoc}}
                     @state={{broken.kind}}
                     @format='atom'
-                    @typeName={{cardTypeName broken.reference}}
+                    @displayName={{cardTypeName broken.reference}}
                     @viewCard={{crud.viewCard}}
                     data-test-plural-view-item={{i}}
                   />
@@ -722,7 +722,7 @@ export function getLinksToManyComponent({
                               effectiveFormat
                               effectiveFormat
                             }}
-                            @typeName={{cardTypeName broken.reference}}
+                            @displayName={{cardTypeName broken.reference}}
                             @viewCard={{crud.viewCard}}
                             data-test-plural-view-item={{i}}
                           />

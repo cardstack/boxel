@@ -113,7 +113,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               @errorDoc={{@brokenLink.errorDoc}}
               @state={{@brokenLink.kind}}
               @format='embedded'
-              @typeName={{cardTypeName @brokenLink.reference}}
+              @displayName={{cardTypeName @brokenLink.reference}}
               @viewCard={{crud.viewCard}}
             />
           </CardCrudFunctionsConsumer>

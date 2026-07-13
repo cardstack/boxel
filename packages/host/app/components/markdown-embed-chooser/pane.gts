@@ -10,6 +10,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import type {
   BrokenLinkErrorDoc,
+  BrokenLinkItemType,
   BrokenLinkState,
 } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -44,8 +45,8 @@ interface Signature {
     brokenUrl?: string;
     errorDoc?: BrokenLinkErrorDoc;
     brokenState?: BrokenLinkState;
-    brokenTypeName?: string;
-    brokenNoun?: string;
+    brokenDisplayName?: string;
+    brokenItemType?: BrokenLinkItemType;
     // The shared format/placement/size selection. Owned by the modal and shared
     // across both tabs so the choice survives a tab switch; this pane is a pure
     // view over it plus the resolved target.
@@ -161,8 +162,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         <MarkdownEmbedPreview
           @target={{@target}}
           @brokenUrl={{@brokenUrl}}
-          @brokenTypeName={{@brokenTypeName}}
-          @brokenNoun={{@brokenNoun}}
+          @brokenDisplayName={{@brokenDisplayName}}
+          @brokenItemType={{@brokenItemType}}
           @errorDoc={{@errorDoc}}
           @brokenState={{@brokenState}}
           @format={{@selection.previewFormat}}

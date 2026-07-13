@@ -10,6 +10,7 @@ import { restartableTask } from 'ember-concurrency';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import type {
   BrokenLinkErrorDoc,
+  BrokenLinkItemType,
   BrokenLinkState,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -221,7 +222,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   // Card refs label by type name; file refs label by filename — matching the
   // label the base `linksTo` broken visual derives for cards.
-  private get brokenTypeName(): string | undefined {
+  private get brokenDisplayName(): string | undefined {
     if (!this.selectedError || !this.selectedUrl) return undefined;
     return this.args.refType === 'file'
       ? fileNameFromUrl(this.selectedUrl)
@@ -230,7 +231,7 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   // Drives the broken-ref overlay headline ("Linked file not found" vs the
   // card wording) so a broken `:file[...]` ref doesn't read as a card.
-  private get brokenNoun(): string | undefined {
+  private get brokenItemType(): BrokenLinkItemType | undefined {
     if (!this.selectedError) return undefined;
     return this.args.refType === 'file' ? 'file' : 'card';
   }
@@ -325,8 +326,8 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             @ctaLabelOverride={{this.ctaLabelOverride}}
             @brokenUrl={{this.brokenUrl}}
             @brokenState={{this.brokenState}}
-            @brokenTypeName={{this.brokenTypeName}}
-            @brokenNoun={{this.brokenNoun}}
+            @brokenDisplayName={{this.brokenDisplayName}}
+            @brokenItemType={{this.brokenItemType}}
             @errorDoc={{this.brokenErrorDoc}}
           />
         {{else}}

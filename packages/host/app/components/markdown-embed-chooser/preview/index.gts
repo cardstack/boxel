@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { BrokenLinkTemplate } from '@cardstack/boxel-ui/components';
 import type {
   BrokenLinkErrorDoc,
+  BrokenLinkItemType,
   BrokenLinkState,
 } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
@@ -24,6 +25,11 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 type EmbedFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+
+// Stable identity for the "no error doc" fallback so the getter below doesn't
+// hand the broken template a fresh object every render (which would churn
+// downstream renders). The broken template only reads fields, never mutates.
+const EMPTY_ERROR_DOC: BrokenLinkErrorDoc = Object.freeze({});
 
 interface EmbedSignature {
   Element: HTMLElement;
@@ -110,6 +116,79 @@ const Embed: TOC<EmbedSignature> = <template>
   </style>
 </template>;
 
+interface BrokenEmbedSignature {
+  Element: HTMLElement;
+  Args: {
+    brokenUrl: string;
+    errorDoc: BrokenLinkErrorDoc;
+    state: BrokenLinkState;
+    displayName?: string;
+    itemType?: BrokenLinkItemType;
+    format: EmbedFormat;
+    kind: 'inline' | 'block';
+    sizeStyle?: ReturnType<typeof htmlSafe>;
+  };
+}
+
+// Placement wrapper for a broken ref, mirroring Embed's inline/block behavior so
+// a broken inline ref (`:card[url | embedded]`) previews inline — the same
+// placement it will serialize to — rather than collapsing to a block. Unlike
+// Embed it adds no card-frame and never sets `overflow: hidden`: the broken
+// template draws its own box, and its reveal overlay must stay free to extend
+// beyond the placeholder footprint. It carries no `data-test-markdown-embed-preview`
+// so the broken state stays distinguishable from a resolved embed.
+const BrokenEmbed: TOC<BrokenEmbedSignature> = <template>
+  {{#if (eq @kind 'inline')}}
+    <span
+      class='broken-embed
+        {{if
+          (eq @format "atom")
+          "broken-embed--inline"
+          "broken-embed--inline-embed"
+        }}'
+      ...attributes
+    >
+      <BrokenLinkTemplate
+        @brokenUrl={{@brokenUrl}}
+        @displayName={{@displayName}}
+        @itemType={{@itemType}}
+        @errorDoc={{@errorDoc}}
+        @state={{@state}}
+        @format={{@format}}
+        style={{@sizeStyle}}
+      />
+    </span>
+  {{else}}
+    <div class='broken-embed broken-embed--block' ...attributes>
+      <BrokenLinkTemplate
+        @brokenUrl={{@brokenUrl}}
+        @displayName={{@displayName}}
+        @itemType={{@itemType}}
+        @errorDoc={{@errorDoc}}
+        @state={{@state}}
+        @format={{@format}}
+        style={{@sizeStyle}}
+      />
+    </div>
+  {{/if}}
+  <style scoped>
+    .broken-embed {
+      max-width: 100%;
+    }
+    .broken-embed--inline {
+      display: inline-flex;
+      vertical-align: middle;
+    }
+    .broken-embed--inline-embed {
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .broken-embed--block {
+      display: block;
+    }
+  </style>
+</template>;
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -127,8 +206,8 @@ interface Signature {
     brokenUrl?: string;
     errorDoc?: BrokenLinkErrorDoc;
     brokenState?: BrokenLinkState;
-    brokenTypeName?: string;
-    brokenNoun?: string;
+    brokenDisplayName?: string;
+    brokenItemType?: BrokenLinkItemType;
     // Render format. `fitted` consults `@sizeSpec` for its width/height;
     // atom/embedded/isolated ignore it.
     format: EmbedFormat;
@@ -168,7 +247,7 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
   }
 
   private get brokenErrorDoc(): BrokenLinkErrorDoc {
-    return this.args.errorDoc ?? {};
+    return this.args.errorDoc ?? EMPTY_ERROR_DOC;
   }
 
   // A fitted broken placeholder takes the same picked footprint as a real
@@ -253,14 +332,15 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
               @sizeStyle={{this.sizeStyle}}
             />
           {{else if @brokenUrl}}
-            <BrokenLinkTemplate
+            <BrokenEmbed
               @brokenUrl={{@brokenUrl}}
-              @typeName={{@brokenTypeName}}
-              @noun={{@brokenNoun}}
+              @displayName={{@brokenDisplayName}}
+              @itemType={{@brokenItemType}}
               @errorDoc={{this.brokenErrorDoc}}
               @state={{this.brokenState}}
               @format={{@format}}
-              style={{this.brokenSizeStyle}}
+              @kind={{this.kind}}
+              @sizeStyle={{this.brokenSizeStyle}}
             />
           {{/if}}
           <span
@@ -290,14 +370,15 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
         ...attributes
       />
     {{else if @brokenUrl}}
-      <BrokenLinkTemplate
+      <BrokenEmbed
         @brokenUrl={{@brokenUrl}}
-        @typeName={{@brokenTypeName}}
-        @noun={{@brokenNoun}}
+        @displayName={{@brokenDisplayName}}
+        @itemType={{@brokenItemType}}
         @errorDoc={{this.brokenErrorDoc}}
         @state={{this.brokenState}}
         @format={{@format}}
-        style={{this.brokenSizeStyle}}
+        @kind={{this.kind}}
+        @sizeStyle={{this.brokenSizeStyle}}
         ...attributes
       />
     {{/if}}

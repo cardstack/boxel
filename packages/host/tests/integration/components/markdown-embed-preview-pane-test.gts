@@ -614,7 +614,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
               @selection={{selection}}
               @onInsert={{harness.onInsert}}
               @brokenUrl={{brokenUrl}}
-              @brokenTypeName='Book'
+              @brokenDisplayName='Book'
               @errorDoc={{errorDoc}}
               @brokenState='not-found'
             />

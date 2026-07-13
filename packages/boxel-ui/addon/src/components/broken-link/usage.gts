@@ -6,13 +6,14 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import BrokenLinkTemplate, {
   type BrokenLinkErrorDoc,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
   type BrokenLinkState,
 } from './index.gts';
 
 export default class BrokenLinkUsage extends Component {
   @tracked brokenUrl = 'https://example.com/realm/Author/exploded-card-id';
-  @tracked typeName = 'Author';
-  @tracked noun = 'card';
+  @tracked displayName = 'Author';
+  @tracked itemType: BrokenLinkItemType = 'card';
   @tracked state: BrokenLinkState = 'not-found';
   @tracked format: BrokenLinkFormat = 'embedded';
 
@@ -54,8 +55,8 @@ export default class BrokenLinkUsage extends Component {
         <div class='broken-link-usage-frame'>
           <BrokenLinkTemplate
             @brokenUrl={{this.brokenUrl}}
-            @typeName={{this.typeName}}
-            @noun={{this.noun}}
+            @displayName={{this.displayName}}
+            @itemType={{this.itemType}}
             @errorDoc={{this.errorDoc}}
             @state={{this.state}}
             @format={{this.format}}
@@ -71,19 +72,19 @@ export default class BrokenLinkUsage extends Component {
           @onInput={{fn (mut this.brokenUrl)}}
         />
         <Args.String
-          @name='typeName'
+          @name='displayName'
           @optional={{true}}
-          @description="Human-readable label next to the link-off icon — the card type name, or a filename for file refs. Falls back to 'Card'."
-          @value={{this.typeName}}
-          @onInput={{fn (mut this.typeName)}}
+          @description="Human-readable label next to the link-off icon — the card type name, or a filename for file refs. Falls back to the capitalized itemType ('Card' / 'File')."
+          @value={{this.displayName}}
+          @onInput={{fn (mut this.displayName)}}
         />
         <Args.String
-          @name='noun'
+          @name='itemType'
           @optional={{true}}
-          @description="The reference kind, used only for the overlay headline ('Linked card not found' vs 'Linked file not found'). Falls back to 'card'."
+          @description="The reference kind. Drives the overlay headline ('Linked card not found' vs 'Linked file not found') and the label fallback. Falls back to 'card'."
           @options={{array 'card' 'file'}}
-          @value={{this.noun}}
-          @onInput={{fn (mut this.noun)}}
+          @value={{this.itemType}}
+          @onInput={{fn (mut this.itemType)}}
         />
         <Args.String
           @name='state'

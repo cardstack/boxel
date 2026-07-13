@@ -691,7 +691,16 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     try {
       result = await editMarkdownEmbed({
         refType: ref.refType as 'card' | 'file',
-        url: ref.url,
+        // `ref.url` is the directive verbatim — a document-relative ref
+        // (`../Type/id`). The chooser loads its preview via `store.get`, which
+        // needs the canonical absolute URL; resolve it against the same base
+        // (and virtual network) the render targets use. `documentBaseUrl` below
+        // still carries the base so the pane re-relativizes on insertion.
+        url: resolveUrl(
+          ref.url,
+          this.args.cardReferenceBaseUrl,
+          this.args.cardReferenceVirtualNetwork,
+        ),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
         documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
