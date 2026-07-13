@@ -6344,9 +6344,12 @@ export class Realm {
             ? (row.diagnostics.toolSchemaErrors as unknown[])
             : null;
         // Source of truth is the row's `has_error` column — the SQL above
-        // filters on it, so we mirror that filter when branching. Using
-        // `row.error_doc != null` here would silently drop any row where
-        // `has_error = TRUE` but `error_doc` is NULL.
+        // filters on `has_error = TRUE` OR diagnostic findings
+        // (brokenLinks / frontmatterParseError / toolSchemaErrors), so a row
+        // can arrive here with `has_error = FALSE` but non-empty diagnostics.
+        // We branch on `has_error` to distinguish indexing errors from
+        // diagnostic-only rows. Using `row.error_doc != null` here would
+        // silently drop any row where `has_error = TRUE` but `error_doc` is NULL.
         let hasError = row.has_error === true;
         // A single boxel_index row can carry more than one independent
         // finding — e.g. a markdown skill with both unparseable frontmatter
