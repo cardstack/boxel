@@ -51,6 +51,10 @@ export interface Stats extends JSONTypes.Object {
 export interface IndexPhaseTimings {
   // Whole-job wall, kickoff to return.
   totalMs?: number;
+  // Batch setup before any phase below: `IndexWriter.createBatch` (generation
+  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // slowness, so it's bucketed rather than left as residue in `totalMs`.
+  setupMs?: number;
   // Reading the index's per-file modified times up front (from-scratch only).
   mtimesMs?: number;
   // Invalidation discovery: the from-scratch filesystem walk, or the

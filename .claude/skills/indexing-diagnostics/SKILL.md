@@ -28,7 +28,7 @@ Seven places, all correlated:
 4. **`error_doc.diagnostics`** — derived copy of the same table's `diagnostics`, written only for error rows: an index error's copy rides `boxel_index.error_doc`, a render error's rides `prerendered_html.error_doc` (an instance's effective error is the union of the two). Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `diagnostics` directly.
 5. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same id lands on `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'` — and, for the render channel, on `prerendered_html.diagnostics->>'prerenderHtmlRequestId'` — so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 6. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
-7. **`jobs.result.phaseTimings`** — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`discoverMs`, `orderMs`, `preWarmMs`, `swapMs`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
+7. **`jobs.result.phaseTimings`** — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`setupMs`, `discoverMs`, `orderMs`, `preWarmMs`, `swapMs`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -1150,14 +1150,19 @@ This mode reads **two** sources that together reconstruct the whole wall:
 For one index job:
 
 ```
-totalMs  ≈  mtimesMs + discoverMs + orderMs + preWarmMs + visitLoopMs + swapMs        (job phases)
+totalMs  ≈  setupMs + mtimesMs + discoverMs + orderMs + preWarmMs + visitLoopMs + swapMs   (job phases)
 
-visitLoopMs  ≈  Σ totalElapsedMs        (server render, per row — the well-instrumented 76%)
-              + Σ indexVisitClientMs.*  (read + renderRpc + bookkeeping, per row)
+visitLoopMs  ≈  Σ totalElapsedMs        (server render — the well-instrumented 76%; per VISIT)
+              + Σ read + Σ renderRpc    (indexVisitClientMs, per VISIT)
+              + Σ bookkeeping           (indexVisitClientMs, per ROW)
               + writeMs                 (aggregate row writes — the I/O the tab doesn't need)
 ```
 
-The `≈` covers small un-bucketed residue (loop control, progress events, resumed-row skips). `mtimesMs` / `preWarmMs` are from-scratch-only (incremental omits both). `writeMs` is aggregate on the job, **not** per row — a row can't time its own INSERT, so per-row `indexVisitClientMs` stops at `bookkeeping` (the pre-write window) and the writes roll up here. `swapMs` is the `batch.done()` transaction (realm-meta update + working→main promotion + obsolete-row prune), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
+The `≈` covers small un-bucketed residue (loop control, progress events, resumed-row skips). `setupMs` is `createBatch` (generation bump + resumable-row scan); `mtimesMs` / `preWarmMs` are from-scratch-only (incremental omits both). `writeMs` is aggregate on the job, **not** per row — a row can't time its own INSERT, so per-row `indexVisitClientMs` stops at `bookkeeping` (the pre-write window) and the writes roll up here.
+
+**Per-VISIT vs per-ROW — the sum has to respect this.** A card-instance `.json` produces **two** rows (`type='instance'` + `type='file'`) from one visit, and they **share** the visit's blob: the same `totalElapsedMs`, `read`, and `renderRpc` land on both. So those three are per-VISIT — sum them over **one row per URL** (filter to `type='file'`, which exists exactly once per visited file) or you double-count every card `.json`. `bookkeeping` is the exception: the card indexer and the file indexer each stamp their **own** value (card dependency resolution vs file-row construction — distinct work in the same visit), so `bookkeeping` is per-ROW and is summed across **all** rows. Step 2's query does both.
+
+`swapMs` is the `batch.done()` transaction (realm-meta update + working→main promotion + obsolete-row prune), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
 
 ### Step 1 — pull the job's phase breakdown
 
@@ -1175,18 +1180,21 @@ ORDER BY id DESC
 LIMIT 5;
 ```
 
-`phase_timings` is `{ totalMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs }` (ms). Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs }` (ms). Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
 
 ### Step 2 — sum the per-row halves for the same job
 
-Correlate rows to the job by the generation it committed (every from-scratch row is stamped with it; an incremental stamps the rows it revisited):
+Correlate rows to the job by the generation it committed (every from-scratch row is stamped with it; an incremental stamps the rows it revisited). The per-VISIT fields (`totalElapsedMs`, `read`, `renderRpc`) are summed over `type='file'` — one row per visited file, so a card `.json`'s shared blob is counted once, not twice — while `bookkeeping` sums over **all** rows (see the per-visit-vs-per-row note above):
 
 ```sql
-SELECT count(*)                                                          AS rows,
-       round(sum((diagnostics->>'totalElapsedMs')::numeric))            AS server_render_ms,
-       round(sum((diagnostics->'indexVisitClientMs'->>'read')::numeric))        AS read_ms,
-       round(sum((diagnostics->'indexVisitClientMs'->>'renderRpc')::numeric))   AS render_rpc_ms,
-       round(sum((diagnostics->'indexVisitClientMs'->>'bookkeeping')::numeric)) AS bookkeeping_ms
+SELECT count(*) FILTER (WHERE type = 'file')                                         AS visits,
+       round(sum((diagnostics->>'totalElapsedMs')::numeric)
+             FILTER (WHERE type = 'file'))                                           AS server_render_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'read')::numeric)
+             FILTER (WHERE type = 'file'))                                           AS read_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'renderRpc')::numeric)
+             FILTER (WHERE type = 'file'))                                           AS render_rpc_ms,
+       round(sum((diagnostics->'indexVisitClientMs'->>'bookkeeping')::numeric))      AS bookkeeping_ms
 FROM boxel_index
 WHERE realm_url = '<realm-url>'
   AND generation = <generation-from-step-1>;
@@ -1219,6 +1227,7 @@ LIMIT 20;
 - **`renderRpc`** — the client-observed prerender round-trip minus the server's own `totalElapsedMs`: serialization + the wire hop to the prerender server + any wait the server doesn't count. Large `renderRpc` with small server render means the transport/queue is the cost, not the render. ~0 on the fused / in-browser path (no wire hop).
 - **`bookkeeping`** — dependency resolution + index-entry construction between the render finishing and the write. The per-row cost that varies with a card's dependency shape; the top of step 3 names the heavy cards.
 - **`writeMs`** (job-level) — the Σ of the working-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
+- **`setupMs`** (job-level) — `createBatch`: the generation bump and the resumable working-row scan, before any visit. Normally small; large `setupMs` is a retry job re-scanning a big working table, or DB slowness.
 - **`discoverMs` / `swapMs`** (job-level) — the serial bookends. `discoverMs` runs before the first visit, `swapMs` after the last, so neither can overlap a visit; they're the floor the pipelining can't remove.
 
 ### What Mode K can't tell you

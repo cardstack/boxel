@@ -240,11 +240,13 @@ export class IndexRunner {
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing for realm ${current.realmURL.href}`,
     );
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
     // at 0 and is filled in by the first `file-visited` once the
@@ -417,6 +419,7 @@ export class IndexRunner {
       generation: current.batch.currentGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
+        setupMs,
         mtimesMs,
         discoverMs,
         orderMs,
@@ -456,11 +459,13 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
 
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
     // dashboard shows it immediately. The total starts at 0 and the
     // first `file-visited` fills it in once the counts are known.
@@ -596,6 +601,7 @@ export class IndexRunner {
       generation: current.batch.currentGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
+        setupMs,
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),

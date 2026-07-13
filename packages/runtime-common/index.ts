@@ -540,8 +540,8 @@ export interface PrerenderResponseMeta {
 // summed across a job's rows it accounts for most of the wall the job spends
 // between server renders. The once-per-job phases (discovery, dependency
 // ordering, module pre-warm, the final swap) and the aggregate row-write time
-// are not attributable to a single row and live on the job's
-// `Stats.phaseTimings` instead.
+// are not attributable to a single row and live on the job result's
+// `phaseTimings` (`jobs.result.phaseTimings`) instead.
 export interface IndexVisitClientTimings {
   // Wall before the render request: reading the file bytes and the
   // file-metadata lookups (created-at, content hash/size).
@@ -555,7 +555,7 @@ export interface IndexVisitClientTimings {
   // Post-render bookkeeping: dependency resolution and index-entry construction
   // between the render completing and the row write. Excludes the write itself
   // (a row cannot time its own INSERT); the job's aggregate write time lives on
-  // `Stats.phaseTimings.writeMs`.
+  // the job result's `phaseTimings.writeMs` (`jobs.result.phaseTimings.writeMs`).
   bookkeeping?: number;
 }
 

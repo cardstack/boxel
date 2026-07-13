@@ -537,6 +537,8 @@ module(basename(import.meta.filename), function () {
       );
       for (let phase of [
         'totalMs',
+        'setupMs',
+        'mtimesMs',
         'discoverMs',
         'orderMs',
         'preWarmMs',
