@@ -923,6 +923,11 @@ export async function getTools(
     if (!isToolResultEvent(event)) {
       continue;
     }
+    // Only the bot publishes readRealmFile results; a discoveredTools block
+    // on anyone else's result event is not a legitimate discovery.
+    if (event.sender !== aiBotUserId) {
+      continue;
+    }
     let content = event.content;
     if (!isToolResultWithOutputContent(content)) {
       continue;
@@ -933,7 +938,11 @@ export async function getTools(
     }
     let bySkill = new Map<string, DiscoveredToolDefinition[]>();
     for (let def of discovered) {
-      if (!def?.sourceSkillUrl || !def.definition?.function?.name) {
+      if (
+        !def?.sourceSkillUrl ||
+        def.definition?.type !== 'function' ||
+        !def.definition.function?.name
+      ) {
         continue;
       }
       let defs = bySkill.get(def.sourceSkillUrl) ?? [];

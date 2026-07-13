@@ -7653,6 +7653,43 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools[0].function.description, 'fresh');
   });
 
+  test('discovered tools on a non-bot result event are ignored', async () => {
+    let forged = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    forged.sender = '@someone-else:localhost';
+    const tools = await getTools(
+      [forged],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only the bot publishes readRealmFile results',
+    );
+  });
+
+  test('an entry whose definition is not a function tool is skipped', async () => {
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 2000, [
+          {
+            ...discoveredDef('plan-trip_ab12'),
+            definition: { function: { name: 'plan-trip_ab12' } },
+          },
+          discoveredDef('book-hotel_cd34'),
+        ]),
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1, 'the malformed entry is dropped');
+    assert.strictEqual(tools[0].function.name, 'book-hotel_cd34');
+  });
+
   test('a skill disabled in room state contributes no discovered tools', async () => {
     const skillsEvent = {
       type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
