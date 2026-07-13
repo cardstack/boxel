@@ -1058,7 +1058,7 @@ Lines are FireLens-wrapped (`{"log":"…"}`); pull `.log`. Strip everything afte
 The index visit's cost is dominated by search-doc assembly. The host produces the doc by walking the card repeatedly until the store's load state is quiescent — the first walk that fires no lazy getter loads is the one whose doc persists — and the diagnostics split the cost along that seam, each side with per-item detail:
 
 1. **The discarded walks and their load drains** (`searchDocSettleMs`, `searchDocSettlePasses`) — the passes re-run because a computed's read of a not-yet-loaded link fired a lazy load the walk couldn't consume. This is where getter-driven link targets load; `searchDocSettlePasses` counts the discarded walks, so a card that settles on its first walk reads `0`. The generator's own `searchable`-route loads are awaited inside whichever walk reaches them (a route's hops resolve within one pass), and every performed load lands in `searchDocLinkLoads` (`{ path, target, ms }`, dotted `linksTo`/`linksToMany` field path + loaded URL). A card's independent routes and plural-field slots load **concurrently**, so the entries overlap in time — read each `ms` as that load's own span, not as a summable slice.
-2. **The doc-producing walk** (`searchDocMs`) — the stable walk's evaluation of the card's fields, its loads all resident or cache hits. The per-field breakdown is `searchDocFieldsMs`, keyed by dotted field path with **inclusive** times (a parent includes its children, so the keys read as a drill-down to the slow leaf).
+2. **The doc-producing walk** (`searchDocMs`) — the stable walk over the card's fields. It never waits on getter-fired loads (those mark a walk unstable), but it can include targeted `searchable`-route loads it consumed inline — a first-walk-stable card performs all its route loads here, each itemized in `searchDocLinkLoads`. The per-field breakdown is `searchDocFieldsMs`, keyed by dotted field path with **inclusive** times (a parent includes its children — and a field's own link loads — so the keys read as a drill-down to the slow leaf).
 
 Both detail blocks are bounded — the slowest 20 entries at ≥ 1 ms — so a typical ~1 ms search doc persists neither, and their absence on a slow row is itself a signal (see step 3). Within one indexing job, loaded wire documents are cached job-scoped in the render tab, so a target shared by many cards costs a real load only on the first owner that reaches it — later owners' entries are near-zero and floor-pruned.
 
@@ -1080,7 +1080,7 @@ ORDER BY (diagnostics->>'searchDocSettleMs')::numeric
 LIMIT 20;
 ```
 
-`settle_ms + search_doc_ms` ≈ the row's search-doc production cost. Which of the two dominates picks the next step: settle-dominated → step 2 (loads), searchDoc-dominated → step 3 (fields).
+`settle_ms + search_doc_ms` ≈ the row's search-doc production cost. Which of the two dominates picks the next step: settle-dominated → step 2 (loads), searchDoc-dominated → step 3 (fields) — but check `searchDocLinkLoads` either way: a searchDoc-dominated row with matching load entries was loading inside the doc-producing walk (a first-walk-stable card's route loads land there), and step 2's load reading applies to it, not step 3's evaluation reading.
 
 **Step 2 — settle-dominated: which link loads were slow.**
 
@@ -1367,8 +1367,11 @@ LIMIT 20;
                                  // includeComputeds: true })` for this card.
   "searchDocMs": 18.3,           // host-side wall-clock of the walk that produced this
                                  // row's search doc — the first walk against a stable
-                                 // load generation, its loads all resident or cache
-                                 // hits, so this measures evaluation. Sum with
+                                 // load generation. Never waits on getter-fired loads
+                                 // (those mark a walk unstable), but can include
+                                 // targeted searchable-route loads it consumed inline,
+                                 // each itemized in `searchDocLinkLoads` — subtract
+                                 // those entries to read pure evaluation. Sum with
                                  // `serializeMs` to get the host's contribution to
                                  // `renderElapsedMs`. Pairs with `computedCalls` so you
                                  // can normalize: a card with `computedCalls=500,
@@ -1377,8 +1380,9 @@ LIMIT 20;
   "searchDocSettleMs": 812.4,    // host-side wall-clock spent BEFORE the doc-producing
                                  // walk: the discarded walk passes and the drains of
                                  // the lazy loads they fired. This is where the card's
-                                 // getter-driven link targets load, so link-load cost
-                                 // lives here, not inside `searchDocMs`. Attributed per
+                                 // getter-driven link targets load; targeted route
+                                 // loads land in whichever walk reaches them first,
+                                 // including the doc-producing one. Attributed per
                                  // target by `searchDocLinkLoads`. Near-zero when the
                                  // first walk settled.
   "searchDocSettlePasses": 3,    // walk passes discarded before one ran against a
@@ -1436,7 +1440,7 @@ All ms values are server-observed walltime.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
 - `computedCalls` + `computedCacheHits` together represent total compute pressure on the render.meta pass. The split tells you how much duplicate work the pass-scoped memo absorbed — a 1:0 ratio means every field was read once, a 1:5 ratio means the cards re-read each computed five extra times (typical for cards where many sibling fields share a computed input). `searchDocMs` + `serializeMs` are the host's contribution to `renderElapsedMs`; comparing `computedCalls / (searchDocMs + serializeMs)` across cards finds the slow-per-call computes that are worth profiling.
-- `searchDocSettleMs` is disjoint from `searchDocMs`: the discarded walk passes and their load drains come first; the doc-producing walk then runs against a settled store. So "producing this row's search doc" cost ≈ `searchDocSettleMs + searchDocMs`, and a slow row splits cleanly: settle-dominated → loading (read `searchDocLinkLoads` for which target), searchDoc-dominated → evaluation (read `searchDocFieldsMs` for which field). The retained `searchDocFieldsMs` entries are inclusive-time dotted paths — the top-level entries (no dot) sum to ≈ `searchDocMs` on a hot-path card; the deeper keys under a hot top-level key are the drill-down, not additional cost.
+- `searchDocSettleMs` is disjoint from `searchDocMs`: the discarded walk passes and their load drains come first; the doc-producing walk then runs. So "producing this row's search doc" cost ≈ `searchDocSettleMs + searchDocMs`, and a slow row splits: settle-dominated → getter-fired loading (read `searchDocLinkLoads` for which target), searchDoc-dominated → evaluation (read `searchDocFieldsMs` for which field) **or** targeted route loads the doc-producing walk consumed inline — a `searchDocLinkLoads` entry matching a hot field path settles which. The retained `searchDocFieldsMs` entries are inclusive-time dotted paths — the top-level entries (no dot) sum to ≈ `searchDocMs` on a hot-path card; the deeper keys under a hot top-level key are the drill-down, not additional cost.
 
 Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 

@@ -158,15 +158,19 @@ export interface PrerenderMetaDiagnostics {
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
   // Wall-clock of the searchable walk that produced the doc — the first
-  // walk whose loads were all resident/cache hits, so this measures
-  // evaluation rather than loading.
+  // walk against a stable load generation. It never waits on getter-fired
+  // loads (those mark a walk unstable and it is discarded), but it can
+  // include targeted `searchable`-route loads it consumed inline — the
+  // first walk to reach a target performs its load, and a first-walk-stable
+  // card performs them all here. Each such load is itemized in
+  // `searchDocLinkLoads`, so subtract those entries to read pure evaluation
+  // time.
   searchDocMs?: number;
-  // Wall-clock spent driving the card's link loads to quiescence before the
-  // walk that produced the doc: the discarded walk passes and their load
-  // drains. Link-load cost lives HERE, not inside `searchDocMs` — by the
-  // time the doc-producing walk runs, its targets are resident. Read
-  // `searchDocLinkLoads` for the per-target breakdown of this time.
-  // Near-zero when the first walk settled.
+  // Wall-clock spent driving the card's getter-fired link loads to
+  // quiescence before the walk that produced the doc: the discarded walk
+  // passes and their load drains. Read `searchDocLinkLoads` for the
+  // per-target load breakdown (its entries span both this and the
+  // doc-producing walk). Near-zero when the first walk settled.
   searchDocSettleMs?: number;
   // How many walk passes were discarded before one ran against a stable
   // load generation. Each pass loads one more dependency-depth wave, so a

@@ -389,13 +389,18 @@ export default class RenderMetaRoute extends Route<Model> {
   // rethrows to the caller (the render error path). Timings recorded before
   // a mid-walk throw survive — the collector fills incrementally.
   //
-  // `searchDocMs` is the authoritative walk's own duration (its loads are
-  // resident/cache hits, so it measures evaluation); `settleMs` is
-  // everything before and around it — the discarded walks and the load
-  // drains; `settlePasses` counts the discarded walks (0 when the first
-  // walk settles). A graph that never stabilizes within the discarded-walk
-  // cap gets one forced final walk against the drained store; its output is
-  // used (or its throw propagated) with a warning.
+  // `searchDocMs` is the authoritative walk's own duration. It never waits
+  // on getter-fired loads (those mark a walk unstable), but it can include
+  // targeted `searchable`-route loads the walk consumed inline — untracked
+  // loads leave the generation unmoved, so the first walk to reach a target
+  // both loads it and can still read as stable. Each such load lands in the
+  // `linkLoads` collector, so per-load cost stays attributable inside the
+  // total. `settleMs` is everything before and around the authoritative
+  // walk — the discarded walks and their load drains; `settlePasses` counts
+  // the discarded walks (0 when the first walk settles). A graph that never
+  // stabilizes within the discarded-walk cap gets one forced final walk
+  // against the drained store; its output is used (or its throw propagated)
+  // with a warning.
   async #searchDocUntilSettled(
     instance: CardDef,
     searchable: Awaited<ReturnType<CardService['getSearchable']>>,
