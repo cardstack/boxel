@@ -81,9 +81,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom: ref },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let person = await api.createFromSerialized<any>(doc.data, doc, undefined);
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
@@ -104,9 +102,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let testCard = await api.createFromSerialized<any>(
       doc.data,
       doc,
