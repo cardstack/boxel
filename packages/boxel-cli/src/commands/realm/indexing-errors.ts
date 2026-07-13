@@ -56,10 +56,26 @@ export interface FrontmatterErrorEntry {
   };
 }
 
+// Resource for a skill row that indexed cleanly but where one or more
+// frontmatter tools failed schema generation, surfaced via
+// `diagnostics.toolSchemaErrors`. The skill's instructions (and remaining
+// tools) index; the failed tools won't be callable until fixed.
+export interface ToolSchemaErrorEntry {
+  type: 'tool-schema-error';
+  id: string;
+  attributes: {
+    url: string;
+    entryType: string;
+    diagnostics: Record<string, unknown> | null;
+    toolSchemaErrors: ToolSchemaErrorLike[];
+  };
+}
+
 export type IndexingErrorsEntry =
   | IndexingErrorEntry
   | BrokenLinkEntry
-  | FrontmatterErrorEntry;
+  | FrontmatterErrorEntry
+  | ToolSchemaErrorEntry;
 
 export interface IndexingErrorsDocument {
   data: IndexingErrorsEntry[];
@@ -79,6 +95,14 @@ export interface FrontmatterParseErrorLike {
   message: string;
   line?: number;
   column?: number;
+}
+
+// Mirror of ToolSchemaError from @cardstack/runtime-common, kept local for
+// the same reason.
+export interface ToolSchemaErrorLike {
+  module: string;
+  name: string;
+  message: string;
 }
 
 export interface IndexingErrorsResult {
@@ -217,7 +241,42 @@ export function formatEntry(entry: IndexingErrorsEntry): string {
       entry.attributes.frontmatterParseError,
     )}`;
   }
+  if (entry.type === 'tool-schema-error') {
+    return `${prefix} ${url}  ${shortToolSchemaErrors(
+      entry.attributes.toolSchemaErrors,
+    )}`;
+  }
   return `${prefix} ${url}  ${shortBrokenLinks(entry.attributes.brokenLinks)}`;
+}
+
+const TOOL_SCHEMA_ERRORS_MAX_LIST = 3;
+
+export function shortToolSchemaErrors(
+  toolSchemaErrors: ToolSchemaErrorLike[] | null | undefined,
+): string {
+  if (!toolSchemaErrors || toolSchemaErrors.length === 0) {
+    return '<no tool schema errors>';
+  }
+  let preview = toolSchemaErrors
+    .slice(0, TOOL_SCHEMA_ERRORS_MAX_LIST)
+    .map((toolError) => {
+      let raw = (toolError.message ?? '<no message>')
+        .replace(/\s+/g, ' ')
+        .trim();
+      let message =
+        raw.length <= SHORT_MESSAGE_MAX
+          ? raw
+          : `${raw.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+      return `${toolError.module}#${toolError.name}: ${message}`;
+    })
+    .join('; ');
+  let suffix =
+    toolSchemaErrors.length > TOOL_SCHEMA_ERRORS_MAX_LIST
+      ? `; …+${toolSchemaErrors.length - TOOL_SCHEMA_ERRORS_MAX_LIST} more`
+      : '';
+  return `${toolSchemaErrors.length} tool schema failure${
+    toolSchemaErrors.length === 1 ? '' : 's'
+  }: ${preview}${suffix}`;
 }
 
 export function shortFrontmatterError(

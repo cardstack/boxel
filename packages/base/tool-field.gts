@@ -1,6 +1,7 @@
 import { Component, FieldDef, field, contains, relativeTo } from './card-api';
 import BooleanField from './boolean';
 import { AbsoluteCodeRefField } from './code-ref';
+import { JsonField } from './json-field';
 import StringField from './string';
 import CommandIcon from '@cardstack/boxel-icons/square-chevron-right';
 import { Pill } from '@cardstack/boxel-ui/components';
@@ -36,6 +37,15 @@ export class ToolField extends FieldDef {
     description:
       'If true, this tool will require human approval before it is executed in the host.',
   });
+
+  // The tool's ready-to-use LLM tool definition (`{ type: 'function',
+  // function: { name, description, parameters } }`), generated from the tool
+  // class's input schema at indexing time and stamped onto the skill's
+  // file-meta resource. Present only on tools rehydrated from an enriched
+  // index row — a tool authored in frontmatter has no value here until the
+  // file indexes. Consumers that need a schema and find none must generate
+  // it themselves (see the host's `uploadToolDefinitions`).
+  @field tool = contains(JsonField);
 
   @field functionName = contains(StringField, {
     description: 'The name of the function to be executed',

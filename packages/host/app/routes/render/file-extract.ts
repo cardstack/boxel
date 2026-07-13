@@ -98,6 +98,9 @@ export default class RenderFileExtractRoute extends Route<Model> {
       contentHash,
       contentSize,
       buildError: this.#buildError.bind(this),
+      // This route is the indexing path, so skill tool schemas are generated
+      // here and persisted with the row.
+      generateToolSchemas: true,
     });
     let fileApiURL = `${baseRealm.url}file-api`;
     let result: FileDefExtractResult;

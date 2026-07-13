@@ -6313,6 +6313,10 @@ export class Realm {
       `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
       `  )`,
       `  OR jsonb_typeof(diagnostics->'frontmatterParseError') = 'object'`,
+      `  OR (`,
+      `    jsonb_typeof(diagnostics->'toolSchemaErrors') = 'array'`,
+      `    AND jsonb_array_length(diagnostics->'toolSchemaErrors') > 0`,
+      `  )`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
@@ -6335,6 +6339,10 @@ export class Realm {
           row.diagnostics.frontmatterParseError !== null
             ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
             : null;
+        let toolSchemaErrors =
+          row.diagnostics && Array.isArray(row.diagnostics.toolSchemaErrors)
+            ? (row.diagnostics.toolSchemaErrors as unknown[])
+            : null;
         // Source of truth is the row's `has_error` column — the SQL above
         // filters on it, so we mirror that filter when branching. Using
         // `row.error_doc != null` here would silently drop any row where
@@ -6354,6 +6362,9 @@ export class Realm {
         //   dead linksTo/linksToMany targets surfaced by render.meta.
         // 'frontmatter-error' = the index row is healthy but the file's YAML
         //   frontmatter wouldn't parse, so anything it declared was dropped.
+        // 'tool-schema-error' = the index row is healthy but one or more of
+        //   the skill's frontmatter tools failed schema generation, so those
+        //   tools won't be callable until fixed.
         // All classes share the (entryType, url) key; the discriminator lets
         // consumers branch on which attributes to read.
         let baseAttributes = {
@@ -6362,7 +6373,11 @@ export class Realm {
           diagnostics: row.diagnostics,
         };
         let findings: {
-          type: 'indexing-error' | 'broken-link' | 'frontmatter-error';
+          type:
+            | 'indexing-error'
+            | 'broken-link'
+            | 'frontmatter-error'
+            | 'tool-schema-error';
           attributes: Record<string, unknown>;
         }[] = [];
         if (hasError) {
@@ -6379,6 +6394,12 @@ export class Realm {
             findings.push({
               type: 'frontmatter-error',
               attributes: { ...baseAttributes, frontmatterParseError },
+            });
+          }
+          if (toolSchemaErrors && toolSchemaErrors.length > 0) {
+            findings.push({
+              type: 'tool-schema-error',
+              attributes: { ...baseAttributes, toolSchemaErrors },
             });
           }
           if (brokenLinks && brokenLinks.length > 0) {

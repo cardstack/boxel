@@ -103,6 +103,21 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// One tool a skill's frontmatter declared whose schema generation failed
+// during file extraction — the module wouldn't load, the export was missing,
+// or the tool's input-schema generation threw. The skill still indexes
+// (instructions plus whichever tools did enrich), so this diagnostics entry
+// is the only indexed signal that the tool won't be callable. Surfaced on
+// `diagnostics.toolSchemaErrors`, alongside `frontmatterParseError`, via
+// `/_indexing-errors`.
+export interface ToolSchemaError {
+  // The tool's code ref as resolved at extract time (absolute module URL, or
+  // the package specifier verbatim when the module isn't realm-hosted).
+  module: string;
+  name: string;
+  message: string;
+}
+
 // One performed load of a link target during search-doc production. `path`
 // is the dotted field path (from the indexed card's root) of the `linksTo` /
 // `linksToMany` field that owns the link; `target` is the resolved
@@ -465,6 +480,12 @@ export interface FileExtractResponse {
   // the file indexer merges this onto `diagnostics.frontmatterParseError` so
   // the failure surfaces via `/_indexing-errors` instead of vanishing.
   frontmatterParseError?: FrontmatterParseError;
+  // Set when one or more of a skill's frontmatter tools failed schema
+  // generation during the extract. The extract still succeeds (the skill
+  // indexes with the tools that did enrich); the file indexer merges this
+  // onto `diagnostics.toolSchemaErrors` so each failure surfaces via
+  // `/_indexing-errors`.
+  toolSchemaErrors?: ToolSchemaError[];
 }
 
 export interface FileRenderResponse {
@@ -579,6 +600,12 @@ export interface Diagnostics
   // by the file indexer from the extract response. Absent when the
   // frontmatter parsed (or there was none).
   frontmatterParseError?: FrontmatterParseError;
+  // Skill frontmatter tools whose index-time schema generation failed. The
+  // row still indexes (instructions plus the tools that did enrich); this is
+  // the only indexed signal that a declared tool won't be callable. Merged
+  // in by the file indexer from the extract response. Absent when every
+  // declared tool enriched (or the file declared none).
+  toolSchemaErrors?: ToolSchemaError[];
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to

@@ -226,15 +226,21 @@ export async function performFileIndexing({
   // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
 
-  // A frontmatter parse failure doesn't fail the file (it still indexes
-  // body-only), so it rides on the row's diagnostics — mirroring brokenLinks —
-  // where `/_indexing-errors` surfaces it for the author. Merge it onto
+  // A frontmatter parse failure or a skill tool's schema-generation failure
+  // doesn't fail the file (it still indexes, body-only / minus that tool's
+  // schema), so each rides on the row's diagnostics — mirroring brokenLinks —
+  // where `/_indexing-errors` surfaces it for the author. Merge them onto
   // whatever render-side diagnostics the visit already produced.
   let fileDiagnostics: Diagnostics | undefined =
-    extractResult.frontmatterParseError
+    extractResult.frontmatterParseError || extractResult.toolSchemaErrors
       ? {
           ...(diagnostics ?? {}),
-          frontmatterParseError: extractResult.frontmatterParseError,
+          ...(extractResult.frontmatterParseError
+            ? { frontmatterParseError: extractResult.frontmatterParseError }
+            : {}),
+          ...(extractResult.toolSchemaErrors
+            ? { toolSchemaErrors: extractResult.toolSchemaErrors }
+            : {}),
         }
       : diagnostics;
 

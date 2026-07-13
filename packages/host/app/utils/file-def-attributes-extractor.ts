@@ -1,13 +1,19 @@
+import { getOwner, setOwner } from '@ember/-internals/owner';
+
 import { isEqual } from 'lodash-es';
 
 import {
   baseRef,
+  buildToolFunctionNameFromResolvedRef,
   CardError,
+  codeRefWithAbsoluteIdentifier,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
+  getClass,
   identifyCard,
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
+  ToolContextStamp,
   type CodeRef,
   type FileMetaResource,
   type FrontmatterParseError,
@@ -15,8 +21,11 @@ import {
   type RealmResourceIdentifier,
   type RenderError,
   type ResolvedCodeRef,
+  type ToolContext,
+  type ToolSchemaError,
 } from '@cardstack/runtime-common';
 import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
 
@@ -24,6 +33,7 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
+import type { Tool as LLMTool } from '@cardstack/base/matrix-event';
 
 export type FileDefExport = {
   extractAttributes: (
@@ -49,6 +59,10 @@ export type FileDefExtractResult = {
   // indexes body-only); lifted out of the searchDoc here so the indexer can
   // persist it onto `diagnostics.frontmatterParseError`. See markdown-file-def.
   frontmatterParseError?: FrontmatterParseError;
+  // Skill frontmatter tools whose schema generation failed. The extract
+  // still succeeds (the skill indexes with the tools that did enrich); the
+  // indexer persists these onto `diagnostics.toolSchemaErrors`.
+  toolSchemaErrors?: ToolSchemaError[];
 };
 
 export class FileDefAttributesExtractor {
@@ -62,6 +76,7 @@ export class FileDefAttributesExtractor {
   #contentSize: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
+  #generateToolSchemas: boolean;
   #fallbackBytes: Uint8Array | null = null;
   #primaryUsed = false;
 
@@ -76,6 +91,7 @@ export class FileDefAttributesExtractor {
     contentSize,
     fileBytes,
     buildError,
+    generateToolSchemas,
   }: {
     loaderService: LoaderService;
     network: NetworkService;
@@ -87,6 +103,12 @@ export class FileDefAttributesExtractor {
     contentSize: number | undefined;
     fileBytes?: Uint8Array;
     buildError: (url: string, error: unknown) => RenderError;
+    // Generate LLM tool definitions for a skill's frontmatter tools and stamp
+    // them onto the file-meta resource. Indexing-only (the file-extract
+    // render route): it loads each tool's module, which the interactive
+    // extract paths (room file attach, the store's direct fallback) shouldn't
+    // pay for — their consumers generate schemas on demand instead.
+    generateToolSchemas?: boolean;
   }) {
     this.#loaderService = loaderService;
     this.#network = network;
@@ -98,6 +120,7 @@ export class FileDefAttributesExtractor {
     this.#contentSize = contentSize;
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
+    this.#generateToolSchemas = generateToolSchemas ?? false;
   }
 
   async extract(): Promise<FileDefExtractResult> {
@@ -227,22 +250,44 @@ export class FileDefAttributesExtractor {
         if (frontmatterParseError) {
           delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
         }
+        let resource = buildFileResource(
+          this.#fileURL,
+          cleanedDoc,
+          adoptsFrom,
+          queryFieldDefs,
+          fieldsMeta,
+        );
+        let toolSchemaErrors: ToolSchemaError[] | undefined;
+        if (this.#generateToolSchemas) {
+          try {
+            toolSchemaErrors = await this.stampSkillToolSchemas(resource);
+          } catch (err) {
+            // Schema generation must never fail the file row — the skill
+            // still indexes instructions-only.
+            console.warn(
+              `[file-extract] tool schema generation failed for ${this.#fileURL}:`,
+              err,
+            );
+            toolSchemaErrors = [
+              {
+                module: '',
+                name: '',
+                message: err instanceof Error ? err.message : String(err),
+              },
+            ];
+          }
+        }
         return {
           status: 'ready',
           searchDoc: cleanedDoc,
-          resource: buildFileResource(
-            this.#fileURL,
-            cleanedDoc,
-            adoptsFrom,
-            queryFieldDefs,
-            fieldsMeta,
-          ),
+          resource,
           types,
           displayNames,
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
           ...(frontmatterParseError ? { frontmatterParseError } : {}),
+          ...(toolSchemaErrors ? { toolSchemaErrors } : {}),
         };
       }
     }
@@ -340,6 +385,135 @@ export class FileDefAttributesExtractor {
       throw await CardError.fromFetchResponse(this.#fileURL, response);
     }
     return response;
+  }
+
+  // For a skill markdown file (`kind: 'skill'`), generate each frontmatter
+  // tool's LLM tool definition and stamp it — with the resolved absolute
+  // codeRef, functionName, and normalized requiresApproval — onto the
+  // file-meta resource, so consumers (ai-bot first) obtain ready-to-use tool
+  // definitions from the index without a module loader. Runs after
+  // `buildFileResource` and replaces the resource's `frontmatter` with an
+  // enriched copy: the search doc shares the original object by reference,
+  // and multi-KB schemas must never land in `search_doc`.
+  //
+  // A tool that fails (module won't load, missing export, schema generation
+  // throws) stays in the tools list as authored and contributes a
+  // `ToolSchemaError`; the remaining tools still enrich.
+  //
+  // Loading realm-hosted tool modules through the loader also records them
+  // as runtime dependencies of this extract, so editing such a module
+  // reindexes the referencing skill. Host-package tool modules
+  // (`@cardstack/boxel-host/...`) resolve inside the host bundle and don't
+  // participate in invalidation — their stamped schemas can go stale across
+  // host deploys until the skill's realm reindexes.
+  private async stampSkillToolSchemas(
+    resource: FileMetaResource,
+  ): Promise<ToolSchemaError[] | undefined> {
+    let attributes = resource.attributes as Record<string, any>;
+    if (attributes.kind !== 'skill') {
+      return undefined;
+    }
+    let frontmatter = attributes.frontmatter as Record<string, any> | undefined;
+    // A fresh extract always serializes skill tools under `tools` — the
+    // frontmatter field maps the pre-rename `boxel.commands` key there too
+    // (see SkillFrontmatterField.fromFrontmatter).
+    let authoredTools =
+      frontmatter && Array.isArray(frontmatter.tools)
+        ? (frontmatter.tools as Record<string, any>[])
+        : undefined;
+    if (!frontmatter || !authoredTools?.length) {
+      return undefined;
+    }
+
+    let loader = this.#loaderService.loader;
+    let cardApi = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api',
+    );
+    let mappings = await basicMappings(loader);
+    // Tool classes never read the context during schema generation, but
+    // host-package tools resolve services (e.g. the loader) through the
+    // context's owner at construction — so the stamp object must carry one,
+    // the same shape the tool service hands to real invocations.
+    let toolContext: ToolContext = { [ToolContextStamp]: true };
+    setOwner(toolContext, getOwner(this.#loaderService)!);
+
+    let errors: ToolSchemaError[] = [];
+    let enrichedTools: Record<string, any>[] = [];
+    for (let entry of authoredTools) {
+      let codeRef = entry?.codeRef as
+        | { module?: unknown; name?: unknown }
+        | undefined;
+      if (
+        typeof codeRef?.module !== 'string' ||
+        typeof codeRef?.name !== 'string'
+      ) {
+        errors.push({
+          module: typeof codeRef?.module === 'string' ? codeRef.module : '',
+          name: typeof codeRef?.name === 'string' ? codeRef.name : '',
+          message: 'tool entry is missing a codeRef module/name',
+        });
+        enrichedTools.push(entry);
+        continue;
+      }
+      // Resolve in RRI space (no VirtualNetwork), matching how ToolField
+      // computes `functionName` — so the stamped name and a host-side
+      // recomputation from the stamped codeRef always agree. Package
+      // specifiers pass through verbatim.
+      let resolvedRef = codeRefWithAbsoluteIdentifier(
+        { module: codeRef.module, name: codeRef.name },
+        new URL(this.#fileURL),
+        undefined,
+      ) as ResolvedCodeRef;
+      try {
+        let ToolClass = await getClass(resolvedRef, loader);
+        if (typeof ToolClass !== 'function') {
+          throw new Error(
+            `module does not export a tool class named "${resolvedRef.name}"`,
+          );
+        }
+        let tool = new ToolClass(toolContext);
+        let functionName = buildToolFunctionNameFromResolvedRef(resolvedRef);
+        let toolDefinition = {
+          type: 'function' as LLMTool['type'],
+          function: {
+            name: functionName,
+            description: tool.description,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                ...(await tool.getInputJsonSchema(cardApi, mappings)),
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        };
+        enrichedTools.push({
+          ...entry,
+          codeRef: resolvedRef,
+          // Absent means "requires approval"; stamp that decision so
+          // consumers don't each re-implement the default.
+          requiresApproval: entry.requiresApproval !== false,
+          functionName,
+          tool: toolDefinition,
+        });
+      } catch (err) {
+        console.warn(
+          `[file-extract] tool schema generation failed for ${resolvedRef.module}#${resolvedRef.name} (skill ${this.#fileURL}):`,
+          err,
+        );
+        errors.push({
+          module: resolvedRef.module,
+          name: resolvedRef.name,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        enrichedTools.push(entry);
+      }
+    }
+    attributes.frontmatter = { ...frontmatter, tools: enrichedTools };
+    return errors.length ? errors : undefined;
   }
 
   // Extract query field definitions (linksTo/linksToMany with a query) from
