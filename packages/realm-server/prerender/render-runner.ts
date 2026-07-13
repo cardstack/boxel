@@ -1282,6 +1282,15 @@ export class RenderRunner {
           );
           if (metaResult !== undefined) {
             meta = metaResult;
+          } else {
+            // The entry step failed, so the page is showing the error
+            // route: a subsequent capture would wait on fresh render
+            // output the page can no longer produce and ride out the
+            // full render timeout, evicting the tab. Skip the icon —
+            // the row is an error row either way. (A card whose meta
+            // errors deterministically — e.g. a computed that reads a
+            // broken link — takes this path on every visit.)
+            cardShortCircuit = true;
           }
           if (!cardShortCircuit) {
             let iconMemo = this.#iconMemoFor(

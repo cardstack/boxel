@@ -7399,6 +7399,37 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
+            'owner.gts': `
+              import { CardDef, StringField, field, contains, linksTo } from '@cardstack/base/card-api';
+              import { Person } from './person';
+              export class Owner extends CardDef {
+                static displayName = "Owner";
+                @field friend = linksTo(Person);
+                @field friendName = contains(StringField, {
+                  computeVia: function() {
+                    return this.friend.name;
+                  }
+                });
+              }
+            `,
+            'stray.json': {
+              data: {
+                attributes: {},
+                relationships: {
+                  friend: {
+                    links: {
+                      self: 'http://localhost:9000/link-to-nowhere',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./owner'),
+                    name: 'Owner',
+                  },
+                },
+              },
+            },
           },
         },
       ],
@@ -7908,6 +7939,32 @@ module(basename(import.meta.filename), function () {
           before,
           'the jobless visit neither read nor wrote the memo',
         );
+      });
+
+      test('a meta error short-circuits the pass and skips the icon render', async function (assert) {
+        // `stray.json`'s `friendName` computed reads a link whose target
+        // never loads, so the meta entry errors on every visit. The pass
+        // must stop there: driving the icon render against the error
+        // route would wait out the full render timeout and evict the tab.
+        let { response, pool } = await indexVisit('stray.json', {
+          jobId: 'icon-memo-meta-error.1',
+        });
+        assert.ok(
+          response.card?.error,
+          `card error captured: ${JSON.stringify(
+            response.card?.error?.error?.message ?? null,
+          )}`,
+        );
+        assert.strictEqual(
+          response.card?.iconHTML,
+          null,
+          'icon render is skipped once the meta entry has errored',
+        );
+        assert.false(
+          pool.timedOut,
+          'the visit completes without a render timeout',
+        );
+        assert.false(pool.evicted, 'the page stays usable');
       });
 
       test('disposing the affinity drops the memo', async function (assert) {
