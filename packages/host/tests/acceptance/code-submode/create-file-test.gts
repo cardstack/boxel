@@ -423,6 +423,31 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.ok(savedUrls.some((url) => url.endsWith('readme.md')));
     });
 
+    test<TestContextWithSave>('can create a skill file with starter frontmatter', async function (assert) {
+      assert.expect(2);
+      await visitOperatorMode();
+      let deferred = new Deferred<void>();
+
+      this.onSave(async (url, content) => {
+        assert.true(
+          url.href.endsWith('skills/trip-planner/SKILL.md'),
+          'conventional skills/<slug>/SKILL.md path from the cleansed name',
+        );
+        assert.true(
+          (content as string).includes('boxel:\n  kind: skill'),
+          'starter frontmatter marks the file as a skill',
+        );
+        deferred.fulfill();
+      });
+
+      await openNewFileModal('Skill');
+      await fillIn('[data-test-skill-name-field]', 'Trip Planner');
+      await click('[data-test-create-skill-file]');
+      await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+      await deferred.promise;
+    });
+
     test('can upload a file via the New menu', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
