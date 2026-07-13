@@ -32,6 +32,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
+  findDiscoveredToolSkillUrl,
   getSkillSourceTools,
   loadSkillSource,
 } from '@cardstack/host/lib/skill-tools';
@@ -375,6 +376,32 @@ export default class MessageBuilder {
         if (toolRequest.name === candidateSkillTool.functionName) {
           skillTool = candidateSkillTool;
           break findCommand;
+        }
+      }
+    }
+
+    // Tool from a read (not enabled) skill: the model may call a tool it
+    // discovered by reading a skill file via readRealmFile. The bot's result
+    // event names the declaring skill, but that annotation is strictly a
+    // lookup hint, never an authorization — the codeRef the host executes is
+    // re-derived here from the skill's realm-indexed frontmatter, loaded
+    // through the store with the user's own permissions. A forged annotation
+    // can't execute anything the named skill doesn't declare, and a skill the
+    // user can't read resolves nothing; either way the tool stays unresolved
+    // and surfaces through the existing unrecognized-command failure path.
+    // `requiresApproval` likewise comes from the verified declaration (absent
+    // means approval required), exactly as for enabled skills.
+    if (!skillTool && toolRequest.name) {
+      let sourceSkillUrl = findDiscoveredToolSkillUrl(
+        this.builderContext.events,
+        toolRequest.name,
+      );
+      if (sourceSkillUrl) {
+        let source = await loadSkillSource(this.store, sourceSkillUrl);
+        if (source) {
+          skillTool = getSkillSourceTools(source).find(
+            (candidate) => candidate.functionName === toolRequest.name,
+          );
         }
       }
     }
