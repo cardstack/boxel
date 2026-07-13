@@ -181,4 +181,54 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
       fsExtra.removeSync(dir);
     }
   });
+
+  test('readdir treats a directory that vanished before it is read as empty', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      let adapter = new NodeAdapter(dir);
+
+      // A directory a traversal expected to descend — a parent listing yielded
+      // it — that a concurrent delete removes before this read opens it, e.g. a
+      // published realm unpublished mid-mtimes-traversal. It lists as empty
+      // rather than surfacing a raw scandir ENOENT, which would otherwise
+      // escape the traversal as an unhandled rejection.
+      let vanished: string[] = [];
+      for await (let entry of adapter.readdir('published/vanished/')) {
+        vanished.push(entry.path);
+      }
+      assert.deepEqual(
+        vanished,
+        [],
+        'a missing directory yields no entries instead of throwing ENOENT',
+      );
+
+      // A path nested under a regular file lists as empty too (ENOTDIR), the
+      // same way openFile/lastModified report it as nonexistent.
+      fsExtra.writeFileSync(join(dir, 'plain.txt'), 'hello');
+      let underFile: string[] = [];
+      for await (let entry of adapter.readdir('plain.txt/nested/')) {
+        underFile.push(entry.path);
+      }
+      assert.deepEqual(
+        underFile,
+        [],
+        'a path nested under a regular file yields no entries instead of throwing ENOTDIR',
+      );
+
+      // A directory that exists still lists its entries.
+      fsExtra.ensureDirSync(join(dir, 'real'));
+      fsExtra.writeFileSync(join(dir, 'real', 'card.json'), '{}');
+      let names: string[] = [];
+      for await (let entry of adapter.readdir('real/')) {
+        names.push(entry.name);
+      }
+      assert.deepEqual(
+        names,
+        ['card.json'],
+        'an existing directory still lists its entries',
+      );
+    } finally {
+      fsExtra.removeSync(dir);
+    }
+  });
 });

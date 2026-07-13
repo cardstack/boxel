@@ -61,6 +61,22 @@ function statIfExists(absolutePath: string): Stats | undefined {
   }
 }
 
+// The same race applies to a directory listing: a concurrent delete — e.g. a
+// published realm being unpublished while a mtimes traversal is descending its
+// tree — can remove a directory between a parent listing that yielded it and
+// the recursive read that opens it, so treat a vanished directory as empty
+// rather than letting the raw ENOENT/ENOTDIR escape. Mirrors statIfExists.
+function readdirIfExists(absolutePath: string) {
+  try {
+    return readdirSync(absolutePath, { withFileTypes: true });
+  } catch (err: any) {
+    if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+      return undefined;
+    }
+    throw err;
+  }
+}
+
 function parseMatrixSendEventError(error: unknown): {
   status?: number;
   errcode?: string;
@@ -120,7 +136,10 @@ export class NodeAdapter implements RealmAdapter {
       ensureDirSync(path);
     }
     let absolutePath = join(this.realmDir, path);
-    let entries = readdirSync(absolutePath, { withFileTypes: true });
+    let entries = readdirIfExists(absolutePath);
+    if (!entries) {
+      return;
+    }
     for await (let entry of entries) {
       let isDirectory = entry.isDirectory();
       let isFile = entry.isFile();
