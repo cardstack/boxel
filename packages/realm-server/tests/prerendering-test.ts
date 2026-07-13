@@ -1561,9 +1561,16 @@ module(basename(import.meta.filename), function () {
           (diagnostics?.searchDocSettleMs ?? -1) >= 0,
           `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
         );
+        // A card whose first walk fires no lazy getter loads settles with
+        // zero discarded passes, so 0 is the healthy floor.
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettlePasses,
+          'number',
+          `searchDocSettlePasses is stamped, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
         assert.ok(
-          (diagnostics?.searchDocSettlePasses ?? 0) >= 2,
-          `searchDocSettlePasses counts at least the two stability passes, got: ${diagnostics?.searchDocSettlePasses}`,
+          (diagnostics?.searchDocSettlePasses ?? -1) >= 0,
+          `searchDocSettlePasses counts the discarded walks, got: ${diagnostics?.searchDocSettlePasses}`,
         );
         if (diagnostics?.searchDocFieldsMs !== undefined) {
           assert.ok(
