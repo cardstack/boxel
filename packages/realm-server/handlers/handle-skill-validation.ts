@@ -4,8 +4,10 @@ import {
   RealmPaths,
   SupportedMimeType,
   fetchUserPermissions,
+  markdownDefRef,
   skillCardRef,
   systemInitiatedPriority,
+  type IndexedFile,
   type ModuleRenderResponse,
   type Realm,
   type RealmPermissions,
@@ -20,14 +22,16 @@ import type { CreateRoutesArgs } from '../routes.ts';
 import { isAuthorizedToViewMonitoring } from '../utils/monitoring.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 
-// Monitoring endpoint that validates every skill in a realm resolves. Skills
-// reference command modules by codeRef, so a module rename breaks every skill
-// pointing at the old path while API-level health checks stay green — the
-// failure only surfaces when a browser tries to import the stale module. Each
-// command codeRef's module is therefore imported via the prerenderer (a real
-// host in headless Chrome, with the same shims and virtual network a user's
-// browser has), so a module this endpoint passes is one the deployed host can
-// actually load.
+// Monitoring endpoint that validates every skill in a realm resolves. A skill
+// is either a legacy `Skill` card (tool refs on `commands`) or a markdown file
+// whose frontmatter declares `boxel.kind: skill` (tool refs on
+// `frontmatter.tools`); both reference command modules by codeRef, so a module
+// rename breaks every skill pointing at the old path while API-level health
+// checks stay green — the failure only surfaces when a browser tries to import
+// the stale module. Each codeRef's module is therefore imported via the
+// prerenderer (a real host in headless Chrome, with the same shims and virtual
+// network a user's browser has), so a module this endpoint passes is one the
+// deployed host can actually load.
 
 interface SkillCommandFailure {
   skill: string;
@@ -114,10 +118,21 @@ export default function handleSkillValidation({
         { filter: { type: skillCardRef } },
         {},
       );
-      skills = cards.map((card) => ({
-        id: card.id!,
-        commands: commandRefsFor(card),
-      }));
+      let { files } = await indexQueryEngine.searchFiles(
+        new URL(realm.url),
+        { filter: { on: markdownDefRef, eq: { kind: 'skill' } } },
+        {},
+      );
+      skills = [
+        ...cards.map((card) => ({
+          id: card.id!,
+          commands: commandRefsFor(card),
+        })),
+        ...files.map((file) => ({
+          id: file.canonicalURL,
+          commands: toolRefsFor(file),
+        })),
+      ];
     } catch (e: any) {
       await sendResponseForSystemError(
         ctxt,
@@ -176,10 +191,33 @@ function commandRefsFor(card: {
   id?: string;
   attributes?: Record<string, any>;
 }): CommandRef[] {
-  let commands: any[] = card.attributes?.commands ?? [];
+  return refsFromToolFields(card.attributes?.commands ?? [], card.id);
+}
+
+// A markdown skill's tool refs live on the indexed `frontmatter.tools` field
+// (the same `ToolField` shape as `Skill.commands`). Index rows extracted
+// before the command → tool rename carry the value under `commands` instead;
+// `tools` is a containsMany, so a pre-rename row yields [] (not undefined) —
+// an empty-check routes to the fallback, mirroring the host's
+// `getSkillSourceTools`.
+function toolRefsFor(file: IndexedFile): CommandRef[] {
+  let frontmatter = file.resource?.attributes?.frontmatter as
+    | { tools?: any[]; commands?: any[] }
+    | undefined;
+  let tools = frontmatter?.tools;
+  return refsFromToolFields(
+    tools?.length ? tools : (frontmatter?.commands ?? []),
+    file.canonicalURL,
+  );
+}
+
+function refsFromToolFields(
+  tools: any[],
+  sourceId: string | undefined,
+): CommandRef[] {
   let refs: CommandRef[] = [];
-  for (let command of commands) {
-    let codeRef = command?.codeRef;
+  for (let tool of tools) {
+    let codeRef = tool?.codeRef;
     if (!codeRef?.module || !codeRef?.name) {
       continue;
     }
@@ -187,8 +225,8 @@ function commandRefsFor(card: {
     // AbsoluteCodeRefField serializes absolute refs (URL or registered
     // package form like @cardstack/boxel-host/...), but guard against
     // hand-authored relative refs anyway.
-    if (module.startsWith('.') && card.id) {
-      module = new URL(module, card.id).href;
+    if (module.startsWith('.') && sourceId) {
+      module = new URL(module, sourceId).href;
     }
     refs.push({ module, name: codeRef.name });
   }

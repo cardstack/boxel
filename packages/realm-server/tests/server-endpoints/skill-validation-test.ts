@@ -16,6 +16,25 @@ const COMMAND_MODULE_SOURCE = `
   export class NamedTestCommand {}
 `;
 
+// A skill expressed as a markdown file: `boxel.kind: skill` frontmatter with
+// tool refs on `boxel.tools` — the markdown counterpart of `Skill.commands`.
+function skillMarkdown(tools: { module: string; name: string }[]): string {
+  return [
+    '---',
+    'boxel:',
+    '  kind: skill',
+    ...(tools.length ? ['  tools:'] : []),
+    ...tools.flatMap(({ module, name }) => [
+      '    - codeRef:',
+      `        module: '${module}'`,
+      `        name: ${name}`,
+      '      requiresApproval: false',
+    ]),
+    '---',
+    '# Test markdown skill',
+  ].join('\n');
+}
+
 function skillDoc(
   commands: { module: string; name: string }[],
 ): LooseSingleCardDocument {
@@ -64,6 +83,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             {
               module: `${testRealmURL.href}test-command`,
               name: 'NoSuchExport',
+            },
+          ]),
+          'broken-tool-skill.md': skillMarkdown([
+            {
+              module: `${testRealmURL.href}nonexistent-command`,
+              name: 'default',
             },
           ]),
         },
@@ -117,10 +142,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let { attributes } = response.body.data;
         assert.strictEqual(attributes.status, 'fail', 'overall status fails');
-        assert.strictEqual(attributes.skillsChecked, 3, 'all skills checked');
+        assert.strictEqual(attributes.skillsChecked, 4, 'all skills checked');
         assert.strictEqual(
           attributes.commandsChecked,
-          4,
+          5,
           'all commands checked',
         );
 
@@ -130,7 +155,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           name: string;
           error: string;
         }[] = attributes.failures;
-        assert.strictEqual(failures.length, 2, 'two failing commands');
+        assert.strictEqual(failures.length, 3, 'three failing commands');
 
         let missingModule = failures.find(
           (f) => f.skill === `${testRealmURL.href}missing-module-skill`,
@@ -152,6 +177,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           `error explains the missing export: ${missingExport!.error}`,
         );
 
+        let brokenMarkdownTool = failures.find(
+          (f) => f.skill === `${testRealmURL.href}broken-tool-skill.md`,
+        );
+        assert.ok(brokenMarkdownTool, 'markdown skill failure reported');
+        assert.strictEqual(
+          brokenMarkdownTool!.module,
+          `${testRealmURL.href}nonexistent-command`,
+          'failing markdown tool module is surfaced',
+        );
+
         assert.notOk(
           failures.some((f) => f.skill === `${testRealmURL.href}valid-skill`),
           'valid skill has no failures',
@@ -169,6 +204,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             { module: `${testRealmURL.href}test-command`, name: 'default' },
           ]),
           'no-commands-skill.json': skillDoc([]),
+          'valid-skill.md': skillMarkdown([
+            {
+              module: `${testRealmURL.href}test-command`,
+              name: 'NamedTestCommand',
+            },
+          ]),
         },
         // Owner-only (no `*` read): the command module can't be fetched
         // anonymously, so this passes only when the endpoint mints prerender
@@ -194,8 +235,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let { attributes } = response.body.data;
         assert.strictEqual(attributes.status, 'pass', 'overall status passes');
-        assert.strictEqual(attributes.skillsChecked, 2, 'all skills checked');
-        assert.strictEqual(attributes.commandsChecked, 1, 'command checked');
+        assert.strictEqual(attributes.skillsChecked, 3, 'all skills checked');
+        assert.strictEqual(attributes.commandsChecked, 2, 'commands checked');
         assert.deepEqual(attributes.failures, [], 'no failures');
       });
     });
