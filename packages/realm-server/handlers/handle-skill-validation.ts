@@ -25,7 +25,7 @@ import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 // Monitoring endpoint that validates every skill in a realm resolves. A skill
 // is either a legacy `Skill` card (tool refs on `commands`) or a markdown file
 // whose frontmatter declares `boxel.kind: skill` (tool refs on
-// `frontmatter.tools`); both reference command modules by codeRef, so a module
+// `frontmatter.tools`); both reference tool modules by codeRef, so a module
 // rename breaks every skill pointing at the old path while API-level health
 // checks stay green — the failure only surfaces when a browser tries to import
 // the stale module. Each codeRef's module is therefore imported via the
@@ -33,7 +33,7 @@ import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 // network a user's browser has), so a module this endpoint passes is one the
 // deployed host can actually load.
 
-interface SkillCommandFailure {
+interface SkillToolFailure {
   skill: string;
   module: string;
   name: string;
@@ -111,7 +111,7 @@ export default function handleSkillValidation({
       definitionLookup,
       virtualNetwork,
     );
-    let skills: { id: string; commands: CommandRef[] }[];
+    let skills: { id: string; tools: ToolRef[] }[];
     try {
       let { cards } = await indexQueryEngine.searchCards(
         new URL(realm.url),
@@ -126,11 +126,11 @@ export default function handleSkillValidation({
       skills = [
         ...cards.map((card) => ({
           id: card.id!,
-          commands: commandRefsFor(card),
+          tools: cardToolRefsFor(card),
         })),
         ...files.map((file) => ({
           id: file.canonicalURL,
-          commands: toolRefsFor(file),
+          tools: markdownToolRefsFor(file),
         })),
       ];
     } catch (e: any) {
@@ -141,9 +141,9 @@ export default function handleSkillValidation({
       return;
     }
 
-    let failures: SkillCommandFailure[];
+    let failures: SkillToolFailure[];
     try {
-      failures = await validateCommandModules({
+      failures = await validateToolModules({
         skills,
         realm,
         dbAdapter,
@@ -158,7 +158,7 @@ export default function handleSkillValidation({
       return;
     }
 
-    let commandCount = skills.reduce((sum, s) => sum + s.commands.length, 0);
+    let toolCount = skills.reduce((sum, s) => sum + s.tools.length, 0);
     return setContextResponse(
       ctxt,
       new Response(
@@ -169,7 +169,7 @@ export default function handleSkillValidation({
             attributes: {
               status: failures.length === 0 ? 'pass' : 'fail',
               skillsChecked: skills.length,
-              commandsChecked: commandCount,
+              toolsChecked: toolCount,
               failures,
             },
           },
@@ -182,15 +182,17 @@ export default function handleSkillValidation({
   };
 }
 
-interface CommandRef {
+interface ToolRef {
   module: string;
   name: string;
 }
 
-function commandRefsFor(card: {
+// A legacy `Skill` card's tool refs live on its `commands` field — the
+// field keeps its pre-rename name for serialized-instance compatibility.
+function cardToolRefsFor(card: {
   id?: string;
   attributes?: Record<string, any>;
-}): CommandRef[] {
+}): ToolRef[] {
   return refsFromToolFields(card.attributes?.commands ?? [], card.id);
 }
 
@@ -200,7 +202,7 @@ function commandRefsFor(card: {
 // `tools` is a containsMany, so a pre-rename row yields [] (not undefined) —
 // an empty-check routes to the fallback, mirroring the host's
 // `getSkillSourceTools`.
-function toolRefsFor(file: IndexedFile): CommandRef[] {
+function markdownToolRefsFor(file: IndexedFile): ToolRef[] {
   let frontmatter = file.resource?.attributes?.frontmatter as
     | { tools?: any[]; commands?: any[] }
     | undefined;
@@ -214,8 +216,8 @@ function toolRefsFor(file: IndexedFile): CommandRef[] {
 function refsFromToolFields(
   tools: any[],
   sourceId: string | undefined,
-): CommandRef[] {
-  let refs: CommandRef[] = [];
+): ToolRef[] {
+  let refs: ToolRef[] = [];
   for (let tool of tools) {
     let codeRef = tool?.codeRef;
     if (!codeRef?.module || !codeRef?.name) {
@@ -233,14 +235,14 @@ function refsFromToolFields(
   return refs;
 }
 
-async function validateCommandModules({
+async function validateToolModules({
   skills,
   realm,
   dbAdapter,
   prerenderer,
   createPrerenderAuth,
 }: {
-  skills: { id: string; commands: CommandRef[] }[];
+  skills: { id: string; tools: ToolRef[] }[];
   realm: Realm;
   dbAdapter: CreateRoutesArgs['dbAdapter'];
   prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
@@ -248,11 +250,11 @@ async function validateCommandModules({
     userId: string,
     permissions: RealmPermissions,
   ) => string;
-}): Promise<SkillCommandFailure[]> {
+}): Promise<SkillToolFailure[]> {
   let modules = new Set<string>();
   for (let skill of skills) {
-    for (let command of skill.commands) {
-      modules.add(command.module);
+    for (let tool of skill.tools) {
+      modules.add(tool.module);
     }
   }
   if (modules.size === 0) {
@@ -290,9 +292,9 @@ async function validateCommandModules({
     }),
   );
 
-  let failures: SkillCommandFailure[] = [];
+  let failures: SkillToolFailure[] = [];
   for (let skill of skills) {
-    for (let { module, name } of skill.commands) {
+    for (let { module, name } of skill.tools) {
       let response = responses.get(module)!;
       if (response.status === 'error') {
         failures.push({

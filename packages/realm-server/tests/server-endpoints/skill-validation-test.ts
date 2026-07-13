@@ -11,9 +11,9 @@ import {
 import { monitoringAuthToken } from '../../utils/monitoring.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-const COMMAND_MODULE_SOURCE = `
-  export default class TestCommand {}
-  export class NamedTestCommand {}
+const TOOL_MODULE_SOURCE = `
+  export default class TestTool {}
+  export class NamedTestTool {}
 `;
 
 // A skill expressed as a markdown file: `boxel.kind: skill` frontmatter with
@@ -36,14 +36,15 @@ function skillMarkdown(tools: { module: string; name: string }[]): string {
 }
 
 function skillDoc(
-  commands: { module: string; name: string }[],
+  tools: { module: string; name: string }[],
 ): LooseSingleCardDocument {
   return {
     data: {
       type: 'card',
       attributes: {
         instructions: 'test skill',
-        commands: commands.map((codeRef) => ({
+        // The Skill card's tool refs live on its pre-rename `commands` field.
+        commands: tools.map((codeRef) => ({
           codeRef,
           requiresApproval: false,
         })),
@@ -65,29 +66,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
       setupPermissionedRealmCached(hooks, {
         fileSystem: {
-          'test-command.gts': COMMAND_MODULE_SOURCE,
+          'test-tool.gts': TOOL_MODULE_SOURCE,
           'valid-skill.json': skillDoc([
-            { module: `${testRealmURL.href}test-command`, name: 'default' },
+            { module: `${testRealmURL.href}test-tool`, name: 'default' },
             {
-              module: `${testRealmURL.href}test-command`,
-              name: 'NamedTestCommand',
+              module: `${testRealmURL.href}test-tool`,
+              name: 'NamedTestTool',
             },
           ]),
           'missing-module-skill.json': skillDoc([
             {
-              module: `${testRealmURL.href}nonexistent-command`,
+              module: `${testRealmURL.href}nonexistent-tool`,
               name: 'default',
             },
           ]),
           'missing-export-skill.json': skillDoc([
             {
-              module: `${testRealmURL.href}test-command`,
+              module: `${testRealmURL.href}test-tool`,
               name: 'NoSuchExport',
             },
           ]),
           'broken-tool-skill.md': skillMarkdown([
             {
-              module: `${testRealmURL.href}nonexistent-command`,
+              module: `${testRealmURL.href}nonexistent-tool`,
               name: 'default',
             },
           ]),
@@ -130,7 +131,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
 
-      test('reports each command codeRef that fails to resolve', async function (assert) {
+      test('reports each tool codeRef that fails to resolve', async function (assert) {
         let response = await request
           .get(
             `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
@@ -143,11 +144,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let { attributes } = response.body.data;
         assert.strictEqual(attributes.status, 'fail', 'overall status fails');
         assert.strictEqual(attributes.skillsChecked, 4, 'all skills checked');
-        assert.strictEqual(
-          attributes.commandsChecked,
-          5,
-          'all commands checked',
-        );
+        assert.strictEqual(attributes.toolsChecked, 5, 'all tools checked');
 
         let failures: {
           skill: string;
@@ -155,7 +152,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           name: string;
           error: string;
         }[] = attributes.failures;
-        assert.strictEqual(failures.length, 3, 'three failing commands');
+        assert.strictEqual(failures.length, 3, 'three failing tools');
 
         let missingModule = failures.find(
           (f) => f.skill === `${testRealmURL.href}missing-module-skill`,
@@ -163,7 +160,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.ok(missingModule, 'missing module failure reported');
         assert.strictEqual(
           missingModule!.module,
-          `${testRealmURL.href}nonexistent-command`,
+          `${testRealmURL.href}nonexistent-tool`,
           'failing module path is surfaced',
         );
 
@@ -183,7 +180,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.ok(brokenMarkdownTool, 'markdown skill failure reported');
         assert.strictEqual(
           brokenMarkdownTool!.module,
-          `${testRealmURL.href}nonexistent-command`,
+          `${testRealmURL.href}nonexistent-tool`,
           'failing markdown tool module is surfaced',
         );
 
@@ -199,19 +196,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
       setupPermissionedRealmCached(hooks, {
         fileSystem: {
-          'test-command.gts': COMMAND_MODULE_SOURCE,
+          'test-tool.gts': TOOL_MODULE_SOURCE,
           'valid-skill.json': skillDoc([
-            { module: `${testRealmURL.href}test-command`, name: 'default' },
+            { module: `${testRealmURL.href}test-tool`, name: 'default' },
           ]),
-          'no-commands-skill.json': skillDoc([]),
+          'no-tools-skill.json': skillDoc([]),
           'valid-skill.md': skillMarkdown([
             {
-              module: `${testRealmURL.href}test-command`,
-              name: 'NamedTestCommand',
+              module: `${testRealmURL.href}test-tool`,
+              name: 'NamedTestTool',
             },
           ]),
         },
-        // Owner-only (no `*` read): the command module can't be fetched
+        // Owner-only (no `*` read): the tool module can't be fetched
         // anonymously, so this passes only when the endpoint mints prerender
         // auth for the realm owner's full Matrix user id — permission rows
         // are keyed by full user id, and a bare username matches none.
@@ -223,7 +220,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         },
       });
 
-      test('passes when every command codeRef resolves in a private realm', async function (assert) {
+      test('passes when every tool codeRef resolves in a private realm', async function (assert) {
         let response = await request
           .get(
             `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
@@ -236,7 +233,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let { attributes } = response.body.data;
         assert.strictEqual(attributes.status, 'pass', 'overall status passes');
         assert.strictEqual(attributes.skillsChecked, 3, 'all skills checked');
-        assert.strictEqual(attributes.commandsChecked, 2, 'commands checked');
+        assert.strictEqual(attributes.toolsChecked, 2, 'tools checked');
         assert.deepEqual(attributes.failures, [], 'no failures');
       });
     });
