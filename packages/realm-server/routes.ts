@@ -170,9 +170,9 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
-  // CS-11093: monitoring endpoint validating that every skill's command
-  // codeRefs still resolve in the deployed host. Self-authenticated with
-  // the monitoring token, same as /_queue-status.
+  // Monitoring endpoint validating that every skill's command codeRefs
+  // resolve in the deployed host. Self-authenticated with the monitoring
+  // token, same as /_queue-status.
   router.get('/_skill-validation', handleSkillValidation(args));
   router.post(
     '/_run-command',

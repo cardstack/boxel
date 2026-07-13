@@ -19,14 +19,14 @@ import type { CreateRoutesArgs } from '../routes.ts';
 import { isAuthorizedToViewMonitoring } from '../utils/monitoring.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 
-// CS-11093: monitoring endpoint that validates every skill in a realm still
-// resolves. Motivated by a staging incident where a host command module was
-// renamed and every skill referencing the old path silently broke the AI
-// assistant — API health checks stayed green because the failure only
-// surfaced when a browser tried to import the stale module. Each command
-// codeRef's module is imported via the prerenderer (a real host in headless
-// Chrome, with the same shims and virtual network a user's browser has), so
-// a module this endpoint passes is one the deployed host can actually load.
+// Monitoring endpoint that validates every skill in a realm resolves. Skills
+// reference command modules by codeRef, so a module rename breaks every skill
+// pointing at the old path while API-level health checks stay green — the
+// failure only surfaces when a browser tries to import the stale module. Each
+// command codeRef's module is therefore imported via the prerenderer (a real
+// host in headless Chrome, with the same shims and virtual network a user's
+// browser has), so a module this endpoint passes is one the deployed host can
+// actually load.
 
 interface SkillCommandFailure {
   skill: string;

@@ -105,7 +105,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
 
-      test('reports each command codeRef that no longer resolves', async function (assert) {
+      test('reports each command codeRef that fails to resolve', async function (assert) {
         let response = await request
           .get(
             `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
