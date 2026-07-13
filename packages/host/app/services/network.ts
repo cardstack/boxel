@@ -103,6 +103,25 @@ export default class NetworkService extends Service {
           resolvedTestRealmURL,
         );
       }
+      // environment.js nulls out resolvedCatalogRealmURL for
+      // `environment === 'test'`, since the mocked qunit suite has no real
+      // catalog realm to fetch from. Live tests (testem-live.js) are the
+      // exception — they run against a real, running catalog realm — so
+      // restore the @cardstack/catalog/ mapping using the always-populated
+      // rawCatalogRealmURL when a live-test run is detected at runtime.
+      let isLiveTest = new URLSearchParams(window.location.search).has(
+        'liveTest',
+      );
+      if (
+        isLiveTest &&
+        !config.resolvedCatalogRealmURL &&
+        config.rawCatalogRealmURL
+      ) {
+        virtualNetwork.addRealmMapping(
+          '@cardstack/catalog/',
+          config.rawCatalogRealmURL,
+        );
+      }
     }
     return virtualNetwork;
   }

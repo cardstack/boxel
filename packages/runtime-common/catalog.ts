@@ -7,7 +7,7 @@ import type { CardDef } from '@cardstack/base/card-api';
 import { RealmPaths, join } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
 import { resolveAdoptedCodeRef } from './code-ref.ts';
-import { realmURL } from './constants.ts';
+import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
@@ -23,7 +23,20 @@ export interface Listing extends CardDef {
   skills: any[];
 }
 
-const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
+// A resolved codeRef.module is typically the base realm's real backing URL
+// (e.g. `https://localhost:4201/base/skill`), not a literal
+// `https://cardstack.com/base/` string — VirtualNetwork.unresolveURL() maps
+// a real URL back to its canonical RRI-prefix form (`@cardstack/base/skill`)
+// via the registered realm mapping, which is what actually identifies base
+// realm membership post-RRI-refactor. Without this, a base-realm module
+// gets wrongly treated as something that needs to be copied into the
+// install destination.
+function isInBaseRealm(
+  module: RealmResourceIdentifier,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return virtualNetwork.unresolveURL(module).startsWith(baseRealmRRI);
+}
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
 // sourceCodeRef: code ref of the code from the source realm
@@ -222,7 +235,7 @@ function resolveTargetCodeRef(
   resolver: ListingPathResolver,
   virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(codeRef.module)) {
+  if (isInBaseRealm(codeRef.module, virtualNetwork)) {
     return codeRef;
   } else {
     let moduleURL = virtualNetwork.toURL(codeRef.module);
@@ -249,7 +262,7 @@ export function planModuleInstall(
     };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(sourceCodeRef.module)) {
+    if (isInBaseRealm(sourceCodeRef.module, virtualNetwork)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(
@@ -276,10 +289,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance, virtualNetwork);
     let lid = resolver.local(virtualNetwork.toURL(instance.id).href);
-    if (baseRealmPath.inRealm(rri(instance.id))) {
+    if (isInBaseRealm(rri(instance.id), virtualNetwork)) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(sourceCodeRef.module)) {
+    if (!isInBaseRealm(sourceCodeRef.module, virtualNetwork)) {
       let targetCodeRef = resolveTargetCodeRef(
         sourceCodeRef,
         resolver,
