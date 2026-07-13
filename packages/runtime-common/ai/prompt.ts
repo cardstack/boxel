@@ -932,6 +932,11 @@ export async function getTools(
     if (!isToolResultWithOutputContent(content)) {
       continue;
     }
+    // Only an applied read actually fetched the skill; discoveries claimed
+    // by a failed or invalid result are not evidence of anything.
+    if (content['m.relates_to']?.key !== 'applied') {
+      continue;
+    }
     let discovered = content.data?.discoveredTools;
     if (!discovered?.length) {
       continue;

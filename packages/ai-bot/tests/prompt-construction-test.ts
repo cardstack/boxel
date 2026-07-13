@@ -7690,6 +7690,24 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools[0].function.name, 'book-hotel_cd34');
   });
 
+  test('discoveries on a non-applied result are ignored', async () => {
+    let failed = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    failed.content['m.relates_to'].key = 'invalid';
+    const tools = await getTools(
+      [failed],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only an applied read is evidence the skill was actually fetched',
+    );
+  });
+
   test('a skill disabled in room state contributes no discovered tools', async () => {
     const skillsEvent = {
       type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
