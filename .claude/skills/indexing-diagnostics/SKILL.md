@@ -69,7 +69,7 @@ WHERE b.url = '<card-url>'
 
 Caveats:
 
-- Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob on `boxel_index.diagnostics` — summed timings across both visits, with the render visit's id under `prerenderHtmlRequestId` alongside `requestId` — and the dual-write projection copies that same combined blob onto the `prerendered_html` row.
+- Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob on `boxel_index.diagnostics` — summed timings across both visits, with the render visit's id under `prerenderHtmlRequestId` alongside `requestId` — and the inline prerendered_html write lands that same combined blob on the `prerendered_html` row.
 - One prerender-html visit produces both of a URL's rows (`type='instance'` and `type='file'`), so both carry the same blob; the `card` block of `renderFormatsMs` describes the instance rendering and the `file` block the FileDef rendering.
 - The two tables' generations advance independently: `p.rendered_at` / `p.generation` tell you _which_ index generation the persisted render diagnostics belong to (fresh when it equals `b.generation`).
 - A `prerender_html` job that never ran (queued, crashed pre-write) leaves no diagnostics — check `jobs` / `job_reservations` for the realm's `prerender_html` lane instead.

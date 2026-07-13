@@ -329,8 +329,8 @@ export class RealmIndexQueryEngine {
       let hasError = Boolean(row.has_error);
       // The entry carries its index-data generation (`boxel_index.generation`);
       // each `html` rendering carries the generation it was produced at
-      // (`prerendered_html.generation`, dual-read with a boxel_index fallback).
-      // The two channels advance independently, so they can differ per row.
+      // (`prerendered_html.generation`). The two channels advance
+      // independently, so they can differ per row.
       let generation = (row.generation as number | null | undefined) ?? 0;
       let htmlGeneration =
         (row.html_generation as number | null | undefined) ?? generation;

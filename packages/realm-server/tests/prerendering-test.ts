@@ -2677,12 +2677,7 @@ module(basename(import.meta.filename), function () {
         let alternate = url.endsWith('.json')
           ? url.replace(/\.json$/, '')
           : `${url}.json`;
-        // The isolated-HTML injection dual-reads from prerendered_html (falling
-        // back to boxel_index), so override both channels for the row.
-        await dbAdapter.execute(
-          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
-          { bind: [html, url, alternate] },
-        );
+        // The isolated-HTML injection reads from prerendered_html.
         await dbAdapter.execute(
           `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 OR url = $3`,
           { bind: [html, url, alternate] },
