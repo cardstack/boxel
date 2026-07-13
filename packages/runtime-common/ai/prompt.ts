@@ -31,6 +31,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
+  DiscoveredToolDefinition,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -905,6 +906,52 @@ export async function getTools(
       for (let tool of skillTools) {
         enabledToolNames.add(tool.functionName);
       }
+    }
+  }
+
+  // Tools discovered by reading a skill file (readRealmFile): each read's
+  // result event embeds the definitions in `data.discoveredTools`, so this
+  // source is event-sourced like every other prompt input. A skill read many
+  // times contributes only its latest read's definitions (the file may have
+  // changed between reads); a skill toggled off in room state contributes
+  // none. Merged into the map first, so an enabled skill's uploaded
+  // definition or a message-context tool with the same functionName wins on
+  // conflict.
+  let disabledSkillIds = new Set(await getDisabledSkillIds(eventList));
+  let discoveredBySkill = new Map<string, DiscoveredToolDefinition[]>();
+  for (let event of eventList) {
+    if (!isToolResultEvent(event)) {
+      continue;
+    }
+    let content = event.content;
+    if (!isToolResultWithOutputContent(content)) {
+      continue;
+    }
+    let discovered = content.data?.discoveredTools;
+    if (!discovered?.length) {
+      continue;
+    }
+    let bySkill = new Map<string, DiscoveredToolDefinition[]>();
+    for (let def of discovered) {
+      if (!def?.sourceSkillUrl || !def.definition?.function?.name) {
+        continue;
+      }
+      let defs = bySkill.get(def.sourceSkillUrl) ?? [];
+      defs.push(def);
+      bySkill.set(def.sourceSkillUrl, defs);
+    }
+    // eventList is chronological, so a later read of the same skill
+    // replaces the earlier one wholesale.
+    for (let [skillUrl, defs] of bySkill) {
+      discoveredBySkill.set(skillUrl, defs);
+    }
+  }
+  for (let [skillUrl, defs] of discoveredBySkill) {
+    if (disabledSkillIds.has(skillUrl)) {
+      continue;
+    }
+    for (let def of defs) {
+      toolMap.set(def.definition.function.name, def.definition);
     }
   }
 
