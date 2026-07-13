@@ -1,4 +1,4 @@
-import { baseFileRef, baseRRI } from './constants.ts';
+import { baseRealm, baseFileRef } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -6,8 +6,13 @@ import type { VirtualNetwork } from './virtual-network.ts';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
+// Deliberately URL form, not baseRRI: `resolveFileDefCodeRef` returns these
+// mappings verbatim via its absolute-module (`://`) early return. In prefix
+// form the modules would instead be resolved against the indexed file's URL,
+// making the stamped ref depend on the virtual network's mapping state — and
+// producing a garbage joined URL wherever the base prefix isn't registered.
 function baseModule(name: string): RealmResourceIdentifier {
-  return baseRRI(name);
+  return `${baseRealm.url}${name}` as RealmResourceIdentifier;
 }
 
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
