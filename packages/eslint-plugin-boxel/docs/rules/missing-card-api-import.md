@@ -40,7 +40,12 @@ export class Payment extends FieldDef {
 Will be fixed to:
 
 ```js
-import { FieldDef, field, linksTo, contains } from 'https://cardstack.com/base/card-api';
+import {
+  FieldDef,
+  field,
+  linksTo,
+  contains,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 export class Payment extends FieldDef {

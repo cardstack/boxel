@@ -34,10 +34,7 @@ import { eq, add } from '@cardstack/boxel-ui/helpers';
 
 // multiline duplicate imports
 import { eq } from '@cardstack/boxel-ui/helpers';
-import {
-  eq,
-  add
-} from '@cardstack/boxel-ui/helpers';
+import { eq, add } from '@cardstack/boxel-ui/helpers';
 ```
 
 Examples of **correct** code for this rule:
@@ -64,22 +61,24 @@ import { b } from 'module';
 The rule's auto-fix capabilities handle several scenarios:
 
 1. **Individual duplicate specifier**: It removes duplicate named imports while preserving unique imports in the same statement.
+
    ```js
    // Before
    import { eq } from '@cardstack/boxel-ui/helpers';
    import { eq, add } from '@cardstack/boxel-ui/helpers';
-   
+
    // After
    import { eq } from '@cardstack/boxel-ui/helpers';
    import { add } from '@cardstack/boxel-ui/helpers';
    ```
 
 2. **Entirely duplicate import statement**: It removes redundant import statements.
+
    ```js
    // Before
    import { eq, add } from '@cardstack/boxel-ui/helpers';
    import { eq, add } from '@cardstack/boxel-ui/helpers';
-   
+
    // After
    import { eq, add } from '@cardstack/boxel-ui/helpers';
    ```
@@ -95,5 +94,5 @@ If you prefer to organize imports by their purpose rather than their source, you
 
 ## Further Reading
 
-* [ES6 Import Syntax](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import)
-* [ESLint rules: no-duplicate-imports](https://eslint.org/docs/latest/rules/no-duplicate-imports) - Similar built-in ESLint rule
+- [ES6 Import Syntax](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import)
+- [ESLint rules: no-duplicate-imports](https://eslint.org/docs/latest/rules/no-duplicate-imports) - Similar built-in ESLint rule
