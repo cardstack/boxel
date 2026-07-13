@@ -669,7 +669,7 @@ export class IndexRunner {
       }
       // A transport-level failure (prerender timeout/abort, network error)
       // never reaches performCardIndexing/performFileIndexing's own
-      // error-entry construction — visitFileForIndexingFused rethrows
+      // error-entry construction — visitFileForIndexing rethrows
       // before calling indexCardWithResult/indexFileWithResults. Left
       // uncaught here, one file's failure propagates out of the
       // fromScratch/incremental visit loop, skips batch.done(), and
@@ -705,7 +705,7 @@ export class IndexRunner {
       // above would let batch.done() promote the untouched `instance`
       // tombstone, silently removing a previously-good card from search
       // over a transient error. Re-parse the file ourselves (the throw
-      // above lost visitFileForIndexingFused's internal determination)
+      // above lost visitFileForIndexing's internal determination)
       // and write a matching instance-error row when it's a card, so
       // the last-known-good instance survives the same as the in-band
       // render-error path.

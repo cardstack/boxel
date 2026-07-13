@@ -14,6 +14,7 @@ import type {
   DBAdapter,
   DefinitionLookup,
   LooseSingleCardDocument,
+  Prerenderer,
   Realm,
   RealmPermissions,
   RealmAdapter,
@@ -28,6 +29,7 @@ import {
   cleanWhiteSpace,
   waitUntil,
   cardInfo,
+  getTestPrerenderer,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   searchCardsForTest,
@@ -5131,6 +5133,164 @@ module(basename(import.meta.filename), function () {
           deletedFile,
           undefined,
           'deleted file is not retrievable',
+        );
+      });
+    });
+
+    module('per-file failure isolation', function (hooks) {
+      let realm: Realm;
+      let testDbAdapter: PgAdapter;
+      // URL substring the wrapper fails prerender visits for; unset =
+      // pass everything through to the real test prerenderer.
+      let failVisitsFor: string | undefined;
+
+      let delegatePromise: Promise<Prerenderer> | undefined;
+      let delegate = () => (delegatePromise ??= getTestPrerenderer());
+      // A transport-level failure (the prerender request aborting before a
+      // response exists) can only be simulated at the Prerenderer seam —
+      // the in-band error paths all require a response document.
+      let interceptingPrerenderer: Prerenderer = {
+        async prerenderModule(args) {
+          return (await delegate()).prerenderModule(args);
+        },
+        async prerenderVisit(args) {
+          if (failVisitsFor && args.url.includes(failVisitsFor)) {
+            throw new Error(
+              'Prerender request to /prerender-visit aborted after 120000ms (simulated transport failure)',
+            );
+          }
+          return (await delegate()).prerenderVisit(args);
+        },
+        async runCommand(args) {
+          return (await delegate()).runCommand(args);
+        },
+        async releaseBatch(args) {
+          await (await delegate()).releaseBatch?.(args);
+        },
+      };
+
+      hooks.beforeEach(function () {
+        failVisitsFor = undefined;
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        mode: 'beforeEach',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        prerenderer: interceptingPrerenderer,
+        onRealmSetup({ dbAdapter, testRealm: r }) {
+          testDbAdapter = dbAdapter;
+          realm = r;
+        },
+      });
+
+      function mangoDoc(firstName: string): LooseSingleCardDocument {
+        return {
+          data: {
+            attributes: { firstName },
+            meta: {
+              adoptsFrom: {
+                module: rri('./person'),
+                name: 'Person',
+              },
+            },
+          },
+        };
+      }
+
+      async function mangoIndexRows() {
+        return (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  (pristine_doc IS NOT NULL) as has_pristine_doc,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}mango.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          has_pristine_doc: boolean;
+          error_message: string | null;
+        }[];
+      }
+
+      test('a transport-level visit failure isolates to its file: the batch still commits and the card keeps last-known-good state under an error row', async function (assert) {
+        failVisitsFor = 'mango.json';
+        await realm.write('mango.json', JSON.stringify(mangoDoc('Mang-Mang')));
+
+        let rows = await mangoIndexRows();
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both the file and instance rows exist for the failed card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(
+            row.is_deleted,
+            `the ${row.type} row is not tombstoned by the transient failure`,
+          );
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
+        let instanceRow = rows.find((row) => row.type === 'instance')!;
+        assert.true(
+          instanceRow.has_pristine_doc,
+          'the instance row preserves the last-known-good serialization',
+        );
+
+        // The failure was isolated: the same job's other work still
+        // committed. A sibling card written in the same realm version
+        // remains searchable, proving batch.done() ran.
+        let { data: others } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Van Gogh' },
+            },
+          },
+        );
+        assert.strictEqual(
+          others.length,
+          1,
+          'sibling cards are still searchable after the failed visit',
+        );
+
+        // Recovery: once the transport failure clears, a rewrite indexes
+        // normally and the error state washes out.
+        failVisitsFor = undefined;
+        await realm.write(
+          'mango.json',
+          JSON.stringify(mangoDoc('Mango Recovered')),
+        );
+        rows = await mangoIndexRows();
+        assert.true(
+          rows.every((row) => !row.has_error),
+          'the error state clears once the visit succeeds',
+        );
+        let { data: recovered } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Mango Recovered' },
+            },
+          },
+        );
+        assert.strictEqual(
+          recovered.length,
+          1,
+          'the recovered card is searchable with its new content',
         );
       });
     });
