@@ -1053,12 +1053,12 @@ Lines are FireLens-wrapped (`{"log":"…"}`); pull `.log`. Strip everything afte
 
 ## Mode J — a search doc was slow to build (per-field / per-link attribution)
 
-The index visit's cost is dominated by search-doc assembly, and its diagnostics split that assembly into two disjoint phases, each with per-item detail:
+The index visit's cost is dominated by search-doc assembly. The host produces the doc by walking the card repeatedly until the store's load state is quiescent — the first walk that fires no lazy getter loads is the one whose doc persists — and the diagnostics split the cost along that seam, each side with per-item detail:
 
-1. **The settle loop** (`searchDocSettleMs`, `searchDocSettlePasses`) — the passes that drive the card's searchable-path link loads (and the links its contained/computed fields read) to quiescence. This is where link targets actually load; the per-target breakdown is `searchDocLinkLoads` (`{ path, target, ms }`, dotted `linksTo`/`linksToMany` field path + loaded URL).
-2. **The timed searchDoc walk** (`searchDocMs`) — evaluation of the card's fields against the now-settled store. The per-field breakdown is `searchDocFieldsMs`, keyed by dotted field path with **inclusive** times (a parent includes its children, so the keys read as a drill-down to the slow leaf).
+1. **The discarded walks and their load drains** (`searchDocSettleMs`, `searchDocSettlePasses`) — the passes re-run because a computed's read of a not-yet-loaded link fired a lazy load the walk couldn't consume. This is where getter-driven link targets load; `searchDocSettlePasses` counts the discarded walks, so a card that settles on its first walk reads `0`. The generator's own `searchable`-route loads are awaited inside whichever walk reaches them (a route's hops resolve within one pass), and every performed load lands in `searchDocLinkLoads` (`{ path, target, ms }`, dotted `linksTo`/`linksToMany` field path + loaded URL). A card's independent routes and plural-field slots load **concurrently**, so the entries overlap in time — read each `ms` as that load's own span, not as a summable slice.
+2. **The doc-producing walk** (`searchDocMs`) — the stable walk's evaluation of the card's fields, its loads all resident or cache hits. The per-field breakdown is `searchDocFieldsMs`, keyed by dotted field path with **inclusive** times (a parent includes its children, so the keys read as a drill-down to the slow leaf).
 
-Both detail blocks are bounded — the slowest 20 entries at ≥ 1 ms — so a typical ~1 ms search doc persists neither, and their absence on a slow row is itself a signal (see step 3).
+Both detail blocks are bounded — the slowest 20 entries at ≥ 1 ms — so a typical ~1 ms search doc persists neither, and their absence on a slow row is itself a signal (see step 3). Within one indexing job, loaded wire documents are cached job-scoped in the render tab, so a target shared by many cards costs a real load only on the first owner that reaches it — later owners' entries are near-zero and floor-pruned.
 
 **Step 1 — find the rows whose search-doc build dominates.**
 
@@ -1109,7 +1109,7 @@ ORDER BY worst_ms DESC
 LIMIT 20;
 ```
 
-Read the shape: one very slow entry = one slow target (a cross-realm link? a target whose own realm is slow? — Mode G if the load is a `_search`-backed path, the target realm's own logs otherwise); many moderate entries under one `path` = a wide `linksToMany` route fanning out (is that `searchable` depth actually needed?). An entry with an **empty `path`** is a load a field getter fired — a computed reading a link — so the fix target is the computed that reads that URL, not a `searchable` annotation. A high `passes` count with moderate per-load times means a deep chain — each pass unlocks one more hop, so depth costs serial round-trips even when each load is fine.
+Read the shape: one very slow entry = one slow target (a cross-realm link? a target whose own realm is slow? — Mode G if the load is a `_search`-backed path, the target realm's own logs otherwise); many moderate entries under one `path` = a wide `linksToMany` route fanning out — its slots load concurrently, so the wall cost is nearer the worst entry than the sum, but each load is still work for the serving realm (is that `searchable` depth actually needed?). An entry with an **empty `path`** is a load a field getter fired — a computed reading a link — so the fix target is the computed that reads that URL, not a `searchable` annotation. A high `passes` count means computed-over-link depth: each discarded walk is one wave of getter-fired loads a computed needed before it could produce a value (`searchable`-route hops resolve inside a single walk and don't add passes).
 
 **Step 3 — searchDoc-dominated: which fields were expensive to evaluate.**
 
@@ -1262,25 +1262,30 @@ A large `searchDocMs` with **no** `searchDocFieldsMs` entries means no single fi
                                  // contains-many / links-to field does this).
   "serializeMs": 42.1,           // host-side wall-clock of `serializeCard(instance, {
                                  // includeComputeds: true })` for this card.
-  "searchDocMs": 18.3,           // host-side wall-clock of `searchDoc(instance)` for
-                                 // this card. Sum with `serializeMs` to get the host's
-                                 // contribution to `renderElapsedMs`. Pairs with
-                                 // `computedCalls` so you can normalize: a card with
-                                 // `computedCalls=500, searchDocMs=80` is ~6 calls/ms
-                                 // — a sign of a hot compute that may be worth a
-                                 // dependency-aware skip.
-  "searchDocSettleMs": 812.4,    // host-side wall-clock of the searchable load-settle
-                                 // loop that runs BEFORE the timed searchDoc walk. This
-                                 // is where the card's searchable link targets actually
-                                 // load — by the time `searchDocMs` is measured they're
-                                 // resident — so link-load cost lives here, not inside
-                                 // `searchDocMs`. Attributed per target by
-                                 // `searchDocLinkLoads`.
-  "searchDocSettlePasses": 3,    // settle passes until the store's load generation held
-                                 // steady. Each pass loads one more dependency-depth
-                                 // wave (a deeper searchable hop, a computed's link), so
-                                 // a high count = a deep link/computed chain. Capped at
-                                 // 20 (a warning is logged at the cap).
+  "searchDocMs": 18.3,           // host-side wall-clock of the walk that produced this
+                                 // row's search doc — the first walk against a stable
+                                 // load generation, its loads all resident or cache
+                                 // hits, so this measures evaluation. Sum with
+                                 // `serializeMs` to get the host's contribution to
+                                 // `renderElapsedMs`. Pairs with `computedCalls` so you
+                                 // can normalize: a card with `computedCalls=500,
+                                 // searchDocMs=80` is ~6 calls/ms — a sign of a hot
+                                 // compute that may be worth a dependency-aware skip.
+  "searchDocSettleMs": 812.4,    // host-side wall-clock spent BEFORE the doc-producing
+                                 // walk: the discarded walk passes and the drains of
+                                 // the lazy loads they fired. This is where the card's
+                                 // getter-driven link targets load, so link-load cost
+                                 // lives here, not inside `searchDocMs`. Attributed per
+                                 // target by `searchDocLinkLoads`. Near-zero when the
+                                 // first walk settled.
+  "searchDocSettlePasses": 3,    // walk passes discarded before one ran against a
+                                 // stable load generation. Each discarded pass is one
+                                 // wave of loads a computed's link read fired (the
+                                 // generator's own searchable-route loads resolve
+                                 // inside a single pass), so a high count = a deep
+                                 // computed-over-link chain. 0 = the first walk
+                                 // settled. Capped at 20 (a warning is logged at the
+                                 // cap).
   "searchDocFieldsMs": {         // per-field inclusive evaluation timings from the timed
                                  // searchDoc walk, keyed by dotted field path from the
                                  // indexed card's root. A parent's time includes its
@@ -1293,18 +1298,21 @@ A large `searchDocMs` with **no** `searchDocFieldsMs` entries means no single fi
     "policies.premiumTotal": 13.8
   },
   "searchDocLinkLoads": [        // slowest link-target loads performed while producing
-                                 // this row's search doc (settle passes + any the timed
-                                 // walk still did). `path` = the dotted linksTo /
-                                 // linksToMany field path; `target` = the loaded URL (a
-                                 // linksToMany records one entry per slot, same path,
-                                 // different target). A load fired through a field
-                                 // getter — a computed reading a link — carries an
-                                 // empty path: the target and cost are attributed, the
-                                 // owning field isn't nameable there. Same bounding as
-                                 // `searchDocFieldsMs`. Separates "linked instance slow
-                                 // to load" (an entry here) from "field expensive to
-                                 // compute" (a hot `searchDocFieldsMs` path with no
-                                 // matching load entry).
+                                 // this row's search doc, across every walk pass.
+                                 // `path` = the dotted linksTo / linksToMany field
+                                 // path; `target` = the loaded URL (a linksToMany
+                                 // records one entry per slot, same path, different
+                                 // target). A load fired through a field getter — a
+                                 // computed reading a link — carries an empty path:
+                                 // the target and cost are attributed, the owning
+                                 // field isn't nameable there. A card's independent
+                                 // routes and plural slots load concurrently, so
+                                 // entries overlap in time and don't sum to wall-
+                                 // clock. Same bounding as `searchDocFieldsMs`.
+                                 // Separates "linked instance slow to load" (an entry
+                                 // here) from "field expensive to compute" (a hot
+                                 // `searchDocFieldsMs` path with no matching load
+                                 // entry).
     { "path": "author", "target": "https://realm.example/Author/1", "ms": 640.1 },
     { "path": "", "target": "https://realm.example/Publisher/2", "ms": 210.4 }
   ]
@@ -1325,7 +1333,7 @@ All ms values are server-observed walltime.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
 - `computedCalls` + `computedCacheHits` together represent total compute pressure on the render.meta pass. The split tells you how much duplicate work the pass-scoped memo absorbed — a 1:0 ratio means every field was read once, a 1:5 ratio means the cards re-read each computed five extra times (typical for cards where many sibling fields share a computed input). `searchDocMs` + `serializeMs` are the host's contribution to `renderElapsedMs`; comparing `computedCalls / (searchDocMs + serializeMs)` across cards finds the slow-per-call computes that are worth profiling.
-- `searchDocSettleMs` is disjoint from `searchDocMs`: the settle loop runs first and performs the link loads; the timed searchDoc walk then runs against a settled store. So "producing this row's search doc" cost ≈ `searchDocSettleMs + searchDocMs`, and a slow row splits cleanly: settle-dominated → loading (read `searchDocLinkLoads` for which target), searchDoc-dominated → evaluation (read `searchDocFieldsMs` for which field). The retained `searchDocFieldsMs` entries are inclusive-time dotted paths — the top-level entries (no dot) sum to ≈ `searchDocMs` on a hot-path card; the deeper keys under a hot top-level key are the drill-down, not additional cost.
+- `searchDocSettleMs` is disjoint from `searchDocMs`: the discarded walk passes and their load drains come first; the doc-producing walk then runs against a settled store. So "producing this row's search doc" cost ≈ `searchDocSettleMs + searchDocMs`, and a slow row splits cleanly: settle-dominated → loading (read `searchDocLinkLoads` for which target), searchDoc-dominated → evaluation (read `searchDocFieldsMs` for which field). The retained `searchDocFieldsMs` entries are inclusive-time dotted paths — the top-level entries (no dot) sum to ≈ `searchDocMs` on a hot-path card; the deeper keys under a hot top-level key are the drill-down, not additional cost.
 
 Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 
@@ -1349,7 +1357,7 @@ Walk the fields top-down. The _first_ positive signal wins; stop there.
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays                                                                                                                                                               | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `blockedTimerSummary` populated                                                                                                                                                                                                                       | **Supplementary**                                                            | Tells you which timer-driven code is fighting the render. Not a root cause on its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `computedCalls` large (e.g. > 1000) AND `searchDocMs + serializeMs` ≈ `renderElapsedMs`                                                                                                                                                               | **Computed-field hot path**                                                  | The render.meta traversal itself is the bottleneck, not data loads or browser stalls. Look at `computedCalls / (searchDocMs + serializeMs)` — > ~5 calls/ms is fast, < ~1 call/ms means a few slow `computeVia` functions dominate. `searchDocFieldsMs` names the field: its dotted-path keys rank the walk's hot paths, so instead of inspecting the card class blind you start at the top entry (see [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution)). Consider hoisting an aggregate computed's scan into a shared rollup or adding `computeDeps` so the field can be skipped when its inputs don't change. The pass-scoped memo already eliminates duplicate reads in one traversal (visible in `computedCacheHits`); further wins require structural changes to the card.                                                                                                                                                                                                                                                                                                                                        |
-| `searchDocSettleMs` large (≫ `searchDocMs`)                                                                                                                                                                                                           | **Search-doc link-load stall**                                               | The index visit spent its time loading the card's searchable link targets, not evaluating fields. `searchDocLinkLoads` names the slow target(s) per dotted field path — one very slow entry is one slow linksTo target (is its realm slow? cross-realm?); many moderate entries are a fan-out (a wide `linksToMany` route — consider whether the `searchable` annotation needs that depth). A high `searchDocSettlePasses` alongside means a deep chain: each pass unlocks one more hop. See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `searchDocSettleMs` large (≫ `searchDocMs`)                                                                                                                                                                                                           | **Search-doc link-load stall**                                               | The index visit spent its time loading the card's link targets, not evaluating fields. `searchDocLinkLoads` names the slow target(s) per dotted field path — one very slow entry is one slow linksTo target (is its realm slow? cross-realm?); many moderate entries are a fan-out (a wide `linksToMany` route — its slots load concurrently, so wall cost tracks the worst entry, but each load is still work for the serving realm). A high `searchDocSettlePasses` alongside means a deep computed-over-link chain: each discarded walk is one wave of getter-fired loads. See [Mode J](#mode-j--a-search-doc-was-slow-to-build-per-field--per-link-attribution).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Special cases
 
