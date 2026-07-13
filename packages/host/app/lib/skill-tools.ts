@@ -117,8 +117,10 @@ export function findDiscoveredToolSkillUrl(
   events: DiscreteMatrixEvent[],
   functionName: string,
 ): string | undefined {
-  let found: string | undefined;
-  for (let event of events) {
+  // Walk newest-first and return on the first match: the latest read of a
+  // skill is the freshest claim about where the tool lives.
+  for (let i = events.length - 1; i >= 0; i--) {
+    let event = events[i];
     if (!isToolResultEventType(event.type)) {
       continue;
     }
@@ -138,11 +140,9 @@ export function findDiscoveredToolSkillUrl(
         def.definition?.function?.name === functionName ||
         def.functionName === functionName
       ) {
-        // Keep scanning: events are chronological, and the latest read of a
-        // skill is the freshest claim about where the tool lives.
-        found = def.sourceSkillUrl;
+        return def.sourceSkillUrl;
       }
     }
   }
-  return found;
+  return undefined;
 }

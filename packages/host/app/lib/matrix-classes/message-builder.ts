@@ -397,10 +397,20 @@ export default class MessageBuilder {
         toolRequest.name,
       );
       if (sourceSkillUrl) {
-        let source = await loadSkillSource(this.store, sourceSkillUrl);
-        if (source) {
-          skillTool = getSkillSourceTools(source).find(
-            (candidate) => candidate.functionName === toolRequest.name,
+        // The URL comes from a bot event, so a load blowing up on a
+        // malformed or unreadable id must degrade to "unresolved tool", not
+        // break message building for the whole timeline.
+        try {
+          let source = await loadSkillSource(this.store, sourceSkillUrl);
+          if (source) {
+            skillTool = getSkillSourceTools(source).find(
+              (candidate) => candidate.functionName === toolRequest.name,
+            );
+          }
+        } catch (e) {
+          console.warn(
+            `could not load skill ${sourceSkillUrl} to resolve tool "${toolRequest.name}":`,
+            e,
           );
         }
       }
