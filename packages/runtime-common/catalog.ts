@@ -7,7 +7,7 @@ import type { CardDef } from '@cardstack/base/card-api';
 import { RealmPaths, join } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
 import { resolveAdoptedCodeRef } from './code-ref.ts';
-import { baseRealmRRI, realmURL } from './constants.ts';
+import { baseRealm, baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
@@ -23,18 +23,23 @@ export interface Listing extends CardDef {
   skills: any[];
 }
 
-// A resolved codeRef.module is typically the base realm's real backing URL
-// (e.g. `https://localhost:4201/base/skill`), not a literal
-// `https://cardstack.com/base/` string — VirtualNetwork.unresolveURL() maps
+// A codeRef.module for a base-realm class may show up in either form:
+// the literal symbolic `https://cardstack.com/base/` URL (e.g. when built
+// directly, without going through a VirtualNetwork with real mappings
+// registered), or the base realm's real backing URL (e.g.
+// `https://localhost:4201/base/skill`) once resolved through one that has
+// them. VirtualNetwork.unresolveURL() only normalizes the latter — it maps
 // a real URL back to its canonical RRI-prefix form (`@cardstack/base/skill`)
-// via the registered realm mapping, which is what actually identifies base
-// realm membership post-RRI-refactor. Without this, a base-realm module
-// gets wrongly treated as something that needs to be copied into the
-// install destination.
+// via the registered realm mapping — so check the literal symbolic form
+// first. Without both, a base-realm module can get wrongly treated as
+// something that needs to be copied into the install destination.
 function isInBaseRealm(
   module: RealmResourceIdentifier,
   virtualNetwork: VirtualNetwork,
 ): boolean {
+  if (module.startsWith(baseRealm.url)) {
+    return true;
+  }
   return virtualNetwork.unresolveURL(module).startsWith(baseRealmRRI);
 }
 
