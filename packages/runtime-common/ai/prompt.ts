@@ -589,12 +589,14 @@ function markdownSkillTools(
     }
     let module = codeRef.module;
     // Match the host's isUrlLike semantics: both `.`- and `/`-prefixed
-    // modules resolve against the skill's own URL. Known limitation: the
-    // host hashes relative refs against the skill's canonical document id,
-    // which in a prefix-form realm differs from the room-state sourceUrl we
-    // resolve against — so relative command modules in prefix-form realms
-    // may not match. Package specifiers and absolute URLs (all current
-    // skills) hash identically on both sides.
+    // modules resolve against the skill's own URL. Known limitation: for a
+    // skill row the indexer has not yet enriched, the host hashes relative
+    // refs against the skill's canonical document id, which in a prefix-form
+    // realm differs from the room-state sourceUrl we resolve against — so
+    // relative command modules in prefix-form realms may not match until the
+    // skill reindexes (the index stamp resolves against the skill's file
+    // URL, agreeing with this resolution). Package specifiers and absolute
+    // URLs (all current skills) hash identically on both sides.
     if ((module.startsWith('.') || module.startsWith('/')) && skillUrl) {
       try {
         module = new URL(module, skillUrl).href;

@@ -1,4 +1,4 @@
-import { getOwner, setOwner } from '@ember/-internals/owner';
+import { getOwner, setOwner } from '@ember/owner';
 
 import { isEqual } from 'lodash-es';
 
@@ -264,18 +264,13 @@ export class FileDefAttributesExtractor {
             toolSchemaErrors = await this.stampSkillToolSchemas(resource);
           } catch (err) {
             // Schema generation must never fail the file row — the skill
-            // still indexes instructions-only.
+            // still indexes instructions-only. Failures inside the stamp are
+            // already attributed per tool; anything reaching here is a bug in
+            // the stamping code itself.
             console.warn(
               `[file-extract] tool schema generation failed for ${this.#fileURL}:`,
               err,
             );
-            toolSchemaErrors = [
-              {
-                module: '',
-                name: '',
-                message: err instanceof Error ? err.message : String(err),
-              },
-            ];
           }
         }
         return {
@@ -411,109 +406,152 @@ export class FileDefAttributesExtractor {
     resource: FileMetaResource,
   ): Promise<ToolSchemaError[] | undefined> {
     let attributes = resource.attributes as Record<string, any>;
-    if (attributes.kind !== 'skill') {
-      return undefined;
-    }
-    let frontmatter = attributes.frontmatter as Record<string, any> | undefined;
     // A fresh extract always serializes skill tools under `tools` — the
     // frontmatter field maps the pre-rename `boxel.commands` key there too
     // (see SkillFrontmatterField.fromFrontmatter).
     let authoredTools =
-      frontmatter && Array.isArray(frontmatter.tools)
-        ? (frontmatter.tools as Record<string, any>[])
+      attributes.kind === 'skill' &&
+      Array.isArray(attributes.frontmatter?.tools)
+        ? (attributes.frontmatter.tools as Record<string, any>[])
         : undefined;
-    if (!frontmatter || !authoredTools?.length) {
+    if (!authoredTools?.length) {
       return undefined;
     }
 
-    let loader = this.#loaderService.loader;
-    let cardApi = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
-    let mappings = await basicMappings(loader);
-    // Tool classes never read the context during schema generation, but
-    // host-package tools resolve services (e.g. the loader) through the
-    // context's owner at construction — so the stamp object must carry one,
-    // the same shape the tool service hands to real invocations.
-    let toolContext: ToolContext = { [ToolContextStamp]: true };
-    setOwner(toolContext, getOwner(this.#loaderService)!);
+    // The authored coordinates, coerced once — used both to validate an
+    // entry and to name it in an error.
+    let coordinatesOf = (entry: Record<string, any>) => ({
+      module:
+        typeof entry?.codeRef?.module === 'string' ? entry.codeRef.module : '',
+      name: typeof entry?.codeRef?.name === 'string' ? entry.codeRef.name : '',
+    });
 
-    let errors: ToolSchemaError[] = [];
-    let enrichedTools: Record<string, any>[] = [];
-    for (let entry of authoredTools) {
-      let codeRef = entry?.codeRef as
-        | { module?: unknown; name?: unknown }
-        | undefined;
-      if (
-        typeof codeRef?.module !== 'string' ||
-        typeof codeRef?.name !== 'string'
-      ) {
-        errors.push({
-          module: typeof codeRef?.module === 'string' ? codeRef.module : '',
-          name: typeof codeRef?.name === 'string' ? codeRef.name : '',
-          message: 'tool entry is missing a codeRef module/name',
-        });
-        enrichedTools.push(entry);
-        continue;
-      }
-      // Resolve in RRI space (no VirtualNetwork), matching how ToolField
-      // computes `functionName` — so the stamped name and a host-side
-      // recomputation from the stamped codeRef always agree. Package
-      // specifiers pass through verbatim.
-      let resolvedRef = codeRefWithAbsoluteIdentifier(
-        { module: rri(codeRef.module), name: codeRef.name },
-        new URL(this.#fileURL),
-        undefined,
-      ) as ResolvedCodeRef;
-      try {
-        let ToolClass = await getClass(resolvedRef, loader);
-        if (typeof ToolClass !== 'function') {
-          throw new Error(
-            `module does not export a tool class named "${resolvedRef.name}"`,
-          );
-        }
-        let tool = new ToolClass(toolContext);
-        let functionName = buildToolFunctionNameFromResolvedRef(resolvedRef);
-        let toolDefinition = {
-          type: 'function' as LLMTool['type'],
-          function: {
-            name: functionName,
-            description: tool.description,
-            parameters: {
-              type: 'object',
-              properties: {
-                description: {
-                  type: 'string',
-                },
-                ...(await tool.getInputJsonSchema(cardApi, mappings)),
-              },
-              required: ['attributes', 'description'],
-            },
-          },
-        };
-        enrichedTools.push({
-          ...entry,
-          codeRef: resolvedRef,
-          // Absent means "requires approval"; stamp that decision so
-          // consumers don't each re-implement the default.
-          requiresApproval: entry.requiresApproval !== false,
-          functionName,
-          tool: toolDefinition,
-        });
-      } catch (err) {
-        console.warn(
-          `[file-extract] tool schema generation failed for ${resolvedRef.module}#${resolvedRef.name} (skill ${this.#fileURL}):`,
-          err,
-        );
-        errors.push({
-          module: resolvedRef.module,
-          name: resolvedRef.name,
-          message: err instanceof Error ? err.message : String(err),
-        });
-        enrichedTools.push(entry);
-      }
+    let loader = this.#loaderService.loader;
+    let cardApi: typeof CardAPI;
+    let mappings: Awaited<ReturnType<typeof basicMappings>>;
+    let toolContext: ToolContext;
+    try {
+      [cardApi, mappings] = await Promise.all([
+        loader.import<typeof CardAPI>('https://cardstack.com/base/card-api'),
+        basicMappings(loader),
+      ]);
+      // Tool classes never read the context during schema generation, but
+      // host-package tools resolve services (e.g. the loader) through the
+      // context's owner at construction — so the stamp object must carry
+      // one, the same shape the tool service hands to real invocations.
+      toolContext = { [ToolContextStamp]: true };
+      setOwner(toolContext, getOwner(this.#loaderService)!);
+    } catch (err) {
+      // Setup failed before any tool could be attempted (e.g. a transient
+      // failure loading the base modules). Attribute the failure to every
+      // declared tool so the diagnostics name real coordinates instead of a
+      // single anonymous entry.
+      console.warn(
+        `[file-extract] tool schema generation failed for ${this.#fileURL}:`,
+        err,
+      );
+      let message = `tool schema generation failed before this tool was attempted: ${
+        err instanceof Error ? err.message : String(err)
+      }`;
+      return authoredTools.map((entry) => ({
+        ...coordinatesOf(entry),
+        message,
+      }));
     }
-    attributes.frontmatter = { ...frontmatter, tools: enrichedTools };
+
+    let skillURL = new URL(this.#fileURL);
+    // Tools are independent; the loader dedupes concurrent module imports,
+    // so enriching in parallel overlaps the per-tool module fetches.
+    let results = await Promise.all(
+      authoredTools.map(
+        async (
+          entry,
+        ): Promise<{
+          entry: Record<string, any>;
+          error?: ToolSchemaError;
+        }> => {
+          let { module, name } = coordinatesOf(entry);
+          if (!module || !name) {
+            return {
+              entry,
+              error: {
+                module,
+                name,
+                message: 'tool entry is missing a codeRef module/name',
+              },
+            };
+          }
+          // Resolve in RRI space (no VirtualNetwork), matching how ToolField
+          // computes `functionName` — so the stamped name and a host-side
+          // recomputation from the stamped codeRef always agree. Package
+          // specifiers pass through verbatim.
+          let resolvedRef = codeRefWithAbsoluteIdentifier(
+            { module: rri(module), name },
+            skillURL,
+            undefined,
+          ) as ResolvedCodeRef;
+          try {
+            let ToolClass = await getClass(resolvedRef, loader);
+            if (typeof ToolClass !== 'function') {
+              throw new Error(
+                `module does not export a tool class named "${resolvedRef.name}"`,
+              );
+            }
+            let tool = new ToolClass(toolContext);
+            let functionName =
+              buildToolFunctionNameFromResolvedRef(resolvedRef);
+            let toolDefinition = {
+              type: 'function' as LLMTool['type'],
+              function: {
+                name: functionName,
+                description: tool.description,
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    description: {
+                      type: 'string',
+                    },
+                    ...(await tool.getInputJsonSchema(cardApi, mappings)),
+                  },
+                  required: ['attributes', 'description'],
+                },
+              },
+            };
+            return {
+              entry: {
+                ...entry,
+                codeRef: resolvedRef,
+                // Absent means "requires approval"; stamp that decision so
+                // consumers don't each re-implement the default.
+                requiresApproval: entry.requiresApproval !== false,
+                functionName,
+                tool: toolDefinition,
+              },
+            };
+          } catch (err) {
+            console.warn(
+              `[file-extract] tool schema generation failed for ${resolvedRef.module}#${resolvedRef.name} (skill ${this.#fileURL}):`,
+              err,
+            );
+            return {
+              entry,
+              error: {
+                module: resolvedRef.module,
+                name: resolvedRef.name,
+                message: err instanceof Error ? err.message : String(err),
+              },
+            };
+          }
+        },
+      ),
+    );
+    let errors = results.flatMap((result) =>
+      result.error ? [result.error] : [],
+    );
+    attributes.frontmatter = {
+      ...attributes.frontmatter,
+      tools: results.map((result) => result.entry),
+    };
     return errors.length ? errors : undefined;
   }
 
