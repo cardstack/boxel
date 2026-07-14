@@ -108,7 +108,7 @@ The safe rule: **block-param names should be at least 2 characters AND not match
 TypeError: Cannot read properties of null (reading 'manager')
 ```
 
-…sometimes wrapped as `"Render binding desync"` in the indexer's error*doc with the TypeError buried in `additionalErrors[0]`. The error does NOT name the offending block-param or tag, and the same message can come from many other causes (any path where Glimmer is asked to invoke a `null` component reference). Treat the message as a hint to look for this footgun, \_not* as proof of it — but the easiest way not to chase the message is to not write the footgun in the first place.
+…sometimes wrapped as `"Render binding desync"` in the indexer's error_doc with the TypeError buried in `additionalErrors[0]`. The error does NOT name the offending block-param or tag, and the same message can come from many other causes (any path where Glimmer is asked to invoke a `null` component reference). Treat the message as a hint to look for this footgun, _not_ as proof of it — but the easiest way not to chase the message is to not write the footgun in the first place.
 
 ### Accessing @fields by Index: The Bridge Pattern
 

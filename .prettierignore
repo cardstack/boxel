@@ -11,3 +11,12 @@ pnpm-lock.yaml
 # make every subsequent pull a formatting fight. The package's own lint
 # excludes them from prettier for the same reason.
 packages/observability/grafanactl/resources/
+
+# Plugin content copied verbatim from the pinned boxel-skills tag by
+# `pnpm build:skills` (packages/boxel-cli/scripts/build-skills.ts).
+# Reformatting drifts the copies from the upstream bytes — prettier's
+# markdown parser even mangles underscore emphasis in some upstream files.
+# The CLI-authored skills under plugin/skills/ ride along; they're markdown
+# maintained by hand + build-plugin.ts, not prettier.
+packages/boxel-cli/plugin/skills/
+packages/boxel-cli/plugin/commands/
