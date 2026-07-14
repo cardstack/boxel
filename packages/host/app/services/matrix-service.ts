@@ -989,6 +989,14 @@ export default class MatrixService extends Service {
       this.saveAuth(auth);
       this.bindEventListeners();
 
+      // Whether *this* start() invocation completed the post-login boot. The
+      // catch below keys off this, not the `postLoginCompleted` field, because
+      // start() can run again on an already-established session (e.g. the
+      // /connect route starts on every visit): the field would still be true
+      // from the previous run, so a fresh attempt that fails before completing
+      // would wrongly skip logout and leave revoked auth in storage.
+      let loginCompletedThisRun = false;
+
       try {
         let deviceId = this.client.getDeviceId();
         if (deviceId) {
@@ -1154,6 +1162,7 @@ export default class MatrixService extends Service {
         await this.loginToRealms();
 
         this.setPostLoginCompleted(true, 'start-success');
+        loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
 
         // If any trusted server was unreachable during boot assembly, keep
@@ -1162,12 +1171,12 @@ export default class MatrixService extends Service {
         this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
-        // Only tear the session down for a failure that happened before login
-        // completed. A late, post-login rejection must not unwind an already-
-        // established session: logout() clears realm state the app has already
-        // populated and resets postLoginCompleted, which would strand the index
-        // route on the login form.
-        if (!this.postLoginCompleted) {
+        // Only tear the session down for a failure that happened before this
+        // run completed login. A late, post-login rejection must not unwind an
+        // already-established session: logout() clears realm state the app has
+        // already populated and resets postLoginCompleted, which would strand
+        // the index route on the login form.
+        if (!loginCompletedThisRun) {
           await this.logout();
         }
       }
