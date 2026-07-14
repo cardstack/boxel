@@ -133,8 +133,9 @@ module('Acceptance | basic tests', function (hooks) {
       .exists('clearing postLoginCompleted strands the app on the login form');
 
     // Re-run the index route model (as any re-navigation would). The one-shot
-    // start() guard already latched on boot, so without the recovery path the
-    // route would render <Auth/> forever; with it, the session re-establishes.
+    // start() guard already latched on boot, so re-establishing the session is
+    // the only path back to the app — assert the route takes it rather than
+    // rendering <Auth/>.
     await getService('router').refresh();
     await settled();
 
