@@ -209,18 +209,25 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
 // Wait for a realm's `_readiness-check` to succeed. Unlike waitForHttpReady
 // (which only proves a port answers), the probe blocks server-side until the
 // realm's first from-scratch index and any in-flight index settle, so a success
-// means that realm is fully indexed and safe to create/publish against. Each
-// request can legitimately hang for as long as the boot index runs; treat any
-// error/non-OK as "not ready yet" and keep polling within the budget.
+// means that realm is fully indexed and safe to create/publish against. The
+// server holds each request open until indexing settles, so a single `fetch`
+// could block past the budget (up to undici's default header timeout) and never
+// return to the loop condition — abort it at the remaining budget so the
+// configured timeout is actually enforced and the caller can stop the child
+// processes and emit diagnostics instead of leaving global setup to hang.
 async function waitForRealmIndexed(url: string, timeoutMs: number) {
   let start = Date.now();
   let lastError: string | undefined;
   while (Date.now() - start < timeoutMs) {
+    let remainingMs = timeoutMs - (Date.now() - start);
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), remainingMs);
     try {
       // `_readiness-check` is registered under the JSON:API mime, and the realm
       // router matches routes on the Accept header — a default `*/*` misses it.
       let response = await fetch(url, {
         headers: { Accept: 'application/vnd.api+json' },
+        signal: controller.signal,
       });
       if (response.ok) {
         return;
@@ -228,6 +235,8 @@ async function waitForRealmIndexed(url: string, timeoutMs: number) {
       lastError = `HTTP ${response.status}`;
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
+    } finally {
+      clearTimeout(abortTimer);
     }
     await delay(500);
   }
