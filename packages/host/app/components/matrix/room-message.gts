@@ -12,7 +12,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCardCollection,
@@ -171,6 +171,27 @@ export default class RoomMessage extends Component<Signature> {
     return this.toolService.run.unlinked().perform(command);
   });
 
+  // Correctness-check messages render all their tools compactly; bot-executed
+  // tools (e.g. readRealmFile) render compactly even inside a regular message,
+  // since they are status indicators rather than actionable tool calls.
+  private isCompactTool = (tool: MessageTool) =>
+    this.message.isCodePatchCorrectness || tool.isBotExecuted;
+
+  // A message carrying only bot-executed tool indicators — no prose,
+  // reasoning, or attachments — stacks flush against a neighboring message of
+  // the same kind, so a burst of readRealmFile calls reads as one list.
+  private get isBotToolsOnlyMessage() {
+    return (
+      !!this.message.tools?.length &&
+      this.message.tools.every((tool) => tool.isBotExecuted) &&
+      !this.message.htmlParts?.length &&
+      !this.message.reasoningContent &&
+      !this.message.attachedFiles?.length &&
+      !this.message.attachedCardsAsFiles?.length &&
+      !this.message.attachedCardIds?.length
+    );
+  }
+
   // A quick succession of messages from one author reads as a single run of
   // conversation, so only the first message in the run gets an avatar and
   // timestamp header.
@@ -237,6 +258,7 @@ export default class RoomMessage extends Component<Signature> {
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         data-test-boxel-message-from={{this.message.author.name}}
+        class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
@@ -247,7 +269,7 @@ export default class RoomMessage extends Component<Signature> {
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
-            @isCompact={{this.message.isCodePatchCorrectness}}
+            @isCompact={{this.isCompactTool command}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
             @isStreaming={{@isStreaming}}

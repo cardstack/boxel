@@ -13,11 +13,14 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+
 import RoomMessage, {
   STREAMING_TIMEOUT_MINUTES,
 } from '@cardstack/host/components/matrix/room-message';
 
 import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
+import MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -257,6 +260,111 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     assert.dom('[data-test-alert-action-button="Wait longer"]').doesNotExist();
     assert.dom('[data-test-card-error]').doesNotExist();
+  });
+
+  test('bot-executed tool calls render compactly while host tool calls render full-size', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Let me read that skill first.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'bot-tool-1',
+          name: 'readRealmFile',
+          arguments: {
+            urls: ['http://test-realm/skills/pirate-speak/SKILL.md'],
+            description: 'Read file: pirate-speak/SKILL.md',
+          },
+          executedBy: AI_BOT_EXECUTOR,
+        },
+        undefined,
+        'event-1',
+        false,
+        'Apply',
+        'applied',
+        undefined,
+        this.owner,
+      ),
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'host-tool-1',
+          name: 'someHostTool',
+          arguments: { description: 'Do a thing' },
+        },
+        undefined,
+        'event-1',
+        true,
+        'Apply',
+        'ready',
+        undefined,
+        this.owner,
+      ),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-tool-call-id="bot-tool-1"]').hasClass('compact');
+    assert
+      .dom(
+        '[data-test-tool-call-id="bot-tool-1"] [data-test-apply-state="applied"]',
+      )
+      .exists();
+    assert
+      .dom('[data-test-tool-call-id="bot-tool-1"]')
+      .containsText('Read file: pirate-speak/SKILL.md');
+
+    assert
+      .dom('[data-test-tool-call-id="host-tool-1"]')
+      .doesNotHaveClass('compact');
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .doesNotHaveClass('bot-tools-only');
+  });
+
+  test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: '',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.htmlParts = [];
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'bot-tool-1',
+          name: 'readRealmFile',
+          arguments: {
+            urls: ['http://test-realm/skills/pirate-speak/SKILL.md'],
+            description: 'Read file: pirate-speak/SKILL.md',
+          },
+          executedBy: AI_BOT_EXECUTOR,
+        },
+        undefined,
+        'event-1',
+        false,
+        'Apply',
+        'applied',
+        undefined,
+        this.owner,
+      ),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-message-idx="0"]').hasClass('bot-tools-only');
   });
 
   function followUpMessage(minutesAgoForCreated: number, author?: object) {
