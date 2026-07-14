@@ -250,18 +250,44 @@ export default class MessageBuilder {
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
+      // A request without an id yet (its first streamed chunk) can't be
+      // matched to later chunks or to its result — skip it; a later replace
+      // always carries the id.
+      if (!encodedCommandRequest.id) {
+        continue;
+      }
+      let decoded = decodeCommandRequest(encodedCommandRequest);
+      // Streamed arguments only ever grow, and only parse once complete — a
+      // request whose arguments have parsed is strictly newer than one whose
+      // haven't. Never let an older pass (e.g. one that just finished
+      // awaiting a slow build) downgrade a request that already carries
+      // arguments back to a partial one.
+      let downgrades = (current: Partial<ToolRequest>) =>
+        current.arguments != null && decoded.arguments == null;
       let command = message.tools.find(
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        if (!downgrades(command.toolRequest)) {
+          command.toolRequest = decoded;
+        }
       } else {
-        message.tools.push(
-          await this.buildMessageCommand(
-            message,
-            decodeCommandRequest(encodedCommandRequest),
-          ),
+        let built = await this.buildMessageCommand(message, decoded);
+        // buildMessageCommand awaits network loads (resolving the tool's
+        // declaring skill), so a concurrent build for a later replace of the
+        // same message can land first. Re-check before pushing: a duplicate
+        // MessageTool for the same request would never receive its result
+        // (results attach to the first match) and would spin forever.
+        let existing = message.tools.find(
+          (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
+        if (existing) {
+          if (!downgrades(existing.toolRequest)) {
+            existing.toolRequest = decoded;
+          }
+        } else {
+          message.tools.push(built);
+        }
       }
     }
   }

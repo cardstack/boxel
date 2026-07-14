@@ -3,7 +3,7 @@ const { module, test, assert } = QUnit;
 import { Responder } from '../lib/responder.ts';
 import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
-import { thinkingMessage } from '../constants.ts';
+import { emptyResponseFallbackMessage, thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -139,6 +139,65 @@ module('Responding', (hooks) => {
     await responder.ensureThinkingMessageSent();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 1, 'Still only one event');
+  });
+
+  test('Finalizing a completion with no content and no tool calls substitutes visible fallback text', async () => {
+    await responder.ensureThinkingMessageSent();
+    // The model spends its whole turn on reasoning, then stops without any
+    // text or tool call.
+    await responder.onChunk(
+      chunkWithReasoning('pondering'),
+      snapshotWithContent(''),
+    );
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let finalContent = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      finalContent.body,
+      emptyResponseFallbackMessage,
+      'the finalized message carries the fallback text instead of an empty body',
+    );
+    assert.true(
+      finalContent.isStreamingFinished as boolean,
+      'the finalized message is marked streaming-finished',
+    );
+  });
+
+  test('Finalizing a canceled empty completion does not substitute fallback text', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      chunkWithReasoning('pondering'),
+      snapshotWithContent(''),
+    );
+    await responder.finalize({ isCanceled: true });
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let finalContent = sentEvents[sentEvents.length - 1].content;
+    assert.equal(finalContent.body, '', 'a canceled turn keeps its empty body');
+  });
+
+  test('Finalizing a tool-call-only completion does not substitute fallback text', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'tool-call-id-1',
+        name: 'doSomething',
+        arguments: { description: 'do it' },
+      }),
+    );
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let finalContent = sentEvents[sentEvents.length - 1].content;
+    assert.equal(
+      finalContent.body,
+      '',
+      'a tool-call turn keeps its empty body — the pill is the content',
+    );
+    let toolRequests = finalContent[APP_BOXEL_TOOL_REQUESTS_KEY] as unknown[];
+    assert.equal(toolRequests.length, 1, 'the tool request is preserved');
   });
 
   test('Sends first content message immediately, replace the thinking message', async () => {
