@@ -9,6 +9,8 @@ import ApplyButton, { type ApplyButtonState } from '../apply-button';
 
 import ViewCodeButton from './view-code-button';
 
+import type { ComponentLike } from '@glint/template';
+
 export interface CodeBlockToolCallHeaderSignature {
   Args: {
     action: () => void;
@@ -17,6 +19,7 @@ export interface CodeBlockToolCallHeaderSignature {
     commandDescription: string;
     toolCallState: ApplyButtonState;
     hideCodeActions?: boolean;
+    icon?: ComponentLike<{ Element: Element }>;
     isDisplayingCode?: boolean;
     isCompact?: boolean;
     toggleCode?: () => void;
@@ -32,7 +35,11 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
 
   <template>
     <header class={{cn 'code-block-header' compact=@isCompact}}>
-      <div class='tool-description'>{{@commandDescription}}</div>
+      <div class='tool-description'>
+        {{#if @icon}}
+          <@icon class='tool-icon' data-test-tool-header-icon />
+        {{/if}}
+        {{@commandDescription}}</div>
       <div class='actions'>
         {{#unless @hideCodeActions}}
           {{#if @isDisplayingCode}}
@@ -87,6 +94,13 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
         line-height: 1.5em;
         text-wrap: pretty;
         overflow-wrap: break-word;
+      }
+      .tool-icon {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        vertical-align: text-bottom;
+        margin-right: var(--boxel-sp-5xs);
       }
       .code-block-header.compact .tool-description {
         order: 2;

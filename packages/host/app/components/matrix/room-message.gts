@@ -167,6 +167,12 @@ export default class RoomMessage extends Component<Signature> {
     return this.toolService.run.unlinked().perform(command);
   });
 
+  // Correctness-check messages render all their tools compactly; bot-executed
+  // tools (e.g. readRealmFile) render compactly even inside a regular message,
+  // since they are status indicators rather than actionable tool calls.
+  private isCompactTool = (tool: MessageTool) =>
+    this.message.isCodePatchCorrectness || tool.isBotExecuted;
+
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
@@ -222,7 +228,7 @@ export default class RoomMessage extends Component<Signature> {
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
-            @isCompact={{this.message.isCodePatchCorrectness}}
+            @isCompact={{this.isCompactTool command}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
             @isStreaming={{@isStreaming}}
