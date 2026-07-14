@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   computeStaleIds,
   loadManifest,
   parseFrontmatter,
+  renderCatalogBlock,
 } from '../../scripts/build-skills.ts';
 
 describe('computeStaleIds', () => {
@@ -124,5 +125,84 @@ describe('parseFrontmatter', () => {
   it('returns {} for content without frontmatter', () => {
     expect(parseFrontmatter('# Just a heading\n')).toEqual({});
     expect(parseFrontmatter('---\nunterminated')).toEqual({});
+  });
+});
+
+describe('renderCatalogBlock', () => {
+  function withSource(
+    fn: (sourceRoot: string) => void,
+    layout: {
+      skills?: Record<string, string | null>;
+      commands?: Record<string, string>;
+    },
+  ): void {
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'build-skills-src-'));
+    try {
+      const skillsDir = join(sourceRoot, 'skills');
+      mkdirSync(skillsDir, { recursive: true });
+      for (const [name, content] of Object.entries(layout.skills ?? {})) {
+        if (content === null) {
+          // A plain top-level file (e.g. glossary.md), not a skill directory.
+          writeFileSync(join(skillsDir, name), '# glossary\n');
+        } else {
+          mkdirSync(join(skillsDir, name), { recursive: true });
+          writeFileSync(join(skillsDir, name, 'SKILL.md'), content);
+        }
+      }
+      const commandsDir = join(sourceRoot, 'commands');
+      mkdirSync(commandsDir, { recursive: true });
+      for (const [name, content] of Object.entries(layout.commands ?? {})) {
+        writeFileSync(join(commandsDir, name), content);
+      }
+      fn(sourceRoot);
+    } finally {
+      rmSync(sourceRoot, { recursive: true, force: true });
+    }
+  }
+
+  it('prefixes both skills (by dir name) and commands (by basename) with /boxel-cli:', () => {
+    withSource(
+      (sourceRoot) => {
+        const block = renderCatalogBlock(
+          sourceRoot,
+          ['boxel', 'glossary.md'],
+          ['boxel-create-card.md'],
+        );
+        expect(block).toContain('| `/boxel-cli:boxel` | Authoring cards. |');
+        expect(block).toContain(
+          '| `/boxel-cli:boxel-create-card` | Create a card. |',
+        );
+        // The plain top-level file has no SKILL.md and is skipped.
+        expect(block).not.toContain('glossary');
+        // No bare, un-namespaced skill rows leak through.
+        expect(block).not.toMatch(/^\| `boxel` \|/m);
+      },
+      {
+        skills: {
+          boxel: '---\nname: boxel\ndescription: Authoring cards.\n---\n# B\n',
+          'glossary.md': null,
+        },
+        commands: {
+          'boxel-create-card.md':
+            '---\nname: boxel-create-card\ndescription: Create a card.\n---\n',
+        },
+      },
+    );
+  });
+
+  it('escapes pipe characters in descriptions and defaults a missing description to empty', () => {
+    withSource(
+      (sourceRoot) => {
+        const block = renderCatalogBlock(sourceRoot, ['piped', 'nodesc'], []);
+        expect(block).toContain('a \\| b');
+        expect(block).toContain('| `/boxel-cli:nodesc` |  |');
+      },
+      {
+        skills: {
+          piped: '---\nname: piped\ndescription: a | b\n---\n',
+          nodesc: '---\nname: nodesc\n---\n',
+        },
+      },
+    );
   });
 });

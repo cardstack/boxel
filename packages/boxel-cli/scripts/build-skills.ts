@@ -233,6 +233,49 @@ function tableRow(name: string, description: string): string {
 }
 
 /**
+ * Build the marker-fenced auto-gen block for `plugin/README.md`: a skill
+ * table and a command table, each keyed by the `/boxel-cli:<name>` slash
+ * invocation (skills by directory name, commands by file basename) with the
+ * description read from each entry's frontmatter. Pure over the filesystem
+ * `sourceRoot` so it can be unit-tested without touching the real plugin dir.
+ */
+export function renderCatalogBlock(
+  sourceRoot: string,
+  skillEntries: readonly string[],
+  commandEntries: readonly string[],
+): string {
+  const tagUrl = `https://github.com/cardstack/boxel-skills/tree/${BOXEL_SKILLS_VERSION}`;
+  const lines: string[] = [];
+  lines.push(README_BEGIN_MARKER);
+  lines.push('');
+  lines.push(
+    `_Copied from [\`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\`](${tagUrl}) by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
+  );
+  lines.push('');
+  lines.push('| Skill | Use it for |');
+  lines.push('|---|---|');
+  for (const entry of skillEntries) {
+    const skillMd = resolve(sourceRoot, 'skills', entry, 'SKILL.md');
+    if (!existsSync(skillMd)) continue; // plain files like glossary.md
+    const fm = parseFrontmatter(readFileSync(skillMd, 'utf8'));
+    lines.push(tableRow(`/boxel-cli:${entry}`, fm.description ?? ''));
+  }
+  lines.push('');
+  lines.push('| Command | Use it for |');
+  lines.push('|---|---|');
+  for (const entry of commandEntries) {
+    const fm = parseFrontmatter(
+      readFileSync(resolve(sourceRoot, 'commands', entry), 'utf8'),
+    );
+    const name = entry.replace(/\.md$/, '');
+    lines.push(tableRow(`/boxel-cli:${name}`, fm.description ?? ''));
+  }
+  lines.push('');
+  lines.push(README_END_MARKER);
+  return lines.join('\n');
+}
+
+/**
  * Rewrite the auto-generated block in `plugin/README.md` so it lists every
  * copied skill and command with the name/description from its frontmatter.
  * The block is fenced by HTML marker comments — if they're missing, throw
@@ -254,36 +297,11 @@ export async function updatePluginReadme(
     );
   }
 
-  const tagUrl = `https://github.com/cardstack/boxel-skills/tree/${BOXEL_SKILLS_VERSION}`;
-  const lines: string[] = [];
-  lines.push(README_BEGIN_MARKER);
-  lines.push('');
-  lines.push(
-    `_Copied from [\`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\`](${tagUrl}) by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
+  const replacement = renderCatalogBlock(
+    sourceRoot,
+    skillEntries,
+    commandEntries,
   );
-  lines.push('');
-  lines.push('| Skill | Use it for |');
-  lines.push('|---|---|');
-  for (const entry of skillEntries) {
-    const skillMd = resolve(sourceRoot, 'skills', entry, 'SKILL.md');
-    if (!existsSync(skillMd)) continue; // plain files like glossary.md
-    const fm = parseFrontmatter(readFileSync(skillMd, 'utf8'));
-    lines.push(tableRow(fm.name ?? entry, fm.description ?? ''));
-  }
-  lines.push('');
-  lines.push('| Command | Use it for |');
-  lines.push('|---|---|');
-  for (const entry of commandEntries) {
-    const fm = parseFrontmatter(
-      readFileSync(resolve(sourceRoot, 'commands', entry), 'utf8'),
-    );
-    const name = entry.replace(/\.md$/, '');
-    lines.push(tableRow(`/boxel-cli:${name}`, fm.description ?? ''));
-  }
-  lines.push('');
-  lines.push(README_END_MARKER);
-
-  const replacement = lines.join('\n');
   const before = readme.slice(0, beginIdx);
   const after = readme.slice(endIdx + README_END_MARKER.length);
   const next = `${before}${replacement}${after}`;
