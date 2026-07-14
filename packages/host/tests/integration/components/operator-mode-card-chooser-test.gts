@@ -651,9 +651,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
     await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-item-button]', { count: 0 });
-    assert
-      .dom(`[data-test-search-content-empty]`)
-      .hasText('No cards available');
+    assert.dom(`[data-test-search-content-empty]`).hasText('No results found');
   });
 
   test(`can filter by realm after searching in card chooser`, async function (assert) {

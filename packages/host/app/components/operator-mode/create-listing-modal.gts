@@ -21,7 +21,6 @@ import { IconX, IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   chooseCard,
   isResolvedCodeRef,
-  removeFileExtension,
   rri,
   type ToolContext,
   type ResolvedCodeRef,
@@ -37,6 +36,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
+import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
 
 interface Signature {
   Args: {};
@@ -152,9 +152,9 @@ export default class CreateListingModal extends Component<Signature> {
   });
 
   @action private removeSelectedExample(urlToRemove: string) {
-    let normalizedUrlToRemove = removeFileExtension(urlToRemove);
+    let normalizedUrlToRemove = removeCardJsonExtension(urlToRemove);
     this._selectedExampleURLs = this.selectedExampleURLs.filter(
-      (url) => removeFileExtension(url) !== normalizedUrlToRemove,
+      (url) => removeCardJsonExtension(url) !== normalizedUrlToRemove,
     );
   }
 

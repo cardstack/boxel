@@ -312,7 +312,7 @@ export default class SheetResults extends Component<Signature> {
 
       {{#if this.hasNoResults}}
         <div class='empty-state' data-test-search-content-empty>
-          No cards available
+          No results found
         </div>
       {{/if}}
     {{/if}}

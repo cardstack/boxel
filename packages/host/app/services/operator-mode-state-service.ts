@@ -50,7 +50,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { removeFileExtension } from '../utils/card-search/types';
+import { removeCardJsonExtension } from '../utils/card-search/types';
 
 import {
   AiAssistantOpen,
@@ -396,7 +396,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
+          (i: StackItem) => i.id && removeCardJsonExtension(i.id) === cardId,
         ) as StackItem[]),
       );
     }

@@ -121,11 +121,13 @@ module(
       await fillIn('[data-test-search-field]', 'mango');
 
       await waitFor(
-        `[data-test-search-result="${testRealmURL}mango-care-notes"]`,
+        `[data-test-search-result="${testRealmURL}mango-care-notes.md"]`,
       );
       assert
-        .dom(`[data-test-search-result="${testRealmURL}mango-care-notes"]`)
-        .exists('the .md file matching the term by name is a search result');
+        .dom(`[data-test-search-result="${testRealmURL}mango-care-notes.md"]`)
+        .exists(
+          'the .md file matching the term by name is a search result, under its extension-bearing id',
+        );
       assert
         .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
         .exists(
@@ -140,13 +142,35 @@ module(
       await click('[data-test-open-search-field]');
       await fillIn('[data-test-search-field]', 'garden-tips');
 
-      await waitFor(`[data-test-search-result="${testRealmURL}garden-tips"]`);
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}garden-tips.md"]`,
+      );
       assert
-        .dom(`[data-test-search-result="${testRealmURL}garden-tips"]`)
+        .dom(`[data-test-search-result="${testRealmURL}garden-tips.md"]`)
         .exists('the file is found by its name');
       assert
         .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
         .doesNotExist('unrelated cards do not match');
+    });
+
+    test('clicking a file result opens the file in the stack', async function (assert) {
+      await visitOperatorMode({});
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'garden-tips');
+
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}garden-tips.md"]`,
+      );
+      await click(`[data-test-search-result="${testRealmURL}garden-tips.md"]`);
+
+      await waitFor(`[data-test-stack-card="${testRealmURL}garden-tips.md"]`);
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}garden-tips.md"]`)
+        .exists('the file opens as a file stack item under its full URL');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}garden-tips.md"]`)
+        .containsText('Garden Tips', 'the markdown content renders');
     });
 
     test('specs still match by title', async function (assert) {
