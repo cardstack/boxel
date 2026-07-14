@@ -44,7 +44,9 @@ module.exports = {
         messageId: 'no-url-form-base-imports',
         data: { specifier, canonical },
         fix(fixer) {
-          let quote = literalNode.raw[0];
+          // Derive the quote from the source text rather than `literalNode.raw`,
+          // which isn't guaranteed to be populated across parsers/AST transforms.
+          let quote = context.sourceCode.getText(literalNode)[0];
           return fixer.replaceText(
             literalNode,
             `${quote}${canonical}${quote}`,
