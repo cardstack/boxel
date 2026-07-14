@@ -8,6 +8,7 @@ import {
   logger,
   hasCardExtension,
   hasExecutableExtension,
+  isCardResource,
   SupportedMimeType,
   jobIdentity,
   Deferred,
@@ -18,6 +19,7 @@ import {
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
+  type FileErrorIndexEntry,
   type RealmInfo,
   type FromScratchResult,
   type IncrementalResult,
@@ -35,7 +37,12 @@ import { moduleFrom } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import { isCardError } from './error.ts';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
 import { canonicalURL } from './index-runner/dependency-url.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
@@ -658,8 +665,76 @@ export class IndexRunner {
         this.#log.info(
           `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
         );
-      } else {
-        throw err;
+        return;
+      }
+      // A transport-level failure of the index visit — its
+      // prerender-server request timing out/aborting, or a reader/network
+      // error — never reaches performCardIndexing/performFileIndexing's
+      // own error-entry construction: visitFileForIndexing rethrows
+      // before calling indexCardWithResult/indexFileWithResults. (HTML
+      // prerendering is a separate job; the request here is the index
+      // pass's own visit.) Left uncaught, one file's failure propagates
+      // out of the fromScratch/incremental visit loop, skips
+      // batch.done(), and discards every other successfully-visited
+      // file's rows for the whole job. Persist a file-error row instead
+      // so the failure is isolated to this URL, matching the error_doc
+      // pattern used for in-band render errors.
+      let message = coerceErrorMessage(
+        err,
+        `Indexing failed for ${url.href} with no error message (${jobIdentity(this.#jobInfo)})`,
+      );
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} failed to index ${url.href}, recording file-error: ${message}`,
+      );
+      let error = isCardError(err)
+        ? serializableError(err)
+        : serializableError(
+            Object.assign(new CardError(message, { status: 500 }), {
+              stack: (err as Error)?.stack,
+            }),
+          );
+      error.message = message;
+      let fileEntry: FileErrorIndexEntry = {
+        type: 'file-error',
+        error,
+      };
+      await this.batch.updateEntry(url, fileEntry);
+      this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
+      this.stats.fileErrors++;
+      // `Batch.invalidate()` already tombstoned every type this URL
+      // previously had in the index — for an existing card that's both
+      // `instance` and `file`. Overwriting only the `file` tombstone
+      // above would let batch.done() promote the untouched `instance`
+      // tombstone, silently removing a previously-good card from search
+      // over a transient error. The index is the oracle for "was this a
+      // card?": the batch records which live row types it tombstoned, so
+      // an existing card is protected even when the file can't be read —
+      // which may be exactly how the visit failed. Re-parsing the source
+      // is only the fallback for a brand-new file, which has no prior
+      // row to protect but should still surface its failure as an
+      // instance error when it's a card.
+      let isCardInstance =
+        this.batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
+      if (!isCardInstance && url.href.endsWith('.json')) {
+        try {
+          let fileRef = await this.#reader.readFile(url);
+          let resource = fileRef?.content
+            ? (JSON.parse(fileRef.content)?.data as unknown)
+            : undefined;
+          isCardInstance = Boolean(resource && isCardResource(resource));
+        } catch (parseErr) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+          );
+        }
+      }
+      if (isCardInstance) {
+        let instanceEntry: InstanceErrorIndexEntry = {
+          type: 'instance-error',
+          error,
+        };
+        await this.batch.updateEntry(url, instanceEntry);
+        this.stats.instanceErrors++;
       }
     }
   }
