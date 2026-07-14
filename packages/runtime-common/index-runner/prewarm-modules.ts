@@ -162,7 +162,7 @@ export interface PreWarmModulesTableArgs {
 // Signal sources:
 //   1. The realm-wide `.gts` / `.gjs` sweep (`allRealmCardModules`) — catches
 //      sibling card modules referenced by *string* in templates (e.g.
-//      `<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`),
+//      `<Search @query={{filter: {type: {module: '.../author.gts', name: 'Author'}}}}>`),
 //      which appear in no instance's runtime `deps`. This is the layer the
 //      query-backed field renders depend on. `.gts` / `.gjs` only is an
 //      optimization, not a correctness gate: a `.ts` / `.js` module hosting a

@@ -165,7 +165,7 @@ export async function runPrerenderHtmlPass({
   // Pre-warm the module definition cache before the format renders fire. The
   // realm-wide `.gts` / `.gjs` sweep is the layer that matters here: it primes
   // the sibling card modules referenced by *string* in query-backed field
-  // renders (`<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`),
+  // renders (`<Search @query={{filter: {type: {module: '.../author.gts', name: 'Author'}}}}>`),
   // so a mid-render `lookupDefinition` hits a populated row instead of spawning
   // a same-affinity sub-`prerenderModule` that would stall the tab pool.
   //
