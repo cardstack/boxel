@@ -744,9 +744,11 @@ export default class ToolService extends Service {
       // one in the skills we can construct
       let toolCodeRef = command.codeRef;
       if (!toolCodeRef) {
-        toolCodeRef = await this.resolveDiscoveredToolCodeRef(command);
-        if (toolCodeRef) {
-          command.codeRef = toolCodeRef;
+        let resolved = await this.resolveDiscoveredTool(command);
+        if (resolved) {
+          command.codeRef = resolved.codeRef;
+          command.requiresApproval = resolved.requiresApproval;
+          toolCodeRef = resolved.codeRef;
         }
       }
       if (toolCodeRef) {
@@ -837,11 +839,15 @@ export default class ToolService extends Service {
   // resolution — streaming replaces restart room processing, so the drain
   // can observe a MessageTool before its codeRef has landed. Rather than
   // declaring the tool unknown (a terminal 'invalid' the model reacts to by
-  // retrying), re-derive the codeRef here with the same verified lookup the
-  // builder uses, and heal it onto the MessageTool.
-  private async resolveDiscoveredToolCodeRef(
+  // retrying), re-derive the tool here with the same verified lookup the
+  // builder uses, and heal the MessageTool. Approval metadata rides along:
+  // the unresolved MessageTool defaulted `requiresApproval` to true, and
+  // leaving that stale would keep a declared-`false` tool from auto-running.
+  private async resolveDiscoveredTool(
     command: MessageTool,
-  ): Promise<ResolvedCodeRef | undefined> {
+  ): Promise<
+    { codeRef: ResolvedCodeRef; requiresApproval: boolean } | undefined
+  > {
     if (!command.name) {
       return undefined;
     }
@@ -866,7 +872,15 @@ export default class ToolService extends Service {
       let skillTool = getSkillSourceTools(source).find(
         (candidate) => candidate.functionName === command.name,
       );
-      return skillTool?.codeRef as ResolvedCodeRef | undefined;
+      if (!skillTool?.codeRef) {
+        return undefined;
+      }
+      return {
+        codeRef: skillTool.codeRef as ResolvedCodeRef,
+        // Absent means approval required, matching how the builder reads the
+        // verified declaration.
+        requiresApproval: skillTool.requiresApproval !== false,
+      };
     } catch (e) {
       console.warn(
         `could not load skill ${sourceSkillUrl} to resolve tool "${command.name}":`,
@@ -897,9 +911,14 @@ export default class ToolService extends Service {
 
     let toolCodeRef = command.codeRef;
     if (!toolCodeRef && command.name !== CHECK_CORRECTNESS_COMMAND_NAME) {
-      toolCodeRef = await this.resolveDiscoveredToolCodeRef(command);
-      if (toolCodeRef) {
-        command.codeRef = toolCodeRef;
+      let resolved = await this.resolveDiscoveredTool(command);
+      if (resolved) {
+        command.codeRef = resolved.codeRef;
+        // Heal approval metadata too: the drain consults it right after
+        // validation, and the unresolved default (true) would keep a
+        // declared-`false` tool from auto-running.
+        command.requiresApproval = resolved.requiresApproval;
+        toolCodeRef = resolved.codeRef;
       }
     }
     let toolInstance: GenericCommand | undefined;

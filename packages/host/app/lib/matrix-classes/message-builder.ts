@@ -256,16 +256,23 @@ export default class MessageBuilder {
       if (!encodedCommandRequest.id) {
         continue;
       }
+      let decoded = decodeCommandRequest(encodedCommandRequest);
+      // Streamed arguments only ever grow, and only parse once complete — a
+      // request whose arguments have parsed is strictly newer than one whose
+      // haven't. Never let an older pass (e.g. one that just finished
+      // awaiting a slow build) downgrade a request that already carries
+      // arguments back to a partial one.
+      let downgrades = (current: Partial<ToolRequest>) =>
+        current.arguments != null && decoded.arguments == null;
       let command = message.tools.find(
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        if (!downgrades(command.toolRequest)) {
+          command.toolRequest = decoded;
+        }
       } else {
-        let built = await this.buildMessageCommand(
-          message,
-          decodeCommandRequest(encodedCommandRequest),
-        );
+        let built = await this.buildMessageCommand(message, decoded);
         // buildMessageCommand awaits network loads (resolving the tool's
         // declaring skill), so a concurrent build for a later replace of the
         // same message can land first. Re-check before pushing: a duplicate
@@ -275,7 +282,9 @@ export default class MessageBuilder {
           (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
         if (existing) {
-          existing.toolRequest = decodeCommandRequest(encodedCommandRequest);
+          if (!downgrades(existing.toolRequest)) {
+            existing.toolRequest = decoded;
+          }
         } else {
           message.tools.push(built);
         }
