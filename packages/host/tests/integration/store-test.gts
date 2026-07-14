@@ -769,7 +769,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('realm subscription is removed when file-meta reference count drops to zero', async function (assert) {
+  test('a file-meta reference installs a realm subscription that outlives the reference', async function (assert) {
     await testRealm.write('hero.png', 'mock hero image');
     let fileUrl = `${testRealmURL}hero.png`;
     let subscriptions = (storeService as any).subscriptions as Map<
@@ -789,9 +789,12 @@ module('Integration | Store', function (hooks) {
     );
 
     storeService.dropReference(fileUrl);
-    assert.false(
+    // Realm subscriptions are not reference-counted: dropping the last
+    // reference leaves the subscription installed (released only when the
+    // store is destroyed), so invalidations keep flowing.
+    assert.true(
       subscriptions.has(testRealmURL),
-      'realm subscription is removed when file-meta reference reaches zero',
+      'realm subscription persists after the file-meta reference drops',
     );
   });
 
