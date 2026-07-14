@@ -679,9 +679,12 @@ export default class CreateFileModal extends Component<Signature> {
 
   @action private setDisplayName(name: string) {
     this.clearSaveError();
-    this.fileNameError = undefined;
     this.displayName = name;
     if (!this.hasUserEditedFileName) {
+      // the file name still derives from the display name (always true for
+      // skills, which have no separate filename field), so a filename error
+      // no longer applies once the name changes
+      this.fileNameError = undefined;
       // if the user starts typing in the filename field, then stop helping them
       this.fileName = cleanseString(name);
     }

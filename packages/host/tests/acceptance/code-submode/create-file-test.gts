@@ -354,7 +354,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       });
     });
 
-    test('new file button has options to create card def, field def, card instance, text files, and upload file', async function (assert) {
+    test('new file button has options to create card def, field def, card instance, skill, text files, and upload file', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
@@ -364,7 +364,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
         )
-        .exists({ count: 5 });
+        .exists({ count: 6 });
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
@@ -378,6 +378,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Instance"]',
+        )
+        .exists();
+      assert
+        .dom(
+          '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Skill"]',
         )
         .exists();
       assert
