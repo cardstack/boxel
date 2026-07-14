@@ -29,6 +29,7 @@ import {
   type Reader,
   type Stats,
   type Diagnostics,
+  type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -128,6 +129,10 @@ export class IndexRunner {
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
+  // Aggregate wall of every `batch.updateEntry` row write in the current pass.
+  // Summed here (not per row) because a row can't time its own INSERT; surfaces
+  // on the job result's `phaseTimings.writeMs`. Reset at the start of each pass.
+  #writeMsTotal = 0;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -223,18 +228,25 @@ export class IndexRunner {
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
     current.#dependencyResolver.reset();
+    current.#writeMsTotal = 0;
     let start = Date.now();
+    // Between-visit phase walls, assembled onto the job result's `phaseTimings`
+    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    let visitLoopMs: number | undefined;
+    let swapMs: number | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing for realm ${current.realmURL.href}`,
     );
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
     // at 0 and is filled in by the first `file-visited` once the
@@ -250,21 +262,23 @@ export class IndexRunner {
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
+    let mtimesMs = Date.now() - mtimesStart;
     current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+      `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${mtimesMs} ms`,
     );
     let invalidateStart = Date.now();
     let discoverResult = await current.discoverInvalidations(
       current.realmURL,
       mtimes,
     );
+    let discoverMs = Date.now() - invalidateStart;
     invalidations = discoverResult.urls.map((href) => new URL(href));
     // The from-scratch URL list lives outside the batch's invalidation set
     // until each visit writes its row; feed the loader-epoch scan up front
     // so the epoch is fixed before the enqueue and the first visit.
     current.batch.noteInvalidatedURLs(discoverResult.urls);
     current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
+      `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
     current.#notifyInvalidationsReady(
       discoverResult.urls,
@@ -272,11 +286,13 @@ export class IndexRunner {
     );
 
     let visitStart = Date.now();
+    let orderStart = Date.now();
     invalidations = sortInvalidations(invalidations, current.realmURL);
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    let orderMs = Date.now() - orderStart;
     // Pre-warm the modules cache. Combines per-row deps (which catch
     // most modules used during a from-scratch pass) with the realm-
     // wide `.gts` / `.gjs` sweep (which catches sibling card modules
@@ -291,6 +307,7 @@ export class IndexRunner {
     // and the files visited below share one `totalFiles`, so the dashboard
     // bar advances through pre-warming and into the visit phase.
     let filesCompleted = 0;
+    let preWarmStart = Date.now();
     let preWarmedCount = await current.preWarmModulesTable(
       invalidations,
       allRealmCardModules,
@@ -306,7 +323,9 @@ export class IndexRunner {
         });
       },
     );
+    let preWarmMs = Date.now() - preWarmStart;
     let totalFiles = preWarmedCount + invalidations.length;
+    let loopStart = Date.now();
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     try {
@@ -352,13 +371,15 @@ export class IndexRunner {
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
         );
       }
+      visitLoopMs = Date.now() - loopStart;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      swapMs = Date.now() - finalizeStart;
       current.#perfLog.debug(
-        `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
+        `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
@@ -396,6 +417,17 @@ export class IndexRunner {
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,
+      phaseTimings: {
+        totalMs: Date.now() - start,
+        setupMs,
+        mtimesMs,
+        discoverMs,
+        orderMs,
+        preWarmMs,
+        ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
+        writeMs: current.#writeMsTotal,
+        ...(swapMs !== undefined ? { swapMs } : {}),
+      },
     };
   }
 
@@ -408,7 +440,12 @@ export class IndexRunner {
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
+    current.#writeMsTotal = 0;
     let start = Date.now();
+    // Between-visit phase walls, assembled onto the job result's `phaseTimings`
+    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    let visitLoopMs: number | undefined;
+    let swapMs: number | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -422,11 +459,13 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
 
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
     // dashboard shows it immediately. The total starts at 0 and the
     // first `file-visited` fills it in once the counts are known.
@@ -438,10 +477,12 @@ export class IndexRunner {
       totalFiles: 0,
       files: [],
     });
+    let discoverStart = Date.now();
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
     await current.batch.invalidate(urls);
+    let discoverMs = Date.now() - discoverStart;
     current.#notifyInvalidationsReady(
       current.batch.invalidations,
       new Set(
@@ -450,6 +491,7 @@ export class IndexRunner {
           .map(([href]) => href),
       ),
     );
+    let orderStart = Date.now();
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
       current.realmURL,
@@ -458,6 +500,7 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    let orderMs = Date.now() - orderStart;
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
     );
@@ -485,6 +528,7 @@ export class IndexRunner {
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
+    let loopStart = Date.now();
     try {
       for (let invalidation of invalidations) {
         if (
@@ -516,8 +560,11 @@ export class IndexRunner {
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
         );
       }
+      visitLoopMs = Date.now() - loopStart;
 
+      let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      swapMs = Date.now() - finalizeStart;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -552,6 +599,15 @@ export class IndexRunner {
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,
+      phaseTimings: {
+        totalMs: Date.now() - start,
+        setupMs,
+        discoverMs,
+        orderMs,
+        ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
+        writeMs: current.#writeMsTotal,
+        ...(swapMs !== undefined ? { swapMs } : {}),
+      },
     };
   }
 
@@ -1110,7 +1166,7 @@ export class IndexRunner {
       dependencyResolver: this.#dependencyResolver,
       virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
-        await this.batch.updateEntry(entryURL, entry);
+        await this.#writeEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
           entryURL,
         );
@@ -1130,7 +1186,7 @@ export class IndexRunner {
     entry: InstanceEntry | InstanceErrorIndexEntry,
   ) {
     let normalizedURL = assertURLEndsWithJSON(instanceURL);
-    await this.batch.updateEntry(normalizedURL, entry);
+    await this.#writeEntry(normalizedURL, entry);
     this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
       normalizedURL,
     );
@@ -1138,6 +1194,18 @@ export class IndexRunner {
       this.stats.instancesIndexed++;
     } else {
       this.stats.instanceErrors++;
+    }
+  }
+
+  // Time the row write and fold it into the pass's aggregate. The single
+  // chokepoint every `boxel_index_working` row write goes through, so the job
+  // result's `phaseTimings.writeMs` covers instance and file rows alike.
+  async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    let start = Date.now();
+    try {
+      await this.batch.updateEntry(url, entry);
+    } finally {
+      this.#writeMsTotal += Date.now() - start;
     }
   }
 }

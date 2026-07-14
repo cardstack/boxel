@@ -56,6 +56,7 @@ import {
   coerceTypes,
   normalizeRealmMetaValue,
   type BoxelIndexTable,
+  type PrerenderedHtmlTable,
   type RealmMetaValue,
 } from './index-structure.ts';
 import {
@@ -148,6 +149,22 @@ function buildNonsearchableFieldMessage(opts: {
   );
 }
 
+// A boxel_index row (`i`) joined with its prerendered_html row's (`ph`)
+// rendered output — the shape the single-entry read paths project
+// (`SELECT i.*` plus `PRERENDERED_HTML_SELECTS`). The HTML/markdown columns
+// live only on prerendered_html; a row with no prerendered_html row reads
+// them as NULL.
+type IndexRowWithHtml = BoxelIndexTable &
+  Pick<
+    PrerenderedHtmlTable,
+    | 'isolated_html'
+    | 'head_html'
+    | 'embedded_html'
+    | 'fitted_html'
+    | 'atom_html'
+    | 'markdown'
+  >;
+
 export interface IndexedFile {
   type: 'file';
   canonicalURL: string;
@@ -167,8 +184,8 @@ export interface IndexedFile {
   markdown: string | null;
   generation: number;
   // The generation the file's prerendered HTML was produced at
-  // (`prerendered_html.generation`, falling back to `boxel_index.generation`
-  // when no prerendered row exists). Distinct from `generation`, the file's
+  // (`prerendered_html.generation`; a file with no prerendered row falls back
+  // to its index-data generation). Distinct from `generation`, the file's
   // index-data generation. Only populated on the search-entry read path
   // (`fileEntryFromResult`); undefined on the single-file `getFile` path.
   htmlGeneration?: number;
@@ -248,9 +265,9 @@ export interface QueryResultsMeta {
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
 // SQL fragments consumed by `_search`'s ORDER BY, which runs with the
-// boxel_index alias `i` in scope (and, since dual-read, a joined prerendered
-// `ph`). `cardURL` sorts on the primary-key `url`, which now exists in both
-// joined tables — qualify it to `i` so it is unambiguous. Callers outside the
+// boxel_index alias `i` in scope (and the joined prerendered_html `ph`).
+// `cardURL` sorts on the primary-key `url`, which exists in both joined
+// tables — qualify it to `i` so it is unambiguous. Callers outside the
 // query engine (query.ts, search-entry.ts) use only the keys of this map.
 // Full-text `matches` builds its tsvector from `markdown_search_text(markdown)`,
 // an IMMUTABLE Postgres function (defined in the prerendered_html migration)
@@ -258,8 +275,8 @@ export interface QueryResultsMeta {
 // tsvector at 1,048,575 bytes and throws SQLSTATE 54000 (`make_tsvector`) above
 // it — which, for a plain GIN expression index, aborts the whole index build.
 // Some instances carry multi-megabyte markdown (base64 image data embedded by
-// image cards), so the raw column can't be indexed. The four markdown GIN
-// indexes (prerendered_html(_working), boxel_index(_working)) all index
+// image cards), so the raw column can't be indexed. The markdown GIN indexes
+// (prerendered_html and prerendered_html_working) both index
 // `to_tsvector('english', markdown_search_text(markdown))`, so the query
 // predicate below must call the same function or the planner won't use them.
 export const generalSortFields: Record<string, string> = {
@@ -326,7 +343,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
+      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -337,7 +354,7 @@ export class IndexQueryEngine {
         ['i.type =', param('instance')],
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
+    ] as Expression)) as unknown as IndexRowWithHtml[];
     return this.#rowToInstanceOrError(result[0], url, opts);
   }
 
@@ -363,7 +380,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
+        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -377,7 +394,7 @@ export class IndexQueryEngine {
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as BoxelIndexTable[];
+      ] as Expression)) as unknown as IndexRowWithHtml[];
       for (let row of rows) {
         let mapped = this.#rowToInstanceOrError(row, undefined, opts);
         if (!mapped) {
@@ -399,7 +416,7 @@ export class IndexQueryEngine {
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(
-    maybeResult: BoxelIndexTable | undefined,
+    maybeResult: IndexRowWithHtml | undefined,
     lookupURL: URL | undefined,
     opts?: GetEntryOptions,
   ): InstanceOrError | undefined {
@@ -481,7 +498,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedFile | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
+      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -493,7 +510,7 @@ export class IndexQueryEngine {
         [`NOT ${effectiveHasError()}`],
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
+    ] as Expression)) as unknown as IndexRowWithHtml[];
     return this.#rowToIndexedFile(result[0]);
   }
 
@@ -516,7 +533,7 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${DUAL_READ_HTML_OVERRIDES}, ${DUAL_READ_ERROR_OVERRIDES}`,
+        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -531,7 +548,7 @@ export class IndexQueryEngine {
           [`NOT ${effectiveHasError()}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as BoxelIndexTable[];
+      ] as Expression)) as unknown as IndexRowWithHtml[];
       for (let row of rows) {
         let mapped = this.#rowToIndexedFile(row);
         if (!mapped) {
@@ -549,7 +566,7 @@ export class IndexQueryEngine {
   }
 
   #rowToIndexedFile(
-    maybeResult: BoxelIndexTable | undefined,
+    maybeResult: IndexRowWithHtml | undefined,
   ): IndexedFile | undefined {
     if (!maybeResult) {
       return undefined;
@@ -676,7 +693,7 @@ export class IndexQueryEngine {
     conditionalLiveDoc = false,
   ): Promise<{
     meta: QueryResultsMeta;
-    results: Partial<BoxelIndexTable>[];
+    results: Partial<IndexRowWithHtml>[];
   }> {
     try {
       let conditions: CardExpression[] = [
@@ -832,12 +849,12 @@ export class IndexQueryEngine {
     entryType: 'instance' | 'file' | 'all' = 'instance',
   ): Promise<{
     meta: QueryResultsMeta;
-    results: (Partial<BoxelIndexTable> & {
+    results: (Partial<IndexRowWithHtml> & {
       html?: string | null;
       used_render_type?: string | null;
-      // The dual-read rendering generation (`prerendered_html.generation`,
-      // falling back to `boxel_index.generation` when no prerendered row
-      // exists) — distinct from `generation`, the entry's index-data generation.
+      // The rendering generation (`prerendered_html.generation`; NULL when no
+      // prerendered row exists) — distinct from `generation`, the entry's
+      // index-data generation.
       html_generation?: number | null;
     })[];
   }> {
@@ -875,9 +892,7 @@ export class IndexQueryEngine {
       selectClauseExpression =
         entryType !== 'instance'
           ? [
-              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(${dualReadColumn(
-                'deps',
-              )}) as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
+              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
             ]
           : [dataOnly];
     } else {
@@ -885,19 +900,11 @@ export class IndexQueryEngine {
       // fitted/embedded JSONB maps keyed by render type, the scalar
       // atom/head columns), plus the live serialization on every row. The
       // caller enumerates candidate renderings and selects from the set.
-      let renderSet = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(${dualReadColumn(
-        'fitted_html',
-      )}) as fitted_html, ANY_VALUE(${dualReadColumn(
-        'embedded_html',
-      )}) as embedded_html, ANY_VALUE(${dualReadColumn(
-        'atom_html',
-      )}) as atom_html, ANY_VALUE(${dualReadColumn(
-        'head_html',
-      )}) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(${dualReadColumn(
-        'deps',
-      )}) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(${dualReadColumn(
-        'generation',
-      )}) as html_generation`;
+      // HTML, the deps that carry its scoped-CSS URLs, and the rendering
+      // generation all come from the prerendered_html channel (`ph`); a row
+      // with no prerendered row reads them as NULL and falls back to its
+      // `item` serialization.
+      let renderSet = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(ph.fitted_html) as fitted_html, ANY_VALUE(ph.embedded_html) as embedded_html, ANY_VALUE(ph.atom_html) as atom_html, ANY_VALUE(ph.head_html) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(ph.generation) as html_generation`;
       selectClauseExpression =
         entryType !== 'instance' ? [`${renderSet}${fileColumns}`] : [renderSet];
     }
@@ -910,7 +917,7 @@ export class IndexQueryEngine {
       entryType,
     )) as {
       meta: QueryResultsMeta;
-      results: (Partial<BoxelIndexTable> & {
+      results: (Partial<IndexRowWithHtml> & {
         html?: string | null;
         used_render_type?: string | null;
       })[];
@@ -948,23 +955,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(${dualReadColumn(
-          'deps',
-        )}) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(${dualReadColumn(
-          'isolated_html',
-        )}) AS isolated_html, ANY_VALUE(${dualReadColumn(
-          'head_html',
-        )}) AS head_html, ANY_VALUE(${dualReadColumn(
-          'embedded_html',
-        )}) AS embedded_html, ANY_VALUE(${dualReadColumn(
-          'fitted_html',
-        )}) AS fitted_html, ANY_VALUE(${dualReadColumn(
-          'atom_html',
-        )}) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(${dualReadColumn(
-          'markdown',
-        )}) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(${dualReadColumn(
-          'generation',
-        )}) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
+        `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
       ],
       'file',
     );
@@ -1281,20 +1272,15 @@ export class IndexQueryEngine {
   // match every non-null row (PG's websearch_to_tsquery already yields an
   // empty tsquery that matches nothing — we match that behavior here).
   //
-  // Dual-read: markdown lives on `prerendered_html.markdown` (behind the
-  // prerendered_html GIN index) with a fallback to `boxel_index.markdown` for
-  // rows with no prerendered_html row. The fallback is guarded by
-  // `ph.url IS NULL` so a row whose prerendered_html markdown is intentionally
-  // absent never re-matches through the boxel_index column, and so a mirrored
-  // row is evaluated against exactly one channel. Both branches are expression
-  // matches against a GIN-indexed
-  // `to_tsvector('english', markdown_search_text(<col>))` — `markdown_search_text`
-  // strips oversized base64 runs and caps length so the tsvector stays under
-  // Postgres's byte limit, and the predicate must call the same function as the
-  // migration's index expression or the planner won't use the index. The planner
-  // can serve the two branches with a bitmap-OR of the two indexes; in practice
-  // the fallback branch reaches ~no rows (dual-write mirrors every row), so the
-  // prerendered_html index carries the load.
+  // Markdown is a render output and lives on `prerendered_html.markdown`, so
+  // full-text membership is eventually consistent: a row whose prerender-html
+  // job hasn't landed yet has no markdown and is not full-text findable until
+  // it does. The predicate is an expression match against the GIN-indexed
+  // `to_tsvector('english', markdown_search_text(markdown))` —
+  // `markdown_search_text` strips oversized base64 runs and caps length so
+  // the tsvector stays under Postgres's byte limit, and the predicate must
+  // call the same function as the migration's index expression or the
+  // planner won't use the index.
   private matchesCondition(
     filter: MatchesFilter,
     _on: CodeRef,
@@ -1307,18 +1293,14 @@ export class IndexQueryEngine {
         : [
             dbExpression({
               pg: [
-                `(to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
+                `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
-                `)) OR (ph.url IS NULL AND to_tsvector('english', markdown_search_text(i.markdown)) @@ websearch_to_tsquery('english',`,
-                param(filter.matches),
-                `))`,
+                `)`,
               ],
               sqlite: [
-                `(LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
+                `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
-                `) ESCAPE '\\') OR (ph.url IS NULL AND LOWER(coalesce(i.markdown, '')) LIKE LOWER(`,
-                param(`%${escapeSqliteLikePattern(filter.matches)}%`),
-                `) ESCAPE '\\')`,
+                `) ESCAPE '\\'`,
               ],
             }),
           ];
@@ -2047,13 +2029,15 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
     : 'prerendered_html';
 }
 
-// Dual-read LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for each
-// boxel_index row (aliased `i`) on their shared (url, realm_url, type) primary
-// key. A boxel_index row without a matching prerendered_html row leaves `ph`'s
-// columns NULL (`ph.url IS NULL`), which the reads treat as the fallback to the
-// boxel_index column. Being keyed on the primary key the join is 1:1, so it
-// never fans out a `GROUP BY url` grouping. `icon_html` is not dual-read: the
-// icon renders in the index visit and stays on boxel_index.
+// HTML-channel LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for
+// each boxel_index row (aliased `i`) on their shared (url, realm_url, type)
+// primary key. prerendered_html is the sole home of rendered output (the HTML
+// formats, markdown, the deps carrying scoped-CSS URLs, the rendering
+// generation, render errors); a boxel_index row without a matching
+// prerendered_html row reads those as NULL (`ph.url IS NULL`) — no rendering
+// exists yet. Being keyed on the primary key the join is 1:1, so it never
+// fans out a `GROUP BY url` grouping. `icon_html` is not joined in: the icon
+// renders in the index visit and lives on boxel_index.
 function prerenderedJoin(opts: WIPOptions | undefined) {
   return `LEFT JOIN ${prerenderedTableFromOpts(
     opts,
@@ -2081,31 +2065,19 @@ function effectiveErrorDoc(): string {
   return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc ELSE i.error_doc END`;
 }
 
-// Appended after a `SELECT i.*` alongside DUAL_READ_HTML_OVERRIDES so the
+// Appended after a `SELECT i.*` alongside PRERENDERED_HTML_SELECTS so the
 // effective error state wins over the raw boxel_index columns
 // (duplicate result columns resolve to the last one in both adapters).
-const DUAL_READ_ERROR_OVERRIDES = [
+const EFFECTIVE_ERROR_SELECTS = [
   `${effectiveHasError()} AS has_error`,
   `${effectiveErrorDoc()} AS error_doc`,
 ].join(', ');
-
-// A single dual-read column. A present prerendered_html row is authoritative for
-// the column — its value wins even when NULL — and boxel_index is consulted only
-// when no prerendered_html row exists (`ph.url IS NULL`, the primary key so never
-// null on a matched row). This matches matchesCondition's `ph.url IS NULL` guard,
-// so a present-but-null prerendered rendering reads as an absence consistently:
-// the column and full-text membership never disagree (a plain
-// `coalesce(ph.col, i.col)` would leak the stale boxel_index value for a row the
-// FTS path already treats as unrendered).
-function dualReadColumn(col: string): string {
-  return `CASE WHEN ph.url IS NULL THEN i.${col} ELSE ph.${col} END`;
-}
 
 // Maps a raw `file`-row search result to the `IndexedFile` view-model. Shared
 // by `searchFiles` and the mixed `searchEntries` assembly loop (which builds
 // a file's resource + native renderings from the same shape).
 export function fileEntryFromResult(
-  result: Partial<BoxelIndexTable>,
+  result: Partial<IndexRowWithHtml>,
 ): IndexedFile {
   let canonicalURL = result.url;
   if (!canonicalURL) {
@@ -2152,15 +2124,14 @@ export function fileEntryFromResult(
   };
 }
 
-// Dual-read HTML/markdown reads, appended after a `SELECT i.*` so these win over
-// the same-named boxel_index columns (duplicate result columns resolve to the
-// last one in both the pg and sqlite adapters). `icon_html` is excluded — the
-// icon renders in the index visit and stays on boxel_index. `deps` is excluded
-// too: `getInstance`/`getFile` expose `deps` for the dependency graph
-// (`getCardDependencies`), which is boxel_index's; the scoped-CSS URLs needed to
-// serve HTML are dual-read where HTML is served — the search selects, searchFiles,
-// and retrieve-scoped-css.
-const DUAL_READ_HTML_OVERRIDES = [
+// The prerendered_html row's rendered output, appended after a `SELECT i.*`
+// on the single-entry read paths. `icon_html` is excluded — the icon renders
+// in the index visit and lives on boxel_index. `deps` is excluded too:
+// `getInstance`/`getFile` expose `deps` for the dependency graph
+// (`getCardDependencies`), which is boxel_index's; the scoped-CSS URLs needed
+// to serve HTML come from `ph.deps` where HTML is served — the search
+// selects, searchFiles, and retrieve-scoped-css.
+const PRERENDERED_HTML_SELECTS = [
   'isolated_html',
   'head_html',
   'atom_html',
@@ -2168,7 +2139,7 @@ const DUAL_READ_HTML_OVERRIDES = [
   'fitted_html',
   'markdown',
 ]
-  .map((col) => `${dualReadColumn(col)} AS ${col}`)
+  .map((col) => `ph.${col} AS ${col}`)
   .join(', ');
 
 // SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can

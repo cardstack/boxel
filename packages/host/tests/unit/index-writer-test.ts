@@ -583,7 +583,7 @@ module('Unit | index-writer', function (hooks) {
     });
 
     let [row] = await adapter.execute(
-      `SELECT pristine_doc, search_doc, display_names, markdown FROM boxel_index_working WHERE url = $1`,
+      `SELECT pristine_doc, search_doc, display_names FROM boxel_index_working WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -613,8 +613,12 @@ module('Unit | index-writer', function (hooks) {
       `high:${REPLACEMENT} emoji:${VALID_EMOJI} low:${REPLACEMENT}`,
       'lone surrogates are replaced while the valid emoji pair is preserved',
     );
+    let [renderedRow] = await adapter.execute(
+      `SELECT markdown FROM prerendered_html_working WHERE url = $1`,
+      { bind: [`${testRealmURL}1.json`] },
+    );
     assert.strictEqual(
-      row.markdown,
+      renderedRow.markdown,
       `# Title${REPLACEMENT} ${REPLACEMENT} keep ${VALID_EMOJI}`,
       'markdown column is sanitized and keeps the valid emoji',
     );
@@ -625,7 +629,7 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('dual-writes prerendered HTML on index and swaps it into production on done', async function (assert) {
+  test('lands prerendered HTML on the prerendered_html channel and swaps it into production on done', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
     );
@@ -713,26 +717,16 @@ module('Unit | index-writer', function (hooks) {
       'prerendered_html carries the HTML at the job generation',
     );
 
-    // No read-path change: the HTML is also on boxel_index (dual-write, not a
-    // move), and icon_html is NOT dual-written (it stays on boxel_index).
+    // icon_html renders in the index visit and lives on boxel_index; the
+    // other formats live only on prerendered_html.
     let [indexRow] = (await adapter.execute(
-      `SELECT isolated_html, markdown, icon_html FROM boxel_index WHERE url = $1`,
+      `SELECT icon_html FROM boxel_index WHERE url = $1`,
       { bind: [`${testRealmURL}1.json`] },
     )) as unknown as BoxelIndexTable[];
     assert.strictEqual(
-      indexRow.isolated_html,
-      `<div class="isolated">Isolated</div>`,
-      'boxel_index retains isolated_html',
-    );
-    assert.strictEqual(
-      indexRow.markdown,
-      'Van Gogh markdown',
-      'boxel_index retains markdown',
-    );
-    assert.strictEqual(
       indexRow.icon_html,
       `<svg>icon</svg>`,
-      'icon_html stays on boxel_index (not part of prerendered_html)',
+      'icon_html lives on boxel_index (not part of prerendered_html)',
     );
   });
 
@@ -818,7 +812,7 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('copyFrom dual-writes prerendered_html for the copied realm', async function (assert) {
+  test('copyFrom copies prerendered_html rows for the copied realm', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
     );
@@ -852,8 +846,8 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // setupIndex seeds the source realm's prerendered_html (as the backfill +
-    // dual-write do in production), so the copy has a rendering to source.
+    // setupIndex seeds the source realm's prerendered_html, so the copy has a
+    // rendering to source.
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL2),
       virtualNetwork,
@@ -885,7 +879,7 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('copyFrom sources HTML from prerendered_html and rewrites realm keys', async function (assert) {
+  test('copyFrom rewrites realm keys in copied prerendered_html rows', async function (assert) {
     let types = [{ module: rri(`./person`), name: 'Person' }, baseCardRef].map(
       (i) => internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
     );
@@ -923,28 +917,10 @@ module('Unit | index-writer', function (hooks) {
           fitted_html: Object.fromEntries(
             types.map((type) => [type, `<div class="fitted">${type}</div>`]),
           ),
-          // The boxel_index HTML deliberately diverges from what we write onto
-          // prerendered_html below, so the copied HTML can only be correct if it
-          // was sourced from prerendered_html rather than the boxel_index column.
-          isolated_html: `<div class="isolated">FROM boxel_index (stale)</div>`,
-          markdown: 'boxel_index markdown (stale)',
+          isolated_html: `<div class="isolated">Isolated HTML</div>`,
+          markdown: 'source markdown',
         },
       ],
-    );
-    // setupIndex seeds the source realm's prerendered_html (backfill +
-    // dual-write do this in production); diverge its rendering from the
-    // boxel_index column with a sentinel a boxel_index-sourced copy could never
-    // produce.
-    await adapter.execute(
-      `UPDATE prerendered_html SET isolated_html = $1, markdown = $2 WHERE url = $3 AND realm_url = $4`,
-      {
-        bind: [
-          `<div class="isolated">FROM prerendered_html</div>`,
-          'prerendered_html markdown',
-          `${testRealmURL}1.json`,
-          testRealmURL,
-        ],
-      },
     );
 
     let batch = await indexWriter.createBatch(
@@ -975,9 +951,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
         realm_url: testRealmURL2,
-        // Sourced from prerendered_html, not the (divergent) boxel_index column.
-        isolated_html: `<div class="isolated">FROM prerendered_html</div>`,
-        markdown: 'prerendered_html markdown',
+        isolated_html: `<div class="isolated">Isolated HTML</div>`,
+        markdown: 'source markdown',
         // Render-type keys rewritten to the destination realm.
         fitted_html: Object.fromEntries(
           destTypes.map((type, i) => [
@@ -998,30 +973,15 @@ module('Unit | index-writer', function (hooks) {
         // is_deleted through, matching the boxel_index copy).
         is_deleted: null,
       },
-      'copied prerendered_html is sourced from prerendered_html with realm keys/deps rewritten and the dest generation stamped',
-    );
-
-    // The boxel_index HTML column is also copied (the dual-read fallback), and
-    // it legitimately differs from the prerendered_html rendering — so the
-    // assertion above is not trivially satisfied.
-    let [indexRow] = (await adapter.execute(
-      `SELECT isolated_html FROM boxel_index WHERE url = $1`,
-      { bind: [`${testRealmURL2}1.json`] },
-    )) as unknown as BoxelIndexTable[];
-    assert.strictEqual(
-      indexRow.isolated_html,
-      `<div class="isolated">FROM boxel_index (stale)</div>`,
-      'boxel_index HTML is copied independently and diverges from prerendered_html',
+      'copied prerendered_html carries realm keys/deps rewritten and the dest generation stamped',
     );
   });
 
-  test('copyFrom refreshes a destination prerendered_html row whose source has none', async function (assert) {
-    // Source row has boxel_index HTML but no prerendered_html row (an indexed
-    // row without a rendering). The destination already carries a stale
-    // prerendered_html row for the same URL. The copy must refresh it (via the
-    // boxel_index projection, which the prerendered_html overlay leaves in place
-    // for a row the source lacks) rather than leave the stale rendering for the
-    // dual-read to prefer.
+  test('copyFrom leaves an unrendered source URL unrendered at the destination', async function (assert) {
+    // The source row is indexed but has no prerendered_html row (no rendering
+    // exists). The copy carries only the prerendered_html rows the source
+    // has, so the destination URL reads as unrendered — the catch-up sweep is
+    // what enqueues its render.
     let resource: CardResource = {
       id: testRRI('1'),
       type: 'card',
@@ -1044,31 +1004,10 @@ module('Unit | index-writer', function (hooks) {
           search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
           display_names: ['Person'],
           deps: [`${testRealmURL}person`],
-          isolated_html: `<div class="isolated">SOURCE via boxel_index</div>`,
-          markdown: 'source boxel_index markdown',
         },
       ],
-    );
-    // Drop the source's prerendered_html row that setupIndex seeded so this row
-    // is a gap the copy must fill from boxel_index. Pre-seed a stale destination
-    // prerendered_html row for the URL the copy will write.
-    await adapter.execute(
-      `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2`,
-      { bind: [`${testRealmURL}1.json`, testRealmURL] },
-    );
-    await adapter.execute(
-      `INSERT INTO prerendered_html (url, file_alias, realm_url, type, isolated_html, markdown, generation, is_deleted, rendered_at)
-       VALUES ($1, $2, $3, 'instance', $4, $5, 1, false, $6)`,
-      {
-        bind: [
-          `${testRealmURL2}1.json`,
-          `${testRealmURL2}1`,
-          testRealmURL2,
-          `<div class="isolated">STALE destination</div>`,
-          'stale destination markdown',
-          String(Date.now()),
-        ],
-      },
+      // Leave prerendered_html empty — the source URL has no rendering.
+      { prerenderedHtml: false },
     );
 
     let batch = await indexWriter.createBatch(
@@ -1078,33 +1017,31 @@ module('Unit | index-writer', function (hooks) {
     await batch.copyFrom(new URL(testRealmURL));
     await batch.done();
 
-    let [rendered] = (await adapter.execute(
-      `SELECT isolated_html, markdown, generation FROM prerendered_html WHERE url = $1`,
+    let [indexRow] = (await adapter.execute(
+      `SELECT url FROM boxel_index WHERE url = $1`,
+      { bind: [`${testRealmURL2}1.json`] },
+    )) as unknown as Partial<BoxelIndexTable>[];
+    assert.strictEqual(
+      indexRow?.url,
+      `${testRealmURL2}1.json`,
+      'the boxel_index row is copied',
+    );
+    let rendered = (await adapter.execute(
+      `SELECT url FROM prerendered_html WHERE url = $1`,
       { bind: [`${testRealmURL2}1.json`] },
     )) as unknown as Partial<PrerenderedHtmlTable>[];
     assert.strictEqual(
-      rendered?.isolated_html,
-      `<div class="isolated">SOURCE via boxel_index</div>`,
-      'the stale destination rendering is refreshed from the copied boxel_index HTML',
-    );
-    assert.strictEqual(
-      rendered?.markdown,
-      'source boxel_index markdown',
-      'markdown is refreshed too',
-    );
-    assert.strictEqual(
-      rendered?.generation,
-      2,
-      'the refreshed row is stamped at the dest-realm generation',
+      rendered.length,
+      0,
+      'no prerendered_html row is created for an unrendered source URL',
     );
   });
 
-  test('copyFrom fills every (url, type) even when the source prerendered_html covers only one type', async function (assert) {
-    // The same URL can carry both an instance and a file boxel_index row. If the
-    // source's prerendered_html has a row for only one of them, the copy must
-    // still land a prerendered_html row for both — the covered type sourced from
-    // prerendered_html, the other filled from the boxel_index projection — so no
-    // type is left without a rendering.
+  test('copyFrom copies only the (url, type) rows the source prerendered_html has', async function (assert) {
+    // The same URL can carry both an instance and a file boxel_index row. The
+    // copy carries a prerendered_html row per (url, type) the source has one
+    // for; a type with no source rendering stays unrendered at the
+    // destination.
     let resource: LooseCardResource = {
       id: `${testRealmURL}1`,
       type: 'card',
@@ -1126,7 +1063,7 @@ module('Unit | index-writer', function (hooks) {
           pristine_doc: resource,
           search_doc: { id: `${testRealmURL}1`, name: 'Mango' },
           deps: [`${testRealmURL}person`],
-          isolated_html: `<div class="isolated">instance boxel_index</div>`,
+          isolated_html: `<div class="isolated">instance rendering</div>`,
         },
         {
           url: `${testRealmURL}1.json`,
@@ -1134,26 +1071,15 @@ module('Unit | index-writer', function (hooks) {
           generation: 1,
           realm_url: testRealmURL,
           search_doc: { name: '1.json' },
-          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
+          isolated_html: `<div class="isolated">file rendering</div>`,
         },
       ],
     );
-    // setupIndex seeds prerendered_html for both types; drop the file row so the
-    // source covers only the instance, then diverge the instance rendering with
-    // a sentinel.
+    // setupIndex seeds prerendered_html for both types; drop the file row so
+    // the source covers only the instance.
     await adapter.execute(
       `DELETE FROM prerendered_html WHERE url = $1 AND realm_url = $2 AND type = 'file'`,
       { bind: [`${testRealmURL}1.json`, testRealmURL] },
-    );
-    await adapter.execute(
-      `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 AND realm_url = $3 AND type = 'instance'`,
-      {
-        bind: [
-          `<div class="isolated">INSTANCE from prerendered_html</div>`,
-          `${testRealmURL}1.json`,
-          testRealmURL,
-        ],
-      },
     );
 
     let batch = await indexWriter.createBatch(
@@ -1171,31 +1097,22 @@ module('Unit | index-writer', function (hooks) {
       rows,
       [
         {
-          type: 'file',
-          isolated_html: `<div class="isolated">FILE from boxel_index</div>`,
-          generation: 2,
-        },
-        {
           type: 'instance',
-          isolated_html: `<div class="isolated">INSTANCE from prerendered_html</div>`,
+          isolated_html: `<div class="isolated">instance rendering</div>`,
           generation: 2,
         },
       ],
-      'both types land a prerendered_html row: instance sourced from prerendered_html, file from the boxel_index projection',
+      'only the type the source prerendered_html covers lands a row; the file type stays unrendered',
     );
   });
 
-  test('promotes prerendered_html for rows resumed from a prior job attempt', async function (assert) {
+  test('promotes prerendered_html_working rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
-    // Seed boxel_index_working as if a prior attempt of job 42 wrote this row
-    // (with HTML) but never mirrored it onto prerendered_html_working — the
-    // crash-window / pre-dual-write-deploy case. prerendered_html_working is
-    // left empty (prerenderedHtml: false), so the batch-commit projection is the
-    // only thing that can promote the row: a resuming batch re-adds the URL to
-    // the invalidation set but never re-runs updateEntry, so the projection must
-    // source from boxel_index_working or the row lands in boxel_index but is
-    // silently skipped in prerendered_html. Auto-seeding prerendered_html_working
-    // here would mask a regression in that projection.
+    // Seed both working tables as if a prior attempt of job 42 wrote this row
+    // (a fused visit writes each entry's index half to boxel_index_working and
+    // its HTML half to prerendered_html_working). A resuming batch pre-seeds
+    // the URL into its invalidation set without re-running updateEntry, so the
+    // swap on done() must promote both channels' working rows.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1217,7 +1134,6 @@ module('Unit | index-writer', function (hooks) {
         ],
         production: [],
       },
-      { prerenderedHtml: false },
     );
 
     let batch = await indexWriter.createBatch(
@@ -1243,13 +1159,13 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let [indexRow] = (await adapter.execute(
-      `SELECT isolated_html FROM boxel_index WHERE url = $1`,
+      `SELECT url FROM boxel_index WHERE url = $1`,
       { bind: [url] },
-    )) as unknown as BoxelIndexTable[];
+    )) as unknown as Partial<BoxelIndexTable>[];
     assert.strictEqual(
-      indexRow?.isolated_html,
-      `<div class="isolated">Resumed</div>`,
-      'boxel_index and prerendered_html advance in lockstep for resumed rows',
+      indexRow?.url,
+      url,
+      'the boxel_index row is promoted in lockstep for resumed rows',
     );
   });
 
@@ -1447,27 +1363,7 @@ module('Unit | index-writer', function (hooks) {
         types: destTypes,
         last_modified: String(modified),
         resource_created_at: String(modified),
-        embedded_html: Object.fromEntries(
-          destTypes.map((type) => [
-            type,
-            `<div class="embedded">Embedded HTML for ${type
-              .split('/')
-              .pop()!}</div>`,
-          ]),
-        ),
-        fitted_html: Object.fromEntries(
-          destTypes.map((type) => [
-            type,
-            `<div class="fitted">Fitted HTML for ${type
-              .split('/')
-              .pop()!}</div>`,
-          ]),
-        ),
-        isolated_html: `<div class="isolated">Isolated HTML</div>`,
-        atom_html: `<span class="atom">Atom HTML</span>`,
-        head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
-        markdown: null,
         is_deleted: null,
         diagnostics: null,
       },
@@ -1605,26 +1501,10 @@ module('Unit | index-writer', function (hooks) {
         deps: [`${testRealmURL}person`],
         last_known_good_deps: [`${testRealmURL}person`],
         types,
-        embedded_html: Object.fromEntries(
-          types.map((type) => [
-            type,
-            `<div class="embedded">Embedded HTML for ${type}</div>`,
-          ]),
-        ),
-        fitted_html: Object.fromEntries(
-          types.map((type) => [
-            type,
-            `<div class="fitted">Fitted HTML for ${type}</div>`,
-          ]),
-        ),
-        isolated_html: `<div class="isolated">Isolated HTML</div>`,
-        atom_html: `<span class="atom">Atom HTML</span>`,
-        head_html: null,
         last_modified: String(modified),
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
-        markdown: null,
       },
       'the error entry includes last known good state of instance',
     );
@@ -1814,16 +1694,10 @@ module('Unit | index-writer', function (hooks) {
         deps: [],
         last_known_good_deps: null,
         types: null,
-        embedded_html: null,
-        fitted_html: null,
-        isolated_html: null,
-        atom_html: null,
-        head_html: null,
         last_modified: null,
         resource_created_at: null,
         is_deleted: false,
         icon_html: null,
-        markdown: null,
       },
       'the error entry does not include last known good state of instance',
     );
