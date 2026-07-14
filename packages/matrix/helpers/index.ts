@@ -199,8 +199,8 @@ export async function createRealm(
       // Neither the tile nor an error surfaced. Distinguish "still creating"
       // (modal open, submit button replaced by the spinner) from "modal gone,
       // no tile" so the failure carries a cause, not just a bare timeout.
-      // Chain the original Playwright expectation error so its locator/call-log
-      // context is preserved alongside the classification.
+      // Fold the original Playwright expectation error into the message so its
+      // locator/call-log context is preserved alongside the classification.
       let modalOpen = (await modal.count()) > 0;
       let stillCreating = modalOpen && (await submitButton.count()) === 0;
       let state = stillCreating
@@ -208,9 +208,10 @@ export async function createRealm(
         : modalOpen
           ? 'modal open but neither the workspace tile nor an error appeared'
           : 'modal closed without the workspace tile appearing';
+      let detail = cause instanceof Error ? cause.message : String(cause);
       throw new Error(
-        `createRealm("${endpoint}") did not settle within 30s: ${state}`,
-        { cause },
+        `createRealm("${endpoint}") did not settle within 30s: ${state}\n` +
+          `underlying expectation failure: ${detail}`,
       );
     }
     if ((await workspaceTile.count()) > 0) {

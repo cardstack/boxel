@@ -11,6 +11,7 @@ import {
   VALID_EXAMPLE_JSON,
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures.ts';
+import { seedFilesAndWaitForIndex } from './helpers/seed-and-wait-for-index.ts';
 import { buildTestClient } from './helpers/test-client.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
@@ -98,45 +99,18 @@ test.describe('runParseInMemory e2e', () => {
     try {
       await clearParseableFixtures(client, realmUrl);
 
-      // Seed: one clean GTS module, a Spec pointing at a valid JSON example.
-      let writeModule = await client.write(
-        realmUrl,
-        'parse-test-card.gts',
-        VALID_MODULE_GTS,
-      );
-      expect(writeModule.ok).toBe(true);
-      expect(
-        await client.waitForFile(realmUrl, 'parse-test-card.gts', {
-          pollMs: 300,
-          timeoutMs: 30_000,
-        }),
-      ).toBe(true);
-
-      let writeExample = await client.write(
-        realmUrl,
-        'ParseTestCard/example-1.json',
-        VALID_EXAMPLE_JSON,
-      );
-      expect(writeExample.ok).toBe(true);
-      expect(
-        await client.waitForFile(realmUrl, 'ParseTestCard/example-1.json', {
-          pollMs: 300,
-          timeoutMs: 30_000,
-        }),
-      ).toBe(true);
-
-      let writeSpec = await client.write(
-        realmUrl,
-        'Spec/parse-test-spec.json',
-        validSpecJson(),
-      );
-      expect(writeSpec.ok).toBe(true);
-      expect(
-        await client.waitForFile(realmUrl, 'Spec/parse-test-spec.json', {
-          pollMs: 300,
-          timeoutMs: 30_000,
-        }),
-      ).toBe(true);
+      // Seed one clean GTS module, a valid JSON example, and a Spec that
+      // links the example — in a single indexer-settled batch. Whole-realm
+      // parse discovers JSON examples through `_federated-search` on Spec
+      // cards, so the Spec must be indexed with its `linkedExamples` link
+      // resolved before discovery runs. `seedFilesAndWaitForIndex` provides
+      // that boundary; a source-existence gate (`write` + `waitForFile`)
+      // does not, since a card can be on disk yet not yet searchable.
+      await seedFilesAndWaitForIndex(client, realmUrl, [
+        { path: 'parse-test-card.gts', content: VALID_MODULE_GTS },
+        { path: 'ParseTestCard/example-1.json', content: VALID_EXAMPLE_JSON },
+        { path: 'Spec/parse-test-spec.json', content: validSpecJson() },
+      ]);
 
       workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
