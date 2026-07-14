@@ -103,6 +103,26 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// Same symbol-channel pattern for a frontmatter value that must differ
+// between the search doc and the file-meta resource: when a
+// `FrontmatterField` subclass produces index-only enrichment (e.g. a skill's
+// generated tool definitions, which are multi-KB and must never land in
+// `search_doc`), `extractAttributes` routes the enriched copy under this key
+// and the host file extractor stamps it onto the resource, leaving the
+// search doc's `frontmatter` as authored.
+export const FRONTMATTER_FILE_META_VALUE_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-file-meta-value',
+);
+
+// Same symbol-channel pattern for the `Partial<Diagnostics>` a
+// `FrontmatterField` subclass contributes to the indexed row (e.g. a skill's
+// `toolSchemaErrors`); the host file extractor lifts it into the extract
+// result so the indexer can merge it onto the row's `diagnostics`. Which
+// keys the bag carries is the subclass's own knowledge.
+export const FRONTMATTER_DIAGNOSTICS_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-diagnostics',
+);
+
 // One tool a skill's frontmatter declared whose schema generation failed
 // during file extraction — the module wouldn't load, the export was missing,
 // or the tool's input-schema generation threw. The skill still indexes
@@ -480,12 +500,12 @@ export interface FileExtractResponse {
   // the file indexer merges this onto `diagnostics.frontmatterParseError` so
   // the failure surfaces via `/_indexing-errors` instead of vanishing.
   frontmatterParseError?: FrontmatterParseError;
-  // Set when one or more of a skill's frontmatter tools failed schema
-  // generation during the extract. The extract still succeeds (the skill
-  // indexes with the tools that did enrich); the file indexer merges this
-  // onto `diagnostics.toolSchemaErrors` so each failure surfaces via
-  // `/_indexing-errors`.
-  toolSchemaErrors?: ToolSchemaError[];
+  // Diagnostics findings the file's frontmatter contributed during the
+  // extract (e.g. a skill's `toolSchemaErrors`). The extract still succeeds;
+  // the file indexer merges the bag onto the row's `diagnostics` so each
+  // finding surfaces via `/_indexing-errors`. Which keys the bag carries is
+  // the producing `FrontmatterField` subclass's own knowledge.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 }
 
 export interface FileRenderResponse {

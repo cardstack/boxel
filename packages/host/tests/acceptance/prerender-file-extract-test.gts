@@ -342,9 +342,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(
-      result.toolSchemaErrors,
+      result.frontmatterDiagnostics,
       undefined,
-      'no tool schema errors',
+      'no frontmatter diagnostics',
     );
 
     let tools = (result.resource?.attributes as Record<string, any>)
@@ -365,11 +365,14 @@ boxel:
     assert.strictEqual(realmTool.codeRef.name, 'default');
     assert.strictEqual(realmTool.functionName, expectedRealmFn);
     assert.false(realmTool.requiresApproval, 'authored false is preserved');
-    assert.strictEqual(realmTool.tool.type, 'function');
-    assert.strictEqual(realmTool.tool.function.name, expectedRealmFn);
-    assert.strictEqual(realmTool.tool.function.description, 'Sends a greeting');
+    assert.strictEqual(realmTool.definition.type, 'function');
+    assert.strictEqual(realmTool.definition.function.name, expectedRealmFn);
+    assert.strictEqual(
+      realmTool.definition.function.description,
+      'Sends a greeting',
+    );
     assert.ok(
-      realmTool.tool.function.parameters.properties.attributes.properties
+      realmTool.definition.function.parameters.properties.attributes.properties
         .greeting,
       'generated schema carries the input card fields',
     );
@@ -392,7 +395,7 @@ boxel:
       'absent requiresApproval stamps as true',
     );
     assert.ok(
-      hostTool.tool.function.parameters.properties.attributes.properties
+      hostTool.definition.function.parameters.properties.attributes.properties
         .submode,
       'host tool schema carries its input card fields',
     );
@@ -405,7 +408,7 @@ boxel:
       'search doc keeps the tools as authored',
     );
     assert.false(
-      'tool' in searchDocTools[0],
+      'definition' in searchDocTools[0],
       'generated schemas stay out of the search doc',
     );
     assert.false(
@@ -433,8 +436,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready', 'extract still succeeds');
 
-    assert.strictEqual(result.toolSchemaErrors?.length, 1);
-    let [toolError] = result.toolSchemaErrors!;
+    let toolSchemaErrors = result.frontmatterDiagnostics?.toolSchemaErrors;
+    assert.strictEqual(toolSchemaErrors?.length, 1);
+    let [toolError] = toolSchemaErrors!;
     assert.strictEqual(
       toolError.module,
       fileURL('skills/broken-tool/missing-tool'),
@@ -452,11 +456,11 @@ boxel:
       'failed tool entry stays as authored',
     );
     assert.strictEqual(
-      tools[0].tool,
+      tools[0].definition,
       undefined,
       'failed tool entry has no schema',
     );
-    assert.ok(tools[1].tool, 'the remaining tool still enriches');
+    assert.ok(tools[1].definition, 'the remaining tool still enriches');
     assert.strictEqual(
       tools[1].functionName,
       buildToolFunctionNameFromResolvedRef({
@@ -480,9 +484,9 @@ boxel:
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(
-      result.toolSchemaErrors,
+      result.frontmatterDiagnostics,
       undefined,
-      'no tool schema errors',
+      'no frontmatter diagnostics',
     );
     // A non-skill kind keeps only the raw frontmatter (no typed `tools`
     // field), and the kind gate skips enrichment before ever looking.

@@ -43,9 +43,9 @@ export class ToolField extends FieldDef {
   // class's input schema at indexing time and stamped onto the skill's
   // file-meta resource. Present only on tools rehydrated from an enriched
   // index row — a tool authored in frontmatter has no value here until the
-  // file indexes. Consumers that need a schema and find none must generate
-  // it themselves (see the host's `uploadToolDefinitions`).
-  @field tool = contains(JsonField);
+  // file indexes. Consumers that need a definition and find none must
+  // generate it themselves (see the host's `uploadToolDefinitions`).
+  @field definition = contains(JsonField);
 
   @field functionName = contains(StringField, {
     description: 'The name of the function to be executed',
