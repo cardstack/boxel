@@ -2,6 +2,8 @@ import { logger } from '@cardstack/runtime-common';
 import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { isToolOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
+import { emptyResponseFallbackMessage } from '../constants.ts';
+
 import { errorReporter } from './sentry.ts';
 import type { OpenAIError } from 'openai/error';
 import { throttle } from 'lodash-es';
@@ -229,12 +231,37 @@ export class Responder {
     }
     this.isFinalized = true;
 
-    let isStreamingFinishedChanged =
-      this.responseState.updateIsStreamingFinished(true, opts?.isCanceled);
+    let changed = this.responseState.updateIsStreamingFinished(
+      true,
+      opts?.isCanceled,
+    );
+    // A generation can complete with neither text nor tool calls — e.g. the
+    // model spends its whole turn on reasoning and then stops. Publishing
+    // that as-is renders a blank message with no signal — for the user or
+    // for the model's own next-turn history — that anything went wrong.
+    // Substitute visible fallback text so the dead end is actionable. The
+    // error path never reaches here (it publishes its own error event
+    // without finalizing), so this only catches the silent case.
+    if (
+      !opts?.isCanceled &&
+      !this.responseState.latestContent &&
+      this.responseState.toolCalls.length === 0
+    ) {
+      log.warn(
+        'Generation completed with no content and no tool calls; substituting fallback text',
+      );
+      changed =
+        this.responseState.update(
+          undefined,
+          emptyResponseFallbackMessage,
+          undefined,
+          true,
+        ) || changed;
+    }
     log.debug('finalize', {
-      isStreamingFinishedChanged,
+      isStreamingFinishedChanged: changed,
     });
-    if (isStreamingFinishedChanged) {
+    if (changed) {
       await this.sendMessageEventWithThrottling();
     }
     await this.flush();
