@@ -3,12 +3,15 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   flattenPrerenderHtmlVisitMeta,
+  hasCardExtension,
+  isBrowserTestEnv,
   isCardResource,
   jobIdentity,
   logger,
   modulesConsumedInMeta,
   RealmPaths,
   type Batch,
+  type DefinitionLookup,
   type IndexWriter,
   type JobInfo,
   type LooseCardResource,
@@ -24,6 +27,10 @@ import type { VirtualNetwork } from '../virtual-network.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
 import { uniqueDeps } from './dependency-collections.ts';
+import {
+  preWarmModulesTable,
+  resolveModuleCacheContext,
+} from './prewarm-modules.ts';
 
 export interface PrerenderHtmlPassArgs {
   realmURL: URL;
@@ -39,9 +46,20 @@ export interface PrerenderHtmlPassArgs {
   // every visit so each prerender tab this pass touches resets its loader
   // exactly once when the realm's module surface changed.
   loaderEpoch: string;
+  // True when a from-scratch index pass spawned this job: run the realm-wide
+  // module pre-warm sweep before the format renders begin. False on
+  // incremental spawns — the sweep is O(realm module count).
+  preWarm: boolean;
   indexWriter: IndexWriter;
+  definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   reader: Reader;
+  // Authed fetch, used only to resolve the realm's module-cache scope for
+  // pre-warm (public vs private + owner user id).
+  fetch: typeof globalThis.fetch;
+  // The realm owner the pre-warm's sub-`prerenderModule` renders as, and the
+  // user id a private realm's cache is keyed on.
+  realmOwnerUserId: string;
   prerenderer: Prerenderer;
   auth: string;
   jobInfo: JobInfo;
@@ -53,6 +71,10 @@ export interface PrerenderHtmlPassResult {
   invalidations: string[];
   generation: number;
   stats: Stats;
+  // The pre-warm sweep's wall-clock, present only when it ran (a from-scratch-
+  // spawned pass outside the browser). Surfaces on the job result so
+  // dashboards attribute the sweep to the job that pays it.
+  preWarmMs?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
@@ -68,9 +90,13 @@ export async function runPrerenderHtmlPass({
   changes,
   generation,
   loaderEpoch,
+  preWarm,
   indexWriter,
+  definitionLookup,
   virtualNetwork,
   reader,
+  fetch,
+  realmOwnerUserId,
   prerenderer,
   auth,
   jobInfo,
@@ -115,11 +141,13 @@ export async function runPrerenderHtmlPass({
     generation,
   });
 
-  // Unlike the index runner — which announces a zero total and lets the
-  // first `file-visited` fill it in once invalidation discovery runs — this
-  // job's URL set arrives fully computed in its args, so the progress row
-  // carries the real denominator from the start. The jobType matches the
-  // queue's `jobs.job_type` value so both spell the job the same way.
+  // The job's URL set arrives fully computed in its args, so the progress row
+  // opens with the render denominator rather than the index runner's zero. A
+  // from-scratch-spawned job then grows this total during pre-warm below (the
+  // sweep's module count isn't known until its dep analysis runs), so the
+  // `file-visited` events carry the combined total — the event sink adopts the
+  // latest `totalFiles` it sees. The jobType matches the queue's
+  // `jobs.job_type` value so both spell the job the same way.
   onProgress?.({
     type: 'indexing-started',
     realmURL: realmURL.href,
@@ -133,6 +161,72 @@ export async function runPrerenderHtmlPass({
     [...operations].map(([url, operation]) => ({ url, operation })),
   );
   let filesCompleted = 0;
+
+  // Pre-warm the module definition cache before the format renders fire. The
+  // realm-wide `.gts` / `.gjs` sweep is the layer that matters here: it primes
+  // the sibling card modules referenced by *string* in query-backed field
+  // renders (`<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`),
+  // so a mid-render `lookupDefinition` hits a populated row instead of spawning
+  // a same-affinity sub-`prerenderModule` that would stall the tab pool.
+  //
+  // Runs only when a from-scratch pass spawned this job (`preWarm`) — the sweep
+  // is O(realm module count). Skipped in the browser: host tests run a Realm
+  // inside a Chrome tab with no separate prerender server and no tab pool, and
+  // populating the definition cache there bakes in keys the host's
+  // card-reference-prefix reader can't match. The realm-wide list is re-derived
+  // from `reader.mtimes()` rather than threaded through args — it mirrors the
+  // index job's own source of truth and keeps the job payload from carrying an
+  // O(realm) module list through every coalesce merge. Pre-warmed modules and
+  // the files rendered below share one `totalFiles`, so the dashboard bar spans
+  // both phases. Best-effort: a failure is warned and the format renders
+  // populate the cache on demand.
+  let preWarmMs: number | undefined;
+  if (preWarm && !isBrowserTestEnv()) {
+    let preWarmStart = Date.now();
+    try {
+      let filesystemMtimes = await reader.mtimes();
+      let allRealmCardModules =
+        Object.keys(filesystemMtimes).filter(hasCardExtension);
+      let updateURLs = [...operations]
+        .filter(([, operation]) => operation === 'update')
+        .map(([url]) => new URL(url));
+      let preWarmedCount = await preWarmModulesTable({
+        realmURL,
+        invalidations: updateURLs,
+        allRealmCardModules,
+        definitionLookup,
+        virtualNetwork,
+        reader,
+        getDependencyRows: (urls) => batch.getDependencyRows(urls),
+        getModuleCacheContext: () =>
+          resolveModuleCacheContext({ fetch, realmURL, realmOwnerUserId }),
+        prerenderUserId: realmOwnerUserId,
+        jobPriority: jobPriority ?? 0,
+        jobInfo,
+        log,
+        perfLog,
+        onModuleWarmed: ({ moduleUrl, warmedCount, totalToWarm }) => {
+          filesCompleted = warmedCount;
+          totalFiles = totalToWarm + operations.size;
+          onProgress?.({
+            type: 'file-visited',
+            realmURL: realmURL.href,
+            jobId: jobInfo.jobId,
+            url: moduleUrl,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
+      totalFiles = preWarmedCount + operations.size;
+    } catch (e) {
+      log.warn(
+        `${jobTag} module pre-warm failed; the format renders will populate the definition cache on demand: ${(e as Error)?.message}`,
+      );
+    }
+    preWarmMs = Date.now() - preWarmStart;
+  }
+
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;
   let tombstoned = 0;
@@ -213,7 +307,12 @@ export async function runPrerenderHtmlPass({
       stats.instanceErrors + stats.fileErrors
     } errors, ${tombstoned} tombstoned) in ${Date.now() - start} ms`,
   );
-  return { invalidations: batch.invalidations, generation, stats };
+  return {
+    invalidations: batch.invalidations,
+    generation,
+    stats,
+    ...(preWarmMs !== undefined ? { preWarmMs } : {}),
+  };
 }
 
 async function visitForPrerenderedHtml({

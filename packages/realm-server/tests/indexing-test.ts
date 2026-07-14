@@ -537,13 +537,15 @@ module(basename(import.meta.filename), function () {
           indexResult,
         )}`,
       );
+      // The module pre-warm sweep runs on the from-scratch-spawned
+      // prerender_html job, not the index job, so `preWarmMs` is absent here
+      // and asserted on the prerender job's result below.
       for (let phase of [
         'totalMs',
         'setupMs',
         'mtimesMs',
         'discoverMs',
         'orderMs',
-        'preWarmMs',
         'visitLoopMs',
         'writeMs',
         'swapMs',
@@ -556,6 +558,11 @@ module(basename(import.meta.filename), function () {
           )}`,
         );
       }
+      assert.strictEqual(
+        (phaseTimings as Record<string, unknown>)?.preWarmMs,
+        undefined,
+        'the index job does not record preWarmMs — the sweep runs on the prerender job',
+      );
 
       assert.strictEqual(
         prerenderJob.job_type,
@@ -596,6 +603,23 @@ module(basename(import.meta.filename), function () {
           (change) => change.url === `${testRealm}mango.json`,
         ),
         'the invalidation set covers the realm content',
+      );
+      assert.true(
+        (prerenderJob.args as { preWarm?: boolean }).preWarm,
+        'a from-scratch-spawned prerender job carries the pre-warm bit',
+      );
+
+      // The module pre-warm sweep's wall-clock is attributed to the job that
+      // pays it: the prerender job records `preWarmMs`, the index job does not.
+      let prerenderResult = prerenderJob.result as {
+        phaseTimings?: { preWarmMs?: unknown } | null;
+      } | null;
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.preWarmMs,
+        'number',
+        `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
+          prerenderResult,
+        )}`,
       );
     });
 
@@ -2363,14 +2387,15 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('the full-realm module pre-warm sweep runs on from-scratch indexing but not on incrementals', async function (assert) {
+      test('the full-realm module pre-warm sweep runs on the from-scratch-spawned prerender job but not on incrementals', async function (assert) {
         // `fancy-person.gts` is an orphan card module: it defines a CardDef
         // (FancyPerson) but no instance adopts it and no other module
         // imports it. Because nothing ever invalidates it, the only code
         // path that can land it in the module cache is the realm-wide
-        // pre-warm sweep — which runs on from-scratch indexing and is
-        // skipped on incrementals. Its presence in the `modules` table is
-        // therefore a deterministic signal of whether the sweep ran.
+        // pre-warm sweep — which runs on the prerender_html job a from-scratch
+        // index spawns, and is skipped on incremental-spawned prerender jobs.
+        // Its presence in the `modules` table is therefore a deterministic
+        // signal of whether the sweep ran.
         let orphanAlias = `${testRealm}fancy-person`;
 
         async function isCached(moduleAlias: string): Promise<boolean> {
@@ -2381,19 +2406,21 @@ module(basename(import.meta.filename), function () {
           return rows.length > 0;
         }
 
-        // The realm was from-scratch indexed during setup; the realm-wide
-        // sweep warmed every card module, including the orphan that no
-        // instance references.
+        // The realm was from-scratch indexed during setup, and its spawned
+        // prerender job (drained before the template snapshot) ran the
+        // realm-wide sweep, warming every card module — including the orphan
+        // that no instance references.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         assert.true(
           await isCached(orphanAlias),
-          'from-scratch pre-warm caches the orphan module via the full-realm sweep',
+          'the from-scratch-spawned prerender job caches the orphan module via the full-realm sweep',
         );
 
         // Clear the cache, then run an incremental on an unrelated instance.
-        // The incremental has no realm-wide sweep, and the orphan is neither
-        // visited nor a dependency of the change, so it does not come back —
-        // only the realm-wide sweep (from-scratch) would re-cache a module
-        // that no instance consumes.
+        // The incremental-spawned prerender job has no realm-wide sweep, and
+        // the orphan is neither rendered nor a dependency of the change, so it
+        // does not come back — only the realm-wide sweep (from-scratch) would
+        // re-cache a module that no instance consumes.
         await testDbAdapter.execute('DELETE FROM modules');
         await realm.write(
           'vangogh.json',
@@ -2406,6 +2433,10 @@ module(basename(import.meta.filename), function () {
             },
           }),
         );
+        // Drain the incremental-spawned prerender job so its renders have had
+        // every chance to touch the cache: it re-warms only what vangogh
+        // consumes (Person), never the orphan.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         assert.false(
           await isCached(orphanAlias),
           'incremental skips the full-realm sweep, leaving the orphan module uncached',
