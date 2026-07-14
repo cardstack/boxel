@@ -195,10 +195,12 @@ export async function createRealm(
       await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
         timeout: 30_000,
       });
-    } catch {
+    } catch (cause) {
       // Neither the tile nor an error surfaced. Distinguish "still creating"
       // (modal open, submit button replaced by the spinner) from "modal gone,
       // no tile" so the failure carries a cause, not just a bare timeout.
+      // Chain the original Playwright expectation error so its locator/call-log
+      // context is preserved alongside the classification.
       let modalOpen = (await modal.count()) > 0;
       let stillCreating = modalOpen && (await submitButton.count()) === 0;
       let state = stillCreating
@@ -208,6 +210,7 @@ export async function createRealm(
           : 'modal closed without the workspace tile appearing';
       throw new Error(
         `createRealm("${endpoint}") did not settle within 30s: ${state}`,
+        { cause },
       );
     }
     if ((await workspaceTile.count()) > 0) {
