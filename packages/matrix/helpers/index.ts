@@ -165,15 +165,19 @@ export async function createRealm(
   endpoint: string,
   name = endpoint,
 ) {
-  // Creating a workspace provisions a matrix room + personal realm. Under
-  // load that can transiently fail: the modal surfaces an error
-  // (`data-test-error-message`) and stays open instead of closing and
-  // rendering the workspace tile. Submitting and waiting only for the tile
-  // then burns the full timeout on a modal that will never resolve. Instead
-  // wait for whichever outcome happens first and, on a surfaced error, retry
-  // the whole form from a clean modal (cancel re-opens with error cleared).
+  // Creating a workspace provisions a matrix room + personal realm and blocks
+  // until that realm is indexed. While the task runs the modal shows a spinner
+  // (the submit button is replaced); on failure it surfaces an error
+  // (`data-test-error-message`) and stays open instead of closing and rendering
+  // the workspace tile. Wait for whichever terminal outcome happens first and,
+  // on a surfaced error, retry the whole form from a clean modal (cancel
+  // re-opens with error cleared). If neither outcome appears in time, report
+  // whether the modal was still spinning (provisioning genuinely in flight) vs.
+  // gone (a different failure) so the next CI failure is diagnosable.
   let workspaceTile = page.locator(`[data-test-workspace="${name}"]`);
   let errorMessage = page.locator('[data-test-error-message]');
+  let modal = page.locator('[data-test-create-workspace-modal]');
+  let submitButton = page.locator('[data-test-create-workspace-submit]');
   let maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // A previous attempt's provisioning may have landed late — if the tile is
@@ -187,9 +191,28 @@ export async function createRealm(
     await page.locator('[data-test-endpoint-field]').fill(endpoint);
     await page.locator('[data-test-create-workspace-submit]').click();
 
-    await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    try {
+      await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
+        timeout: 30_000,
+      });
+    } catch (cause) {
+      // Neither the tile nor an error surfaced. Distinguish "still creating"
+      // (modal open, submit button replaced by the spinner) from "modal gone,
+      // no tile" so the failure carries a cause, not just a bare timeout.
+      // Chain the original Playwright expectation error so its locator/call-log
+      // context is preserved alongside the classification.
+      let modalOpen = (await modal.count()) > 0;
+      let stillCreating = modalOpen && (await submitButton.count()) === 0;
+      let state = stillCreating
+        ? 'still creating (spinner shown) — realm provisioning did not finish in time'
+        : modalOpen
+          ? 'modal open but neither the workspace tile nor an error appeared'
+          : 'modal closed without the workspace tile appearing';
+      throw new Error(
+        `createRealm("${endpoint}") did not settle within 30s: ${state}`,
+        { cause },
+      );
+    }
     if ((await workspaceTile.count()) > 0) {
       return;
     }

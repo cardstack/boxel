@@ -38,11 +38,13 @@ export const appURL = 'https://localhost:4205/test';
 const DEFAULT_PRERENDER_PORT = 4231;
 const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;
 const DEFAULT_WORKER_START_TIMEOUT_MS = 90_000;
-// Absolute backstop for the realm-server-ready wait. The realm server only
-// emits `ready` after a boot-time from-scratch full index of every mounted
-// realm (test + skills + base, ~500 files), which legitimately runs for
-// ~2 minutes on a loaded CI runner. The progress-aware watchdog below is the
-// real guard; this cap only catches a pathological slow-drip that keeps
+// Absolute backstop for the realm-server-ready wait. `ready` fires once the
+// server is listening with its realms mounted — the boot-time from-scratch
+// index of every mounted realm (test + skills + base, ~600 files) then runs on
+// a single worker and legitimately takes ~2 minutes on a loaded CI runner. The
+// harness waits that index out separately, after `ready`, via _readiness-check
+// (see the gate below). The progress-aware watchdog below is the real guard for
+// the ready wait; this cap only catches a pathological slow-drip that keeps
 // emitting output without ever finishing.
 const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 300_000;
 // Fail the boot only when it goes silent: if neither the worker's
@@ -52,6 +54,11 @@ const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 300_000;
 // progressing cold index never trips it, while a genuine hang surfaces fast.
 const DEFAULT_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS = 90_000;
 const REALM_SERVER_PROGRESS_POLL_MS = 5_000;
+// Post-`ready` gate: how long to wait for each mounted realm's boot index to
+// settle (probed via _readiness-check) before letting tests run. The boot full
+// index legitimately runs ~2 minutes under CI load; this leaves headroom while
+// staying under the start cap above.
+const DEFAULT_REALM_SERVER_INDEX_READY_TIMEOUT_MS = 240_000;
 const STARTUP_LOG_TAIL_LINES = 80;
 
 export interface PrerenderServerConfig {
@@ -197,6 +204,46 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
     await delay(200);
   }
   throw new Error(`timed out waiting for ${url} to become ready`);
+}
+
+// Wait for a realm's `_readiness-check` to succeed. Unlike waitForHttpReady
+// (which only proves a port answers), the probe blocks server-side until the
+// realm's first from-scratch index and any in-flight index settle, so a success
+// means that realm is fully indexed and safe to create/publish against. The
+// server holds each request open until indexing settles, so a single `fetch`
+// could block past the budget (up to undici's default header timeout) and never
+// return to the loop condition — abort it at the remaining budget so the
+// configured timeout is actually enforced and the caller can stop the child
+// processes and emit diagnostics instead of leaving global setup to hang.
+async function waitForRealmIndexed(url: string, timeoutMs: number) {
+  let start = Date.now();
+  let lastError: string | undefined;
+  while (Date.now() - start < timeoutMs) {
+    let remainingMs = timeoutMs - (Date.now() - start);
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), remainingMs);
+    try {
+      // `_readiness-check` is registered under the JSON:API mime, and the realm
+      // router matches routes on the Accept header — a default `*/*` misses it.
+      let response = await fetch(url, {
+        headers: { Accept: 'application/vnd.api+json' },
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        return;
+      }
+      lastError = `HTTP ${response.status}`;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    } finally {
+      clearTimeout(abortTimer);
+    }
+    await delay(500);
+  }
+  throw new Error(
+    `timed out after ${timeoutMs}ms waiting for ${url} to report indexed` +
+      (lastError ? ` (last: ${lastError})` : ''),
+  );
 }
 
 function stopChildProcess(
@@ -372,6 +419,10 @@ export async function startServer({
   let realmServerProgressIdleTimeoutMs = parseTimeoutMs(
     process.env.TEST_HARNESS_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS,
     DEFAULT_REALM_SERVER_PROGRESS_IDLE_TIMEOUT_MS,
+  );
+  let realmServerIndexReadyTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_REALM_SERVER_INDEX_READY_TIMEOUT_MS,
+    DEFAULT_REALM_SERVER_INDEX_READY_TIMEOUT_MS,
   );
   let workerManagerMetadataFile = join(
     dir.name,
@@ -676,6 +727,40 @@ export async function startServer({
       clearInterval(realmServerStartTimeout);
     }
   }
+
+  // `ready` above only means the realm server is listening with its realms
+  // mounted — the boot-time from-scratch index of those realms (test + skills +
+  // base, ~600 files) is still running on the single indexing worker. Any realm
+  // a test creates while that boot index is in flight queues behind it, so its
+  // `_create-realm` can take 30-100s to return and blows the per-test
+  // create-workspace waits (and cascades into publish/registration test
+  // timeouts). Gate the harness on each mounted realm's `_readiness-check` — a
+  // public probe that resolves only once the realm's indexing settles — so no
+  // test starts until the boot index is actually done. base is last (largest),
+  // so it dominates the wait; the others return promptly.
+  let bootIndexStart = Date.now();
+  try {
+    for (let realmURL of [
+      'https://localhost:4205/test/',
+      'https://localhost:4205/skills/',
+      'https://localhost:4205/base/',
+    ]) {
+      await waitForRealmIndexed(
+        `${realmURL}_readiness-check`,
+        realmServerIndexReadyTimeoutMs,
+      );
+    }
+  } catch (error) {
+    await Promise.all([
+      stopChildProcess(realmServer),
+      stopChildProcess(workerManager),
+    ]);
+    throw buildStartupFailure(error, startupDiagnostics());
+  }
+  console.log(
+    `realm server: boot index settled ${Date.now() - bootIndexStart}ms after ` +
+      `ready (gated on _readiness-check before starting tests)`,
+  );
 
   let server = new IsolatedRealmServer(
     realmServer,
