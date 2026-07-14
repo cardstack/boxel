@@ -250,18 +250,35 @@ export default class MessageBuilder {
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
+      // A request without an id yet (its first streamed chunk) can't be
+      // matched to later chunks or to its result — skip it; a later replace
+      // always carries the id.
+      if (!encodedCommandRequest.id) {
+        continue;
+      }
       let command = message.tools.find(
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
         command.toolRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
-        message.tools.push(
-          await this.buildMessageCommand(
-            message,
-            decodeCommandRequest(encodedCommandRequest),
-          ),
+        let built = await this.buildMessageCommand(
+          message,
+          decodeCommandRequest(encodedCommandRequest),
         );
+        // buildMessageCommand awaits network loads (resolving the tool's
+        // declaring skill), so a concurrent build for a later replace of the
+        // same message can land first. Re-check before pushing: a duplicate
+        // MessageTool for the same request would never receive its result
+        // (results attach to the first match) and would spin forever.
+        let existing = message.tools.find(
+          (c) => c.toolRequest.id === encodedCommandRequest.id,
+        );
+        if (existing) {
+          existing.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        } else {
+          message.tools.push(built);
+        }
       }
     }
   }
