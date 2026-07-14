@@ -129,10 +129,11 @@ export default function handleSearch(opts: {
     }
     // `scope` changes which row kinds the response contains, so it must key the
     // cache — otherwise a `scope: 'cards'` and a `scope: 'all'` request for the
-    // same query would collide on one ETag/body. Fold only when set (absent ==
-    // the default 'all', so keying `undefined` would not fragment but omitting
-    // it keeps the key identical to pre-scope requests).
-    if (parsed.scope) {
+    // same query would collide on one ETag/body. An explicit `'all'` folds the
+    // same as an absent scope (both mean the default), so the two spellings
+    // share one cache entry/ETag — which also keeps the key identical to
+    // pre-scope requests.
+    if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
 

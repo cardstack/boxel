@@ -422,7 +422,6 @@ export default class SQLiteAdapter implements DBAdapter {
         }
         return `ON CONFLICT (${pkColumns})`;
       })
-      .replace(/\(case jsonb_typeof(\([^)]*\)) when 'array' .+ end\)/, '$1')
       .split('ANY_VALUE(')
       .reduce((acc, segment, index) => {
         // SQLite has no ANY_VALUE; every non-grouped select column is

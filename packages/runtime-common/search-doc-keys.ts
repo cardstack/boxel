@@ -6,6 +6,14 @@
 // and files can be filtered/sorted through one query. Keeping the spellings in
 // one module means a rename is a single-file change rather than a cross-package
 // grep.
+//
+// `_`-prefixed top-level search-doc keys are reserved for these synthetics:
+// the query engine special-cases them by leaf name before any field-definition
+// lookup (e.g. `_isCardInstanceFile` compiles to an existence test, not a
+// value comparison), and the client-side matcher treats any unshimmed
+// `_`-prefixed key as server-only. A user-defined field whose name collides
+// with one of these at the search-doc top level would silently get the
+// synthetic's semantics instead of its own value's.
 
 // The row's display title under a kind-neutral key (a card's is its
 // `cardTitle`, a file's is its name), so one mixed query can substring-match

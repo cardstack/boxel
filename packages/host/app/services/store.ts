@@ -21,6 +21,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
   baseFileRef,
+  baseRef,
   CardError,
   hasExecutableExtension,
   isCardError,
@@ -1270,18 +1271,26 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
   ): Promise<SearchEntryResults> {
-    // Search spans card instances and files. A query with a positive type ref
-    // already selects a kind (a card type -> instances, a FileDef type ->
-    // files), so it passes through with the default 'all' scope and its filter
-    // discriminates. An otherwise-unscoped query is pinned to 'cards' so the
-    // common "search for cards" case doesn't surface a card's dual-indexed
-    // `.json` file row (or plain files) — the choke point that replaces the
-    // former per-call-site card anchor, while leaving file/typed searches
-    // (e.g. SearchResource's file-meta queries) untouched.
+    // Search spans card instances and files. A query with a positive
+    // *concrete* type ref already selects a kind (a card type -> instances, a
+    // FileDef type -> files), so it passes through with the default 'all'
+    // scope and its filter discriminates. An otherwise-unscoped query is
+    // pinned to 'cards' so the common "search for cards" case doesn't surface
+    // a card's dual-indexed `.json` file row (or plain files) — the choke
+    // point that replaces the former per-call-site card anchor, while leaving
+    // file/typed searches (e.g. SearchResource's file-meta queries) untouched.
+    //
+    // A BaseDef ref is *not* kind-selecting — it terminates both kinds' type
+    // chains, so it matches every row — and is pinned to 'cards' like an
+    // untyped query. Known gap: a mixed `any:` whose one branch is card-typed
+    // and another untyped counts as positively typed, so its untyped branch
+    // can still match file rows in 'all' scope; no caller composes that shape
+    // today.
     let typeRefs = query.filter
       ? getTypeRefsFromFilter(query.filter)
       : undefined;
-    let hasPositiveType = typeRefs?.some((r) => !r.negated) ?? false;
+    let hasPositiveType =
+      typeRefs?.some((r) => !r.negated && !isEqual(r.ref, baseRef)) ?? false;
     let scope: SearchEntryScope | undefined = hasPositiveType
       ? undefined
       : 'cards';

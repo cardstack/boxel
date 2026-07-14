@@ -8,7 +8,6 @@ import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 export type Expression = (
   | string
   | Param
-  | TableValuedEach
   | TableValuedTree
   | JsonContains
   | TypesContains
@@ -57,11 +56,6 @@ export interface FieldValue {
   value: CardExpression;
   errorHint: string;
   kind: 'field-value';
-}
-
-export interface TableValuedEach {
-  kind: 'table-valued-each';
-  column: string;
 }
 
 export interface TableValuedTree {
@@ -122,7 +116,6 @@ export type CardExpression = (
   | string
   | Param
   | DBSpecificExpression
-  | TableValuedEach
   | TableValuedTree
   | JsonContains
   | TypesContains
@@ -199,13 +192,6 @@ export function isDbExpression(
     'kind' in expression &&
     expression.kind === 'db-specific-expression'
   );
-}
-
-export function tableValuedEach(column: string): TableValuedEach {
-  return {
-    kind: 'table-valued-each',
-    column,
-  };
 }
 
 export function tableValuedTree(
@@ -528,19 +514,6 @@ export function expressionToSql(
         });
       }
       return `${name}.${treeColumn}`;
-    } else if (element.kind === 'table-valued-each') {
-      let { column } = element;
-      let key = `each_${column}`;
-      let { name } = tableValuedFunctions.get(key) ?? {};
-      if (!name) {
-        name = `${column}${nonce++}_array_element`;
-
-        tableValuedFunctions.set(key, {
-          name,
-          fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
-        });
-      }
-      return name;
     } else if (element.kind === 'json-contains') {
       // Render the containment of `column` by {segments: value}. Both branches
       // re-use renderElement so binds are pushed in left-to-right order.

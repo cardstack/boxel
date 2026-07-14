@@ -1507,7 +1507,6 @@ export class IndexQueryEngine {
             isParam(element) ||
             isDbExpression(element) ||
             typeof element === 'string' ||
-            element.kind === 'table-valued-each' ||
             element.kind === 'table-valued-tree' ||
             element.kind === 'json-contains' ||
             element.kind === 'types-contains'
