@@ -1018,7 +1018,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         format: 'org.matrix.custom.html',
       },
       {
-        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
+        // beyond the same-author grouping window, so this message keeps
+        // the timestamp header the assertion below looks for
+        origin_server_ts: new Date(2024, 0, 3, 12, 34).getTime(),
       },
     );
     simulateRemoteMessage(
@@ -1047,7 +1049,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       );
     assert
       .dom('[data-test-message-idx="1"]')
-      .containsText('Wednesday Jan 3, 2024, 12:31 PM Second message body');
+      .containsText('Wednesday Jan 3, 2024, 12:34 PM Second message body');
   });
 
   test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {

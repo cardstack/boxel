@@ -57,6 +57,10 @@ export const skillCardRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}skill` as RealmResourceIdentifier,
   name: 'Skill',
 };
+export const markdownDefRef: ResolvedCodeRef = {
+  module: `${baseRealmRRI}markdown-file-def` as RealmResourceIdentifier,
+  name: 'MarkdownDef',
+};
 export const baseFileRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'FileDef',
