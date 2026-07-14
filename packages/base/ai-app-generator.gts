@@ -108,7 +108,6 @@ export class AiAppGenerator extends CardDef {
             <div class='suggestions-row'>
               {{#each @model.suggestions as |suggestion|}}
                 <BoxelButton
-                  @kind='secondary'
                   @size='small'
                   title={{suggestion.cardTitle}}
                   {{on
