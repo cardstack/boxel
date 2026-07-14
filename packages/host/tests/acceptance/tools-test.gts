@@ -476,6 +476,39 @@ module('Acceptance | Tools tests', function (hooks) {
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         }),
+        // Markdown skills for the read-skill (pull model) execution tests.
+        // Neither is enabled in any room; their tools only become callable
+        // after a readRealmFile result event names them.
+        'skills/read-tools/SKILL.md': [
+          '---',
+          'name: read-tools',
+          'boxel:',
+          '  kind: skill',
+          '  tools:',
+          '    - codeRef:',
+          "        module: '@cardstack/boxel-host/commands/switch-submode'",
+          '        name: default',
+          '---',
+          '# Read Tools',
+          '',
+          'Use switch-submode to move between interact and code modes.',
+          '',
+        ].join('\n'),
+        'skills/decoy/SKILL.md': [
+          '---',
+          'name: decoy',
+          'boxel:',
+          '  kind: skill',
+          '  tools:',
+          '    - codeRef:',
+          '        module: /test/maybe-boom-command',
+          '        name: default',
+          '---',
+          '# Decoy',
+          '',
+          'Declares only maybe-boom.',
+          '',
+        ].join('\n'),
         'hi.txt': 'hi',
       },
     });
@@ -906,6 +939,175 @@ module('Acceptance | Tools tests', function (hooks) {
       message.content.commandRequestId,
       '29e8addb-197b-4d6d-b0a9-547959bf7c96',
     );
+  });
+
+  // Simulates the result event the bot publishes after reading a skill via
+  // readRealmFile: the discovered tool definitions ride `data.discoveredTools`
+  // tagged with the declaring skill's URL.
+  function simulateSkillReadResult(
+    roomId: string,
+    sourceSkillUrl: string,
+    functionName: string,
+  ) {
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: 'read-1',
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: 'earlier-bot-message',
+        },
+        data: {
+          attachedFiles: [],
+          discoveredTools: [
+            {
+              sourceSkillUrl,
+              codeRef: {
+                module: '@cardstack/boxel-host/commands/switch-submode',
+                name: 'default',
+              },
+              functionName,
+              requiresApproval: true,
+              definition: {
+                type: 'function',
+                function: {
+                  name: functionName,
+                  description: 'Switch between interact and code submodes',
+                  parameters: { type: 'object', properties: {} },
+                },
+              },
+            },
+          ],
+        },
+      },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+    );
+  }
+
+  test('a tool from a skill read via readRealmFile executes after approval', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-room-settled]');
+    let roomId = getRoomIds().pop()!;
+    // The skill is never enabled in the room; the model learned about its
+    // tool from an earlier readRealmFile result event.
+    simulateSkillReadResult(
+      roomId,
+      `${testRealmURL}skills/read-tools/SKILL.md`,
+      'switch-submode_dd88',
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'call-1',
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'Switching to code submode',
+            attributes: { submode: 'code' },
+          }),
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="0"]');
+    await settled();
+
+    // The skill's frontmatter has no requiresApproval on the tool, so
+    // approval is required: the request renders an Apply button and nothing
+    // auto-runs.
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply]')
+      .exists('the verified read-skill tool offers approval, not auto-run');
+
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
+    assert.dom('[data-test-submode-switcher=code]').exists();
+
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).find(
+          (m) =>
+            m.content.msgtype ===
+              APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE &&
+            m.content.commandRequestId === 'call-1',
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: 'timed out waiting for command result event',
+      },
+    );
+    let message = getRoomEvents(roomId).find(
+      (m) =>
+        m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE &&
+        m.content.commandRequestId === 'call-1',
+    )!;
+    assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
+  });
+
+  test('a discovered-tool annotation naming a skill that does not declare the tool is rejected', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-room-settled]');
+    let roomId = getRoomIds().pop()!;
+    // The annotation names the decoy skill, which declares only maybe-boom —
+    // re-deriving from the decoy's indexed frontmatter finds no
+    // switch-submode, so the codeRef asserted by the event never executes.
+    simulateSkillReadResult(
+      roomId,
+      `${testRealmURL}skills/decoy/SKILL.md`,
+      'switch-submode_dd88',
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'call-forged',
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'Switching to code submode',
+            attributes: { submode: 'code' },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
+    );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText('No command for the name "switch-submode_dd88" was found');
+    assert
+      .dom('[data-test-submode-switcher=code]')
+      .doesNotExist('the forged tool call never executed');
+
+    let message = getRoomEvents(roomId)
+      .filter(
+        (m) =>
+          m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      )
+      .pop()!;
+    assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
+    assert.strictEqual(message.content.commandRequestId, 'call-forged');
   });
 
   test('rendering a command request without a description fallsback to attributes.description', async function (assert) {

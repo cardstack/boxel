@@ -1,9 +1,18 @@
 import { isCardInstance, isMarkdownFile } from '@cardstack/runtime-common';
+import {
+  isToolResultEventType,
+  isToolResultWithOutputContent,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import { isSkillCard } from './file-def-manager';
 
 import type StoreService from '../services/store';
 import type { MarkdownDef } from '@cardstack/base/markdown-file-def';
+import type {
+  DiscoveredToolDefinition,
+  MatrixEvent as DiscreteMatrixEvent,
+  ToolResultEvent,
+} from '@cardstack/base/matrix-event';
 import type * as SkillModule from '@cardstack/base/skill';
 
 // A skill is either a `Skill` card (commands on `Skill.commands`) or a
@@ -94,4 +103,46 @@ export function peekSkillSource(
   }
   let card = store.peek<SkillModule.Skill>(id);
   return isCardInstance(card) && isSkillCardInstance(card) ? card : undefined;
+}
+
+// The declaring-skill hint for a tool the model discovered by reading a
+// skill file: the latest readRealmFile result event whose
+// `data.discoveredTools` names this function returns that entry's
+// `sourceSkillUrl`. The hint only says where to look — a caller must
+// re-derive the codeRef from that skill's realm-indexed frontmatter (see
+// `message-builder`) before executing anything, so a forged or stale
+// annotation can point at a skill but never make it declare a tool it
+// doesn't have.
+export function findDiscoveredToolSkillUrl(
+  events: DiscreteMatrixEvent[],
+  functionName: string,
+): string | undefined {
+  // Walk newest-first and return on the first match: the latest read of a
+  // skill is the freshest claim about where the tool lives.
+  for (let i = events.length - 1; i >= 0; i--) {
+    let event = events[i];
+    if (!isToolResultEventType(event.type)) {
+      continue;
+    }
+    let content = (event as ToolResultEvent).content;
+    if (!isToolResultWithOutputContent(content)) {
+      continue;
+    }
+    let discovered = content.data?.discoveredTools;
+    if (!Array.isArray(discovered)) {
+      continue;
+    }
+    for (let def of discovered as DiscoveredToolDefinition[]) {
+      if (!def?.sourceSkillUrl) {
+        continue;
+      }
+      if (
+        def.definition?.function?.name === functionName ||
+        def.functionName === functionName
+      ) {
+        return def.sourceSkillUrl;
+      }
+    }
+  }
+  return undefined;
 }
