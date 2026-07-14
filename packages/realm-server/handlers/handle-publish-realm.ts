@@ -567,7 +567,7 @@ export default function handlePublishRealm({
           // without an explicit invalidation those fetches would hit
           // the cached old bytes — producing a fresh reindex against
           // STALE source, which then gets written to
-          // boxel_index.isolated_html and served forever. Neither the
+          // prerendered_html.isolated_html and served forever. Neither the
           // Cache-Control: no-store header nor the DB modules DELETE
           // above reach into the realm-server's per-Realm byte cache.
           // The Phase-3-PR-2 comment above relies on the NodeAdapter

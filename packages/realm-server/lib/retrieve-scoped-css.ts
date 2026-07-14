@@ -26,22 +26,21 @@ export async function retrieveScopedCSS({
     return null;
   }
 
-  // Dual-read: the scoped-CSS URLs needed to serve a card's HTML ride on the
-  // prerendered_html `deps` / `last_known_good_deps`, falling back to the
-  // boxel_index columns only when no prerendered_html row exists (a present row
-  // is authoritative, matching the query engine's `ph.url IS NULL` guard).
+  // The scoped-CSS URLs needed to serve a card's HTML ride on the
+  // prerendered_html `deps` / `last_known_good_deps` — the deps captured by
+  // the render that produced the HTML being served. The boxel_index join
+  // scopes the lookup to a live instance row and supplies the generation.
   let scopedCSSQuery: Expression = [
     `
-      SELECT CASE WHEN ph.url IS NULL THEN i.deps ELSE ph.deps END AS deps,
-             CASE WHEN ph.url IS NULL THEN i.last_known_good_deps ELSE ph.last_known_good_deps END AS last_known_good_deps,
+      SELECT ph.deps AS deps,
+             ph.last_known_good_deps AS last_known_good_deps,
              i.generation
       FROM boxel_index AS i
-      LEFT JOIN prerendered_html AS ph
+      JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
       WHERE i.type = 'instance'
         AND i.is_deleted IS NOT TRUE
-        AND ((CASE WHEN ph.url IS NULL THEN i.deps ELSE ph.deps END) IS NOT NULL
-             OR (CASE WHEN ph.url IS NULL THEN i.last_known_good_deps ELSE ph.last_known_good_deps END) IS NOT NULL)
+        AND (ph.deps IS NOT NULL OR ph.last_known_good_deps IS NOT NULL)
         AND
     `,
     ...indexCandidateExpressions(candidates, 'i'),

@@ -23,13 +23,9 @@ export interface BoxelIndexTable {
   // using `internalKeyFor()`
   types: string[] | null;
   display_names: string[] | null;
-  head_html: string | null;
-  embedded_html: Record<string, string> | null;
-  fitted_html: Record<string, string> | null;
-  isolated_html: string | null;
-  atom_html: string | null;
+  // The icon renders in the index visit, so it lives here rather than on
+  // `prerendered_html` with the other rendered output.
   icon_html: string | null;
-  markdown: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript

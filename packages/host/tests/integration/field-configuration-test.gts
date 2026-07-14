@@ -44,7 +44,14 @@ import type { FileDef } from '@cardstack/base/file-api';
 let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
-  virtualNetwork: VirtualNetwork = new VirtualNetwork();
+  #virtualNetwork: VirtualNetwork = new VirtualNetwork();
+  resolveURL(reference: string, base?: string): URL | undefined {
+    try {
+      return this.#virtualNetwork.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
+  }
   private cardInstances = new Map<string, CardDefType>();
   private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();
