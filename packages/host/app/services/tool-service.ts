@@ -386,6 +386,19 @@ export default class ToolService extends Service {
           // This command was sent by another agent, so we will not auto-execute it
           continue;
         }
+        // The event that enqueued this entry is always the final,
+        // streaming-finished one, but the message MODEL the drain reads can
+        // lag behind it — and a lagging model still carries tool requests
+        // whose arguments haven't fully arrived (partial tool-call JSON
+        // parses to no arguments), so validating them fails with a spurious
+        // terminal 'invalid' ("data must be object"). Defer by re-enqueueing
+        // until the model reflects the finished stream; nothing else will
+        // re-enqueue this event, so dropping it here would orphan the tools.
+        if (message.isStreamingFinished === false) {
+          this.toolProcessingEventQueue.push(`${roomId}|${eventId}`);
+          debounce(this, this.drainToolProcessingQueue, 250);
+          continue;
+        }
 
         // Collect all ready commands for this message
         let readyTools: any[] = [];
