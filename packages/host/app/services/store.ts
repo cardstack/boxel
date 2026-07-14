@@ -1639,14 +1639,10 @@ export default class StoreService extends Service implements StoreInterface {
       );
     }
 
-    // if there are no more subscribers to this realm then unsubscribe from realm.
-    // Subscription keys are realm-root URLs (realm events route by URL), while
-    // ids are in canonical form (prefix form for mapped realms), so resolve
-    // each id to URL space before the realm-membership comparison.
-    let vn = this.network.virtualNetwork;
+    // if there are no more subscribers to this realm then unsubscribe from realm
     let realmHref = !isLocalId(id)
       ? [...this.subscriptions.keys()].find((realmURL) =>
-          vn.toURLHref(id).startsWith(realmURL),
+          id.startsWith(realmURL),
         )
       : undefined;
     if (!realmHref) {
@@ -1660,7 +1656,7 @@ export default class StoreService extends Service implements StoreInterface {
         ([referenceId, count]) =>
           !isLocalId(referenceId) &&
           count > 0 &&
-          vn.toURLHref(referenceId).startsWith(realmHref),
+          referenceId.startsWith(realmHref),
       )
     ) {
       subscription.unsubscribe();
