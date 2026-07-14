@@ -6,20 +6,24 @@ import { rri } from '@cardstack/runtime-common';
 import { setupPermissionedRealmsCached } from './helpers/index.ts';
 
 // The module pre-warm exists so that when a card's query-backed field renders,
-// the mid-render `lookupDefinition` for a *string-referenced* sibling type is
-// already cached — otherwise it would spawn a same-affinity sub-prerender that
-// can stall the tab pool. This test proves the from-scratch prerender job's
-// sweep warms exactly that kind of module.
+// the mid-render definition lookup for a *string-referenced* sibling type is
+// already cached — during a prerender that lookup runs cache-only, so a miss
+// leaves the field's type unresolved rather than triggering a sub-prerender.
+// This test asserts the from-scratch prerender job's sweep populates the
+// definition cache for exactly that kind of module.
 //
 // `widget.gts` defines `Widget`, but nothing adopts it (no instances) and no
 // module imports it — `gallery.gts` references it only by a string module URL
 // inside its query-backed field's `on` filter. So every other caching path is
-// closed: instance indexing never touches it (there are no Widget instances,
-// and the index visit skips query fields), and the prerender search runs
-// cache-only (it never populates on a miss). The realm-wide `.gts` sweep the
-// prerender job runs before its format renders is the *only* thing that can
-// land `Widget` in the `modules` cache — so its presence there after a
+// closed: instance indexing never touches the modules cache, and the
+// cache-only prerender search never populates on a miss. The realm-wide `.gts`
+// sweep the prerender job runs before its format renders is the *only* thing
+// that can land `Widget` in the `modules` cache — so its presence there after a
 // from-scratch is a clean signal the sweep warmed the query-consumed module.
+//
+// Scope: this asserts the warming (cache presence). That a query-field render
+// then *reads* the warmed definition (a cache-only hit, not a silent no-op) is
+// covered by the "module pre-warm" module in `definition-lookup-test.ts`.
 module(basename(import.meta.filename), function () {
   module('prerender pre-warm — query-backed field target', function (hooks) {
     let realmURL = 'http://127.0.0.1:4459/prewarm-query/';
