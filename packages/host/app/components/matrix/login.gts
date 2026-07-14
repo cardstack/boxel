@@ -63,15 +63,14 @@ export default class Login extends Component<Signature> {
           <AuthButton
             class='google-button'
             data-test-google-login-btn
-            @variant='google'
             @loading={{this.doGoogleSso.isRunning}}
             {{on 'click' this.startGoogleSso}}
           >
-            <GoogleColor class='google-g' />
+            <GoogleColor class='google-g' aria-hidden='true' />
             Continue with Google
           </AuthButton>
           <div class='divider' aria-hidden='true'>
-            <span class='divider-label'>OR USE YOUR EMAIL</span>
+            <span class='divider-label'>or use your email</span>
           </div>
         {{/if}}
         <AuthFormField @label='Email Address or Username'>
@@ -101,7 +100,8 @@ export default class Login extends Component<Signature> {
           />
         </AuthFormField>
         <Button
-          @kind='text-only'
+          @kind='link-muted'
+          @size='extra-small'
           class='forgot-password'
           data-test-forgot-password
           {{on 'click' (fn @setMode 'forgot-password')}}
@@ -119,12 +119,13 @@ export default class Login extends Component<Signature> {
         {{/if}}
         <p class='register-prompt'>
           <span class='register-prompt-text'>Don't have an account?</span>
-          <button
+          <Button
             type='button'
             class='register-link'
+            @kind='link-primary'
             data-test-register-user
             {{on 'click' (fn @setMode 'register')}}
-          >Create a new Boxel account</button>
+          >Create a new Boxel account</Button>
         </p>
       </form>
     {{/if}}
@@ -147,19 +148,14 @@ export default class Login extends Component<Signature> {
         line-height: 1.4;
       }
       .forgot-password {
-        border: none;
-        padding: 0;
+        --host-outline-offset: 2px;
+        margin-top: var(--boxel-sp-4xs);
         margin-bottom: var(--boxel-sp-lg);
         margin-left: auto;
-        color: var(--muted-foreground);
-        font: 500 var(--boxel-font-xs);
-      }
-      .forgot-password:hover {
-        color: var(--boxel-highlight);
-        background-color: transparent;
       }
       .google-button {
         margin-top: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
       }
       .google-g {
         width: 1.125rem;
@@ -183,6 +179,7 @@ export default class Login extends Component<Signature> {
         color: var(--muted-foreground);
         font: 600 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-lg);
+        text-transform: uppercase;
       }
       .register-prompt {
         display: flex;
@@ -196,15 +193,7 @@ export default class Login extends Component<Signature> {
         color: var(--muted-foreground);
       }
       .register-link {
-        background: none;
-        border: none;
-        padding: 0;
-        font: inherit;
-        color: var(--boxel-highlight);
-        cursor: pointer;
-      }
-      .register-link:hover {
-        text-decoration: underline;
+        --host-outline-offset: 2px;
       }
       .centered-loading {
         align-self: center;

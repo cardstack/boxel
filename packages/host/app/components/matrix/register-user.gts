@@ -210,6 +210,7 @@ export default class RegisterUser extends Component<Signature> {
             @loading={{this.doRegistrationFlow.isRunning}}
             {{on 'click' this.register}}
           >Create Account</AuthButton>
+          <div>or</div>
           <AuthButton
             data-test-cancel-btn
             @variant='secondary'
@@ -271,6 +272,7 @@ export default class RegisterUser extends Component<Signature> {
         justify-content: center;
         align-items: center;
         gap: var(--boxel-sp-sm);
+        color: var(--muted-foreground);
       }
       .username-prefix {
         padding-right: 0;
