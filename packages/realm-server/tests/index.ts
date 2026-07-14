@@ -318,6 +318,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/run-command-endpoint-test',
   './server-endpoints/screenshot-card-endpoint-test',
   './server-endpoints/search-test',
+  './server-endpoints/skill-validation-test',
   './serve-index-test',
   './server-config-test',
   './server-endpoints/info-test',
