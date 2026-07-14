@@ -311,6 +311,23 @@ export interface RenderTimeoutDiagnostics {
     card?: Record<string, number>;
     file?: Record<string, number>;
   };
+  // Per-route wall-clock of the index-visit route steps in this visit, split
+  // by the card indexing and the FileDef file indexing — the index-half
+  // sibling of `renderFormatsMs`. Keys are the route steps an index visit
+  // runs: `meta` and `icon` for a card, `fileExtract` and `icon` for a file.
+  // The `meta` number covers the whole `render.meta` route, so the
+  // types / displayNames chain that route builds is inside that bucket, not a
+  // step of its own — the standalone `types` route is html-half work driving
+  // the fitted/embedded renders, and never runs on an index visit. Only
+  // populated where the index-half step actually runs, so it decomposes the
+  // per-visit floor into measured route buckets rather than leaving it
+  // inferred from `renderElapsedMs`: on an index visit it rides
+  // `boxel_index.diagnostics`; the `fileExtract` leg can also appear on a
+  // prerender-html visit that resolves its own file resource.
+  indexRoutesMs?: {
+    card?: Record<string, number>;
+    file?: Record<string, number>;
+  };
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
