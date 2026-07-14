@@ -503,6 +503,19 @@ export default class MatrixService extends Service {
     return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
+  // True when there's persisted auth to boot from but the post-login boot never
+  // finished (or was undone). `start()` sets `postLoginCompleted`, and the index
+  // route only calls `start()` once, so if `postLoginCompleted` is cleared
+  // afterward — a `resetState()` racing a re-navigation — nothing re-establishes
+  // the session and the route would strand the app on the login form. A route
+  // that sees this can re-run `start()` to recover; `start()` re-derives the
+  // client from the persisted auth, so it recovers even when `resetState()` left
+  // a bare (logged-out) client behind. A genuine logout clears the persisted
+  // auth, so `getAuth()` is empty there and this stays false.
+  get needsPostLoginRecovery() {
+    return !this.postLoginCompleted && Boolean(this.getAuth());
+  }
+
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
   // decides to render <Auth/>, plus a compact tail of the `postLoginCompleted`
@@ -1149,7 +1162,14 @@ export default class MatrixService extends Service {
         this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
-        await this.logout();
+        // Only tear the session down for a failure that happened before login
+        // completed. A late, post-login rejection must not unwind an already-
+        // established session: logout() clears realm state the app has already
+        // populated and resets postLoginCompleted, which would strand the index
+        // route on the login form.
+        if (!this.postLoginCompleted) {
+          await this.logout();
+        }
       }
 
       let indexController = getOwner(this)!.lookup(

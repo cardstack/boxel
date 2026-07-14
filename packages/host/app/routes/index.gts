@@ -103,6 +103,25 @@ export default class Card extends Route {
       await this.matrixService.ready;
       await this.matrixService.start();
       this.didMatrixServiceStart = true;
+    } else if (this.matrixService.needsPostLoginRecovery) {
+      // `start()` above is a one-shot (guarded by `didMatrixServiceStart`). If
+      // `postLoginCompleted` was cleared after that first start while the matrix
+      // client stayed logged in — a `resetState()` racing a re-navigation — the
+      // guard would otherwise strand the app on the login form forever. Re-run
+      // `start()` to re-establish the post-login session before falling through.
+      if (isTesting()) {
+        console.warn(
+          `[login-diag] index route recovering post-login session: ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
+      await this.matrixService.start();
+      if (isTesting() && !this.matrixService.isLoggedIn) {
+        console.warn(
+          `[login-diag] index route post-login recovery did not restore session: ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
     }
 
     if (!this.matrixService.isLoggedIn) {
