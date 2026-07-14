@@ -1,6 +1,50 @@
 ---
 name: catalog-listing
-description: catalog-listing
+description: Use when installing, browsing, remixing, updating, or submitting catalog listings (Apps, Cards, Fields, Skills, Themes) from a Boxel catalog realm. Includes the submission workflow that creates a SubmissionWorkflowCard and GitHub PR.
+boxel:
+  kind: skill
+  tools:
+    - codeRef:
+        module: '@cardstack/catalog/commands/listing-create'
+        name: default
+        requiresApproval: false
+    - codeRef:
+        module: '@cardstack/catalog/commands/listing-use'
+        name: default
+        requiresApproval: false
+    - codeRef:
+        module: '@cardstack/catalog/commands/listing-install'
+        name: default
+        requiresApproval: false
+    - codeRef:
+        module: '@cardstack/catalog/commands/listing-remix'
+        name: default
+        requiresApproval: false
+    - codeRef:
+        module: '@cardstack/boxel-host/tools/preview-format'
+        name: default
+        requiresApproval: false
+---
+
+# catalog-listing
+
+## Pair with
+
+- **`boxel-environment`** — catalog operations are usually run inside the live Boxel app via host commands (use/install/remix flow).
+- **`boxel`** — when generating a new card definition via the listing-generate flow.
+- **`source-code-editing`** — when writing the generated `.gts` files.
+
+## Don't use for
+
+- Local-only card creation that doesn't touch a catalog listing — use `boxel` + `source-code-editing` directly.
+- Plain realm-to-realm card copying — use `command-atomic-install` pattern, not the catalog use flow.
+
+---
+
+## References
+
+- `references/submission-workflow.md` — catalog "Make a PR" submission flow. Load when the user asks to submit a listing, make a catalog PR, retry a failed submission, or inspect a SubmissionWorkflowCard.
+
 ---
 
 Before running the operation, ensure the following conditions are met:
@@ -52,3 +96,10 @@ If actionType is generate .gts card definition via listing requirement:
 - Code generation must not exceed 1000 lines per response
 - Continue in subsequent responses if needed.
 - Once complete, create some example and show the module and example via preview-format command. Make sure the module is full path which includes the realm url
+
+If actionType is submit, make PR, or catalog submission:
+
+- Load `references/submission-workflow.md`.
+- Ensure the listing already exists and has correct specs/examples/skills relationships.
+- Prefer the high-level workflow command/menu item. Do not manually copy files into the catalog repo or invoke lower-level bot events unless debugging.
+- Return the SubmissionWorkflowCard URL and, once available, the linked PR URL or current blocked step.

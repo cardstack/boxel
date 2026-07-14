@@ -1,29 +1,31 @@
 /**
- * Generate plugin/skills/<skill>/SKILL.md (and references/) for every
- * boxel-skills-derived plugin skill. Run via `pnpm build:skills` from
- * `packages/boxel-cli/`.
+ * Copy `skills/` and `commands/` from the pinned boxel-skills tag into
+ * `plugin/`. Run via `pnpm build:skills` from `packages/boxel-cli/`.
  *
  * Source: cardstack/boxel-skills at a pinned tag (BOXEL_SKILLS_VERSION).
  * Override the source location with BOXEL_SKILLS_REPO=/path/to/checkout for
  * local development against an unreleased boxel-skills branch.
  *
- * Emission policy: every SkillSet aggregator + every SkillPlusMarkdown leaf
- * that is NOT a child of any aggregator AND NOT rejected by `isExcluded`.
- * Aggregator children stay inside `plugin/skills/<aggregator>/references/`.
- * No allowlist — adding a card upstream automatically packages it on the next
- * `pnpm build:skills` unless it matches the (small) exclusion rule.
+ * boxel-skills is markdown-first: `skills/<name>/SKILL.md` (+ `references/`,
+ * `scripts/`) directories and `commands/<name>.md` slash-command files are
+ * already in the shape Claude Code consumes, so this build is a verbatim
+ * copy — no transformation, no formatting, no curation. Frontmatter is read
+ * only to regenerate the plugin README's catalog tables.
  *
- * Stale-dir sweep: each run persists the emitted IDs to
+ * Stale-entry sweep: each run persists the copied entry names to
  * `scripts/.boxel-skills-manifest.json` and, on the next run, deletes any
- * `plugin/skills/<id>` that was in the prior manifest but not in the new
- * plan — keeping the plugin from shipping skills that have been removed,
- * re-parented under an aggregator, or newly excluded.
+ * `plugin/skills/<name>` or `plugin/commands/<name>` that was in the prior
+ * manifest but is no longer in the source — keeping the plugin from shipping
+ * content that has been removed or renamed upstream. Entries this script
+ * never wrote (the CLI-authored skills like `file-ops` and `realm-sync`) are
+ * never in the manifest, so the sweep cannot touch them.
  *
  * The on-`main` workflow `.github/workflows/boxel-cli-publish.yml` runs this
- * and commits the regenerated `plugin/skills/` diff back to main.
+ * and commits the regenerated `plugin/` diff back to main.
  */
 import { execSync } from 'child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -35,7 +37,7 @@ import {
 import { relative, resolve } from 'path';
 import { format, resolveConfig } from 'prettier';
 
-const BOXEL_SKILLS_VERSION = 'v0.0.22';
+const BOXEL_SKILLS_VERSION = 'v0.0.28';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
@@ -50,81 +52,6 @@ const README_BEGIN_MARKER =
   '<!-- BEGIN AUTO-GENERATED: boxel-skills (run `pnpm build:skills` to update) -->';
 const README_END_MARKER = '<!-- END AUTO-GENERATED: boxel-skills -->';
 
-/**
- * Per-skill overrides for the lean SKILL.md frontmatter `description`. The
- * source's cardInfo.summary is often too generic for Claude Code's
- * auto-activation; these descriptions are tuned for skill discovery. New
- * boxel-skills cards fall through to upstream cardInfo.summary — only add an
- * override here if a specific skill's auto-activation proves too noisy/quiet.
- */
-export const DESCRIPTION_OVERRIDES: Record<string, string> = {
-  'boxel-development':
-    'Authoring Boxel cards. Use when creating or editing .gts card definitions, .json card instances, or answering questions about CardDef / FieldDef / templates / Boxel patterns. Covers the full .gts authoring surface — imports, fields, formats (isolated/embedded/fitted/atom/edit), styling, and common pitfalls.',
-  'boxel-design':
-    'Boxel UI design discovery. Use when designing or redesigning a Boxel app, choosing a visual direction, or pushing past default look-and-feel before generating code.',
-};
-
-/**
- * Upstream cards aimed at the host AI assistant runtime (Matrix chat in the
- * boxel host app), not Claude Code / Codex. Those skills teach a host-only
- * tool-call shape (`{name, payload: {description, attributes}}`), reference
- * host commands like `switch-submode_dd88` / `set-active-llm_1887` /
- * `patch-fields_3e67`, and assume a chat `roomId` — none of which exist in
- * the boxel-cli context. Shipping them via the plugin would mislead the
- * assistant into emitting invalid tool calls.
- *
- * Listed explicitly — no prefix rule — so future `env-*` additions upstream
- * are NOT silently dropped; only IDs verified as host-only belong here. The
- * boxel-environment aggregator's references are enumerated alongside the
- * aggregator itself so the exclusion survives upstream re-parenting or
- * top-level promotion.
- */
-export const EXCLUDED_IDS = new Set<string>([
-  // Aggregator: its own frontMatter/backMatter teach host JSON shape.
-  'boxel-environment',
-
-  // boxel-environment references — all teach host commands / shapes.
-  'env-assistant-persona',
-  'env-calling-commands',
-  'env-choosing-llm-models',
-  'env-indexing-operations',
-  'env-markdown-edit',
-  'env-searching-and-querying',
-  'env-user-environment-awareness',
-  'env-workflows-and-orchestration-patterns',
-  'source-code-editing',
-
-  // Top-level host-only leaves (siblings of the aggregator).
-  'env-creating-and-editing-cards',
-  'env-sim-boxel-environment-guide',
-]);
-
-export function isExcluded(id: string): boolean {
-  return EXCLUDED_IDS.has(id);
-}
-
-export interface SkillCard {
-  id: string;
-  json: any;
-  /** Adopted card type, e.g. "SkillSet" or "SkillPlusMarkdown". */
-  kind: string;
-}
-
-export interface RelatedSkill {
-  id: string;
-  inclusionMode: 'full' | 'link-only';
-  summary: string;
-}
-
-export interface EmissionPlan {
-  /** Cards to emit as top-level plugin skills, in stable order. */
-  emit: SkillCard[];
-  /** Card IDs that are children of some emitted SkillSet aggregator. */
-  aggregatorChildren: Set<string>;
-  /** Cards skipped because their `kind` is not understood. */
-  unsupported: SkillCard[];
-}
-
 function resolveSourceRoot(): string {
   const override = process.env.BOXEL_SKILLS_REPO;
   if (override) {
@@ -137,7 +64,7 @@ function resolveSourceRoot(): string {
     return override;
   }
   const target = resolve(CACHE_DIR, BOXEL_SKILLS_VERSION);
-  if (existsSync(resolve(target, 'Skill'))) {
+  if (existsSync(resolve(target, 'skills'))) {
     console.log(`Using cached boxel-skills clone at ${target}`);
     return target;
   }
@@ -152,258 +79,58 @@ function resolveSourceRoot(): string {
   return target;
 }
 
-function loadSkillCards(sourceRoot: string): Map<string, SkillCard> {
-  const skillsDir = resolve(sourceRoot, 'Skill');
-  if (!existsSync(skillsDir) || !statSync(skillsDir).isDirectory()) {
-    throw new Error(`Source missing Skill/ directory: ${sourceRoot}`);
+/**
+ * Top-level entries of a source directory, sorted. Includes plain files
+ * (e.g. `skills/glossary.md`, which skill bodies link to relatively)
+ * alongside `<name>/SKILL.md` directories.
+ */
+function listEntries(dir: string): string[] {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    throw new Error(`Source missing expected directory: ${dir}`);
   }
-  const cards = new Map<string, SkillCard>();
-  for (const name of readdirSync(skillsDir)) {
-    if (!name.endsWith('.json')) continue;
-    const id = name.replace(/\.json$/, '');
-    const path = resolve(skillsDir, name);
-    let json: any;
-    try {
-      json = JSON.parse(readFileSync(path, 'utf8'));
-    } catch (e) {
-      throw new Error(`Failed to parse ${path}: ${(e as Error).message}`);
-    }
-    const kind = json?.data?.meta?.adoptsFrom?.name ?? '<unknown>';
-    cards.set(id, { id, json, kind });
-  }
-  return cards;
-}
-
-export function getCardName(card: SkillCard): string {
-  const a = card.json?.data?.attributes ?? {};
-  return a?.cardInfo?.name ?? a?.cardTitle ?? card.id;
-}
-
-export function getCardSummary(card: SkillCard): string {
-  const a = card.json?.data?.attributes ?? {};
-  return a?.cardInfo?.summary ?? a?.cardDescription ?? '';
+  return readdirSync(dir)
+    .filter((name) => !name.startsWith('.'))
+    .sort();
 }
 
 /**
- * The frontmatter `description` written into each emitted SKILL.md, and the
- * same text used in the auto-generated README table column. Mirrors the
- * fallback chain in `emitAggregator` / `emitLeaf`.
+ * Minimal single-line YAML frontmatter reader — just enough to pull `name:`
+ * and `description:` for the README tables. boxel-skills authors these as
+ * single-line scalars; anything fancier falls back to the entry's file name
+ * rather than mis-parsing. Deliberately not a YAML parser: the copied files
+ * are the contract, the table is a convenience.
  */
-export function getSkillDescription(card: SkillCard): string {
-  const override = DESCRIPTION_OVERRIDES[card.id];
-  if (override) return override;
-  const summary = getCardSummary(card);
-  if (summary) return summary;
-  const name = getCardName(card);
-  return card.kind === 'SkillSet' ? `${name} skill from boxel-skills.` : name;
-}
-
-export function getRelatedSkills(card: SkillCard): RelatedSkill[] {
-  const attrs = card.json?.data?.attributes;
-  const rels = card.json?.data?.relationships;
-  if (!Array.isArray(attrs?.relatedSkills) || !rels) return [];
-  const out: RelatedSkill[] = [];
-  attrs.relatedSkills.forEach((entry: any, i: number) => {
-    const link = rels[`relatedSkills.${i}.skill`]?.links?.self;
-    if (typeof link !== 'string') return;
-    const id = link.replace(/^\.\//, '');
-    out.push({
-      id,
-      inclusionMode:
-        entry?.inclusionMode === 'link-only' ? 'link-only' : 'full',
-      summary:
-        typeof entry?.contentSummary === 'string' ? entry.contentSummary : '',
-    });
-  });
+export function parseFrontmatter(content: string): {
+  name?: string;
+  description?: string;
+} {
+  if (!content.startsWith('---\n')) return {};
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return {};
+  const block = content.slice(4, end);
+  const out: { name?: string; description?: string } = {};
+  for (const line of block.split('\n')) {
+    const m = /^(name|description):\s*(.+)$/.exec(line);
+    if (!m) continue;
+    const key = m[1] as 'name' | 'description';
+    if (out[key] !== undefined) continue;
+    out[key] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
+  }
   return out;
 }
 
-function getLeafBody(sourceRoot: string, leafId: string): string {
-  const path = resolve(sourceRoot, 'Skill', `${leafId}.md`);
-  if (!existsSync(path)) {
-    throw new Error(`Leaf skill body missing: ${path}`);
-  }
-  return readFileSync(path, 'utf8');
-}
-
-function frontmatter(name: string, description: string): string {
-  // Collapse whitespace; Claude Code reads description as one line.
-  const desc = description.replace(/\s+/g, ' ').trim();
-  return `---\nname: ${name}\ndescription: ${desc}\n---\n`;
-}
-
 /**
- * Write `content` to `filePath` after running it through the repo's Prettier
- * config. Without this the generated markdown drifts from the committed copy
- * whenever any local format pass (pre-commit hook, `pnpm format`, editor on-save)
- * touches it, breaking the boxel-skills sync freshness CI gate.
- */
-async function writeFormattedMarkdown(
-  filePath: string,
-  content: string,
-): Promise<void> {
-  const config = (await resolveConfig(filePath)) ?? {};
-  const formatted = await format(content, {
-    ...config,
-    parser: 'markdown',
-    filepath: filePath,
-  });
-  writeFileSync(filePath, formatted);
-}
-
-function clearReferencesDir(skillName: string): void {
-  const refsDir = resolve(PLUGIN_DIR, 'skills', skillName, 'references');
-  if (existsSync(refsDir)) {
-    rmSync(refsDir, { recursive: true, force: true });
-  }
-}
-
-async function emitAggregator(
-  sourceRoot: string,
-  card: SkillCard,
-  related: RelatedSkill[],
-): Promise<void> {
-  const name = card.id;
-  const skillDir = resolve(PLUGIN_DIR, 'skills', name);
-  mkdirSync(skillDir, { recursive: true });
-
-  clearReferencesDir(name);
-  const refsDir = resolve(skillDir, 'references');
-  mkdirSync(refsDir, { recursive: true });
-  for (const r of related) {
-    const body = getLeafBody(sourceRoot, r.id);
-    await writeFormattedMarkdown(resolve(refsDir, `${r.id}.md`), body);
-  }
-
-  const cardName = getCardName(card);
-  const description = getSkillDescription(card);
-  const attrs = card.json?.data?.attributes ?? {};
-  const intro =
-    typeof attrs.frontMatter === 'string' ? attrs.frontMatter.trim() : '';
-  const outro =
-    typeof attrs.backMatter === 'string' ? attrs.backMatter.trim() : '';
-
-  const fullRefs = related.filter((r) => r.inclusionMode === 'full');
-  const linkOnlyRefs = related.filter((r) => r.inclusionMode === 'link-only');
-
-  const refIndex: string[] = [];
-  refIndex.push('## References');
-  refIndex.push('');
-  refIndex.push(
-    `_Generated from \`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\` by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
-  );
-  refIndex.push('');
-  if (fullRefs.length > 0) {
-    refIndex.push('### Always load when this skill activates');
-    refIndex.push('');
-    for (const r of fullRefs) {
-      refIndex.push(`- \`references/${r.id}.md\` — ${r.summary}`);
-    }
-    refIndex.push('');
-  }
-  if (linkOnlyRefs.length > 0) {
-    refIndex.push('### Load on demand (only when the task touches this area)');
-    refIndex.push('');
-    for (const r of linkOnlyRefs) {
-      refIndex.push(`- \`references/${r.id}.md\` — ${r.summary}`);
-    }
-    refIndex.push('');
-  }
-
-  const sections: string[] = [];
-  sections.push(frontmatter(name, description));
-  // Use the source's own H1 if frontMatter starts with one; otherwise add ours.
-  const introHasH1 = /^#\s+\S/.test(intro);
-  if (!introHasH1) {
-    sections.push(`# ${cardName}`);
-    sections.push('');
-  }
-  if (intro) {
-    sections.push(intro);
-    sections.push('');
-  }
-  sections.push(refIndex.join('\n'));
-  if (outro) {
-    sections.push(outro);
-    sections.push('');
-  }
-  const content =
-    sections
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trimEnd() + '\n';
-  await writeFormattedMarkdown(resolve(skillDir, 'SKILL.md'), content);
-  console.log(
-    `wrote plugin/skills/${name}/SKILL.md + ${related.length} references`,
-  );
-}
-
-async function emitLeaf(sourceRoot: string, card: SkillCard): Promise<void> {
-  const name = card.id;
-  const skillDir = resolve(PLUGIN_DIR, 'skills', name);
-  mkdirSync(skillDir, { recursive: true });
-
-  const description = getSkillDescription(card);
-  const body = getLeafBody(sourceRoot, name).trimEnd() + '\n';
-  const content = `${frontmatter(name, description)}\n${body}`;
-  await writeFormattedMarkdown(resolve(skillDir, 'SKILL.md'), content);
-  console.log(`wrote plugin/skills/${name}/SKILL.md (single-file leaf)`);
-}
-
-/**
- * Decide which cards to emit as top-level plugin skills.
- *
- * - Every SkillSet aggregator is emitted (its children get bundled inside
- *   `references/` by `emitAggregator`).
- * - Every SkillPlusMarkdown leaf is emitted UNLESS it's already a child of
- *   some aggregator — those leaves are reachable via the aggregator's
- *   references and don't need a duplicate top-level skill.
- * - Cards that `isExcluded` rejects are dropped entirely (see that helper
- *   for rationale). The aggregator-children scan still walks excluded
- *   aggregators so their children stay claimed and don't get promoted to
- *   top-level leaves.
- * - Cards with any other `kind` are recorded as `unsupported` so the caller
- *   can warn without exploding the build.
- */
-export function computeEmissionPlan(
-  cards: Map<string, SkillCard>,
-): EmissionPlan {
-  const aggregatorChildren = new Set<string>();
-  for (const card of cards.values()) {
-    if (card.kind !== 'SkillSet') continue;
-    for (const r of getRelatedSkills(card)) aggregatorChildren.add(r.id);
-  }
-
-  const emit: SkillCard[] = [];
-  const unsupported: SkillCard[] = [];
-  for (const card of cards.values()) {
-    if (isExcluded(card.id)) continue;
-    if (card.kind === 'SkillSet') {
-      emit.push(card);
-    } else if (card.kind === 'SkillPlusMarkdown') {
-      if (!aggregatorChildren.has(card.id)) emit.push(card);
-    } else {
-      unsupported.push(card);
-    }
-  }
-
-  emit.sort((a, b) => a.id.localeCompare(b.id));
-  unsupported.sort((a, b) => a.id.localeCompare(b.id));
-  return { emit, aggregatorChildren, unsupported };
-}
-
-/**
- * Persisted record of which `plugin/skills/<id>` directories the last
- * `pnpm build:skills` run wrote. Used to detect and delete dirs that drop
- * out of the emission plan (e.g. upstream removes a card, re-parents a leaf
- * under an aggregator, or `isExcluded` starts rejecting it) so the plugin
- * never ships stale generated skills. CLI-authored skill dirs (file-ops,
- * realm-sync, etc.) are never written by this script and so are never in
- * the manifest — the sweep can't touch them.
+ * Persisted record of which `plugin/skills/<name>` and
+ * `plugin/commands/<name>` entries the last `pnpm build:skills` run copied.
+ * Used to detect and delete entries that drop out of the source (upstream
+ * removal or rename) so the plugin never ships stale content. `commands` is
+ * optional for backward compatibility with manifests written before the
+ * copy-only model shipped command files.
  */
 export interface Manifest {
   version: string;
   skills: string[];
+  commands?: string[];
 }
 
 export function loadManifest(path: string): Manifest | null {
@@ -420,59 +147,102 @@ export function loadManifest(path: string): Manifest | null {
   } catch {
     return null;
   }
+  const m = data as Manifest;
   if (
     typeof data !== 'object' ||
     data === null ||
-    typeof (data as Manifest).version !== 'string' ||
-    !Array.isArray((data as Manifest).skills) ||
-    !(data as Manifest).skills.every((s) => typeof s === 'string')
+    typeof m.version !== 'string' ||
+    !Array.isArray(m.skills) ||
+    !m.skills.every((s) => typeof s === 'string') ||
+    (m.commands !== undefined &&
+      (!Array.isArray(m.commands) ||
+        !m.commands.every((s) => typeof s === 'string')))
   ) {
     return null;
   }
-  return data as Manifest;
+  return m;
 }
 
 /**
- * Pure function: given the prior manifest and the new emission plan's IDs,
- * return the IDs whose `plugin/skills/<id>` directory should be deleted.
+ * Pure function: given the prior manifest's entry names and the new copy
+ * plan's names, return the entries whose plugin copy should be deleted.
  * Stable-sorted so log output is deterministic.
  */
 export function computeStaleIds(
-  prior: Manifest | null,
-  newEmitIds: readonly string[],
+  priorIds: readonly string[] | null | undefined,
+  newIds: readonly string[],
 ): string[] {
-  if (!prior) return [];
-  const next = new Set(newEmitIds);
-  return prior.skills.filter((id) => !next.has(id)).sort();
+  if (!priorIds) return [];
+  const next = new Set(newIds);
+  return priorIds.filter((id) => !next.has(id)).sort();
 }
 
-function sweepStaleSkillDirs(staleIds: readonly string[]): void {
+function sweepStaleEntries(subdir: string, staleIds: readonly string[]): void {
   for (const id of staleIds) {
-    const dir = resolve(PLUGIN_DIR, 'skills', id);
-    if (!existsSync(dir)) continue;
-    rmSync(dir, { recursive: true, force: true });
-    console.log(`removed stale plugin/skills/${id}`);
+    const target = resolve(PLUGIN_DIR, subdir, id);
+    if (!existsSync(target)) continue;
+    rmSync(target, { recursive: true, force: true });
+    console.log(`removed stale plugin/${subdir}/${id}`);
   }
 }
 
-function writeManifest(plan: EmissionPlan): void {
-  const manifest: Manifest = {
-    version: BOXEL_SKILLS_VERSION,
-    skills: plan.emit.map((c) => c.id).sort(),
-  };
-  writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
-  console.log(
-    `wrote ${relative(resolve(import.meta.dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills)`,
-  );
+/**
+ * Copy each top-level entry of `<sourceRoot>/<subdir>` into
+ * `plugin/<subdir>/` verbatim. An existing destination entry is removed
+ * first so files deleted upstream inside a skill (e.g. a dropped reference)
+ * don't linger in the copy.
+ */
+function copyEntries(
+  sourceRoot: string,
+  subdir: string,
+  entries: readonly string[],
+): void {
+  const destDir = resolve(PLUGIN_DIR, subdir);
+  mkdirSync(destDir, { recursive: true });
+  for (const name of entries) {
+    const src = resolve(sourceRoot, subdir, name);
+    const dest = resolve(destDir, name);
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(src, dest, { recursive: true });
+  }
+  console.log(`copied ${entries.length} ${subdir}/ entries into plugin/`);
 }
 
 /**
- * Rewrite the auto-generated table block in `plugin/README.md` so it lists
- * every skill in the current emission plan. The block is fenced by HTML
- * marker comments — if they're missing, throw clearly rather than silently
- * un-wiring the auto-gen.
+ * Write `content` to `filePath` after running it through the repo's Prettier
+ * config. Copied skill/command files ship verbatim; this applies only to the
+ * README this script itself generates, so local format passes don't drift it
+ * from the committed copy.
  */
-export async function updatePluginReadme(plan: EmissionPlan): Promise<void> {
+async function writeFormattedMarkdown(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const config = (await resolveConfig(filePath)) ?? {};
+  const formatted = await format(content, {
+    ...config,
+    parser: 'markdown',
+    filepath: filePath,
+  });
+  writeFileSync(filePath, formatted);
+}
+
+function tableRow(name: string, description: string): string {
+  const desc = description.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim();
+  return `| \`${name}\` | ${desc} |`;
+}
+
+/**
+ * Rewrite the auto-generated block in `plugin/README.md` so it lists every
+ * copied skill and command with the name/description from its frontmatter.
+ * The block is fenced by HTML marker comments — if they're missing, throw
+ * clearly rather than silently un-wiring the auto-gen.
+ */
+export async function updatePluginReadme(
+  sourceRoot: string,
+  skillEntries: readonly string[],
+  commandEntries: readonly string[],
+): Promise<void> {
   const readme = readFileSync(PLUGIN_README_PATH, 'utf8');
   const beginIdx = readme.indexOf(README_BEGIN_MARKER);
   const endIdx = readme.indexOf(README_END_MARKER);
@@ -480,7 +250,7 @@ export async function updatePluginReadme(plan: EmissionPlan): Promise<void> {
     throw new Error(
       `plugin/README.md is missing the auto-gen markers ` +
         `"${README_BEGIN_MARKER}" and "${README_END_MARKER}". ` +
-        `Restore them around the boxel-skills table so build:skills can update it.`,
+        `Restore them around the boxel-skills tables so build:skills can update them.`,
     );
   }
 
@@ -489,14 +259,26 @@ export async function updatePluginReadme(plan: EmissionPlan): Promise<void> {
   lines.push(README_BEGIN_MARKER);
   lines.push('');
   lines.push(
-    `_Generated from [\`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\`](${tagUrl}) by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
+    `_Copied from [\`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\`](${tagUrl}) by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
   );
   lines.push('');
   lines.push('| Skill | Use it for |');
   lines.push('|---|---|');
-  for (const card of plan.emit) {
-    const desc = getSkillDescription(card).replace(/\s+/g, ' ').trim();
-    lines.push(`| \`/boxel-cli:${card.id}\` | ${desc} |`);
+  for (const entry of skillEntries) {
+    const skillMd = resolve(sourceRoot, 'skills', entry, 'SKILL.md');
+    if (!existsSync(skillMd)) continue; // plain files like glossary.md
+    const fm = parseFrontmatter(readFileSync(skillMd, 'utf8'));
+    lines.push(tableRow(fm.name ?? entry, fm.description ?? ''));
+  }
+  lines.push('');
+  lines.push('| Command | Use it for |');
+  lines.push('|---|---|');
+  for (const entry of commandEntries) {
+    const fm = parseFrontmatter(
+      readFileSync(resolve(sourceRoot, 'commands', entry), 'utf8'),
+    );
+    const name = entry.replace(/\.md$/, '');
+    lines.push(tableRow(`/boxel-cli:${name}`, fm.description ?? ''));
   }
   lines.push('');
   lines.push(README_END_MARKER);
@@ -507,52 +289,49 @@ export async function updatePluginReadme(plan: EmissionPlan): Promise<void> {
   const next = `${before}${replacement}${after}`;
   await writeFormattedMarkdown(PLUGIN_README_PATH, next);
   console.log(
-    `wrote plugin/README.md (boxel-skills table, ${plan.emit.length} rows)`,
+    `wrote plugin/README.md (${skillEntries.length} skills, ${commandEntries.length} commands)`,
+  );
+}
+
+function writeManifest(
+  skillEntries: readonly string[],
+  commandEntries: readonly string[],
+): void {
+  const manifest: Manifest = {
+    version: BOXEL_SKILLS_VERSION,
+    skills: [...skillEntries].sort(),
+    commands: [...commandEntries].sort(),
+  };
+  writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
+  console.log(
+    `wrote ${relative(resolve(import.meta.dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills, ${manifest.commands!.length} commands)`,
   );
 }
 
 async function main(): Promise<void> {
   const sourceRoot = resolveSourceRoot();
-  const cards = loadSkillCards(sourceRoot);
-  const plan = computeEmissionPlan(cards);
+  const skillEntries = listEntries(resolve(sourceRoot, 'skills'));
+  const commandEntries = listEntries(resolve(sourceRoot, 'commands'));
 
   const priorManifest = loadManifest(MANIFEST_PATH);
-  const staleIds = computeStaleIds(
-    priorManifest,
-    plan.emit.map((c) => c.id),
+  sweepStaleEntries(
+    'skills',
+    computeStaleIds(priorManifest?.skills, skillEntries),
   );
-  sweepStaleSkillDirs(staleIds);
+  sweepStaleEntries(
+    'commands',
+    computeStaleIds(priorManifest?.commands, commandEntries),
+  );
 
-  for (const card of plan.emit) {
-    if (card.kind === 'SkillSet') {
-      const related = getRelatedSkills(card);
-      if (related.length === 0) {
-        throw new Error(
-          `Aggregator "${card.id}" has no related skills — JSON shape unexpected.`,
-        );
-      }
-      await emitAggregator(sourceRoot, card, related);
-    } else if (card.kind === 'SkillPlusMarkdown') {
-      await emitLeaf(sourceRoot, card);
-    }
-  }
+  copyEntries(sourceRoot, 'skills', skillEntries);
+  copyEntries(sourceRoot, 'commands', commandEntries);
 
-  await updatePluginReadme(plan);
-  writeManifest(plan);
-
-  if (plan.unsupported.length > 0) {
-    console.log('');
-    console.log(
-      'Skipped: cards with unsupported adoptsFrom.name (build keeps going):',
-    );
-    for (const c of plan.unsupported) {
-      console.log(`  - ${c.id} (${c.kind})`);
-    }
-  }
+  await updatePluginReadme(sourceRoot, skillEntries, commandEntries);
+  writeManifest(skillEntries, commandEntries);
 
   console.log('');
   console.log(
-    `Done. Emitted ${plan.emit.length} skill(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
+    `Done. Copied ${skillEntries.length} skill(s) and ${commandEntries.length} command(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
   );
 }
 
