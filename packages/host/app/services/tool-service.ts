@@ -22,6 +22,7 @@ import {
   identifyCard,
   rri,
   type PatchData,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
@@ -34,6 +35,11 @@ import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import LimitedSet from '../lib/limited-set';
+import {
+  findDiscoveredToolSkillUrl,
+  getSkillSourceTools,
+  loadSkillSource,
+} from '../lib/skill-tools';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
@@ -78,6 +84,13 @@ export default class ToolService extends Service {
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   executedToolRequestIds = new TrackedSet<string>();
+  // Requests we've published a terminal 'invalid' result for. A terminal
+  // result must be terminal: without this, a later drain pass can re-validate
+  // the same request (e.g. once an async codeRef resolution has landed),
+  // find it valid, and execute it — publishing 'applied' after 'invalid' and
+  // leaving the model believing the first attempt failed. Auto-execution
+  // skips these; the manual "Try Anyway" path deliberately does not.
+  invalidatedToolRequestIds = new TrackedSet<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
@@ -109,6 +122,7 @@ export default class ToolService extends Service {
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
     this.executedToolRequestIds.clear();
+    this.invalidatedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
@@ -389,6 +403,12 @@ export default class ToolService extends Service {
           if (this.executedToolRequestIds.has(messageTool.id!)) {
             continue;
           }
+          // Already published a terminal 'invalid' for this request; the
+          // room-state status below can lag the matrix round-trip, so the
+          // local record is the authoritative guard against re-running it.
+          if (this.invalidatedToolRequestIds.has(messageTool.id!)) {
+            continue;
+          }
           if (
             messageTool.status === 'applied' ||
             messageTool.status === 'invalid'
@@ -490,6 +510,7 @@ export default class ToolService extends Service {
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
         messageTool.eventId;
+      this.invalidatedToolRequestIds.add(commandRequestId);
       await this.matrixService.sendToolResultEvent({
         roomId,
         invokedToolFromEventId,
@@ -703,6 +724,12 @@ export default class ToolService extends Service {
       // If we don't find it in the one-offs, start searching for
       // one in the skills we can construct
       let toolCodeRef = command.codeRef;
+      if (!toolCodeRef) {
+        toolCodeRef = await this.resolveDiscoveredToolCodeRef(command);
+        if (toolCodeRef) {
+          command.codeRef = toolCodeRef;
+        }
+      }
       if (toolCodeRef) {
         let ToolConstructor = (await getClass(
           toolCodeRef,
@@ -785,6 +812,51 @@ export default class ToolService extends Service {
     }
   });
 
+  // A tool from a read (not enabled) skill gets its codeRef during message
+  // building via an async, network-backed load of the declaring skill's
+  // realm-indexed frontmatter. Validation and execution can race that
+  // resolution — streaming replaces restart room processing, so the drain
+  // can observe a MessageTool before its codeRef has landed. Rather than
+  // declaring the tool unknown (a terminal 'invalid' the model reacts to by
+  // retrying), re-derive the codeRef here with the same verified lookup the
+  // builder uses, and heal it onto the MessageTool.
+  private async resolveDiscoveredToolCodeRef(
+    command: MessageTool,
+  ): Promise<ResolvedCodeRef | undefined> {
+    if (!command.name) {
+      return undefined;
+    }
+    let roomResource = this.matrixService.roomResources.get(
+      command.message.roomId,
+    );
+    if (!roomResource) {
+      return undefined;
+    }
+    let sourceSkillUrl = findDiscoveredToolSkillUrl(
+      roomResource.events,
+      command.name,
+    );
+    if (!sourceSkillUrl) {
+      return undefined;
+    }
+    try {
+      let source = await loadSkillSource(this.store, sourceSkillUrl);
+      if (!source) {
+        return undefined;
+      }
+      let skillTool = getSkillSourceTools(source).find(
+        (candidate) => candidate.functionName === command.name,
+      );
+      return skillTool?.codeRef as ResolvedCodeRef | undefined;
+    } catch (e) {
+      console.warn(
+        `could not load skill ${sourceSkillUrl} to resolve tool "${command.name}":`,
+        e,
+      );
+      return undefined;
+    }
+  }
+
   async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
@@ -805,6 +877,12 @@ export default class ToolService extends Service {
     }
 
     let toolCodeRef = command.codeRef;
+    if (!toolCodeRef && command.name !== CHECK_CORRECTNESS_COMMAND_NAME) {
+      toolCodeRef = await this.resolveDiscoveredToolCodeRef(command);
+      if (toolCodeRef) {
+        command.codeRef = toolCodeRef;
+      }
+    }
     let toolInstance: GenericCommand | undefined;
 
     if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
@@ -860,6 +938,11 @@ export default class ToolService extends Service {
           command.message.roomId,
           command.toolRequest.id,
         ) ?? command.eventId;
+      // Record before publishing so no concurrent drain pass can slip in
+      // between the send and the bookkeeping and execute the request.
+      if (command.toolRequest.id) {
+        this.invalidatedToolRequestIds.add(command.toolRequest.id);
+      }
       await this.matrixService.sendToolResultEvent({
         roomId: command.message.roomId,
         invokedToolFromEventId,
