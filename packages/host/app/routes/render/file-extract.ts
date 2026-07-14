@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { getOwner, setOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
@@ -10,9 +11,11 @@ import {
   baseRealm,
   formattedError,
   snapshotRuntimeDependencies,
+  ToolContextStamp,
   trackRuntimeModuleDependency,
   withRuntimeDependencyTrackingContext,
   type RenderError,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
@@ -88,6 +91,14 @@ export default class RenderFileExtractRoute extends Route<Model> {
     let fileDefCodeRef = parsedOptions.fileDefCodeRef ?? baseFileRef;
     let contentHash: string | undefined = parsedOptions.fileContentHash;
     let contentSize: number | undefined = parsedOptions.fileContentSize;
+    // This route is the indexing path, so skill tool schemas are generated
+    // during the extract and persisted with the row. Tool classes never read
+    // the context during schema generation, but host-package tools resolve
+    // services (e.g. the loader) through the context's owner at construction —
+    // so the context must carry one, the same shape the tool service hands to
+    // real invocations.
+    let toolContext: ToolContext = { [ToolContextStamp]: true };
+    setOwner(toolContext, getOwner(this)!);
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
@@ -98,6 +109,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
       contentHash,
       contentSize,
       buildError: this.#buildError.bind(this),
+      toolContext,
     });
     let fileApiURL = `${baseRealm.url}file-api`;
     let result: FileDefExtractResult;

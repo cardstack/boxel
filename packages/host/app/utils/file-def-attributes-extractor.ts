@@ -3,18 +3,22 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
+  FRONTMATTER_DIAGNOSTICS_SYMBOL,
+  FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
   type CodeRef,
+  type Diagnostics,
   type FileMetaResource,
   type FrontmatterParseError,
   type QueryFieldMeta,
   type RealmResourceIdentifier,
   type RenderError,
   type ResolvedCodeRef,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
 
@@ -29,7 +33,11 @@ export type FileDefExport = {
   extractAttributes: (
     url: string,
     getStream: () => Promise<unknown>,
-    options?: { contentHash?: string; contentSize?: number },
+    options?: {
+      contentHash?: string;
+      contentSize?: number;
+      toolContext?: ToolContext;
+    },
   ) => Promise<any>;
 };
 export type FileDefModule = Record<string, FileDefExport | undefined>;
@@ -49,6 +57,10 @@ export type FileDefExtractResult = {
   // indexes body-only); lifted out of the searchDoc here so the indexer can
   // persist it onto `diagnostics.frontmatterParseError`. See markdown-file-def.
   frontmatterParseError?: FrontmatterParseError;
+  // Diagnostics findings the frontmatter contributed (e.g. a skill's
+  // `toolSchemaErrors`). The extract still succeeds; the indexer merges the
+  // bag onto the row's `diagnostics`.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 };
 
 export class FileDefAttributesExtractor {
@@ -62,6 +74,7 @@ export class FileDefAttributesExtractor {
   #contentSize: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
+  #toolContext: ToolContext | undefined;
   #fallbackBytes: Uint8Array | null = null;
   #primaryUsed = false;
 
@@ -76,6 +89,7 @@ export class FileDefAttributesExtractor {
     contentSize,
     fileBytes,
     buildError,
+    toolContext,
   }: {
     loaderService: LoaderService;
     network: NetworkService;
@@ -87,6 +101,13 @@ export class FileDefAttributesExtractor {
     contentSize: number | undefined;
     fileBytes?: Uint8Array;
     buildError: (url: string, error: unknown) => RenderError;
+    // Owner-carrying context that index-time tool schema generation
+    // constructs tool classes with (see SkillFrontmatterField.fromFrontmatter).
+    // Only the indexing path (the file-extract render route) provides one:
+    // schema generation loads each tool's module, which the interactive
+    // extract paths (room file attach, the store's direct fallback) shouldn't
+    // pay for — their consumers generate schemas on demand instead.
+    toolContext?: ToolContext;
   }) {
     this.#loaderService = loaderService;
     this.#network = network;
@@ -98,6 +119,7 @@ export class FileDefAttributesExtractor {
     this.#contentSize = contentSize;
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
+    this.#toolContext = toolContext;
   }
 
   async extract(): Promise<FileDefExtractResult> {
@@ -151,7 +173,11 @@ export class FileDefAttributesExtractor {
         return await klass.extractAttributes(
           this.#fileURL,
           this.#getStreamForAttempt,
-          { contentHash: this.#contentHash, contentSize: this.#contentSize },
+          {
+            contentHash: this.#contentHash,
+            contentSize: this.#contentSize,
+            toolContext: this.#toolContext,
+          },
         );
       } catch (err) {
         console.warn(
@@ -227,22 +253,46 @@ export class FileDefAttributesExtractor {
         if (frontmatterParseError) {
           delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
         }
+        // And for any diagnostics findings the frontmatter contributed,
+        // merged onto the row's `diagnostics` by the indexer.
+        let frontmatterDiagnostics = cleanedBag[
+          FRONTMATTER_DIAGNOSTICS_SYMBOL
+        ] as Partial<Diagnostics> | undefined;
+        if (frontmatterDiagnostics) {
+          delete cleanedBag[FRONTMATTER_DIAGNOSTICS_SYMBOL];
+        }
+        // A frontmatter value enriched for the index (e.g. a skill's
+        // generated tool definitions) replaces the resource's `frontmatter`
+        // only; the search doc keeps the value as authored, because multi-KB
+        // generated content must never land in `search_doc`.
+        let fileMetaFrontmatter = cleanedBag[
+          FRONTMATTER_FILE_META_VALUE_SYMBOL
+        ] as Record<string, unknown> | undefined;
+        if (fileMetaFrontmatter) {
+          delete cleanedBag[FRONTMATTER_FILE_META_VALUE_SYMBOL];
+        }
+        let resource = buildFileResource(
+          this.#fileURL,
+          cleanedDoc,
+          adoptsFrom,
+          queryFieldDefs,
+          fieldsMeta,
+        );
+        if (fileMetaFrontmatter) {
+          (resource.attributes as Record<string, unknown>).frontmatter =
+            fileMetaFrontmatter;
+        }
         return {
           status: 'ready',
           searchDoc: cleanedDoc,
-          resource: buildFileResource(
-            this.#fileURL,
-            cleanedDoc,
-            adoptsFrom,
-            queryFieldDefs,
-            fieldsMeta,
-          ),
+          resource,
           types,
           displayNames,
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
           ...(frontmatterParseError ? { frontmatterParseError } : {}),
+          ...(frontmatterDiagnostics ? { frontmatterDiagnostics } : {}),
         };
       }
     }

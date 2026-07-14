@@ -110,6 +110,14 @@ export class Prerenderer {
             `batch ownership cleared for ${affinityKey} due to affinity disposal`,
           );
         }
+        // Drop the affinity's icon memo with the rest of its warm state.
+        // Disposal also clears the ownership entry above, which makes the
+        // owner-matched clear in `releaseBatch` a no-op for this affinity —
+        // without this, a job whose affinity is disposed mid-run (cancel,
+        // idle eviction, capacity pressure) would leave its memo behind
+        // until another job for the same realm replaced it. A still-running
+        // job just re-renders each type's icon once as the memo re-warms.
+        this.#renderRunner.clearIconMemo(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({
@@ -265,6 +273,10 @@ export class Prerenderer {
     let owner = this.#batchOwnership.get(affinityKey);
     if (owner?.batchId === batchId) {
       this.#batchOwnership.delete(affinityKey);
+      // The job's icon memo has no readers once its batch releases the
+      // affinity (a later job carries a different job key), so drop it
+      // rather than letting it idle until the next job replaces it.
+      this.#renderRunner.clearIconMemo(affinityKey);
       log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
     }
   }
@@ -277,6 +289,13 @@ export class Prerenderer {
   ): { batchId: string; since: number } | undefined {
     let owner = this.#batchOwnership.get(affinityKey);
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getIconMemo(affinityKey: string) {
+    return this.#renderRunner.getIconMemo(affinityKey);
   }
 
   // Back-compat static re-export: older callers / tests reference

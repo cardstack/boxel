@@ -5,6 +5,7 @@ import {
   fillIn,
   render,
   settled,
+  triggerEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -202,6 +203,19 @@ module('Integration | codemirror embed toolbar', function (hooks) {
     assert
       .dom('[data-test-toolbar="add-embed"]')
       .exists('Add embed lives in the toolbar when no directive is focused');
+    // Add-embed has no key command → a label-only tooltip (no shortcut badge).
+    assert
+      .dom('[data-test-toolbar-tooltip="add-embed"]')
+      .exists('Add embed is wrapped in a tooltip trigger');
+    await triggerEvent('[data-test-toolbar-tooltip="add-embed"]', 'mouseenter');
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText('Add embed', 'tooltip shows the Add embed label');
+    assert
+      .dom('[data-test-tooltip-content] .shortcut-key')
+      .doesNotExist('shortcut-less item has no shortcut badge');
+    await triggerEvent('[data-test-toolbar-tooltip="add-embed"]', 'mouseleave');
     assert
       .dom('[data-test-toolbar-embed-popover]')
       .doesNotExist('popover is closed by default');
@@ -278,6 +292,22 @@ module('Integration | codemirror embed toolbar', function (hooks) {
       .exists(
         'Edit pencil replaces the Add popover when the cursor is inside a directive',
       );
+    // Edit-embed has no key command → a label-only tooltip (no shortcut badge).
+    assert
+      .dom('[data-test-toolbar-tooltip="edit-embed"]')
+      .exists('Edit embed is wrapped in a tooltip trigger');
+    await triggerEvent(
+      '[data-test-toolbar-tooltip="edit-embed"]',
+      'mouseenter',
+    );
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText('Edit embed', 'tooltip shows the Edit embed label');
+    await triggerEvent(
+      '[data-test-toolbar-tooltip="edit-embed"]',
+      'mouseleave',
+    );
 
     await click('[data-test-toolbar="edit-embed"]');
     await waitFor('[data-test-markdown-embed-chooser-modal]');
