@@ -245,6 +245,7 @@ const ALL_TEST_FILES: string[] = [
   './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
+  './prewarm-query-field-test',
   './prerender-html-split-test',
   './prerender-html-split-integration-test',
   './prerender-html-reconcile-test',
