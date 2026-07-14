@@ -189,6 +189,13 @@ export async function runPrerenderHtmlPass({
       let filesystemMtimes = await reader.mtimes();
       let allRealmCardModules =
         Object.keys(filesystemMtimes).filter(hasCardExtension);
+      // Info, not debug: the sweep can hold this worker for minutes on a
+      // module-heavy realm, and with few workers everything queued behind it
+      // waits that long. CI logs need the sweep's span attributable without a
+      // log-level override.
+      log.info(
+        `${jobTag} module pre-warm sweep starting (${allRealmCardModules.length} realm card modules)`,
+      );
       let updateURLs = [...operations]
         .filter(([, operation]) => operation === 'update')
         .map(([url]) => new URL(url));
@@ -221,6 +228,9 @@ export async function runPrerenderHtmlPass({
         },
       });
       totalFiles = preWarmedCount + operations.size;
+      log.info(
+        `${jobTag} module pre-warm sweep completed (${preWarmedCount} modules warmed) in ${Date.now() - preWarmStart} ms`,
+      );
     } catch (e) {
       log.warn(
         `${jobTag} module pre-warm failed; the format renders will populate the definition cache on demand: ${(e as Error)?.message}`,
