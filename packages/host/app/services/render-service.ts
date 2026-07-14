@@ -142,14 +142,14 @@ export class CardStoreWithErrors implements CardStore {
     // matching the host store's keying.
     return isLocalId(key)
       ? key
-      : this.#virtualNetwork.unresolveURL(this.#virtualNetwork.toURL(key).href);
+      : this.#virtualNetwork.unresolveURL(this.#virtualNetwork.toURLHref(key));
   }
 
   private normalizeURL(id: string): string {
     let key = id.replace(/\.json$/, '');
     // Load targets resolve to the real URL — this is the fetch boundary, and
     // the loaded document's id is stamped from it.
-    return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
+    return isLocalId(key) ? id : this.#virtualNetwork.toURLHref(id);
   }
 
   trackLoad(load: Promise<unknown>) {
