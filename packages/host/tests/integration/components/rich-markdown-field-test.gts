@@ -1,6 +1,12 @@
 import { precompileTemplate } from '@ember/template-compilation';
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -1187,6 +1193,52 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-markdown-mode-option="source"]')
       .exists('view selector opens without editor focus');
     await click('[data-test-markdown-mode-option="compose"]');
+  });
+
+  test('toolbar items are wrapped in tooltips whose hint is suppressed while the control is disabled', async function (assert) {
+    // The enabled-on-focus transition depends on document.hasFocus(), which is
+    // false in headless CI (see the "formatting controls start disabled" test),
+    // so the format buttons are disabled here. That makes this the reliable
+    // side to assert: every item is a tooltip trigger, and hovering a disabled
+    // control reveals no tooltip. The always-enabled add/edit-embed tooltips
+    // (label + hover reveal) are covered in the codemirror embed toolbar test.
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await waitFor('[data-test-toolbar="bold"]');
+
+    // Bold (a shortcut item) and Strikethrough (shortcut-less) are both wrapped
+    // in a tooltip trigger.
+    assert
+      .dom('[data-test-toolbar-tooltip="bold"]')
+      .exists('Bold is wrapped in a tooltip trigger');
+    assert
+      .dom('[data-test-toolbar-tooltip="strikethrough"]')
+      .exists('Strikethrough is wrapped in a tooltip trigger');
+
+    // Disabled before the editor gains focus → hovering reveals no tooltip.
+    assert.dom('[data-test-toolbar="bold"]').isDisabled();
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .doesNotExist('no tooltip is shown while the control is disabled');
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseleave');
   });
 
   test('selecting Preview shows rendered markdown and hides editor', async function (assert) {
