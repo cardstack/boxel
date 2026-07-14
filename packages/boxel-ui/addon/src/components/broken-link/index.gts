@@ -410,8 +410,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
               @icon='close'
               @label='Close'
               @variant='ghost'
-              @width='13'
-              @height='13'
+              @size='extra-small'
               {{on 'click' this.close}}
               data-test-broken-link-overlay-close
             />
@@ -733,12 +732,6 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       .overlay-close {
         flex: none;
         margin: -2px -2px 0 0;
-        --boxel-icon-button-width: 1.25rem;
-        --boxel-icon-button-height: 1.25rem;
-        color: var(--boxel-400);
-      }
-      .overlay-close:hover {
-        color: var(--boxel-dark);
       }
       .overlay-url-row {
         display: flex;
