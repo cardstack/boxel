@@ -669,6 +669,12 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation > :deep(* + .meta-hidden) {
         margin-top: var(--boxel-sp-xs);
       }
+      /* headerless bot-tool indicator messages stack flush, so a burst of
+         reads presents as one list */
+      .ai-assistant-conversation
+        > :deep(.bot-tools-only.meta-hidden + .bot-tools-only.meta-hidden) {
+        margin-top: 0;
+      }
       .ai-assistant-conversation > :deep(* + .code-patch-correctness) {
         margin-top: var(--boxel-sp-xxs);
       }

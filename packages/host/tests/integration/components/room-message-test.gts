@@ -324,5 +324,46 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom('[data-test-tool-call-id="host-tool-1"]')
       .doesNotHaveClass('compact');
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .doesNotHaveClass('bot-tools-only');
+  });
+
+  test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: '',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.htmlParts = [];
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'bot-tool-1',
+          name: 'readRealmFile',
+          arguments: {
+            urls: ['http://test-realm/skills/pirate-speak/SKILL.md'],
+            description: 'Read file: pirate-speak/SKILL.md',
+          },
+          executedBy: AI_BOT_EXECUTOR,
+        },
+        undefined,
+        'event-1',
+        false,
+        'Apply',
+        'applied',
+        undefined,
+        this.owner,
+      ),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-message-idx="0"]').hasClass('bot-tools-only');
   });
 });

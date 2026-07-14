@@ -12,7 +12,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCardCollection,
@@ -173,6 +173,21 @@ export default class RoomMessage extends Component<Signature> {
   private isCompactTool = (tool: MessageTool) =>
     this.message.isCodePatchCorrectness || tool.isBotExecuted;
 
+  // A message carrying only bot-executed tool indicators — no prose,
+  // reasoning, or attachments — stacks flush against a neighboring message of
+  // the same kind, so a burst of readRealmFile calls reads as one list.
+  private get isBotToolsOnlyMessage() {
+    return (
+      !!this.message.tools?.length &&
+      this.message.tools.every((tool) => tool.isBotExecuted) &&
+      !this.message.htmlParts?.length &&
+      !this.message.reasoningContent &&
+      !this.message.attachedFiles?.length &&
+      !this.message.attachedCardsAsFiles?.length &&
+      !this.message.attachedCardIds?.length
+    );
+  }
+
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
@@ -218,6 +233,7 @@ export default class RoomMessage extends Component<Signature> {
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         data-test-boxel-message-from={{this.message.author.name}}
+        class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
