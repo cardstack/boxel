@@ -18,8 +18,6 @@ import {
 
 import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
-import { File } from '@cardstack/boxel-ui/icons';
-
 import {
   cardTypeDisplayName,
   cardTypeIcon,
@@ -242,12 +240,6 @@ export default class RoomMessageTool extends Component<Signature> {
     return !!(this.failedToolState || this.didFailCorrectnessCheck);
   }
 
-  // Bot-executed tools (readRealmFile) share the correctness checks' compact
-  // rendering; the file icon keeps the two visually distinct.
-  private get headerIcon() {
-    return this.args.messageTool.isBotExecuted ? File : undefined;
-  }
-
   <template>
     <div
       class={{cn
@@ -275,7 +267,6 @@ export default class RoomMessageTool extends Component<Signature> {
             @action={{@runCommand}}
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
-            @icon={{this.headerIcon}}
             @isCompact={{@isCompact}}
             @toolCallState='preparing'
           />
@@ -296,7 +287,6 @@ export default class RoomMessageTool extends Component<Signature> {
             @action={{@runCommand}}
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
-            @icon={{this.headerIcon}}
             @toolCallState={{this.applyButtonState}}
             @isCompact={{@isCompact}}
             @isDisplayingCode={{this.isDisplayingCode}}

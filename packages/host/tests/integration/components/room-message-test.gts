@@ -262,7 +262,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.dom('[data-test-card-error]').doesNotExist();
   });
 
-  test('bot-executed tool calls render compactly with a file icon while host tool calls render full-size', async function (assert) {
+  test('bot-executed tool calls render compactly while host tool calls render full-size', async function (assert) {
     let testScenario = await setupTestScenario({
       isStreaming: false,
       minutesAgoForCreated: 2,
@@ -313,9 +313,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     assert.dom('[data-test-tool-call-id="bot-tool-1"]').hasClass('compact');
     assert
-      .dom('[data-test-tool-call-id="bot-tool-1"] [data-test-tool-header-icon]')
-      .exists();
-    assert
       .dom(
         '[data-test-tool-call-id="bot-tool-1"] [data-test-apply-state="applied"]',
       )
@@ -327,10 +324,5 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom('[data-test-tool-call-id="host-tool-1"]')
       .doesNotHaveClass('compact');
-    assert
-      .dom(
-        '[data-test-tool-call-id="host-tool-1"] [data-test-tool-header-icon]',
-      )
-      .doesNotExist();
   });
 });
