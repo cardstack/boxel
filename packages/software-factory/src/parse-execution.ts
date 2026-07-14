@@ -280,6 +280,17 @@ export async function discoverJsonExampleFiles(
       }
     }
   }
+  // Diagnostic: whole-realm JSON discovery hinges on the Spec index being
+  // caught up. Source POST indexing is async, so a caller that just wrote a
+  // Spec can observe it in search before its `linkedExamples` link resolves,
+  // surfacing here as Spec cards found but zero example URLs — which silently
+  // drops those examples from the parse set. Logging the shape of each
+  // discovery makes that gap visible when tracing why an example went
+  // unchecked (a Spec legitimately having no examples looks identical, so
+  // this stays at debug rather than warning).
+  log.debug(
+    `spec discovery: totalSpecCards=${result.totalSpecCards ?? 'n/a'} specs=${result.specs.length} exampleUrls=${urls.length}`,
+  );
   return urls.sort((a, b) => a.localeCompare(b));
 }
 

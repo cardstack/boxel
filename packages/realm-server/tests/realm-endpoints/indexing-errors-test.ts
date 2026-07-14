@@ -486,6 +486,91 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('surfaces tool-schema-error rows even when has_error is FALSE', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let fileURL = `${sourceRealm.url}skills/broken-tool/SKILL.md`;
+      let toolSchemaErrors = [
+        {
+          module: `${sourceRealm.url}missing-tool`,
+          name: 'default',
+          message: 'module not found',
+        },
+      ];
+      let diagnostics = { toolSchemaErrors };
+
+      // A skill row that indexed cleanly (has_error = FALSE) but where a
+      // frontmatter tool failed schema generation. Upsert keeps the test
+      // re-runnable against the cached realm.
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+           (url, file_alias, type, generation, realm_url,
+            has_error, error_doc, diagnostics, is_deleted)
+         VALUES ($1, $2, 'file', 1, $3, FALSE, NULL, $4::jsonb, FALSE)
+         ON CONFLICT (url, realm_url, type) DO UPDATE
+         SET has_error = FALSE,
+             error_doc = NULL,
+             diagnostics = EXCLUDED.diagnostics,
+             is_deleted = FALSE`,
+        {
+          bind: [
+            fileURL,
+            fileURL.replace(/\.md$/, ''),
+            sourceRealm.url,
+            JSON.stringify(diagnostics),
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let entries = (
+        response.body.data as Array<{
+          type: string;
+          id: string;
+          attributes: {
+            url: string;
+            entryType: string;
+            errorDoc?: unknown;
+            toolSchemaErrors?: {
+              module: string;
+              name: string;
+              message: string;
+            }[];
+          };
+        }>
+      ).filter((e) => e.attributes.url === fileURL);
+      assert.strictEqual(
+        entries.length,
+        1,
+        'one tool-schema-error row reported',
+      );
+      let entry = entries[0];
+      assert.strictEqual(entry.type, 'tool-schema-error', 'discriminator');
+      assert.strictEqual(
+        entry.id,
+        `file::${fileURL}`,
+        'id encodes both entry type and URL',
+      );
+      assert.strictEqual(
+        entry.attributes.errorDoc,
+        undefined,
+        'no errorDoc on a healthy row with tool schema failures',
+      );
+      assert.deepEqual(
+        entry.attributes.toolSchemaErrors,
+        toolSchemaErrors,
+        'toolSchemaErrors payload included',
+      );
+    });
+
     test('emits both findings when a healthy row has broken links AND a frontmatter parse error', async function (assert) {
       await sourceRealm.realmIndexUpdater.fullIndex();
 

@@ -56,10 +56,26 @@ export interface FrontmatterErrorEntry {
   };
 }
 
+// Resource for a skill row that indexed cleanly but where one or more
+// frontmatter tools failed schema generation, surfaced via
+// `diagnostics.toolSchemaErrors`. The skill's instructions (and remaining
+// tools) index; the failed tools won't be callable until fixed.
+export interface ToolSchemaErrorEntry {
+  type: 'tool-schema-error';
+  id: string;
+  attributes: {
+    url: string;
+    entryType: string;
+    diagnostics: Record<string, unknown> | null;
+    toolSchemaErrors: ToolSchemaErrorLike[];
+  };
+}
+
 export type IndexingErrorsEntry =
   | IndexingErrorEntry
   | BrokenLinkEntry
-  | FrontmatterErrorEntry;
+  | FrontmatterErrorEntry
+  | ToolSchemaErrorEntry;
 
 export interface IndexingErrorsDocument {
   data: IndexingErrorsEntry[];
@@ -79,6 +95,14 @@ export interface FrontmatterParseErrorLike {
   message: string;
   line?: number;
   column?: number;
+}
+
+// Mirror of ToolSchemaError from @cardstack/runtime-common, kept local for
+// the same reason.
+export interface ToolSchemaErrorLike {
+  module: string;
+  name: string;
+  message: string;
 }
 
 export interface IndexingErrorsResult {
@@ -145,18 +169,25 @@ export async function indexingErrors(
   }
 }
 
+// Collapse internal whitespace and cap at SHORT_MESSAGE_MAX for one-line
+// terminal display. Shared by every finding formatter below.
+function collapseAndTruncate(raw: string): string {
+  let collapsed = raw.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= SHORT_MESSAGE_MAX) {
+    return collapsed;
+  }
+  return `${collapsed.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+}
+
 export function shortErrorMessage(
   errorDoc: SerializedErrorLike | null | undefined,
 ): string {
   if (!errorDoc) {
     return '<no error document>';
   }
-  let raw = errorDoc.title ?? errorDoc.message ?? '<no message>';
-  let collapsed = raw.replace(/\s+/g, ' ').trim();
-  if (collapsed.length <= SHORT_MESSAGE_MAX) {
-    return collapsed;
-  }
-  return `${collapsed.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+  return collapseAndTruncate(
+    errorDoc.title ?? errorDoc.message ?? '<no message>',
+  );
 }
 
 export function registerIndexingErrorsCommand(realm: Command): void {
@@ -217,7 +248,42 @@ export function formatEntry(entry: IndexingErrorsEntry): string {
       entry.attributes.frontmatterParseError,
     )}`;
   }
+  if (entry.type === 'tool-schema-error') {
+    return `${prefix} ${url}  ${shortToolSchemaErrors(
+      entry.attributes.toolSchemaErrors,
+    )}`;
+  }
   return `${prefix} ${url}  ${shortBrokenLinks(entry.attributes.brokenLinks)}`;
+}
+
+const TOOL_SCHEMA_ERRORS_MAX_LIST = 3;
+
+export function shortToolSchemaErrors(
+  toolSchemaErrors: ToolSchemaErrorLike[] | null | undefined,
+): string {
+  if (!toolSchemaErrors || toolSchemaErrors.length === 0) {
+    return '<no tool schema errors>';
+  }
+  let preview = toolSchemaErrors
+    .slice(0, TOOL_SCHEMA_ERRORS_MAX_LIST)
+    .map((toolError) => {
+      let message = collapseAndTruncate(toolError.message ?? '<no message>');
+      // A malformed tool entry can carry empty coordinates; don't render a
+      // bare '#'.
+      let ref =
+        toolError.module || toolError.name
+          ? `${toolError.module}#${toolError.name}`
+          : '<tool with no codeRef>';
+      return `${ref}: ${message}`;
+    })
+    .join('; ');
+  let suffix =
+    toolSchemaErrors.length > TOOL_SCHEMA_ERRORS_MAX_LIST
+      ? `; …+${toolSchemaErrors.length - TOOL_SCHEMA_ERRORS_MAX_LIST} more`
+      : '';
+  return `${toolSchemaErrors.length} tool schema failure${
+    toolSchemaErrors.length === 1 ? '' : 's'
+  }: ${preview}${suffix}`;
 }
 
 export function shortFrontmatterError(
@@ -232,11 +298,7 @@ export function shortFrontmatterError(
           typeof parseError.column === 'number' ? `:${parseError.column}` : ''
         })`
       : '';
-  let raw = (parseError.message ?? '<no message>').replace(/\s+/g, ' ').trim();
-  let message =
-    raw.length <= SHORT_MESSAGE_MAX
-      ? raw
-      : `${raw.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+  let message = collapseAndTruncate(parseError.message ?? '<no message>');
   return `frontmatter parse error${where}: ${message}`;
 }
 

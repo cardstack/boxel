@@ -209,6 +209,23 @@ export async function performFileIndexing({
     _title: name,
   };
 
+  // A frontmatter parse failure — or any diagnostics bag the frontmatter
+  // contributed (e.g. a skill's tool schema failures) — doesn't fail the
+  // file (it still indexes), so each rides on the row's diagnostics —
+  // mirroring brokenLinks — where `/_indexing-errors` surfaces it for the
+  // author. Merge them onto whatever render-side diagnostics the visit
+  // already produced. Computed before the dependency-error branch below so
+  // those findings persist on dependency-error rows too.
+  let { frontmatterParseError, frontmatterDiagnostics } = extractResult;
+  let fileDiagnostics: Diagnostics | undefined =
+    frontmatterParseError || frontmatterDiagnostics
+      ? {
+          ...(diagnostics ?? {}),
+          ...(frontmatterDiagnostics ?? {}),
+          ...(frontmatterParseError ? { frontmatterParseError } : {}),
+        }
+      : diagnostics;
+
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
   let dependencyError =
@@ -226,7 +243,7 @@ export async function performFileIndexing({
       error: normalizedDependencyError,
       searchData,
       types: fileTypes,
-      diagnostics: withBookkeeping(diagnostics),
+      diagnostics: withBookkeeping(fileDiagnostics),
     });
     return 'error';
   }
@@ -243,18 +260,6 @@ export async function performFileIndexing({
   // hasModulePrerender remains on the options as a hint for callers; the visit
   // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
-
-  // A frontmatter parse failure doesn't fail the file (it still indexes
-  // body-only), so it rides on the row's diagnostics — mirroring brokenLinks —
-  // where `/_indexing-errors` surfaces it for the author. Merge it onto
-  // whatever render-side diagnostics the visit already produced.
-  let fileDiagnostics: Diagnostics | undefined =
-    extractResult.frontmatterParseError
-      ? {
-          ...(diagnostics ?? {}),
-          frontmatterParseError: extractResult.frontmatterParseError,
-        }
-      : diagnostics;
 
   await updateEntry(entryURL, {
     type: 'file',
