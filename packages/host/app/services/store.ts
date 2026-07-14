@@ -2131,7 +2131,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
       // Resolve registered prefix IDs (e.g. @cardstack/skills/...) to actual
       // URLs so they can be used for fetching.
-      let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
+      let url = vn.isRegisteredPrefix(id) ? vn.toURLHref(id) : id;
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
@@ -2301,7 +2301,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
-      let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
+      let url = vn.isRegisteredPrefix(id) ? vn.toURLHref(id) : id;
       let fileMetaDoc: SingleFileMetaDocument | CardError;
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);
@@ -2885,7 +2885,7 @@ export function asURL(
   // matches the document branch above, which returns `data.id` verbatim and
   // is canonical (prefix form for mapped realms) as served, so both branches
   // key a mapped realm's instance identically.
-  return isLocalId(id) ? id : vn.unresolveURL(vn.toURL(id).href);
+  return isLocalId(id) ? id : vn.unresolveURL(vn.toURLHref(id));
 }
 
 function isSystemCardDefaultId(
