@@ -59,6 +59,10 @@ interface Signature {
 const STREAMING_TIMEOUT_MS = 3 * 60 * 1000;
 export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 
+// A message from the same author landing within this window of the previous
+// message renders without its avatar/timestamp header.
+const MESSAGE_GROUPING_WINDOW_MS = 2 * 60 * 1000;
+
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
@@ -167,6 +171,27 @@ export default class RoomMessage extends Component<Signature> {
     return this.toolService.run.unlinked().perform(command);
   });
 
+  // A quick succession of messages from one author reads as a single run of
+  // conversation, so only the first message in the run gets an avatar and
+  // timestamp header.
+  private get isGroupedWithPreviousMessage() {
+    let previousMessage = this.args.roomResource.messages[this.args.index - 1];
+    if (!previousMessage) {
+      return false;
+    }
+    return (
+      previousMessage.author.userId === this.message.author.userId &&
+      this.message.created.getTime() - previousMessage.created.getTime() <
+        MESSAGE_GROUPING_WINDOW_MS
+    );
+  }
+
+  private get hideMeta() {
+    return (
+      this.message.isCodePatchCorrectness || this.isGroupedWithPreviousMessage
+    );
+  }
+
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
@@ -208,7 +233,7 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
-        @hideMeta={{this.message.isCodePatchCorrectness}}
+        @hideMeta={{this.hideMeta}}
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         data-test-boxel-message-from={{this.message.author.name}}

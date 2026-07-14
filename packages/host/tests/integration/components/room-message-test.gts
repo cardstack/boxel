@@ -258,4 +258,75 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.dom('[data-test-alert-action-button="Wait longer"]').doesNotExist();
     assert.dom('[data-test-card-error]').doesNotExist();
   });
+
+  function followUpMessage(minutesAgoForCreated: number, author?: object) {
+    let now = Date.now();
+    return {
+      author: author ?? {
+        userId: '@aibot:localhost',
+        displayName: 'AI Assistant',
+        name: 'AI Assistant',
+      },
+      body: 'And one more thing…',
+      created: new Date(now - minutesAgoForCreated * 60 * 1000),
+      updated: new Date(now - minutesAgoForCreated * 60 * 1000),
+      roomId: 'unused',
+      eventId: 'event-2',
+      htmlParts: parseHtmlContent('And one more thing…', '!abcd', '5678'),
+      attachedFiles: [],
+      attachedCardsAsFiles: [],
+      commands: [],
+      isStreamingFinished: true,
+    };
+  }
+
+  test('it hides the timestamp header when the previous message has the same author less than 2 minutes earlier', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 5,
+      minutesAgoForUpdated: 5,
+      messageContent: 'First response',
+      renderIndex: 1,
+      extraMessages: [followUpMessage(4)],
+    });
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-message-idx="1"]').hasClass('meta-hidden');
+    assert.dom('[data-test-message-idx="1"] time').doesNotExist();
+  });
+
+  test('it shows the timestamp header when the previous message is from a different author', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 5,
+      minutesAgoForUpdated: 5,
+      messageContent: 'A user question',
+      renderIndex: 1,
+      extraMessages: [followUpMessage(4)],
+    });
+    (testScenario as any).message.author = {
+      userId: '@testuser:localhost',
+      displayName: 'Test User',
+      name: 'Test User',
+    };
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-message-idx="1"]').doesNotHaveClass('meta-hidden');
+    assert.dom('[data-test-message-idx="1"] time').exists();
+  });
+
+  test('it shows the timestamp header when the previous message from the same author is more than 2 minutes older', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 5,
+      minutesAgoForUpdated: 5,
+      messageContent: 'First response',
+      renderIndex: 1,
+      extraMessages: [followUpMessage(2)],
+    });
+    await renderRoomMessageComponent(testScenario);
+
+    assert.dom('[data-test-message-idx="1"]').doesNotHaveClass('meta-hidden');
+    assert.dom('[data-test-message-idx="1"] time').exists();
+  });
 });
