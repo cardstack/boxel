@@ -75,6 +75,7 @@ import type { ToolChoice } from '../helpers/ai.ts';
 import { logger } from '../log.ts';
 
 import { parseFrontmatter } from '../frontmatter-parse.ts';
+import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -496,7 +497,7 @@ export interface EnabledSkill {
 
 // A skill enabled as a markdown file (SKILL.md), rather than a Skill card.
 export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
-  return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
+  return isMarkdownFile(fileDef.sourceUrl ?? fileDef.name ?? '');
 }
 
 // A command a markdown skill contributes via its `boxel.tools` frontmatter
