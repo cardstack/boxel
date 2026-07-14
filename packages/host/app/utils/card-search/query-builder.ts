@@ -94,14 +94,32 @@ function buildTypeFilter(
   return { any: codeRefs.map((ref) => ({ type: ref })) };
 }
 
-// OR-combine full-text markdown search with a `_title` substring match so
-// short prefixes (e.g. "ma" → "mango", "mark") still find results by title
-// while longer/natural-language queries tap markdown content via `matches`.
-// `_title` is the synthetic key stamped on both card and file rows (a card's
-// title, a file's name), so the term matches files by name too.
+// A title substring match against `_title` plus, for backward compatibility,
+// the legacy `cardTitle` key.
+//
+// BACKWARD-COMPAT FALLBACK (remove once every realm has been reindexed):
+// `_title` is a synthetic key that only exists on rows indexed after it was
+// introduced. On not-yet-reindexed cards it is absent, so a `_title`-only match
+// would silently miss them. A card's title has long been stamped under the
+// `cardTitle` key, so OR that branch in — it resolves against the default
+// `CardDef` type context and is NULL-safe on file rows (which have no
+// `cardTitle`), so it never throws and never leaks files. On reindexed rows
+// `_title` equals `cardTitle`, so the extra branch is redundant, not wrong.
+function buildTitleTermFilters(searchTerm: string): Filter[] {
+  return [
+    { contains: { _title: searchTerm } },
+    { contains: { cardTitle: searchTerm } },
+  ];
+}
+
+// OR-combine full-text markdown search with a title substring match so short
+// prefixes (e.g. "ma" → "mango", "mark") still find results by title while
+// longer/natural-language queries tap markdown content via `matches`. `_title`
+// is the synthetic key stamped on both card and file rows (a card's title, a
+// file's name), so the term matches files by name too.
 function buildSearchTermFilter(searchTerm: string): Filter {
   return {
-    any: [{ matches: searchTerm }, { contains: { _title: searchTerm } }],
+    any: [{ matches: searchTerm }, ...buildTitleTermFilters(searchTerm)],
   };
 }
 
@@ -242,8 +260,9 @@ export function buildRecentsQuery(
 ): Query {
   const typeFilter = buildTypeFilter(selectedTypeIds);
   const term = searchTerm?.trim() || undefined;
+  // `_title` plus the legacy `cardTitle` fallback — see `buildTitleTermFilters`.
   const termFilter: Filter | undefined = term
-    ? { contains: { _title: term } }
+    ? { any: buildTitleTermFilters(term) }
     : undefined;
   let filters: Filter[];
   if (baseFilter) {

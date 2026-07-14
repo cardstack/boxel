@@ -29,6 +29,12 @@ const SORT_AZ: SortOption = {
 // a wire-`scope` concern (see searchScopeForOptions), not a filter.
 const DEDUP_FILTER: Filter = excludeCardInstanceFileRows();
 
+// A title term matches `_title` plus the legacy `cardTitle` backward-compat
+// fallback (present until every realm is reindexed — see buildTitleTermFilters).
+function titleBranches(term: string): Filter[] {
+  return [{ contains: { _title: term } }, { contains: { cardTitle: term } }];
+}
+
 module('Unit | card-search/query-builder', function () {
   module('buildSearchQuery', function () {
     test('empty search key with no baseFilter combines not-spec with the card-json dedup', function (assert) {
@@ -46,10 +52,7 @@ module('Unit | card-search/query-builder', function () {
           every: [
             { not: { type: specRef } },
             {
-              any: [
-                { matches: 'xylophone' },
-                { contains: { _title: 'xylophone' } },
-              ],
+              any: [{ matches: 'xylophone' }, ...titleBranches('xylophone')],
             },
             DEDUP_FILTER,
           ],
@@ -93,7 +96,7 @@ module('Unit | card-search/query-builder', function () {
           every: [
             baseFilter,
             {
-              any: [{ matches: 'puppy' }, { contains: { _title: 'puppy' } }],
+              any: [{ matches: 'puppy' }, ...titleBranches('puppy')],
             },
           ],
         },
@@ -112,7 +115,7 @@ module('Unit | card-search/query-builder', function () {
           every: [
             baseFilter,
             {
-              any: [{ matches: 'mango' }, { contains: { _title: 'mango' } }],
+              any: [{ matches: 'mango' }, ...titleBranches('mango')],
             },
             DEDUP_FILTER,
           ],
@@ -163,7 +166,7 @@ module('Unit | card-search/query-builder', function () {
             { not: { type: specRef } },
             { type: authorRef },
             {
-              any: [{ matches: 'droid' }, { contains: { _title: 'droid' } }],
+              any: [{ matches: 'droid' }, ...titleBranches('droid')],
             },
           ],
         },
@@ -210,13 +213,13 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
-    test('a term filters recents by _title substring only (no full-text matches)', function (assert) {
+    test('a term filters recents by title substring only (no full-text matches)', function (assert) {
       let query = buildRecentsQuery('mango', SORT_AZ);
       assert.deepEqual(query, {
         filter: {
           every: [
             { not: { type: specRef } },
-            { contains: { _title: 'mango' } },
+            { any: titleBranches('mango') },
             DEDUP_FILTER,
           ],
         },
