@@ -511,9 +511,11 @@ export default class MatrixService extends Service {
   // that sees this can re-run `start()` to recover; `start()` re-derives the
   // client from the persisted auth, so it recovers even when `resetState()` left
   // a bare (logged-out) client behind. A genuine logout clears the persisted
-  // auth, so `getAuth()` is empty there and this stays false.
+  // auth, so this stays false there. The index route reads this on every model
+  // refresh, so it only tests for the auth key's presence — the value is never
+  // parsed here.
   get needsPostLoginRecovery() {
-    return !this.postLoginCompleted && Boolean(this.getAuth());
+    return !this.postLoginCompleted && Boolean(this.storage?.getItem('auth'));
   }
 
   // Test-only diagnostic for the intermittent "operator-mode renders the login
