@@ -508,7 +508,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.loadDefinitionCacheEntry({
       ...args,
       moduleURL: canonicalURL(args.moduleURL, undefined, this.#virtualNetwork),
-      // Pre-warm is speculative and best-effort: the IndexRunner sweeps
+      // Pre-warm is speculative and best-effort: the module pre-warm sweeps
       // every realm `.gts`/`.gjs` to prime sibling card modules, so it
       // also touches modules that aren't cards and fail to prerender
       // (e.g. a non-card `realm.gts`). Persisting those errors would

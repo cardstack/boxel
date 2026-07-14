@@ -179,7 +179,9 @@ export async function runPrerenderHtmlPass({
   // O(realm) module list through every coalesce merge. Pre-warmed modules and
   // the files rendered below share one `totalFiles`, so the dashboard bar spans
   // both phases. Best-effort: a failure is warned and the format renders
-  // populate the cache on demand.
+  // populate the cache on demand. A retried job re-sweeps the whole realm (the
+  // visit loop's resume-skip has no pre-warm analog), which is cheap — the
+  // second attempt's populate calls hit the cache as O(1) reads, no re-renders.
   let preWarmMs: number | undefined;
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();

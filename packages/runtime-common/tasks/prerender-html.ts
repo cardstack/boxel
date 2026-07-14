@@ -247,7 +247,10 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       changes,
       generation,
       loaderEpoch,
-      preWarm,
+      // A job enqueued by an older worker (rolling deploy) or by a code path
+      // predating the flag carries no `preWarm`; default it to false so the
+      // boolean contract holds and a legacy job simply skips the sweep.
+      preWarm = false,
     } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} at generation ${generation} (${changes.length} changes, spawned by job ${args.spawningJobId}, preWarm ${preWarm})`,

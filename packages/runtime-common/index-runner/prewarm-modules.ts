@@ -118,8 +118,12 @@ export interface PreWarmModulesTableArgs {
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   reader: Reader;
-  // Reads `boxel_index` / `boxel_index_working` deps for the invalidation
-  // set — the strongest per-URL warm signal.
+  // Reads `boxel_index` / `boxel_index_working` deps for the invalidation set
+  // — a supplementary per-URL warm signal on top of the realm-wide sweep.
+  // When a from-scratch index pass is still in flight for this realm, these
+  // are the prior generation's deps (or a partial working set); that only
+  // affects the supplementary layer, and any module it misses falls back to
+  // the safe on-demand read-through.
   getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
   // Resolves the cache scope + user id the populate is keyed on. Best-effort
   // (fetches realm `_info`): a failure degrades to a skipped pre-warm, so it

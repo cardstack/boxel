@@ -38,6 +38,7 @@ import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
+  maxPrerenderHtmlJobId,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
@@ -2422,6 +2423,13 @@ module(basename(import.meta.filename), function () {
         // does not come back — only the realm-wide sweep (from-scratch) would
         // re-cache a module that no instance consumes.
         await testDbAdapter.execute('DELETE FROM modules');
+        // Baseline the HTML channel before the write so the settle below waits
+        // for the job this incremental spawns (fire-and-forget enqueue),
+        // rather than racing ahead past the already-resolved template jobs.
+        let prerenderBaseline = await maxPrerenderHtmlJobId(
+          testDbAdapter,
+          realm.url,
+        );
         await realm.write(
           'vangogh.json',
           JSON.stringify({
@@ -2436,7 +2444,9 @@ module(basename(import.meta.filename), function () {
         // Drain the incremental-spawned prerender job so its renders have had
         // every chance to touch the cache: it re-warms only what vangogh
         // consumes (Person), never the orphan.
-        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+          afterJobId: prerenderBaseline,
+        });
         assert.false(
           await isCached(orphanAlias),
           'incremental skips the full-realm sweep, leaving the orphan module uncached',
