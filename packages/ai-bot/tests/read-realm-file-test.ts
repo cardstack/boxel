@@ -412,6 +412,31 @@ module('executeReadRealmFile markdown file-meta', () => {
     );
   });
 
+  test('a pre-rename row (frontmatter.commands) reports its entries as tools', async () => {
+    let sessions = stubSessions({ token: 'unused' });
+    let unstamped = { codeRef: { module: `${REALM}tools/plan`, name: 'x' } };
+    let { fetch } = recordingFetch(() =>
+      fileMetaResponse({
+        content: BODY,
+        frontmatter: { commands: [unstamped] },
+      }),
+    );
+
+    let result = await executeReadRealmFile(FILE_URL, {
+      onBehalfOf: ON_BEHALF_OF,
+      delegatedUserRealmSessions: sessions,
+      fetch,
+    });
+
+    assert.true(result.ok);
+    assert.deepEqual(
+      (result as { ok: true; tools?: unknown[] }).tools,
+      [unstamped],
+      'legacy-key entries pass through so downstream can report the skill ' +
+        'declares tools it cannot offer',
+    );
+  });
+
   test('an unindexed .md (file-meta 404) falls back to raw source', async () => {
     let sessions = stubSessions({ token: 'unused' });
     let raw = '---\nname: trip\n---\n# Raw body';

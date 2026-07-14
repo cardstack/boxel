@@ -366,7 +366,8 @@ export interface ToolResultWithOutputContent {
   commandRequestId: string;
   // Present if status is 'failed' or 'invalid', or on an 'applied' result
   // where part of the work failed (e.g. a multi-file read that fetched only
-  // some of its files).
+  // some of its files, or a skill read whose declared tools lack usable
+  // indexed definitions and so cannot be offered).
   failureReason?: string;
   data: {
     // we retrieve the content on the server side by downloading the file

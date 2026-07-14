@@ -102,7 +102,10 @@ module('fulfillReadRealmFileCalls', () => {
     },
   };
 
-  function fileMetaFetch(tools: unknown[]) {
+  function fileMetaFetch(
+    tools: unknown[],
+    frontmatterKey: 'tools' | 'commands' = 'tools',
+  ) {
     return (async () =>
       new Response(
         JSON.stringify({
@@ -112,7 +115,7 @@ module('fulfillReadRealmFileCalls', () => {
             attributes: {
               sourceUrl: FILE_URL,
               content: '# Trip Planner',
-              frontmatter: { tools },
+              frontmatter: { [frontmatterKey]: tools },
             },
           },
         }),
@@ -143,6 +146,69 @@ module('fulfillReadRealmFileCalls', () => {
       [{ sourceSkillUrl: FILE_URL, ...STAMPED_TOOL }],
       'stamped definitions ride the result tagged with the skill URL; the ' +
         'unstamped entry is dropped',
+    );
+    assert.true(
+      sent[0].content.failureReason.includes(FILE_URL) &&
+        sent[0].content.failureReason.includes('1 of 2') &&
+        sent[0].content.failureReason.includes('reindex'),
+      'the dropped entry is named in the failure note so the model can ' +
+        'surface the stale index instead of hunting for the tool',
+    );
+  });
+
+  test('a skill whose declared tools all lack definitions carries a degradation note', async () => {
+    let { client, sent } = fakeClient();
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([UNSTAMPED_TOOL]),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(
+      outcomes,
+      [{ commandRequestId: 'c1', ok: true }],
+      'a degraded skill read is still a successful file read',
+    );
+    let { content } = sent[0];
+    assert.strictEqual(
+      content['m.relates_to'].key,
+      'applied',
+      'the file content still comes back',
+    );
+    assert.true(
+      content.failureReason.includes(FILE_URL) &&
+        content.failureReason.includes('1 of 1') &&
+        content.failureReason.includes('reindex'),
+      'the note names the skill, the count, and the remedy',
+    );
+    let data = dataOf(sent[0]);
+    assert.strictEqual(data.attachedFiles.length, 1);
+    assert.false(
+      'discoveredTools' in data,
+      'no usable definitions means no discoveredTools key',
+    );
+  });
+
+  test('a pre-rename index row (frontmatter.commands) degrades with a note instead of silently', async () => {
+    let { client, sent } = fakeClient();
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([UNSTAMPED_TOOL, UNSTAMPED_TOOL], 'commands'),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    let { content } = sent[0];
+    assert.strictEqual(content['m.relates_to'].key, 'applied');
+    assert.true(
+      content.failureReason.includes('2 of 2') &&
+        content.failureReason.includes('reindex'),
+      'entries under the legacy key count as declared tools',
     );
   });
 
