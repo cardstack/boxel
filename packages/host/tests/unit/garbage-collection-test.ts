@@ -5,7 +5,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   localId,
   type Loader,
   type CardErrorJSONAPI as CardError,
@@ -40,7 +39,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
+    api = await loader.import('@cardstack/base/card-api');
     delete (globalThis as any).__boxelRenderContext;
   });
 

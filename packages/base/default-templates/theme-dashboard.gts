@@ -18,7 +18,12 @@ import {
   FieldContainer,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import {
+  bool,
+  cn,
+  themeScope,
+  themeScopedCss,
+} from '@cardstack/boxel-ui/helpers';
 
 import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
 
@@ -1072,11 +1077,20 @@ export class ThemeDashboard extends GlimmerComponent<{
     version?: string;
     isDarkMode?: boolean;
     themeCss?: string | null;
+    themeId?: string | null;
   };
   Blocks: { default: []; header: []; navBar: [] };
   Element: HTMLElement;
 }> {
-  private themeScopeId = guidFor(this);
+  // Content-derived rather than guidFor: this markup can be persisted as
+  // prerendered HTML, where the scoped rules are page-global. Equal scopes
+  // are only safe when their declarations are equal too, which the theme id
+  // plus content hash guarantees; a per-process guid can repeat across
+  // prerender jobs with different themes. The guid fallback only covers
+  // unsaved theme cards previewing their own CSS, which are never persisted.
+  private get themeScopeId() {
+    return themeScope(this.args.themeId, this.args.themeCss) ?? guidFor(this);
+  }
 
   // The data-theme wrapper drives the preview's light/dark toggle through the
   // ambient `--boxel-color-scheme` signal, flipping the semantic tokens to the
@@ -1097,7 +1111,10 @@ export class ThemeDashboard extends GlimmerComponent<{
       >
         {{#if @themeCss}}
           {{! template-lint-disable require-scoped-style }}
-          <style>
+          {{! data-boxel-theme-style marks this as a dedupable theme
+              stylesheet; the attribute survives serialization, so prerendered
+              fragments stay recognizable when re-inserted }}
+          <style data-boxel-theme-style>
             {{themeScopedCss this.themeScopeId @themeCss}}
           </style>
           {{! template-lint-enable require-scoped-style }}

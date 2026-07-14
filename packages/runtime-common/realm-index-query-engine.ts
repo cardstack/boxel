@@ -84,7 +84,8 @@ import {
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
-import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
+import type { FieldDefinition } from './definitions.ts';
+import { urlNamesFile } from './file-def-code-ref.ts';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
@@ -328,8 +329,8 @@ export class RealmIndexQueryEngine {
       let hasError = Boolean(row.has_error);
       // The entry carries its index-data generation (`boxel_index.generation`);
       // each `html` rendering carries the generation it was produced at
-      // (`prerendered_html.generation`, dual-read with a boxel_index fallback).
-      // The two channels advance independently, so they can differ per row.
+      // (`prerendered_html.generation`). The two channels advance
+      // independently, so they can differ per row.
       let generation = (row.generation as number | null | undefined) ?? 0;
       let htmlGeneration =
         (row.html_generation as number | null | undefined) ?? generation;
@@ -426,9 +427,17 @@ export class RealmIndexQueryEngine {
         emitItem = false;
       }
       if (emitItem && pristine) {
+        // `pristine_doc` is stored with its id unresolved to the realm's
+        // registered alias prefix (e.g. `@cardstack/catalog/...`) for
+        // storage portability. The search-entry's `item` relationship
+        // always points at `cardUrl` (the row's resolved absolute URL,
+        // shared with the entry's own id) — the included resource's id
+        // must match that exactly or a JSON:API consumer's relationship
+        // lookup silently finds nothing.
         let item: CardResource<Saved> = {
           ...pristine,
-          links: { self: pristine.id },
+          id: cardUrl as RealmResourceIdentifier,
+          links: { self: cardUrl },
         };
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
@@ -695,71 +704,6 @@ export class RealmIndexQueryEngine {
       }
     }
     return fileMatch && !instanceMatch;
-  }
-
-  // When a relationship in the pristine_doc is missing data.type (stale
-  // index data from before the fix that added data to NotLoadedValue
-  // serialization), we need to consult the field definition to determine
-  // whether the relationship targets a FileDef or a CardDef.
-  private async fieldExpectsFileMeta(
-    resource: LooseCardResource | FileMetaResource,
-    fieldKey: string,
-    opts?: Options,
-  ): Promise<boolean> {
-    if (!resource.meta?.adoptsFrom) {
-      return false;
-    }
-    let relativeTo = resource.id
-      ? this.#realm.virtualNetwork.toURL(resource.id)
-      : this.realmURL;
-    let codeRef = codeRefWithAbsoluteIdentifier(
-      resource.meta.adoptsFrom,
-      relativeTo,
-      undefined,
-      this.#realm.virtualNetwork,
-    );
-    if (!isResolvedCodeRef(codeRef)) {
-      return false;
-    }
-    try {
-      let definition: import('./definitions.ts').Definition | undefined;
-      if (opts?.cacheOnlyDefinitions) {
-        definition =
-          await this.#definitionLookup.lookupCachedDefinition(codeRef);
-        if (!definition) {
-          return false;
-        }
-      } else {
-        definition = await this.#definitionLookup.lookupDefinition(codeRef, {
-          ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-        });
-      }
-      if (!definition) {
-        return false;
-      }
-      // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
-      let fieldName = fieldKey.includes('.')
-        ? fieldKey.slice(0, fieldKey.indexOf('.'))
-        : fieldKey;
-      let fieldDefinition = getImmediateFieldDef(definition, fieldName);
-      if (!fieldDefinition) {
-        return false;
-      }
-      let fieldCardRef = fieldDefinition.fieldOrCard;
-      let isFileType = await this.#indexQueryEngine.hasFileType(
-        this.realmURL,
-        fieldCardRef,
-        opts,
-      );
-      let isInstanceType = await this.#indexQueryEngine.hasInstanceType(
-        this.realmURL,
-        fieldCardRef,
-        opts,
-      );
-      return isFileType && !isInstanceType;
-    } catch {
-      return false;
-    }
   }
 
   async fetchCardTypeSummary() {
@@ -1377,9 +1321,17 @@ export class RealmIndexQueryEngine {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
+        // A file link (the URL ends in a known FileDef extension; card ids
+        // never do) is requested with the file-meta mime so the serving
+        // realm returns the index-enriched document — consumers rely on
+        // index-derived attributes like a markdown skill's `kind`, which
+        // the card-mime fallback for file paths omits.
+        let accept = urlNamesFile(new URL(url))
+          ? SupportedMimeType.FileMeta
+          : SupportedMimeType.CardJson;
         try {
           response = await this.#fetch(url, {
-            headers: { Accept: SupportedMimeType.CardJson },
+            headers: { Accept: accept },
           });
         } catch (err: unknown) {
           let message =
@@ -1461,8 +1413,21 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
-    let omitSet = new Set(omit);
+    let vnForIdentity = this.#realm.virtualNetwork;
+    let realmPath = new RealmPaths(realmURL, vnForIdentity);
+    // `omit`/root ids may arrive in either resolved-URL or registered-alias
+    // form (the entry's item resource id is always resolved, while a
+    // fetched linked resource's own pristine_doc-derived id — and the
+    // relationship pointing at it, `relationshipIdStr` below — stays in
+    // alias form for storage portability). `equivalentURLForms` only
+    // enumerates spellings of a *resolved* URL, so an alias-form input needs
+    // `toURLHref` first to reach the resolved form it can expand from;
+    // `toURLHref` is a no-op on an input that's already a resolved URL.
+    // Index every spelling under one key so a root recognized via one form
+    // still matches when the same card is reached again via another.
+    let allIdForms = (id: string) =>
+      vnForIdentity.equivalentURLForms(vnForIdentity.toURLHref(id));
+    let omitSet = new Set(omit.flatMap((id) => allIdForms(id)));
     let visited = new Set<string>();
 
     type LayerItem = {
@@ -1482,7 +1447,9 @@ export class RealmIndexQueryEngine {
         if (visited.has(resource.id)) {
           continue;
         }
-        visited.add(resource.id);
+        for (let form of allIdForms(resource.id)) {
+          visited.add(form);
+        }
       }
       layer.push({
         resource,
@@ -1654,35 +1621,25 @@ export class RealmIndexQueryEngine {
           }
           processed.add(key);
 
-          let relationshipType = relationship.data?.type as
-            | typeof CardResourceType
-            | typeof FileMetaResourceType
-            | undefined;
-          let expectsFileMeta = relationshipType === FileMetaResourceType;
-          let expectsCard = relationshipType === CardResourceType;
-          // Stale index payloads can incorrectly record file relationships
-          // as type "card" (or omit type entirely) when linked files were
-          // indexed after instances. Trust the field declaration in that
-          // case.
-          if (
-            !expectsFileMeta &&
-            (relationshipType === CardResourceType || !relationshipType)
-          ) {
-            expectsFileMeta = await this.fieldExpectsFileMeta(
-              resource,
-              key,
-              activeOpts,
-            );
-            if (expectsFileMeta) {
-              expectsCard = false;
-            }
-          }
-
           let vn = this.#realm.virtualNetwork;
           let linkURL = vn.resolveURL(
             relationship.links.self,
             resource.id ? vn.toURL(resource.id) : realmURL,
           );
+
+          let relationshipType = relationship.data?.type as
+            | typeof CardResourceType
+            | typeof FileMetaResourceType
+            | undefined;
+          // Card ids never end in a known FileDef extension, so the URL
+          // itself says whether the link targets a file. That also corrects
+          // stale index payloads which record file relationships as type
+          // "card" (or omit the type) when linked files were indexed after
+          // instances.
+          let expectsFileMeta =
+            relationshipType === FileMetaResourceType || urlNamesFile(linkURL);
+          let expectsCard =
+            relationshipType === CardResourceType && !expectsFileMeta;
           let resolvedSelf: string;
           try {
             resolvedSelf = vn.resolveURL(

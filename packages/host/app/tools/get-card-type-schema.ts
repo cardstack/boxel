@@ -1,8 +1,4 @@
-import {
-  baseRealm,
-  getClass,
-  type ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { getClass, type ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   basicMappings,
   generateJsonSchemaForCardType,
@@ -44,7 +40,7 @@ export default class GetCardTypeSchemaTool extends HostBaseTool<
     }
 
     let cardApi = await loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     let mappings = await basicMappings(loader);
     let schema = generateJsonSchemaForCardType(

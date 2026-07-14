@@ -6,7 +6,6 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -51,7 +50,7 @@ module('Integration | Command | preview-format', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

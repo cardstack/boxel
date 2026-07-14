@@ -76,6 +76,98 @@ function dataOf(sentEvent: { content: any }) {
 }
 
 module('fulfillReadRealmFileCalls', () => {
+  const STAMPED_TOOL = {
+    codeRef: {
+      module: 'https://localhost:4201/user/jane/tools/plan-trip',
+      name: 'default',
+    },
+    functionName: 'plan-trip_ab12',
+    requiresApproval: false,
+    definition: {
+      type: 'function',
+      function: {
+        name: 'plan-trip_ab12',
+        description: 'Plans a trip',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  };
+
+  // A skill entry the index has not (yet) enriched: no definition, so the
+  // fulfillment layer must not embed it.
+  const UNSTAMPED_TOOL = {
+    codeRef: {
+      module: 'https://localhost:4201/user/jane/tools/book-hotel',
+      name: 'default',
+    },
+  };
+
+  function fileMetaFetch(tools: unknown[]) {
+    return (async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            id: FILE_URL,
+            type: 'file-meta',
+            attributes: {
+              sourceUrl: FILE_URL,
+              content: '# Trip Planner',
+              frontmatter: { tools },
+            },
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof globalThis.fetch;
+  }
+
+  test('a skill read embeds its usable tool definitions beside the attachments', async () => {
+    let { client, sent } = fakeClient();
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([STAMPED_TOOL, UNSTAMPED_TOOL]),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    let data = dataOf(sent[0]);
+    assert.strictEqual(
+      data.attachedFiles.length,
+      1,
+      'the attachment path is unchanged',
+    );
+    assert.deepEqual(
+      data.discoveredTools,
+      [{ sourceSkillUrl: FILE_URL, ...STAMPED_TOOL }],
+      'stamped definitions ride the result tagged with the skill URL; the ' +
+        'unstamped entry is dropped',
+    );
+  });
+
+  test('no discoveredTools key when the read carries no definitions', async () => {
+    let { client, sent } = fakeClient();
+    let fetch = (async () =>
+      new Response('# Plain notes', {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/notes',
+      }),
+    );
+
+    let data = dataOf(sent[0]);
+    assert.false(
+      'discoveredTools' in data,
+      'the result data stays exactly as before for tool-less reads',
+    );
+  });
+
   test('a successful read attaches the file to an applied command-result event', async () => {
     let { client, sent } = fakeClient();
     let fetch = (async () =>

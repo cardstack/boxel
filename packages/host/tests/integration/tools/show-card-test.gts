@@ -9,7 +9,6 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test, skip } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -134,7 +133,7 @@ module('Integration | Command | show-card', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -580,7 +579,7 @@ module('Integration | Command | show-card', function (hooks) {
       let loader = getService('loader-service').loader;
       let mappings = await basicMappings(loader);
       let cardAPI = await loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
+        '@cardstack/base/card-api',
       );
       const inputSchema = await command.getInputJsonSchema(cardAPI, mappings);
       assert.ok(inputSchema, 'Input JSON schema is defined');

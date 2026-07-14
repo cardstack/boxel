@@ -10,7 +10,6 @@ import {
   rri,
   type CardResource,
   type IndexedInstance,
-  type InstanceOrError,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
@@ -30,27 +29,6 @@ import {
 
 const testRealmURLObject = new URL(testRealmURL);
 
-// Copy every boxel_index row for the realm into prerendered_html, seeding
-// rendered_at from indexed_at, so a mirrored row reads identically whether the
-// dual-read serves it from prerendered_html or from the boxel_index fallback.
-async function mirrorPrerenderedHtml(adapter: SQLiteAdapter, realmURL: string) {
-  await adapter.execute(
-    `INSERT INTO prerendered_html (
-       url, file_alias, realm_url, type,
-       fitted_html, embedded_html, atom_html, head_html, isolated_html,
-       markdown, deps, last_known_good_deps,
-       generation, is_deleted, error_doc, rendered_at
-     )
-     SELECT
-       url, file_alias, realm_url, type,
-       fitted_html, embedded_html, atom_html, head_html, isolated_html,
-       markdown, deps, last_known_good_deps,
-       generation, is_deleted, error_doc, indexed_at
-     FROM boxel_index WHERE realm_url = $1`,
-    { bind: [realmURL] },
-  );
-}
-
 const makeCardResource = (
   id: string,
   name: string,
@@ -62,7 +40,11 @@ const makeCardResource = (
   meta: { adoptsFrom },
 });
 
-module('Unit | prerendered-html dual-read', function (hooks) {
+// prerendered_html is the sole home of rendered output: every HTML/markdown
+// read path sources it from the prerendered_html row joined to the
+// boxel_index row, and a row with no prerendered_html row reads as
+// unrendered — null HTML, no full-text membership.
+module('Unit | prerendered-html read path', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexQueryEngine: IndexQueryEngine;
   let virtualNetwork: VirtualNetwork;
@@ -108,7 +90,8 @@ module('Unit | prerendered-html dual-read', function (hooks) {
     ].map((t) => internalKeyFor(t, testRealmURLObject, virtualNetwork));
 
     // Two instances + one file, each carrying every HTML format, markdown, and
-    // the scoped-CSS deps. A fourth instance carries no HTML at all — the row
+    // the scoped-CSS deps (setupIndex lands the HTML half on
+    // prerendered_html). A third instance carries no HTML at all — the row
     // whose renderings never existed.
     let fittedFor = (label: string) =>
       Object.fromEntries(
@@ -208,197 +191,161 @@ module('Unit | prerendered-html dual-read', function (hooks) {
           markdown: 'Readme markdown body',
         },
       ],
-      // This suite exercises the dual-read itself — the boxel_index fallback,
-      // the prerendered_html mirror, and the mix — so it seeds prerendered_html
-      // by hand (the local mirrorPrerenderedHtml helper) rather than via
-      // setupIndex.
-      { prerenderedHtml: false },
     );
   });
 
-  // A normalized, order-stable snapshot of every HTML/markdown read path, so
-  // the same battery can be compared across dual-read scenarios.
-  async function snapshot() {
-    let instanceUrls = [1, 2, 3].map((n) => new URL(`${testRealmURL}${n}`));
-    let single: (InstanceOrError | undefined)[] = [];
-    for (let url of instanceUrls) {
-      single.push(await indexQueryEngine.getInstance(url));
-    }
-    let batched = await indexQueryEngine.getInstances(instanceUrls);
-    let batchedEntries = [...batched.entries()].sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
+  test('every read path serves HTML and markdown from prerendered_html', async function (assert) {
+    let entry = (await indexQueryEngine.getInstance(
+      new URL(`${testRealmURL}1`),
+    )) as IndexedInstance;
+    assert.strictEqual(
+      entry.isolatedHtml,
+      `<div class="isolated">Van Gogh</div>`,
+      'getInstance serves isolated_html from prerendered_html',
+    );
+    assert.strictEqual(
+      entry.atomHtml,
+      `<span class="atom">Van Gogh</span>`,
+      'getInstance serves atom_html from prerendered_html',
+    );
+    assert.strictEqual(
+      entry.markdown,
+      'Van Gogh painted sunflowers',
+      'getInstance serves markdown from prerendered_html',
+    );
+
+    let batched = await indexQueryEngine.getInstances([
+      new URL(`${testRealmURL}1`),
+      new URL(`${testRealmURL}2`),
+    ]);
+    let mango = batched.get(`${testRealmURL}2`) as IndexedInstance;
+    assert.strictEqual(
+      mango.isolatedHtml,
+      `<div class="isolated">Mango</div>`,
+      'getInstances serves isolated_html from prerendered_html',
     );
 
     let file = await indexQueryEngine.getFile(
       new URL(`${testRealmURL}readme.md`),
     );
+    assert.strictEqual(
+      file?.isolatedHtml,
+      `<div class="isolated">Readme</div>`,
+      'getFile serves isolated_html from prerendered_html',
+    );
+    assert.strictEqual(
+      file?.iconHtml,
+      `<svg>file-icon</svg>`,
+      'getFile serves icon_html from boxel_index',
+    );
 
-    let renderSet = await indexQueryEngine.search(
+    let { results } = await indexQueryEngine.search(
       testRealmURLObject,
       {},
       { includeErrors: true },
       { kind: 'renderSet' },
     );
-    let files = await indexQueryEngine.searchFiles(testRealmURLObject, {}, {});
+    let row1 = results.find((r) => r.url === `${testRealmURL}1.json`);
+    assert.strictEqual(
+      row1?.atom_html,
+      `<span class="atom">Van Gogh</span>`,
+      'the renderSet projection serves atom_html from prerendered_html',
+    );
+    assert.deepEqual(
+      row1?.deps,
+      [
+        `${testRealmURL}person`,
+        `${testRealmURL}Person.gts.abc.glimmer-scoped.css`,
+      ],
+      'the renderSet projection serves deps from prerendered_html',
+    );
+    assert.strictEqual(
+      row1?.html_generation,
+      1,
+      'the renderSet projection carries the rendering generation',
+    );
+
+    let { files } = await indexQueryEngine.searchFiles(
+      testRealmURLObject,
+      {},
+      {},
+    );
+    let readme = files.find(
+      (f) => f.canonicalURL === `${testRealmURL}readme.md`,
+    );
+    assert.strictEqual(
+      readme?.markdown,
+      'Readme markdown body',
+      'searchFiles serves markdown from prerendered_html',
+    );
+
     let matched = await indexQueryEngine.searchCards(
       testRealmURLObject,
       { filter: { matches: 'sunflowers' } },
       {},
     );
-
-    return {
-      single,
-      batchedEntries,
-      file,
-      renderSet,
-      files: files.files,
-      matchedUrls: matched.cards.map((c) => c.id as string).sort(),
-    };
-  }
-
-  test('golden parity: prerendered_html mirror and boxel_index fallback return identical results', async function (assert) {
-    // Fallback path: with no prerendered_html rows, every read falls back to
-    // the boxel_index columns.
-    let fallback = await snapshot();
-
-    // Sanity: HTML actually flowed through the fallback (guards against a
-    // snapshot that is trivially empty and would pass any comparison).
-    let vg = fallback.single[0] as IndexedInstance;
-    assert.strictEqual(
-      vg.isolatedHtml,
-      `<div class="isolated">Van Gogh</div>`,
-      'fallback path serves boxel_index HTML',
-    );
-    assert.strictEqual(
-      vg.markdown,
-      'Van Gogh painted sunflowers',
-      'fallback path serves boxel_index markdown',
-    );
     assert.deepEqual(
-      fallback.matchedUrls,
+      matched.cards.map((c) => c.id as string),
       [`${testRealmURL}1`],
-      'fallback FTS matches over boxel_index.markdown',
-    );
-
-    // Prerendered path: mirror every row into prerendered_html; reads now come
-    // from prerendered_html and must be byte-for-byte identical.
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
-    let prerendered = await snapshot();
-    assert.deepEqual(
-      prerendered,
-      fallback,
-      'prerendered_html mirror returns identical results to the boxel_index fallback',
-    );
-
-    // A row deliberately missing from prerendered_html resolves via the
-    // boxel_index fallback, while its neighbors are served from prerendered_html.
-    await adapter.execute(`DELETE FROM prerendered_html WHERE url = $1`, {
-      bind: [`${testRealmURL}2.json`],
-    });
-    let mixed = await snapshot();
-    assert.deepEqual(
-      mixed,
-      fallback,
-      'a row missing from prerendered_html is served identically from the fallback',
+      'FTS matches over prerendered_html.markdown',
     );
   });
 
-  test('reads prefer prerendered_html over boxel_index when a row exists', async function (assert) {
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
-    // Diverge the prerendered_html rendering from the boxel_index column with a
-    // sentinel. A correct dual-read serves the sentinel; only a stale read that
-    // ignored prerendered_html would return the boxel_index value.
-    await adapter.execute(
-      `UPDATE prerendered_html
-       SET isolated_html = $1, atom_html = $2, markdown = $3
-       WHERE url = $4`,
-      {
-        bind: [
-          `<div class="isolated">PRERENDERED</div>`,
-          `<span class="atom">PRERENDERED</span>`,
-          'prerendered markdown sentinel',
-          `${testRealmURL}1.json`,
-        ],
-      },
-    );
-
+  test('a row with no prerendered_html row reads as unrendered', async function (assert) {
     let entry = (await indexQueryEngine.getInstance(
-      new URL(`${testRealmURL}1`),
+      new URL(`${testRealmURL}3`),
     )) as IndexedInstance;
+    assert.strictEqual(entry.isolatedHtml, null, 'isolated_html is absent');
+    assert.strictEqual(entry.markdown, null, 'markdown is absent');
+
+    let { results } = await indexQueryEngine.search(
+      testRealmURLObject,
+      {},
+      { includeErrors: true },
+      { kind: 'renderSet' },
+    );
+    let row3 = results.find((r) => r.url === `${testRealmURL}3.json`);
+    assert.ok(row3, 'the unrendered row is still a search member');
     assert.strictEqual(
-      entry.isolatedHtml,
-      `<div class="isolated">PRERENDERED</div>`,
-      'getInstance serves isolated_html from prerendered_html',
+      row3?.fitted_html,
+      null,
+      'the renderSet projection has no renderings for it',
     );
     assert.strictEqual(
-      entry.atomHtml,
-      `<span class="atom">PRERENDERED</span>`,
-      'getInstance serves atom_html from prerendered_html',
-    );
-    assert.strictEqual(
-      entry.markdown,
-      'prerendered markdown sentinel',
-      'getInstance serves markdown from prerendered_html',
+      row3?.html_generation,
+      null,
+      'it has no rendering generation',
     );
 
-    // A row with no prerendered_html row keeps serving the boxel_index column.
+    // Deleting a row's prerendered_html row removes its renderings — the
+    // remaining rows keep serving theirs.
     await adapter.execute(`DELETE FROM prerendered_html WHERE url = $1`, {
       bind: [`${testRealmURL}2.json`],
     });
-    let fallbackEntry = (await indexQueryEngine.getInstance(
+    let mango = (await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}2`),
     )) as IndexedInstance;
     assert.strictEqual(
-      fallbackEntry.isolatedHtml,
-      `<div class="isolated">Mango</div>`,
-      'a row absent from prerendered_html falls back to boxel_index HTML',
+      mango.isolatedHtml,
+      null,
+      'a row without a prerendered_html row has no HTML',
     );
-  });
-
-  test('a present prerendered_html row is authoritative for a null column (no boxel_index fallback)', async function (assert) {
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
-    // Null the prerendered rendering while boxel_index retains a value. A
-    // present prerendered_html row is authoritative, so the read reports the
-    // absence rather than leaking the boxel_index column — otherwise a row
-    // absent from full-text search could serve stale markdown/HTML.
-    await adapter.execute(
-      `UPDATE prerendered_html SET markdown = NULL, isolated_html = NULL WHERE url = $1`,
-      { bind: [`${testRealmURL}1.json`] },
-    );
-    let entry = (await indexQueryEngine.getInstance(
+    let vanGogh = (await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}1`),
     )) as IndexedInstance;
     assert.strictEqual(
-      entry.markdown,
-      null,
-      'a present-but-null prerendered markdown reads as absent, not the boxel_index value',
-    );
-    assert.strictEqual(
-      entry.isolatedHtml,
-      null,
-      'a present-but-null prerendered isolated_html reads as absent',
+      vanGogh.isolatedHtml,
+      `<div class="isolated">Van Gogh</div>`,
+      'other rows keep serving their prerendered_html',
     );
   });
 
-  test('FTS matches reads prerendered_html.markdown with a boxel_index fallback', async function (assert) {
-    await mirrorPrerenderedHtml(adapter, testRealmURL);
-
+  test('FTS membership follows prerendered_html.markdown', async function (assert) {
     // Membership tracks prerendered_html.markdown: rewrite row 2's markdown to
     // include a new term and confirm the matches query now finds it.
     await adapter.execute(
       `UPDATE prerendered_html SET markdown = $1 WHERE url = $2`,
       { bind: ['Mango and sunflowers together', `${testRealmURL}2.json`] },
-    );
-    // Confirm the mirror created row 2 and the update landed, so the membership
-    // assertion below exercises the prerendered_html.markdown read (not a no-op).
-    let [row2] = (await adapter.execute(
-      `SELECT markdown FROM prerendered_html WHERE url = $1`,
-      { bind: [`${testRealmURL}2.json`] },
-    )) as { markdown: string | null }[];
-    assert.strictEqual(
-      row2?.markdown,
-      'Mango and sunflowers together',
-      'prerendered_html row 2 markdown was mirrored and updated',
     );
     let bothMatch = await indexQueryEngine.searchCards(
       testRealmURLObject,
@@ -411,9 +358,7 @@ module('Unit | prerendered-html dual-read', function (hooks) {
       'matches membership follows prerendered_html.markdown',
     );
 
-    // Blanking a prerendered_html markdown drops the row from FTS even though
-    // boxel_index retains its markdown (the ph row exists, so the guarded
-    // boxel_index fallback does not re-add it).
+    // Blanking a prerendered_html markdown drops the row from FTS.
     await adapter.execute(
       `UPDATE prerendered_html SET markdown = NULL WHERE url = $1`,
       { bind: [`${testRealmURL}1.json`] },
@@ -426,13 +371,13 @@ module('Unit | prerendered-html dual-read', function (hooks) {
     assert.deepEqual(
       afterBlank.cards.map((c) => c.id as string).sort(),
       [`${testRealmURL}2`],
-      'a present-but-empty prerendered_html markdown is not re-matched via boxel_index',
+      'a null prerendered_html markdown is not full-text findable',
     );
 
-    // With no prerendered_html row at all, the guarded fallback reads
-    // boxel_index.markdown so the row stays full-text findable.
+    // Deleting the prerendered_html row entirely likewise removes membership —
+    // an unrendered row is not full-text findable until its render lands.
     await adapter.execute(`DELETE FROM prerendered_html WHERE url = $1`, {
-      bind: [`${testRealmURL}1.json`],
+      bind: [`${testRealmURL}2.json`],
     });
     let afterDelete = await indexQueryEngine.searchCards(
       testRealmURLObject,
@@ -440,9 +385,9 @@ module('Unit | prerendered-html dual-read', function (hooks) {
       {},
     );
     assert.deepEqual(
-      afterDelete.cards.map((c) => c.id as string).sort(),
-      [`${testRealmURL}1`, `${testRealmURL}2`],
-      'a row missing from prerendered_html falls back to boxel_index.markdown for FTS',
+      afterDelete.cards.map((c) => c.id as string),
+      [],
+      'a row with no prerendered_html row has no full-text membership',
     );
   });
 });

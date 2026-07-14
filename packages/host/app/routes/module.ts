@@ -20,7 +20,6 @@ import {
   type SearchablePathDiagnostic,
   isBaseDef,
   baseCardRef,
-  baseRealm,
   Deferred,
   loadCardDef,
   internalKeyFor,
@@ -70,6 +69,10 @@ export type Model = {
   definitions: {
     [name: string]: ModuleDefinitionResult | ErrorEntry;
   };
+  // All export names of the module — `definitions` only covers BaseDef
+  // exports, so this is the only signal for validating non-card exports
+  // (e.g. skill command classes). Absent on error models.
+  exports?: string[];
   error?: ErrorEntry;
   // Definition-build diagnostics (currently the `searchable`-path validation
   // findings) ride here so they JSON-round-trip into the `ModuleRenderResponse`
@@ -352,6 +355,7 @@ export async function buildModuleModel(
         createdAt,
         isShimmed,
         definitions,
+        exports: Object.keys(module),
         ...(searchablePathIssues.length > 0
           ? { meta: { diagnostics: { searchablePathIssues } } }
           : {}),
@@ -396,7 +400,7 @@ async function validateModuleSearchablePaths(
   }
   try {
     let loader = context.loaderService.loader;
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let lookupDefinition = async (
       codeRef: CodeRef,
     ): Promise<Definition | undefined> => {
@@ -455,7 +459,7 @@ async function makeDefinition(
   let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;

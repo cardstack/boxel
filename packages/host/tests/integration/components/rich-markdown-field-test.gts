@@ -1,6 +1,12 @@
 import { precompileTemplate } from '@ember/template-compilation';
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -8,7 +14,6 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
   baseRRI,
   testRealmURL,
 } from '@cardstack/runtime-common';
@@ -36,7 +41,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { BaseDef } from '@cardstack/base/card-api';
+import type { BaseDef, CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -69,7 +74,7 @@ module('Integration | RichMarkdownField', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('renders markdown as HTML', async function (assert) {
@@ -306,6 +311,76 @@ module('Integration | RichMarkdownField', function (hooks) {
       .exists('card reference placeholder is rendered');
   });
 
+  test('display path renders a relative card-ref pill in a prefix-mapped realm', async function (assert) {
+    // End-to-end over the whole reference chain in a prefix-mapped realm: the
+    // markdown field extracts the ref in RRI space, the query-backed
+    // linkedCards field searches by that RRI, the index and the client-side
+    // filter matcher tolerate the URL-form instance id, and the pill slot
+    // matches — so the referenced card's atom actually renders. Guards the
+    // regression where the client re-filter dropped the URL-form instance
+    // against the RRI filter value, leaving the pill unresolved.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: { body: { content: `Inline: :card[./Pet/mango]` } },
+            meta: { adoptsFrom: { module: './article', name: 'ArticleCard' } },
+          },
+        },
+      },
+    });
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+    try {
+      let store = getService('store');
+      let article = (await store.get(
+        `${testRealmURL}article-1`,
+      )) as CardDefType;
+      let refs = (article as any).body?.cardReferenceUrls;
+      assert.deepEqual(
+        refs,
+        ['@test/cards/Pet/mango'],
+        'the relative ref resolves against the prefix-form base into RRI space',
+      );
+      await renderCard(loader, article, 'isolated');
+      await waitFor('[data-test-pet-atom]');
+      assert
+        .dom('[data-test-pet-atom]')
+        .hasText('Mango', 'the referenced card renders as a pill');
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
+  });
+
   test('renders footnotes', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
@@ -484,7 +559,7 @@ module('Integration | RichMarkdownField', function (hooks) {
       );
 
       let CodeMirrorEditor = (
-        (await loader.import(`${baseRealm.url}codemirror-editor`)) as {
+        (await loader.import('@cardstack/base/codemirror-editor')) as {
           default: unknown;
         }
       ).default;
@@ -1118,6 +1193,52 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-markdown-mode-option="source"]')
       .exists('view selector opens without editor focus');
     await click('[data-test-markdown-mode-option="compose"]');
+  });
+
+  test('toolbar items are wrapped in tooltips whose hint is suppressed while the control is disabled', async function (assert) {
+    // The enabled-on-focus transition depends on document.hasFocus(), which is
+    // false in headless CI (see the "formatting controls start disabled" test),
+    // so the format buttons are disabled here. That makes this the reliable
+    // side to assert: every item is a tooltip trigger, and hovering a disabled
+    // control reveals no tooltip. The always-enabled add/edit-embed tooltips
+    // (label + hover reveal) are covered in the codemirror embed toolbar test.
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await waitFor('[data-test-toolbar="bold"]');
+
+    // Bold (a shortcut item) and Strikethrough (shortcut-less) are both wrapped
+    // in a tooltip trigger.
+    assert
+      .dom('[data-test-toolbar-tooltip="bold"]')
+      .exists('Bold is wrapped in a tooltip trigger');
+    assert
+      .dom('[data-test-toolbar-tooltip="strikethrough"]')
+      .exists('Strikethrough is wrapped in a tooltip trigger');
+
+    // Disabled before the editor gains focus → hovering reveals no tooltip.
+    assert.dom('[data-test-toolbar="bold"]').isDisabled();
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .doesNotExist('no tooltip is shown while the control is disabled');
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseleave');
   });
 
   test('selecting Preview shows rendered markdown and hides editor', async function (assert) {

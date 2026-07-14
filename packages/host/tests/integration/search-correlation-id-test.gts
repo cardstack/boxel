@@ -5,7 +5,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   rri,
   setSearchTimingSinkForTests,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
@@ -61,7 +60,7 @@ module('Integration | search correlation id', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {

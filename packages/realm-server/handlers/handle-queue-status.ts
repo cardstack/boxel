@@ -2,23 +2,16 @@ import type Koa from 'koa';
 import { query, SupportedMimeType } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { monitoringAuthToken } from '../utils/monitoring.ts';
+import { isAuthorizedToViewMonitoring } from '../utils/monitoring.ts';
 
-function isAuthorizedToViewMonitoring(
-  request: Koa.Request,
-  realmServerSecretSeed: string,
-): boolean {
-  return (
-    request.headers['authorization'] ===
-    `Bearer ${monitoringAuthToken(realmServerSecretSeed)}`
-  );
-}
 export default function handleQueueStatusRequest({
   dbAdapter,
   realmServerSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    if (!isAuthorizedToViewMonitoring(ctxt.request, realmServerSecretSeed)) {
+    if (
+      !(await isAuthorizedToViewMonitoring(ctxt.request, realmServerSecretSeed))
+    ) {
       return setContextResponse(
         ctxt,
         new Response('Unauthorized', {

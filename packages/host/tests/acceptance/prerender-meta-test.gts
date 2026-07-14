@@ -5,7 +5,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   baseRealmRRI,
   diffDoc,
   type PrerenderMeta,
@@ -64,7 +63,7 @@ module('Acceptance | prerender | meta', function (hooks) {
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('@cardstack/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
 
     let {
       field,

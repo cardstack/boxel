@@ -1,26 +1,28 @@
 ---
-description: List every `boxel_index` row in a realm whose latest indexing attempt failed (`has_error = TRUE`), rendered cleanly but holds broken `linksTo` / `linksToMany` targets, or indexed but couldn't parse its frontmatter YAML. Use to answer "why is this realm broken", "what's failing to index", "which cards have dead references", or "why did my skill's commands disappear" without reading the database directly.
+description: List every `boxel_index` row in a realm whose latest indexing attempt failed (`has_error = TRUE`), rendered cleanly but holds broken `linksTo` / `linksToMany` targets, indexed but couldn't parse its frontmatter YAML, or indexed a skill whose frontmatter tools failed schema generation. Use to answer "why is this realm broken", "what's failing to index", "which cards have dead references", "why did my skill's commands disappear", or "why isn't my skill's tool callable" without reading the database directly.
 ---
 
 # Realm indexing errors
 
-`boxel realm indexing-errors` returns three classes of "indexing finding" for a realm:
+`boxel realm indexing-errors` returns four classes of "indexing finding" for a realm:
 
 1. **`indexing-error`** — `boxel_index` rows where `has_error = TRUE`. The render or file extract failed and the persisted `errorDoc` (a `SerializedError`: `message`, `status`, `title`, optional `stack`, optional `deps`) explains why.
 2. **`broken-link`** — `boxel_index` rows where `has_error = FALSE` but the indexer's `render.meta` scan persisted a non-empty `diagnostics.brokenLinks` array. The card itself indexes fine; one or more `linksTo` / `linksToMany` targets are dead. Each entry exposes `attributes.brokenLinks: BrokenLinkSummary[]` — `{ fieldName, reference, kind: 'error' | 'not-found' }`.
 3. **`frontmatter-error`** — `boxel_index` rows where `has_error = FALSE` but a markdown file's leading YAML frontmatter wouldn't parse, persisted as `diagnostics.frontmatterParseError`. The file indexes body-only, so anything the frontmatter declared (a skill's `commands`, its `boxel.kind`, etc.) was silently dropped — this finding is the only signal the author gets. Each entry exposes `attributes.frontmatterParseError` — `{ message, line?, column? }`.
+4. **`tool-schema-error`** — `boxel_index` rows where `has_error = FALSE` but one or more of a skill markdown file's frontmatter tools failed index-time schema generation (module wouldn't load, missing export, schema generation threw), persisted as `diagnostics.toolSchemaErrors`. The skill indexes with the tools that did enrich; each failed tool won't be callable via the pull model until fixed — this finding is the only indexed signal. Each entry exposes `attributes.toolSchemaErrors: ToolSchemaError[]` — `{ module, name, message }`.
 
 Use this skill to triage realm health in one call, without reading the database directly or scraping per-card failures.
 
 ## When the user asks to...
 
-| Ask                                                                         | Run                                                                                                              |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| "what's failing to index in <realm>?"                                       | `boxel realm indexing-errors --realm <realm-url>`                                                                |
-| "which cards have broken links in <realm>?"                                 | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "broken-link")'`       |
-| "why did my skill's commands disappear / which files have bad frontmatter?" | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "frontmatter-error")'` |
-| "give me the full payload as JSON"                                          | `boxel realm indexing-errors --realm <realm-url> --json`                                                         |
-| "is anything broken in this realm right now?"                               | `boxel realm indexing-errors --realm <realm-url>` — exit 0 with "No indexing errors." is the all-clear           |
+| Ask                                                                          | Run                                                                                                              |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| "what's failing to index in <realm>?"                                        | `boxel realm indexing-errors --realm <realm-url>`                                                                |
+| "which cards have broken links in <realm>?"                                  | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "broken-link")'`       |
+| "why did my skill's commands disappear / which files have bad frontmatter?"  | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "frontmatter-error")'` |
+| "why isn't my skill's tool callable / which tools failed schema generation?" | `boxel realm indexing-errors --realm <realm-url> --json \| jq '.data[] \| select(.type == "tool-schema-error")'` |
+| "give me the full payload as JSON"                                           | `boxel realm indexing-errors --realm <realm-url> --json`                                                         |
+| "is anything broken in this realm right now?"                                | `boxel realm indexing-errors --realm <realm-url>` — exit 0 with "No indexing errors." is the all-clear           |
 
 ## Typical sequencing
 
@@ -66,7 +68,7 @@ Default (human-readable):
 [file]     https://realm.example.com/skills/sync/SKILL.md  frontmatter parse error (line 4:3): Implicit map keys need to be on a single line
 ```
 
-Each line is `[<entryType>] <url>  <short summary>`. For `indexing-error` rows the summary is `errorDoc.title` (falling back to `errorDoc.message`). For `broken-link` rows it is `<N> broken: fieldName→reference, …` (up to three, then `+N more`). For `frontmatter-error` rows it is `frontmatter parse error (line L:C): <message>`.
+Each line is `[<entryType>] <url>  <short summary>`. For `indexing-error` rows the summary is `errorDoc.title` (falling back to `errorDoc.message`). For `broken-link` rows it is `<N> broken: fieldName→reference, …` (up to three, then `+N more`). For `frontmatter-error` rows it is `frontmatter parse error (line L:C): <message>`. For `tool-schema-error` rows it is `<N> tool schema failure(s): module#name: <message>; …` (up to three, then `+N more`).
 
 `--json` emits a JSON-API document:
 
@@ -126,6 +128,30 @@ Each line is `[<entryType>] <url>  <short summary>`. For `indexing-error` rows t
           "column": 3
         }
       }
+    },
+    {
+      "type": "tool-schema-error",
+      "id": "file::https://realm.example.com/skills/sync/SKILL.md",
+      "attributes": {
+        "url": "https://realm.example.com/skills/sync/SKILL.md",
+        "entryType": "file",
+        "diagnostics": {
+          "toolSchemaErrors": [
+            {
+              "module": "https://realm.example.com/missing-tool",
+              "name": "default",
+              "message": "Could not find module"
+            }
+          ]
+        },
+        "toolSchemaErrors": [
+          {
+            "module": "https://realm.example.com/missing-tool",
+            "name": "default",
+            "message": "Could not find module"
+          }
+        ]
+      }
     }
   ]
 }
@@ -136,8 +162,9 @@ Each line is `[<entryType>] <url>  <short summary>`. For `indexing-error` rows t
 - `--realm` is required and must be the realm base URL (with the realm path, not just the server origin).
 - The endpoint reports findings for **all** entry types (instances, modules, files) — not just card instances. A failing `.gts` shows up here even if it isn't published as a card.
 - The default human-readable line truncates the error message to 100 characters and prefers `errorDoc.title` over `errorDoc.message`. Use `--json` for the full payload.
-- `broken-link` and `frontmatter-error` findings have **no** `errorDoc` — `has_error` is `FALSE`. Branch on `data[].type` (or check `attributes.brokenLinks` / `attributes.frontmatterParseError`) before reading `errorDoc`.
+- `broken-link`, `frontmatter-error`, and `tool-schema-error` findings have **no** `errorDoc` — `has_error` is `FALSE`. Branch on `data[].type` (or check `attributes.brokenLinks` / `attributes.frontmatterParseError` / `attributes.toolSchemaErrors`) before reading `errorDoc`.
 - A `frontmatter-error` means the file _did_ index — just without its frontmatter. The body is fine; whatever the YAML declared (skill `commands`, `boxel.kind`) is gone until the YAML is fixed and the realm re-indexes.
+- A `tool-schema-error` likewise means the skill _did_ index; only the named tools lack generated schemas. Fixing the tool module (or the codeRef) and re-indexing the skill file clears it.
 - JSON-API resource `id` is `${entryType}::${url}`, not bare `${url}`. To get the URL back, read `attributes.url`.
 - On transport failure with `--json`, stdout receives `{"error":"..."}` (not the data envelope) and the process exits non-zero. Successful calls always emit `{ "data": [...] }`. A consumer reading only stdout can distinguish failure from "realm is healthy" by checking for the `error` key (or the exit code).
 - The list does not include queue depth, running-job progress, or a "last finished at" timestamp. Those are separate concerns and may be folded into a future `indexing-status` command.

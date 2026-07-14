@@ -1,9 +1,7 @@
-import { click, find, visit, waitFor } from '@ember/test-helpers';
+import { click, find, settled, visit, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
-
-import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -39,12 +37,12 @@ module('Acceptance | basic tests', function (hooks) {
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('@cardstack/base/card-api')
-    >(`${baseRealm.url}card-api`);
+    >('@cardstack/base/card-api');
     let { default: StringField } = await loader.import<
       typeof import('@cardstack/base/string')
-    >(`${baseRealm.url}string`);
+    >('@cardstack/base/string');
     let { Spec } = await loader.import<typeof import('@cardstack/base/spec')>(
-      `${baseRealm.url}spec`,
+      '@cardstack/base/spec',
     );
 
     class Index extends CardDef {
@@ -115,6 +113,40 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')
       .containsText('Hello, world');
+  });
+
+  test('recovers to the app when postLoginCompleted is cleared after boot', async function (assert) {
+    await visit('/');
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .exists('app booted and rendered before the reset');
+
+    // Reproduce the post-boot login-reset race deterministically. The persisted
+    // auth is left intact (a genuine logout clears it), but postLoginCompleted
+    // gets cleared — exactly what a resetState() racing a re-navigation does.
+    // The <Auth/> gate is reactive, so the app swaps to the login form at once.
+    let matrixService = getService('matrix-service');
+    matrixService.resetState();
+    await settled();
+    assert
+      .dom('[data-test-login-form]')
+      .exists('clearing postLoginCompleted strands the app on the login form');
+
+    // Re-run the index route model (as any re-navigation would). The one-shot
+    // start() guard already latched on boot, so re-establishing the session is
+    // the only path back to the app — assert the route takes it rather than
+    // rendering <Auth/>.
+    await getService('router').refresh();
+    await settled();
+
+    assert
+      .dom('[data-test-login-form]')
+      .doesNotExist(
+        'the index route recovers the session instead of stranding',
+      );
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .exists('recovered back to the booted app');
   });
 
   test('submode switcher exposes an app version tooltip', async function (assert) {

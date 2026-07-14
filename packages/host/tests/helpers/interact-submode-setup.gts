@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
@@ -61,12 +60,12 @@ export function setupInteractSubmodeTests(
     let cardsGrid: typeof import('@cardstack/base/cards-grid');
     let fileApi: typeof import('@cardstack/base/file-api');
     let imageFileApi: typeof import('@cardstack/base/image-file-def');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    spec = await loader.import(`${baseRealm.url}spec`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
-    imageFileApi = await loader.import(`${baseRealm.url}image-file-def`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    spec = await loader.import('@cardstack/base/spec');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
+    fileApi = await loader.import('@cardstack/base/file-api');
+    imageFileApi = await loader.import('@cardstack/base/image-file-def');
 
     let {
       field,

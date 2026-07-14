@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import {
   PermissionsContextName,
-  baseRealm,
   localId,
   type Permissions,
   type SerializedError,
@@ -116,7 +115,7 @@ module('Integration | getRelationshipMembershipState', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   module('singular linksTo', function () {
