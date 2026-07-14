@@ -332,7 +332,11 @@ export default class StoreService extends Service implements StoreInterface {
 
   resetState() {
     clearInterval(this.gcInterval);
-    this.unsubscribeFromAllRealms();
+    // Deliberately does NOT unsubscribe here: resetState runs at mid-session
+    // boundaries (realm/workspace switch, route deactivate), and realm
+    // invalidations must keep flowing to cards that survive the reset.
+    // Subscriptions are released only when the store is destroyed
+    // (see the destructor's unsubscribeFromAllRealms).
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
     this.onSaveSubscriber = undefined;
@@ -1653,7 +1657,9 @@ export default class StoreService extends Service implements StoreInterface {
   // races invalidation delivery — tearing a subscription down mid-flight drops
   // updates a caller is still waiting on. Realms are few and their
   // subscriptions cheap, so install one on first use (subscribeToRealm) and
-  // release them all together when the store resets or is destroyed.
+  // release them all together when the store is destroyed. This runs only from
+  // the destructor — not resetState, which is a mid-session boundary where
+  // subscriptions must persist.
   private unsubscribeFromAllRealms() {
     for (let { unsubscribe } of this.subscriptions.values()) {
       unsubscribe();
