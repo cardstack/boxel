@@ -13,7 +13,9 @@ import {
   executeReadRealmFile,
   fileLabelFromUrl,
   type ReadRealmFileArgs,
+  type ReadRealmFileTool,
 } from './read-realm-file.ts';
+import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
 let log = logger('ai-bot:read-realm-file');
@@ -119,8 +121,43 @@ export async function fulfillReadRealmFileCalls(
 }
 
 type FileRead =
-  | { url: string; attachment: Record<string, unknown> }
+  | {
+      url: string;
+      attachment: Record<string, unknown>;
+      // Definitions of the tools the read file's indexed frontmatter
+      // declares, when the file is a skill whose index row carries usable
+      // (schema-stamped) entries.
+      discoveredTools?: DiscoveredToolDefinition[];
+    }
   | { url: string; error: string };
+
+// The read's tool entries that are usable as LLM tool definitions, tagged
+// with the skill file they came from. Entries without a well-formed
+// definition (e.g. a skill indexed before schema enrichment) are dropped
+// here — the prompt can only offer a tool it has a definition for.
+function discoveredToolDefinitions(
+  url: string,
+  tools: ReadRealmFileTool[] | undefined,
+): DiscoveredToolDefinition[] {
+  return (tools ?? [])
+    .filter(
+      (tool) =>
+        tool.definition?.type === 'function' &&
+        typeof tool.definition.function?.name === 'string' &&
+        tool.definition.function.name.length > 0,
+    )
+    .map((tool) => ({
+      sourceSkillUrl: url,
+      ...(tool.codeRef ? { codeRef: tool.codeRef } : {}),
+      ...(typeof tool.functionName === 'string'
+        ? { functionName: tool.functionName }
+        : {}),
+      ...(typeof tool.requiresApproval === 'boolean'
+        ? { requiresApproval: tool.requiresApproval }
+        : {}),
+      definition: tool.definition as DiscoveredToolDefinition['definition'],
+    }));
+}
 
 // Reads and uploads a single file of a call. An upload failure is folded into
 // the same shape as a read failure so the caller reports both alike.
@@ -144,6 +181,7 @@ async function readAndUpload(
     log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
     return { url, error: `could not store ${url} for reading` };
   }
+  let discoveredTools = discoveredToolDefinitions(url, result.tools);
   return {
     url,
     attachment: {
@@ -153,6 +191,7 @@ async function readAndUpload(
       contentType: READ_FILE_CONTENT_TYPE,
       contentSize: Buffer.byteLength(result.content),
     },
+    ...(discoveredTools.length ? { discoveredTools } : {}),
   };
 }
 
@@ -187,12 +226,19 @@ async function fulfillOne(
   let reads = await Promise.all(
     urls.map((url) => readAndUpload(url, deps, upload)),
   );
-  let attachedFiles = reads
-    .filter(
-      (read): read is Extract<FileRead, { attachment: object }> =>
-        'attachment' in read,
-    )
-    .map((read) => read.attachment);
+  let successfulReads = reads.filter(
+    (read): read is Extract<FileRead, { attachment: object }> =>
+      'attachment' in read,
+  );
+  let attachedFiles = successfulReads.map((read) => read.attachment);
+  // Tool definitions the read skills contributed ride the result event next
+  // to the attachments, so prompt assembly can offer them on later turns
+  // from room events alone. Kept out of attachedFiles: those entries are
+  // SerializedFileDefs consumed by the attachment-download path (and the
+  // timeline), which must not change shape.
+  let discoveredTools = successfulReads.flatMap(
+    (read) => read.discoveredTools ?? [],
+  );
   let failureReason =
     reads
       .filter(
@@ -223,6 +269,7 @@ async function fulfillOne(
     data: {
       context: { agentId: deps.agentId },
       attachedFiles,
+      ...(discoveredTools.length ? { discoveredTools } : {}),
     },
   });
   return {

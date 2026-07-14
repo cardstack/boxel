@@ -31,6 +31,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
+  DiscoveredToolDefinition,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -75,6 +76,7 @@ import type { ToolChoice } from '../helpers/ai.ts';
 import { logger } from '../log.ts';
 
 import { parseFrontmatter } from '../frontmatter-parse.ts';
+import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -496,7 +498,7 @@ export interface EnabledSkill {
 
 // A skill enabled as a markdown file (SKILL.md), rather than a Skill card.
 export function isMarkdownSkillFile(fileDef: SerializedFileDef): boolean {
-  return /\.(md|markdown)$/i.test(fileDef.sourceUrl ?? fileDef.name ?? '');
+  return isMarkdownFile(fileDef.sourceUrl ?? fileDef.name ?? '');
 }
 
 // A command a markdown skill contributes via its `boxel.tools` frontmatter
@@ -904,6 +906,66 @@ export async function getTools(
       for (let tool of skillTools) {
         enabledToolNames.add(tool.functionName);
       }
+    }
+  }
+
+  // Tools discovered by reading a skill file (readRealmFile): each read's
+  // result event embeds the definitions in `data.discoveredTools`, so this
+  // source is event-sourced like every other prompt input. A skill read many
+  // times contributes only its latest read's definitions (the file may have
+  // changed between reads); a skill toggled off in room state contributes
+  // none. Merged into the map first, so an enabled skill's uploaded
+  // definition or a message-context tool with the same functionName wins on
+  // conflict.
+  let disabledSkillIds = new Set(await getDisabledSkillIds(eventList));
+  let discoveredBySkill = new Map<string, DiscoveredToolDefinition[]>();
+  for (let event of eventList) {
+    if (!isToolResultEvent(event)) {
+      continue;
+    }
+    // Only the bot publishes readRealmFile results; a discoveredTools block
+    // on anyone else's result event is not a legitimate discovery.
+    if (event.sender !== aiBotUserId) {
+      continue;
+    }
+    let content = event.content;
+    if (!isToolResultWithOutputContent(content)) {
+      continue;
+    }
+    // Only an applied read actually fetched the skill; discoveries claimed
+    // by a failed or invalid result are not evidence of anything.
+    if (content['m.relates_to']?.key !== 'applied') {
+      continue;
+    }
+    let discovered = content.data?.discoveredTools;
+    if (!discovered?.length) {
+      continue;
+    }
+    let bySkill = new Map<string, DiscoveredToolDefinition[]>();
+    for (let def of discovered) {
+      if (
+        !def?.sourceSkillUrl ||
+        def.definition?.type !== 'function' ||
+        !def.definition.function?.name
+      ) {
+        continue;
+      }
+      let defs = bySkill.get(def.sourceSkillUrl) ?? [];
+      defs.push(def);
+      bySkill.set(def.sourceSkillUrl, defs);
+    }
+    // eventList is chronological, so a later read of the same skill
+    // replaces the earlier one wholesale.
+    for (let [skillUrl, defs] of bySkill) {
+      discoveredBySkill.set(skillUrl, defs);
+    }
+  }
+  for (let [skillUrl, defs] of discoveredBySkill) {
+    if (disabledSkillIds.has(skillUrl)) {
+      continue;
+    }
+    for (let def of defs) {
+      toolMap.set(def.definition.function.name, def.definition);
     }
   }
 
