@@ -344,7 +344,7 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
-  test('adding a prefix-form reference installs the realm subscription', async function (assert) {
+  test('a prefix-form reference installs a realm subscription that outlives the reference', async function (assert) {
     getService('network').virtualNetwork.addRealmMapping(
       '@test-prefix/',
       testRealmURL,
@@ -367,6 +367,15 @@ module('Integration | Store', function (hooks) {
 
     await storeService.flush();
     storeService.dropReference('@test-prefix/Person/hassan');
+
+    // Realm subscriptions are not reference-counted: dropping the last
+    // reference leaves the subscription in place (it is released only when the
+    // store resets or is destroyed), so realm invalidations keep flowing to
+    // callers that re-reference a card in this realm.
+    assert.true(
+      subscriptions.has(testRealmURL),
+      'dropping the last reference leaves the realm subscription installed',
+    );
   });
 
   test('deleting a linked target rewrites a loaded consumer linksTo slot to a broken-link sentinel', async function (assert) {
