@@ -386,36 +386,6 @@ export interface MarkdownEmbedChooser {
   ): Promise<MarkdownEmbedResolution>;
 }
 
-const MARKDOWN_EMBED_CHOOSER_KEY = '_CARDSTACK_MARKDOWN_EMBED_CHOOSER';
-
-export async function chooseMarkdownEmbed(
-  opts: { defaultTab?: 'card' | 'file' } = {},
-): Promise<MarkdownEmbedResolution> {
-  let here = globalThis as any;
-  let chooser: MarkdownEmbedChooser | undefined =
-    here[MARKDOWN_EMBED_CHOOSER_KEY];
-  if (!chooser) {
-    throw new Error(
-      `no cardstack markdown-embed chooser is available in this environment`,
-    );
-  }
-  return chooser.chooseCardOrFile(opts);
-}
-
-export async function editMarkdownEmbed(
-  target: MarkdownEmbedInitialTarget,
-): Promise<MarkdownEmbedResolution> {
-  let here = globalThis as any;
-  let chooser: MarkdownEmbedChooser | undefined =
-    here[MARKDOWN_EMBED_CHOOSER_KEY];
-  if (!chooser) {
-    throw new Error(
-      `no cardstack markdown-embed chooser is available in this environment`,
-    );
-  }
-  return chooser.editEmbed(target);
-}
-
 export interface BfmRefRange {
   kind: 'inline' | 'block';
   // Half-open range into the original markdown string as UTF-16 code-unit

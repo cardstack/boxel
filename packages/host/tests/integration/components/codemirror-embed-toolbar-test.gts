@@ -67,7 +67,9 @@ class HostContextProvider extends GlimmerComponent<{
   }
   @provide(CardContextName)
   get cardContext() {
-    return {};
+    return {
+      markdownEmbedChooser: getService('markdown-embed-chooser'),
+    };
   }
   <template>
     {{! template-lint-disable no-yield-only }}
