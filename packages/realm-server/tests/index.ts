@@ -80,9 +80,17 @@ process.on('unhandledRejection', (reason: unknown) => {
             return String(reason);
           }
         })();
-  console.error(
-    `Unhandled promise rejection during test [${testName}]:\n${detail}`,
-  );
+  // Write synchronously to fd 2: the re-throw below turns this into an
+  // uncaughtException that exits the process immediately, and a buffered
+  // console.error to a pipe (as on CI) can be dropped before it flushes,
+  // leaving a nonzero exit with no visible cause. fs.writeSync always flushes
+  // before returning.
+  let message = `Unhandled promise rejection during test [${testName}]:\n${detail}\n`;
+  try {
+    (require('node:fs') as typeof import('node:fs')).writeSync(2, message);
+  } catch {
+    console.error(message);
+  }
   throw reason;
 });
 

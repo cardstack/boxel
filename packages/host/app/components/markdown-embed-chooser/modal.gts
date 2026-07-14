@@ -116,6 +116,11 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
   @action
   private handleKeydown(event: Event) {
     if ((event as KeyboardEvent).key === 'Escape') {
+      // Own the Escape here: stop it before it reaches the document-level
+      // operator-mode handler, which would otherwise flip the card out of edit
+      // format once closing this modal has cleared the `has-modal` guard.
+      event.preventDefault();
+      event.stopPropagation();
       this.handleClose();
     }
   }
@@ -138,6 +143,8 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
         class='markdown-embed-chooser-modal'
         @title=''
         @onClose={{this.handleClose}}
+        @closeButtonLabel='close'
+        @closeButtonShortcut='ESC'
         @size='large'
         @centered={{true}}
         @cardContainerClass='markdown-embed-chooser-modal__container'

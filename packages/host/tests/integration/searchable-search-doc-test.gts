@@ -1,13 +1,15 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type {
-  Realm,
-  IndexedInstance,
-  SearchDocTimings,
+import {
+  rri,
+  type Realm,
+  type IndexedInstance,
+  type SearchDocTimings,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import CardStoreWithGarbageCollection from '@cardstack/host/lib/gc-card-store';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -27,6 +29,7 @@ import {
   FieldDef,
   Component,
   StringField,
+  createFromSerialized,
   getDataBucket,
   searchDocFromFields,
 } from '../helpers/base-realm';
@@ -294,6 +297,26 @@ module('Integration | searchable search doc', function (hooks) {
       });
     }
 
+    // ---- a throwing branch beside a searchable link -------------------------
+    // On a fresh store the computed's branch throws: reading `other` fires
+    // that target's lazy load and yields `undefined`, so the `.name` read
+    // throws. The computed is declared BEFORE the searchable link, so a walk
+    // that stopped at the first failing branch would never reach the link
+    // field. Branches run concurrently and all settle before the first
+    // rejection rethrows, so the searchable link's targeted load fires (and
+    // completes) in the same walk. Once `other` is resident the computed
+    // succeeds, so the card indexes cleanly.
+    class Boom extends CardDef {
+      static displayName = 'Boom';
+      @field other = linksTo(Author);
+      @field boom = contains(StringField, {
+        computeVia: function (this: any) {
+          return this.other.name;
+        },
+      });
+      @field agent = linksTo(Agent, { searchable: true });
+    }
+
     let agentRef = (id: string) => ({ links: { self: id } });
 
     ({ realm } = await setupIntegrationTestRealm({
@@ -338,10 +361,14 @@ module('Integration | searchable search doc', function (hooks) {
         },
         'profile.gts': { Profile, FancyProfile, ArticleProfile },
         'article-query.gts': { ArticleQuery },
+        'boom.gts': { Boom },
 
         // --- leaves + chain ---
         'Agent/a1.json': card('Agent Smith', 'agent', 'Agent'),
         'Agent/a2.json': card('Agent Jones', 'agent', 'Agent'),
+        // Referenced only by Boom/b1, so its residency in a test's store is
+        // attributable to that card's walk alone.
+        'Agent/a3.json': card('Agent Braun', 'agent', 'Agent'),
         'Headquarters/h1.json': card('HQ One', 'headquarters', 'Headquarters'),
         'Company/co1.json': {
           data: {
@@ -619,6 +646,20 @@ module('Integration | searchable search doc', function (hooks) {
             id: `${testRealmURL}ArticleQuery/q1`,
             attributes: { title: 'Query' },
             meta: adoptsFrom('article-query', 'ArticleQuery'),
+          },
+        },
+
+        // --- throwing branch beside a searchable link ---
+        'Boom/b1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Boom/b1`,
+            attributes: {},
+            relationships: {
+              other: agentRef(`${testRealmURL}Author/au1`),
+              agent: agentRef(`${testRealmURL}Agent/a3`),
+            },
+            meta: adoptsFrom('boom', 'Boom'),
           },
         },
       },
@@ -1145,6 +1186,61 @@ module('Integration | searchable search doc', function (hooks) {
     let doc = await loadAndGenerate(`${testRealmURL}ArticleQuery/q1`);
     assert.strictEqual(doc.title, 'Query', 'plain fields are present');
     assert.notOk('related' in doc, 'the query-backed field is skipped');
+  });
+
+  test('a throwing branch does not stop sibling link loads in the same walk', async function (assert) {
+    // Build the instance from its bare document on a dedicated store, so both
+    // of its links start not-loaded — the shape the indexer's walk sees. (The
+    // live store's card GET sideloads the whole link graph, which would leave
+    // nothing for the walk to load.)
+    let network = getService('network');
+    let store = new CardStoreWithGarbageCollection(
+      new Map(),
+      network.fetch,
+      network.virtualNetwork,
+    );
+    let doc = {
+      data: {
+        id: `${testRealmURL}Boom/b1`,
+        type: 'card' as const,
+        attributes: {},
+        relationships: {
+          other: { links: { self: `${testRealmURL}Author/au1` } },
+          agent: { links: { self: `${testRealmURL}Agent/a3` } },
+        },
+        meta: {
+          adoptsFrom: { module: rri(`${testRealmURL}boom`), name: 'Boom' },
+        },
+      },
+    };
+    let instance = (await createFromSerialized(
+      doc.data,
+      doc,
+      new URL(doc.data.id),
+      { store },
+    )) as CardDefType;
+    let thrown: unknown;
+    try {
+      await searchDocFromFields(instance);
+    } catch (e) {
+      thrown = e;
+    }
+    // The computed branch reads its not-yet-loaded `other` target and throws.
+    assert.notStrictEqual(
+      thrown,
+      undefined,
+      'the failing branch rethrows to the caller',
+    );
+    // Branches settle together before the rethrow, so the searchable link's
+    // targeted load — a sibling of the throwing computed — has already
+    // completed and registered its target.
+    assert.ok(
+      store.getCard(`${testRealmURL}Agent/a3`),
+      'the sibling searchable target loaded during the same walk',
+    );
+    // Drain the lazy load the computed's read fired so no fetch outlives the
+    // test.
+    await store.loaded();
   });
 
   test('a linksTo target is enumerated by its DECLARED type (subtype bloat dropped)', async function (assert) {

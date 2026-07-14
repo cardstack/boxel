@@ -515,13 +515,27 @@ export interface CardStore {
   setCardNonTracked(id: string, instance: CardDef): void;
   setFileMetaNonTracked(id: string, instance: FileDef): void;
   makeTracked(id: string): void;
+  // `untracked` opts out of the store's load-generation tracking: safe only
+  // for a caller that awaits this promise inline and folds the resolved
+  // document into its own output, so the load-settle machinery (which exists
+  // to catch loads fired and abandoned by field getters) has nothing to wait
+  // for. The searchable generator's targeted link loads use this — it lets a
+  // walk whose targets all resolve immediately read as settled without a
+  // confirmation pass. Stores that don't implement the option simply keep
+  // tracking, which costs an extra settle pass and nothing else.
   loadCardDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;

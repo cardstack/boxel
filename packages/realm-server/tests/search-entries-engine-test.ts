@@ -479,6 +479,44 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('fields[entry]=item: the included item id matches the entry even when pristine_doc was stored under a registered-prefix alias', async function (assert) {
+      // Realms with a registered alias prefix (catalog, base, skills,
+      // openrouter) store `pristine_doc.id` in that alias form for storage
+      // portability (`unresolveResourceInstanceURLs` at index time), while
+      // every other identifier this engine emits — the entry itself,
+      // its `item` relationship, `links.self` — uses the row's resolved URL.
+      // Simulate that storage shape directly (no need to stand up a fully
+      // aliased realm) and confirm the served item's identity still matches
+      // the relationship that points at it, not the stored alias.
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET pristine_doc = jsonb_set(pristine_doc, '{id}', '"@fake-alias/john"'::jsonb)
+         WHERE url = '${johnId}.json' AND type = 'instance'`,
+      );
+      try {
+        let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+          personQuery({ fields: { entry: ['item'] } }),
+        );
+        let entry = entryFor(doc, johnId)!;
+        assert.deepEqual(entry.relationships.item, {
+          data: { type: 'card', id: johnId },
+        });
+        let item = itemIn(doc, johnId);
+        assert.ok(
+          item,
+          'the included item is keyed by the resolved id the relationship points at, not the stored alias',
+        );
+        assert.strictEqual(item!.id, johnId);
+        assert.strictEqual(item!.links?.self, johnId);
+      } finally {
+        await dbAdapter.execute(
+          `UPDATE boxel_index
+           SET pristine_doc = jsonb_set(pristine_doc, '{id}', '"${johnId}"'::jsonb)
+           WHERE url = '${johnId}.json' AND type = 'instance'`,
+        );
+      }
+    });
+
     test('fields[entry]=item.<field>: sparse items carry meta.sparseFields', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({ fields: { entry: ['item.firstName'] } }),
