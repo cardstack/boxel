@@ -1018,7 +1018,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         format: 'org.matrix.custom.html',
       },
       {
-        // beyond the same-author continuation window, so this message keeps
+        // beyond the same-author grouping window, so this message keeps
         // the timestamp header the assertion below looks for
         origin_server_ts: new Date(2024, 0, 3, 12, 34).getTime(),
       },

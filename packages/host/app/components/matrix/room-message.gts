@@ -61,7 +61,7 @@ export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 
 // A message from the same author landing within this window of the previous
 // message renders without its avatar/timestamp header.
-const CONTINUATION_WINDOW_MS = 2 * 60 * 1000;
+const MESSAGE_GROUPING_WINDOW_MS = 2 * 60 * 1000;
 
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
@@ -174,7 +174,7 @@ export default class RoomMessage extends Component<Signature> {
   // A quick succession of messages from one author reads as a single run of
   // conversation, so only the first message in the run gets an avatar and
   // timestamp header.
-  private get isContinuationOfPreviousMessage() {
+  private get isGroupedWithPreviousMessage() {
     let previousMessage = this.args.roomResource.messages[this.args.index - 1];
     if (!previousMessage) {
       return false;
@@ -182,14 +182,13 @@ export default class RoomMessage extends Component<Signature> {
     return (
       previousMessage.author.userId === this.message.author.userId &&
       this.message.created.getTime() - previousMessage.created.getTime() <
-        CONTINUATION_WINDOW_MS
+        MESSAGE_GROUPING_WINDOW_MS
     );
   }
 
   private get hideMeta() {
     return (
-      this.message.isCodePatchCorrectness ||
-      this.isContinuationOfPreviousMessage
+      this.message.isCodePatchCorrectness || this.isGroupedWithPreviousMessage
     );
   }
 
