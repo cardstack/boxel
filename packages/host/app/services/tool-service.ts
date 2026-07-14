@@ -510,6 +510,12 @@ export default class ToolService extends Service {
       ) {
         continue;
       }
+      // Already invalidated by an earlier pass — the room-state status above
+      // can lag the matrix round-trip, so without this check a repeated
+      // stuck-processing pass would publish a duplicate terminal 'invalid'.
+      if (this.invalidatedToolRequestIds.has(commandRequestId)) {
+        continue;
+      }
       if (!messageTool.name) {
         continue;
       }
@@ -952,18 +958,27 @@ export default class ToolService extends Service {
           command.toolRequest.id,
         ) ?? command.eventId;
       // Record before publishing so no concurrent drain pass can slip in
-      // between the send and the bookkeeping and execute the request.
+      // between the send and the bookkeeping and execute the request. If the
+      // publish fails, un-record it — no terminal result exists in the room,
+      // so a later pass must be allowed to retry rather than skip forever.
       if (command.toolRequest.id) {
         this.invalidatedToolRequestIds.add(command.toolRequest.id);
       }
-      await this.matrixService.sendToolResultEvent({
-        roomId: command.message.roomId,
-        invokedToolFromEventId,
-        toolCallId: command.toolRequest.id!,
-        status: 'invalid',
-        failureReason: error,
-        context: await this.operatorModeStateService.getSummaryForAIBot(),
-      });
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId: command.message.roomId,
+          invokedToolFromEventId,
+          toolCallId: command.toolRequest.id!,
+          status: 'invalid',
+          failureReason: error,
+          context: await this.operatorModeStateService.getSummaryForAIBot(),
+        });
+      } catch (e) {
+        if (command.toolRequest.id) {
+          this.invalidatedToolRequestIds.delete(command.toolRequest.id);
+        }
+        throw e;
+      }
       return false;
     }
 
