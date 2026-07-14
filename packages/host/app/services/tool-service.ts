@@ -529,17 +529,26 @@ export default class ToolService extends Service {
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
         messageTool.eventId;
+      // Same record-then-publish contract as validate(): record first so no
+      // concurrent pass can execute mid-publish, un-record on failure so a
+      // request with no terminal result in the room can be retried instead
+      // of being skipped forever.
       this.invalidatedToolRequestIds.add(commandRequestId);
-      await this.matrixService.sendToolResultEvent({
-        roomId,
-        invokedToolFromEventId,
-        toolCallId: commandRequestId,
-        status: 'invalid',
-        failureReason: `Room processing did not finish within ${Math.round(
-          STUCK_PROCESSING_TIMEOUT_MS / 1000,
-        )}s; command was not started`,
-        context: await this.operatorModeStateService.getSummaryForAIBot(),
-      });
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId,
+          invokedToolFromEventId,
+          toolCallId: commandRequestId,
+          status: 'invalid',
+          failureReason: `Room processing did not finish within ${Math.round(
+            STUCK_PROCESSING_TIMEOUT_MS / 1000,
+          )}s; command was not started`,
+          context: await this.operatorModeStateService.getSummaryForAIBot(),
+        });
+      } catch (e) {
+        this.invalidatedToolRequestIds.delete(commandRequestId);
+        throw e;
+      }
     }
   }
 
