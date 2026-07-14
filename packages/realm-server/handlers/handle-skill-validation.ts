@@ -118,10 +118,21 @@ export default function handleSkillValidation({
         { filter: { type: skillCardRef } },
         {},
       );
-      let { files } = await indexQueryEngine.searchFiles(
+      // Discover markdown skills with a type-only file search, then narrow to
+      // `kind: 'skill'` here. An `eq: { kind }` filter would make the query
+      // resolve MarkdownDef's field definition; when that lookup misses, the
+      // search engine swallows the resulting error into an empty result set,
+      // silently dropping every markdown skill. A type match is
+      // definition-free — it matches the indexed `types` column — so discovery
+      // stays reliable regardless of which definitions are loaded here.
+      let { files: markdownFiles } = await indexQueryEngine.searchFiles(
         new URL(realm.url),
-        { filter: { on: markdownDefRef, eq: { kind: 'skill' } } },
+        { filter: { type: markdownDefRef } },
         {},
+      );
+      let files = markdownFiles.filter(
+        (file) =>
+          (file.searchDoc?.kind ?? file.resource?.attributes?.kind) === 'skill',
       );
       skills = [
         ...cards.map((card) => ({
