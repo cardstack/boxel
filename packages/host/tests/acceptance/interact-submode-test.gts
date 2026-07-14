@@ -1318,10 +1318,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       const messageService = getService('message-service');
       const receivedEventDeferred = new Deferred<void>();
-      let handledIncrementalEvent = false;
-      messageService.listenerCallbacks
-        .get(testRealmURL)!
-        .push((ev: RealmEventContent) => {
+      const unsubscribe = messageService.subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
           // React only to the incremental index event produced by this
           // edit. File "update" events, the "incremental-index-initiation"
           // event that precedes indexing, and any from-scratch ("full") or
@@ -1329,15 +1328,13 @@ module('Acceptance | interact submode tests', function (hooks) {
           // re-index events carry no clientRequestId and would fail the
           // assertions below — so ignore everything that is not the single
           // incremental event under test.
-          if (
-            handledIncrementalEvent ||
-            ev.eventName !== 'index' ||
-            ev.indexType !== 'incremental'
-          ) {
+          if (ev.eventName !== 'index' || ev.indexType !== 'incremental') {
             // eslint-disable-next-line qunit/no-early-return
             return;
           }
-          handledIncrementalEvent = true;
+          // Stop listening once the incremental event is handled so a later
+          // event can't re-run these assertions and overrun assert.expect(6).
+          unsubscribe();
           ev = ev as IncrementalIndexEventContent;
           assert.ok(
             ev.clientRequestId,
@@ -1359,7 +1356,8 @@ module('Acceptance | interact submode tests', function (hooks) {
             'invalidations are correct',
           ); // the card that was edited
           receivedEventDeferred.fulfill();
-        });
+        },
+      );
       await click('[data-test-edit-button]');
       fillIn('[data-test-field="firstName"] input', 'FadhlanXXX');
       let inputElement = find(
