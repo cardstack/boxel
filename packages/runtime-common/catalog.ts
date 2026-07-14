@@ -23,16 +23,16 @@ export interface Listing extends CardDef {
   skills: any[];
 }
 
-// A codeRef.module for a base-realm class may show up in either form:
-// the literal symbolic `https://cardstack.com/base/` URL (e.g. when built
-// directly, without going through a VirtualNetwork with real mappings
-// registered), or the base realm's real backing URL (e.g.
-// `https://localhost:4201/base/skill`) once resolved through one that has
-// them. VirtualNetwork.unresolveURL() only normalizes the latter — it maps
-// a real URL back to its canonical RRI-prefix form (`@cardstack/base/skill`)
-// via the registered realm mapping — so check the literal symbolic form
-// first. Without both, a base-realm module can get wrongly treated as
-// something that needs to be copied into the install destination.
+// A codeRef.module for a base-realm class may show up in either form: the
+// literal symbolic `https://cardstack.com/base/` URL, or the base realm's
+// real backing URL (e.g. `https://localhost:4201/base/skill`).
+// VirtualNetwork.unresolveURL() can canonicalize either form to the
+// `@cardstack/base/` RRI prefix, but only when the base realm's URL and
+// realm mappings are actually registered on that VirtualNetwork instance —
+// a bare VirtualNetwork (e.g. the plan-install unit test) leaves both
+// forms unchanged, so the literal-URL check below is still needed.
+// Without it, a base-realm module can get wrongly treated as something
+// that needs to be copied into the install destination.
 function isInBaseRealm(
   module: RealmResourceIdentifier,
   virtualNetwork: VirtualNetwork,
