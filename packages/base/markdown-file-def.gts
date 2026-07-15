@@ -249,14 +249,28 @@ class Embedded extends Component<typeof MarkdownDef> {
         font-weight: 600;
       }
 
+      /*
+        Embedded markdown is a bounded preview by default: a max-height clip
+        plus a bottom fade hinting that there is more to open and read. The
+        embedding context can retune this across the embed boundary via two
+        custom properties (the only lever it has, since it cannot pass args
+        into a framework-driven embedded render):
+          - a taller bounded preview:
+              --markdown-embedded-max-height: 500px;
+          - full, unbounded content (drop the clip AND the fade together):
+              --markdown-embedded-max-height: none;
+              --markdown-embedded-mask: none;
+      */
       .markdown-embedded__content {
-        max-height: 200px;
+        max-height: var(--markdown-embedded-max-height, 200px);
         overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
+        mask-image: var(
+          --markdown-embedded-mask,
+          linear-gradient(to bottom, black 60%, transparent 100%)
+        );
+        -webkit-mask-image: var(
+          --markdown-embedded-mask,
+          linear-gradient(to bottom, black 60%, transparent 100%)
         );
       }
 
