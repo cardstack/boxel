@@ -141,6 +141,23 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .default-card-template.edit > .notes-footer {
         background-color: var(--muted, var(--boxel-100));
       }
+      .default-card-template.edit {
+        container-name: default-edit-template;
+        container-type: inline-size;
+      }
+      /* stack field labels above their inputs when the template is narrow */
+      @container default-edit-template (width < 400px) {
+        .default-card-template.edit :deep(.boxel-field.horizontal) {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+          gap: var(--boxel-sp-4xs);
+          min-height: unset;
+        }
+        .default-card-template.edit
+          :deep(.boxel-field.horizontal > .label-container) {
+          padding-top: 0;
+        }
+      }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit
         > :deep(
