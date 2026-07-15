@@ -11,7 +11,7 @@ import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
-  decodeCommandRequest,
+  decodeToolRequest,
 } from '@cardstack/runtime-common/commands';
 import {
   getToolRequests,
@@ -254,12 +254,12 @@ export default class MessageBuilder {
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        command.toolRequest = decodeToolRequest(encodedCommandRequest);
       } else {
         message.tools.push(
           await this.buildMessageCommand(
             message,
-            decodeCommandRequest(encodedCommandRequest),
+            decodeToolRequest(encodedCommandRequest),
           ),
         );
       }
@@ -310,7 +310,7 @@ export default class MessageBuilder {
     for (let toolRequest of toolRequests) {
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(toolRequest),
+        decodeToolRequest(toolRequest),
       );
       commands.push(command);
     }

@@ -4,7 +4,7 @@ import {
   getToolRequests,
   isToolResultEventType,
   isToolResultRelType,
-  decodeCommandRequest,
+  decodeToolRequest,
   type ToolContext,
   type ToolRequest,
 } from '@cardstack/runtime-common';
@@ -105,7 +105,7 @@ export async function waitForCompletedCommandRequest(
         );
         if (
           toolRequest &&
-          commandRequestPredicate(decodeCommandRequest(toolRequest))
+          commandRequestPredicate(decodeToolRequest(toolRequest))
         ) {
           result = toolResultEvent;
           return true;

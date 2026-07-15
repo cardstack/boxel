@@ -343,6 +343,7 @@ const ALL_TEST_FILES: string[] = [
   './package-shim-handler-test',
   './command-parsing-utils-test',
   './command-function-name-test',
+  './tool-request-decoding-test',
   './query-matches-filter-test',
   './parse-search-url-test',
   './matches-filter-integration-test',
