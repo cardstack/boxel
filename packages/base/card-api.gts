@@ -211,6 +211,7 @@ import {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
+import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
 import type { FileMetaResource } from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
@@ -376,6 +377,10 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  // Host bridge for the markdown editor's embed chooser. Provided by
+  // operator-mode; absent in contexts with no chooser modal (prerender,
+  // freestyle), so consumers guard on it.
+  markdownEmbedChooser?: MarkdownEmbedChooser;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';

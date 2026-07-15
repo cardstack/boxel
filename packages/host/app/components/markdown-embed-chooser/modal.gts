@@ -1,8 +1,6 @@
-import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -42,24 +40,6 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
   @tracked private manuallySelectedTab: MarkdownEmbedRefType | undefined;
   @tracked
   private manualSelectionRequest: MarkdownEmbedChooserRequest | undefined;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    // Registers the global bridge `chooseMarkdownEmbed` / `editMarkdownEmbed`
-    // in runtime-common dispatch to. Mirrors the card-chooser/file-chooser
-    // pattern so the base-realm markdown editor can open the modal without a
-    // direct host import.
-    (globalThis as any)._CARDSTACK_MARKDOWN_EMBED_CHOOSER = {
-      chooseCardOrFile: (opts: { defaultTab?: MarkdownEmbedRefType }) =>
-        this.markdownEmbedChooser.chooseCardOrFile(opts),
-      editEmbed: (
-        target: Parameters<MarkdownEmbedChooserService['editEmbed']>[0],
-      ) => this.markdownEmbedChooser.editEmbed(target),
-    };
-    registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_MARKDOWN_EMBED_CHOOSER;
-    });
-  }
 
   private get request() {
     return this.markdownEmbedChooser.currentRequest;
