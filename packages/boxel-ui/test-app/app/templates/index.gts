@@ -201,6 +201,10 @@ class IndexComponent extends Component {
       }
       .boxel-freestyle-guide-container {
         border-radius: 0;
+        /* CardContainer's overflow: hidden makes it the containing scroll
+           box for the sticky nav sidebar, which then never sticks to the
+           viewport. Nothing needs clipping here (no rounded corners). */
+        overflow: visible;
       }
       .boxel-freestyle-theme-settings {
         --boxel-container-gap: var(--boxel-sp-2xs) var(--boxel-sp);
