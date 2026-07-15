@@ -131,180 +131,182 @@ interface EditSignature {
 
 class CardInfoEditor extends GlimmerComponent<EditSignature> {
   <template>
-    <div class='cardInfo-editor'>
-      <Button
-        class={{cn 'preview-toggle' is-preview-visible=this.isPreviewVisible}}
-        @size='extra-small'
-        @kind='text-only'
-        {{on 'click' this.togglePreview}}
-        data-test-toggle-preview
-      >
-        {{if this.isPreviewVisible 'Hide' 'Show'}}
-        Default Preview
-        <ChevronRight
-          class='preview-toggle-icon'
-          width='14'
-          height='14'
-          role='presentation'
-        />
-      </Button>
-      {{#if this.isPreviewVisible}}
-        <div class='default-preview'>
-          <FieldContainer
-            @label='Card Type'
-            @icon={{@model.constructor.icon}}
-            data-test-edit-preview='cardType'
-          >
-            {{@model.constructor.displayName}}
-          </FieldContainer>
-          {{#each this.previewFields as |item|}}
-            {{#let item.Field as |Field|}}
-              <FieldContainer
-                @label={{item.label}}
-                @icon={{if
-                  (eq item.key 'cardThumbnailURL')
-                  LinkIcon
-                  (getFieldIcon @model item.key)
-                }}
-                data-test-edit-preview={{item.key}}
-                data-edit-preview-field={{item.key}}
-              >
-                {{#if item.value}}
-                  <Field @format='atom' />
-                {{else}}
-                  <em class='null-preview'>
-                    {{#if (and (eq item.key 'cardTheme') @hideThemeChooser)}}
-                      (Self)
-                    {{else}}
-                      None
-                    {{/if}}
-                  </em>
-                {{/if}}
-              </FieldContainer>
-            {{/let}}
-          {{/each}}
-        </div>
-      {{/if}}
-      <FieldContainer class='main-fields'>
-        <:label>
-          <div class='cardInfo-thumbnail-container'>
-            <CardInfoImageContainer
-              class='cardInfo-thumbnail-preview'
-              @cardThumbnailURL={{@model.cardThumbnailURL}}
+    <div class='card-info-editor'>
+      <div class='card-info-preview-group'>
+        <Button
+          class={{cn 'preview-toggle' is-preview-visible=this.isPreviewVisible}}
+          @size='extra-small'
+          @kind='text-only'
+          {{on 'click' this.togglePreview}}
+          data-test-toggle-preview
+        >
+          {{if this.isPreviewVisible 'Hide' 'Show'}}
+          Default Preview
+          <ChevronRight
+            class='preview-toggle-icon'
+            width='14'
+            height='14'
+            role='presentation'
+          />
+        </Button>
+        {{#if this.isPreviewVisible}}
+          <div class='default-preview'>
+            <FieldContainer
+              class='preview-field'
+              @label='Card Type'
               @icon={{@model.constructor.icon}}
-              data-test-thumbnail-image
-            />
-            <Button
-              class='cardInfo-thumbnail-popup-toggle'
-              @size='extra-small'
-              @kind='secondary-light'
-              {{on 'click' this.toggleThumbnailEditor}}
-              data-test-toggle-thumbnail-editor
+              data-test-edit-preview='cardType'
             >
-              Change
-              {{#unless @hideThemeChooser}}Theme & {{/unless}}Thumbnail
-            </Button>
-          </div>
-        </:label>
-        <:default>
-          <div class='card-info-edit-fields'>
-            <FieldContainer
-              class='card-info-field'
-              @label='Name'
-              @tag='label'
-              @labelFontSize='default'
-              @icon={{NameIcon}}
-              @vertical={{true}}
-              data-test-field='cardInfo-name'
-            >
-              <@fields.cardInfo.name />
+              {{@model.constructor.displayName}}
             </FieldContainer>
-            <FieldContainer
-              class='card-info-field'
-              @label='Summary'
-              @tag='label'
-              @labelFontSize='default'
-              @icon={{SummaryIcon}}
-              @vertical={{true}}
-              data-test-field='cardInfo-summary'
-            >
-              <@fields.cardInfo.summary />
-            </FieldContainer>
+            {{#each this.previewFields as |item|}}
+              {{#let item.Field as |Field|}}
+                <FieldContainer
+                  class='preview-field'
+                  @label={{item.label}}
+                  @icon={{if
+                    (eq item.key 'cardThumbnailURL')
+                    LinkIcon
+                    (getFieldIcon @model item.key)
+                  }}
+                  data-test-edit-preview={{item.key}}
+                  data-edit-preview-field={{item.key}}
+                >
+                  {{#if item.value}}
+                    <Field @format='atom' />
+                  {{else}}
+                    <em class='null-preview'>
+                      {{#if (and (eq item.key 'cardTheme') @hideThemeChooser)}}
+                        (Self)
+                      {{else}}
+                        None
+                      {{/if}}
+                    </em>
+                  {{/if}}
+                </FieldContainer>
+              {{/let}}
+            {{/each}}
           </div>
-        </:default>
-      </FieldContainer>
-      {{#if this.isThumbnailEditorVisible}}
-        <div class='hidden-fields'>
+        {{/if}}
+      </div>
+      <div class='card-info-fields'>
+        <CardInfoImageContainer
+          class='card-info-thumbnail-preview'
+          @cardThumbnailURL={{@model.cardThumbnailURL}}
+          @icon={{@model.constructor.icon}}
+          data-test-thumbnail-image
+        />
+        <div class='card-info-edit-fields card-info-edit-field-group'>
           <FieldContainer
             class='card-info-field'
-            @label='Thumbnail URL'
+            @label='Name'
             @tag='label'
-            @icon={{ImageIcon}}
-            data-test-field='cardInfo-thumbnailURL'
+            @labelFontSize='default'
+            @icon={{NameIcon}}
+            @vertical={{true}}
+            data-test-field='cardInfo-name'
           >
-            <div class='thumbnail-picker' data-thumbnail-picker-controls>
-              <div class='thumbnail-picker-inputs'>
-                <span
-                  class='thumbnail-picker-input-slot'
-                  data-test-thumbnail-input
-                >
-                  <@fields.cardInfo.cardThumbnailURL />
-                </span>
-                {{#if this.hasThumbnailUrl}}
-                  <IconButton
-                    class='thumbnail-picker-clear'
-                    @icon={{XIcon}}
-                    @width='16px'
-                    @height='16px'
-                    aria-label='Clear thumbnail'
-                    data-test-thumbnail-clear
-                    {{on 'click' this.clearThumbnail}}
-                  />
-                {{else if this.computedThumbnailFallback}}
-                  <span
-                    class='thumbnail-picker-placeholder'
-                    data-test-thumbnail-placeholder
-                    aria-hidden='true'
-                  >{{this.computedThumbnailFallback}}</span>
-                {{/if}}
-              </div>
-              {{#unless this.hasThumbnailUrl}}
-                <span class='thumbnail-picker-or'>or</span>
-                <Button
-                  @kind='secondary'
-                  @size='extra-small'
-                  data-test-thumbnail-select-image
-                  {{on 'click' this.selectThumbnailImage}}
-                >
-                  Select Image
-                </Button>
-              {{/unless}}
-            </div>
+            <@fields.cardInfo.name />
           </FieldContainer>
-          {{#unless @hideThemeChooser}}
-            <FieldContainer
-              class='card-info-field theme-field'
-              @label='Theme'
-              @icon={{ThemeIcon}}
-              data-test-field='cardInfo-theme'
-            >
-              <@fields.cardInfo.theme />
-            </FieldContainer>
-          {{/unless}}
+          <FieldContainer
+            class='card-info-field'
+            @label='Summary'
+            @tag='label'
+            @labelFontSize='default'
+            @icon={{SummaryIcon}}
+            @vertical={{true}}
+            data-test-field='cardInfo-summary'
+          >
+            <@fields.cardInfo.summary />
+          </FieldContainer>
         </div>
-      {{/if}}
+        <Button
+          class='card-info-thumbnail-popup-toggle'
+          @size='extra-small'
+          @kind='secondary-light'
+          {{on 'click' this.toggleThumbnailEditor}}
+          data-test-toggle-thumbnail-editor
+        >
+          Change
+          {{#unless @hideThemeChooser}}Theme & {{/unless}}Thumbnail
+        </Button>
+        {{#if this.isThumbnailEditorVisible}}
+          <div class='hidden-fields card-info-edit-field-group'>
+            <FieldContainer
+              class='card-info-field'
+              @label='Thumbnail URL'
+              @tag='label'
+              @icon={{ImageIcon}}
+              data-test-field='cardInfo-thumbnailURL'
+            >
+              <div class='thumbnail-picker' data-thumbnail-picker-controls>
+                <div class='thumbnail-picker-inputs'>
+                  <span
+                    class='thumbnail-picker-input-slot'
+                    data-test-thumbnail-input
+                  >
+                    <@fields.cardInfo.cardThumbnailURL />
+                  </span>
+                  {{#if this.hasThumbnailUrl}}
+                    <IconButton
+                      class='thumbnail-picker-clear'
+                      @icon={{XIcon}}
+                      @width='16px'
+                      @height='16px'
+                      aria-label='Clear thumbnail'
+                      data-test-thumbnail-clear
+                      {{on 'click' this.clearThumbnail}}
+                    />
+                  {{else if this.computedThumbnailFallback}}
+                    <span
+                      class='thumbnail-picker-placeholder'
+                      data-test-thumbnail-placeholder
+                      aria-hidden='true'
+                    >{{this.computedThumbnailFallback}}</span>
+                  {{/if}}
+                </div>
+                {{#unless this.hasThumbnailUrl}}
+                  <span class='thumbnail-picker-or'>or</span>
+                  <Button
+                    @kind='secondary'
+                    @size='extra-small'
+                    data-test-thumbnail-select-image
+                    {{on 'click' this.selectThumbnailImage}}
+                  >
+                    Select Image
+                  </Button>
+                {{/unless}}
+              </div>
+            </FieldContainer>
+            {{#unless @hideThemeChooser}}
+              <FieldContainer
+                class='card-info-field theme-field'
+                @label='Theme'
+                @icon={{ThemeIcon}}
+                data-test-field='cardInfo-theme'
+              >
+                <@fields.cardInfo.theme />
+              </FieldContainer>
+            {{/unless}}
+          </div>
+        {{/if}}
+      </div>
     </div>
     <style scoped>
-      .cardInfo-editor {
-        --thumbnail-container-size: 6.25rem;
+      .card-info-editor {
+        container-name: cardInfo-editor-template;
+        container-type: inline-size;
         position: relative;
         width: 100%;
         max-width: 100%;
       }
+
+      .card-info-preview-group {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
       .preview-toggle {
-        position: absolute;
-        top: calc(-1 * var(--boxel-sp-lg));
-        right: 0;
+        margin-left: auto;
         min-width: 10.5rem;
         justify-content: space-between;
       }
@@ -314,35 +316,55 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .is-preview-visible .preview-toggle-icon {
         transform: rotate(-90deg);
       }
-      .preview-toggle + .default-preview {
-        margin-top: var(--boxel-sp-lg);
-      }
-      .default-preview + .main-fields {
-        margin-top: var(--boxel-sp-lg);
-      }
       .default-preview {
+        display: grid;
+        gap: var(--boxel-sp);
+        margin-bottom: var(--boxel-sp-xl);
         padding: var(--boxel-sp-lg);
-        background-color: var(--accent, var(--boxel-200));
-        border-radius: var(--radius, var(--boxel-border-radius));
-        color: var(--accent-foreground, var(--boxel-dark));
+        background-color: var(--accent);
+        border-radius: var(--radius);
+        color: var(--accent-foreground);
       }
-      .cardInfo-thumbnail-container {
-        display: flex;
-        flex-direction: column;
+      .preview-field,
+      .preview-field > :deep(.label-container) {
+        --boxel-field-content-padding: 0;
+        min-height: unset;
+        padding-top: unset;
+      }
+
+      .card-info-fields {
+        --thumbnail-container-size: 6.25rem;
+        display: grid;
+        grid-template-areas:
+          'thumbnail name-summary'
+          'thumbnail-toggle name-summary'
+          'hidden-fields hidden-fields';
+        grid-template-columns:
+          var(--boxel-field-label-size, minmax(8rem, 25%))
+          1fr;
         align-items: center;
-        padding-right: var(--boxel-sp-xl);
+        justify-items: center;
       }
-      .cardInfo-thumbnail-preview {
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+      .card-info-thumbnail-preview {
+        grid-area: thumbnail;
+        border: 1px solid var(--border);
       }
-      .cardInfo-thumbnail-popup-toggle {
-        margin-top: var(--boxel-sp-xs);
+      .card-info-thumbnail-popup-toggle {
+        grid-area: thumbnail-toggle;
+        max-width: 9.375rem;
+        padding-inline: var(--boxel-sp-xs);
       }
-      .card-info-field + .card-info-field {
-        margin-top: var(--boxel-sp-lg);
+      .card-info-edit-fields {
+        grid-area: name-summary;
       }
       .hidden-fields {
+        grid-area: hidden-fields;
         margin-top: var(--boxel-sp);
+      }
+      .card-info-edit-field-group {
+        width: 100%;
+        display: grid;
+        gap: var(--boxel-sp-lg);
       }
       .theme-field :deep(.links-to-editor .field-component-card) {
         min-height: var(--boxel-form-control-height);
@@ -408,6 +430,36 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .default-preview :deep([data-edit-preview-field='cardThumbnailURL']) {
         overflow-wrap: anywhere;
         min-width: 0;
+      }
+
+      @container cardInfo-editor-template (width < 425px) {
+        .card-info-preview-group {
+          margin-bottom: var(--boxel-sp);
+        }
+        .default-preview {
+          margin-bottom: 0;
+        }
+        .card-info-fields {
+          --thumbnail-container-size: 4.375rem;
+          grid-template-columns: var(--thumbnail-container-size) 1fr;
+          gap: var(--boxel-sp-sm);
+          align-items: flex-end;
+        }
+        .card-info-edit-field-group {
+          gap: var(--boxel-sp-xs);
+        }
+        .card-info-thumbnail-popup-toggle {
+          align-self: start;
+          max-width: var(--thumbnail-container-size);
+          min-width: unset;
+          padding-inline: 0;
+          border-radius: var(--boxel-border-radius-sm);
+          font-size: 0.6875rem;
+        }
+        .card-info-thumbnail-preview :deep(.icon) {
+          width: 1.25rem;
+          height: 1.25rem;
+        }
       }
     </style>
   </template>

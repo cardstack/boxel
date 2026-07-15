@@ -61,58 +61,63 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       class={{cn 'default-card-template' @format}}
       data-test-base-template={{@format}}
     >
-      <Header @hasBottomBorder={{true}} class='card-info-header'>
-        {{#if (eq @format 'isolated')}}
-          <CardInfoTemplates.view
-            @cardTitle={{@model.cardTitle}}
-            @cardDescription={{@model.cardDescription}}
-            @cardThumbnailURL={{@model.cardThumbnailURL}}
-            @icon={{@model.constructor.icon}}
-          />
-        {{else}}
-          <CardInfoTemplates.edit
-            @fields={{@fields}}
-            @model={{@model}}
-            @hideThemeChooser={{this.isThemeCard}}
-          />
+      <div class={{cn 'default-card-template--inner' @format}}>
+        <Header @hasBottomBorder={{true}} class='card-info-header'>
+          {{#if (eq @format 'isolated')}}
+            <CardInfoTemplates.view
+              @cardTitle={{@model.cardTitle}}
+              @cardDescription={{@model.cardDescription}}
+              @cardThumbnailURL={{@model.cardThumbnailURL}}
+              @icon={{@model.constructor.icon}}
+            />
+          {{else}}
+            <CardInfoTemplates.edit
+              @fields={{@fields}}
+              @model={{@model}}
+              @hideThemeChooser={{this.isThemeCard}}
+            />
+          {{/if}}
+        </Header>
+        {{#if this.displayFields}}
+          <section class='own-display-fields'>
+            {{#each-in this.displayFields as |key Field|}}
+              <FieldContainer
+                @label={{startCase key}}
+                @icon={{getFieldIcon @model key}}
+                data-test-field={{key}}
+              >
+                <Field class='in-isolated' />
+              </FieldContainer>
+            {{/each-in}}
+          </section>
         {{/if}}
-      </Header>
-      {{#if this.displayFields}}
-        <section class='own-display-fields'>
-          {{#each-in this.displayFields as |key Field|}}
-            <FieldContainer
-              @label={{startCase key}}
-              @icon={{getFieldIcon @model key}}
-              data-test-field={{key}}
-            >
-              <Field class='in-isolated' />
-            </FieldContainer>
-          {{/each-in}}
-        </section>
-      {{/if}}
-      <footer class='notes-footer'>
-        <FieldContainer
-          @label='Notes'
-          @icon={{getFieldIcon @model.cardInfo 'notes'}}
-          data-test-field='cardInfo-notes'
-        >
-          <@fields.cardInfo.notes />
-        </FieldContainer>
-      </footer>
+        <footer class='notes-footer'>
+          <FieldContainer
+            @label='Notes'
+            @icon={{getFieldIcon @model.cardInfo 'notes'}}
+            data-test-field='cardInfo-notes'
+          >
+            <@fields.cardInfo.notes />
+          </FieldContainer>
+        </footer>
+      </div>
     </div>
     <style scoped>
       .default-card-template {
-        --hr-color: rgba(0 0 0 / 10%);
+        container-name: default-template;
+        container-type: inline-size;
+      }
+      .default-card-template--inner {
+        --boxel-default-template-padding: var(--boxel-sp-xl);
+        --boxel-default-template-hr-color: rgba(0 0 0 / 10%);
         display: grid;
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem; /* 150px */
-        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
-          var(--boxel-sp-xl);
+        --boxel-header-padding: var(--boxel-default-template-padding);
         --boxel-header-gap: var(--boxel-sp-lg);
-        --boxel-header-border-color: var(--hr-color);
-        align-items: flex-start;
-        background-color: var(--muted, var(--boxel-100));
+        --boxel-header-border-color: var(--boxel-default-template-hr-color);
+        background-color: var(--muted);
       }
       .card-info-header :deep(.info) {
         align-self: center;
@@ -123,14 +128,14 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .own-display-fields {
         display: grid;
         gap: var(--boxel-sp-lg);
-        padding: var(--boxel-sp-xl);
-        background-color: var(--background, var(--boxel-light));
+        padding: var(--boxel-default-template-padding);
+        background-color: var(--background);
       }
       .own-display-fields + .notes-footer {
-        border-top: 1px solid var(--hr-color);
+        border-top: 1px solid var(--boxel-default-template-hr-color);
       }
       .notes-footer {
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-default-template-padding);
       }
       .tags {
         display: flex;
@@ -139,22 +144,20 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         margin-top: var(--boxel-sp-xs);
       }
       .default-card-template.edit > .notes-footer {
-        background-color: var(--muted, var(--boxel-100));
-      }
-      .default-card-template.edit {
-        container-name: default-edit-template;
-        container-type: inline-size;
+        background-color: var(--muted);
       }
       /* stack field labels above their inputs when the template is narrow */
-      @container default-edit-template (width < 400px) {
-        .default-card-template.edit :deep(.boxel-field.horizontal) {
+      @container default-template (width < 425px) {
+        .default-card-template--inner {
+          --boxel-default-template-padding: var(--boxel-sp);
+        }
+        :deep(.boxel-field.horizontal:not(.theme-field)) {
           grid-template-columns: 1fr;
           grid-template-rows: auto 1fr;
-          gap: var(--boxel-sp-4xs);
+          gap: var(--boxel-sp-xs);
           min-height: unset;
         }
-        .default-card-template.edit
-          :deep(.boxel-field.horizontal > .label-container) {
+        :deep(.boxel-field.horizontal:not(.theme-field) > .label-container) {
           padding-top: 0;
         }
       }
