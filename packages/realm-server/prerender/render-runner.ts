@@ -917,6 +917,26 @@ export class RenderRunner {
       > = (diagnostics.renderFormatsMs ??= {});
       (renderFormatsMs[rendering] ??= {})[format] = ms;
     };
+    // The index-half sibling of `recordFormatMs`: per-route wall-clock of the
+    // index-visit route steps (`meta` / `icon` for a card, `fileExtract` /
+    // `icon` for a file), recorded onto `response.meta.diagnostics.indexRoutesMs`
+    // as each step completes. Decomposes the index visit's per-visit floor
+    // into measured route buckets instead of leaving it inferred from
+    // `renderElapsedMs`. Recorded wherever the step runs — on an index visit
+    // that is every leg; a self-sufficient prerender-html visit records only
+    // its `fileExtract` leg.
+    let recordIndexRouteMs = (
+      rendering: 'card' | 'file',
+      route: string,
+      ms: number,
+    ) => {
+      let meta = (response.meta ??= {});
+      let diagnostics = (meta.diagnostics ??= {});
+      let indexRoutesMs: NonNullable<
+        RenderTimeoutDiagnostics['indexRoutesMs']
+      > = (diagnostics.indexRoutesMs ??= {});
+      (indexRoutesMs[rendering] ??= {})[route] = ms;
+    };
 
     try {
       // Page acquired but untouched — tag as 'queued'. The between-pass
@@ -1008,6 +1028,7 @@ export class RenderRunner {
           simulateTimeoutMs: opts?.simulateTimeoutMs,
           timeoutMs: opts?.timeoutMs,
         };
+        let extractStart = Date.now();
         let capture = await withTimeout(
           page,
           async () => {
@@ -1023,6 +1044,7 @@ export class RenderRunner {
           opts?.timeoutMs,
           this.#profileContext(affinityKey, url, 'file-extract', jobId),
         );
+        recordIndexRouteMs('file', 'fileExtract', Date.now() - extractStart);
         let extractResponse: FileExtractResponse;
         if (isRenderError(capture)) {
           let renderError = capture as RenderError;
@@ -1186,6 +1208,7 @@ export class RenderRunner {
           step: string,
           fn: () => Promise<T | RenderError>,
           format?: string,
+          indexRoute?: string,
         ): Promise<T | undefined> => {
           if (cardShortCircuit) {
             return;
@@ -1199,8 +1222,12 @@ export class RenderRunner {
               this.#profileContext(affinityKey, url, step, jobId),
             ),
           );
+          let elapsed = Date.now() - stepStart;
           if (format) {
-            recordFormatMs('card', format, Date.now() - stepStart);
+            recordFormatMs('card', format, elapsed);
+          }
+          if (indexRoute) {
+            recordIndexRouteMs('card', indexRoute, elapsed);
           }
           if (stepResult.ok) {
             return stepResult.value as T;
@@ -1279,6 +1306,8 @@ export class RenderRunner {
               );
               return await renderMeta(page, captureOptions);
             },
+            undefined,
+            'meta',
           );
           if (metaResult !== undefined) {
             meta = metaResult;
@@ -1316,6 +1345,8 @@ export class RenderRunner {
               let iconResult = await runTimedStep<string>(
                 'visit card icon render',
                 () => renderIcon(page, captureOptions),
+                undefined,
+                'icon',
               );
               if (iconResult !== undefined) {
                 iconHTML = iconResult;
@@ -1341,8 +1372,11 @@ export class RenderRunner {
             cb: () => Promise<string | RenderError>;
             assign: (v: string) => void;
             // html-route format key for `renderFormatsMs`; the icon step is
-            // index-half work and records no format timing.
+            // index-half work and records an `indexRoutesMs` route timing
+            // instead of a format one.
             format?: string;
+            // index-route key for `indexRoutesMs` (the icon step).
+            indexRoute?: string;
           }> = [
             {
               name: 'visit card head render',
@@ -1370,6 +1404,7 @@ export class RenderRunner {
                     assign: (v: string) => {
                       iconHTML = v;
                     },
+                    indexRoute: 'icon',
                   },
                 ]
               : []),
@@ -1384,7 +1419,12 @@ export class RenderRunner {
           ];
           for (let step of formatSteps) {
             if (cardShortCircuit) break;
-            let v = await runTimedStep<string>(step.name, step.cb, step.format);
+            let v = await runTimedStep<string>(
+              step.name,
+              step.cb,
+              step.format,
+              step.indexRoute,
+            );
             if (v !== undefined) step.assign(v);
           }
         }
@@ -1458,6 +1498,8 @@ export class RenderRunner {
           let finalMetaResult = await runTimedStep<PrerenderMeta>(
             'visit card render.meta',
             () => renderMeta(page, captureOptions),
+            undefined,
+            'meta',
           );
           if (finalMetaResult !== undefined) {
             meta = finalMetaResult;
@@ -1645,6 +1687,7 @@ export class RenderRunner {
             // The file's icon belongs to the index half, and an index visit
             // never touches the html route — so the icon render is its entry
             // into the render app for this file.
+            let iconStart = Date.now();
             let iconResult = await withTimeout(
               page,
               async () => {
@@ -1660,6 +1703,7 @@ export class RenderRunner {
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, 'file icon', jobId),
             );
+            recordIndexRouteMs('file', 'icon', Date.now() - iconStart);
             if (isRenderError(iconResult)) {
               let renderError = iconResult as RenderError;
               let evicted = await this.#maybeEvict(
@@ -1704,8 +1748,11 @@ export class RenderRunner {
               cb: () => Promise<string | Record<string, string> | RenderError>;
               assign: (value: string | Record<string, string>) => void;
               // html-route format key for `renderFormatsMs`; the icon step
-              // is index-half work and records no format timing.
+              // is index-half work and records an `indexRoutesMs` route
+              // timing instead of a format one.
               format?: string;
+              // index-route key for `indexRoutesMs` (the icon step).
+              indexRoute?: string;
             }> = [];
 
             if (effectiveTypes && effectiveTypes.length > 0) {
@@ -1758,6 +1805,7 @@ export class RenderRunner {
                 assign: (v) => {
                   iconHTML = v as string;
                 },
+                indexRoute: 'icon',
               });
             }
             steps.push({
@@ -1780,8 +1828,12 @@ export class RenderRunner {
                   this.#profileContext(affinityKey, url, step.name, jobId),
                 ),
               );
+              let elapsed = Date.now() - stepStart;
               if (step.format) {
-                recordFormatMs('file', step.format, Date.now() - stepStart);
+                recordFormatMs('file', step.format, elapsed);
+              }
+              if (step.indexRoute) {
+                recordIndexRouteMs('file', step.indexRoute, elapsed);
               }
               if (res.ok) {
                 step.assign(res.value);

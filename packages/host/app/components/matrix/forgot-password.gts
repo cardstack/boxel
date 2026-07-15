@@ -66,6 +66,7 @@ export default class ForgotPassword extends Component<Signature> {
           @loading={{this.sendEmailValidationTask.isRunning}}
           {{on 'click' this.sendEmailValidation}}
         >Reset Your Password</AuthButton>
+        <div>or</div>
         <AuthButton
           data-test-cancel-reset-password-btn
           @variant='secondary'
@@ -169,6 +170,7 @@ export default class ForgotPassword extends Component<Signature> {
         align-items: center;
         margin-top: var(--boxel-sp-lg);
         gap: var(--boxel-sp-sm);
+        color: var(--muted-foreground);
       }
       .email-validation-instruction {
         padding: 0;

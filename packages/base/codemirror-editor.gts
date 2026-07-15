@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
+import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -94,6 +95,14 @@ interface CodeMirrorContext {
 
 const SAVE_DEBOUNCE_MS = 500;
 
+// The symbol CodeMirror's `Mod-` binding resolves to per platform: ⌘ on macOS,
+// Ctrl elsewhere. Kept local to this file — the toolbar tooltips are its only
+// consumer.
+const modKey =
+  typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+    ? '⌘'
+    : 'Ctrl';
+
 function isInline(kind: string): boolean {
   return kind === 'inline';
 }
@@ -178,6 +187,10 @@ interface ToolbarItem {
   action?: () => void;
   active?: boolean;
   ariaPressed?: 'true' | 'false';
+  // Key-command hint shown as a badge in the tooltip. Set only for items with a
+  // binding in the CodeMirror keymap (bold/italic/code); absent items render a
+  // label-only tooltip.
+  shortcut?: string;
 }
 
 const EMPTY_FORMATS: SelectionFormats = Object.freeze({
@@ -454,6 +467,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._wrapBold,
         active: f.bold,
         ariaPressed: pressed(f.bold),
+        shortcut: `${modKey}B`,
       },
       {
         testId: 'italic',
@@ -462,6 +476,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._wrapItalic,
         active: f.italic,
         ariaPressed: pressed(f.italic),
+        shortcut: `${modKey}I`,
       },
       {
         testId: 'strikethrough',
@@ -478,6 +493,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._wrapCode,
         active: f.code,
         ariaPressed: pressed(f.code),
+        shortcut: `${modKey}\``,
       },
       {
         testId: 'link',
@@ -661,14 +677,17 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._embedPopoverOpen = false;
     let chooser = this.cardContext?.markdownEmbedChooser;
     if (!chooser) {
-      // No chooser provided (e.g. card running outside the host) — silently
+      // No chooser provided (e.g. card running outside the host) — warn and
       // no-op so the toolbar click doesn't blow up the editor.
       console.warn('markdown-embed chooser unavailable');
       return;
     }
     let result;
     try {
-      result = await chooser.chooseCardOrFile({ defaultTab });
+      result = await chooser.chooseCardOrFile({
+        defaultTab,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
+      });
     } catch (e) {
       console.warn('markdown-embed chooser failed', e);
       return;
@@ -698,12 +717,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         // Resolve the directive's raw ref (which may be relative to the field's
         // base URL) to an absolute URL. The chooser loads the preview via
         // `store.get`, which can't resolve a relative specifier on its own.
-        url: resolveUrl(
-          ref.url,
-          this.args.cardReferenceBaseUrl,
-        ),
+        url: resolveUrl(ref.url, this.args.cardReferenceBaseUrl),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
       });
     } catch (e) {
       console.warn('markdown-embed chooser failed', e);
@@ -1111,28 +1128,44 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           {{/if}}
 
           {{#if this._currentBfmRef}}
-            <button
-              class='toolbar-btn'
-              data-test-toolbar='edit-embed'
-              type='button'
-              title='Edit embed'
-              aria-label='Edit embed'
-              {{on 'mousedown' this._preventFocusLoss}}
-              {{on 'click' this._openEditEmbed}}
-            ><PencilIcon width='16' height='16' /></button>
+            <Tooltip @placement='top' data-test-toolbar-tooltip='edit-embed'>
+              <:trigger>
+                <button
+                  class='toolbar-btn'
+                  data-test-toolbar='edit-embed'
+                  type='button'
+                  aria-label='Edit embed'
+                  {{on 'mousedown' this._preventFocusLoss}}
+                  {{on 'click' this._openEditEmbed}}
+                ><PencilIcon width='16' height='16' /></button>
+              </:trigger>
+              <:content>
+                <span class='toolbar-tooltip'>
+                  <span class='toolbar-tooltip__label'>Edit embed</span>
+                </span>
+              </:content>
+            </Tooltip>
           {{else}}
             <div class='toolbar-embed-trigger'>
-              <button
-                class='toolbar-btn
-                  {{if this._embedPopoverOpen "toolbar-btn--active"}}'
-                data-test-toolbar='add-embed'
-                type='button'
-                title='Add embed'
-                aria-label='Add embed'
-                aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
-                {{on 'mousedown' this._preventFocusLoss}}
-                {{on 'click' this._toggleEmbedPopover}}
-              ><PlusIcon width='16' height='16' /></button>
+              <Tooltip @placement='top' data-test-toolbar-tooltip='add-embed'>
+                <:trigger>
+                  <button
+                    class='toolbar-btn
+                      {{if this._embedPopoverOpen "toolbar-btn--active"}}'
+                    data-test-toolbar='add-embed'
+                    type='button'
+                    aria-label='Add embed'
+                    aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
+                    {{on 'mousedown' this._preventFocusLoss}}
+                    {{on 'click' this._toggleEmbedPopover}}
+                  ><PlusIcon width='16' height='16' /></button>
+                </:trigger>
+                <:content>
+                  <span class='toolbar-tooltip'>
+                    <span class='toolbar-tooltip__label'>Add embed</span>
+                  </span>
+                </:content>
+              </Tooltip>
               {{#if this._embedPopoverOpen}}
                 <div
                   class='toolbar-embed-popover'
@@ -1162,20 +1195,38 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             {{#if btn.divider}}
               <span class='toolbar-divider'></span>
             {{else}}
-              <button
-                class='toolbar-btn {{if btn.active "toolbar-btn--active"}}'
-                data-test-toolbar={{btn.testId}}
-                type='button'
-                title={{btn.label}}
-                aria-label={{btn.label}}
-                aria-pressed={{btn.ariaPressed}}
-                disabled={{not this.toolbarEnabled}}
-                {{on 'mousedown' this._preventFocusLoss}}
-                {{on 'click' btn.action}}
-              >{{#let btn.icon as |Icon|}}<Icon
-                    width='16'
-                    height='16'
-                  />{{/let}}</button>
+              {{! Every item gets a styled tooltip — the label, plus a shortcut
+                  key badge when the item has a CodeMirror binding. The tooltip
+                  is suppressed while the control is disabled. }}
+              <Tooltip
+                @placement='top'
+                @disabled={{not this.toolbarEnabled}}
+                data-test-toolbar-tooltip={{btn.testId}}
+              >
+                <:trigger>
+                  <button
+                    class='toolbar-btn {{if btn.active "toolbar-btn--active"}}'
+                    data-test-toolbar={{btn.testId}}
+                    type='button'
+                    aria-label={{btn.label}}
+                    aria-pressed={{btn.ariaPressed}}
+                    disabled={{not this.toolbarEnabled}}
+                    {{on 'mousedown' this._preventFocusLoss}}
+                    {{on 'click' btn.action}}
+                  >{{#let btn.icon as |Icon|}}<Icon
+                        width='16'
+                        height='16'
+                      />{{/let}}</button>
+                </:trigger>
+                <:content>
+                  <span class='toolbar-tooltip'>
+                    <span class='toolbar-tooltip__label'>{{btn.label}}</span>
+                    {{#if btn.shortcut}}
+                      <kbd class='shortcut-key'>{{btn.shortcut}}</kbd>
+                    {{/if}}
+                  </span>
+                </:content>
+              </Tooltip>
             {{/if}}
           {{/each}}
         </div>
@@ -1652,6 +1703,30 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         .toolbar-btn:disabled {
           color: var(--muted-foreground, var(--boxel-300));
           cursor: not-allowed;
+        }
+
+        /* Tooltip content: label at left, shortcut in a darker key badge at
+           right. Rendered into the shared #tooltip-overlay, but these rules
+           still apply — scoped CSS keys off the element's class, not its
+           position in the DOM tree. */
+        .toolbar-tooltip {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .shortcut-key {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 1.4em;
+          padding: 0 var(--boxel-sp-5xs);
+          border-radius: var(--boxel-border-radius-xs, 4px);
+          background: rgb(0 0 0 / 35%);
+          color: var(--boxel-450, #939393);
+          font-family: inherit;
+          font-size: 0.9em;
+          line-height: 1.5;
         }
 
         .toolbar-divider {

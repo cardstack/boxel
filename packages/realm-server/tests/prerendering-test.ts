@@ -4387,6 +4387,7 @@ module(basename(import.meta.filename), function () {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
             '@cardstack/base/card-api/CardDef',
+            '@cardstack/base/card-api/BaseDef',
           ]);
         });
 
@@ -7786,6 +7787,50 @@ module(basename(import.meta.filename), function () {
       assert.notOk(
         index.meta?.diagnostics?.renderFormatsMs,
         'index visit records no per-format render timings',
+      );
+
+      // Per-route index timings are the index-half sibling of
+      // renderFormatsMs: they ride the index visit's meta — one number per
+      // index-half route step (meta / icon for the card, fileExtract / icon
+      // for the file) — while the prerender-html visit, which runs no
+      // index-half route here, reports none. (No jobId is threaded, so the
+      // per-type icon memo is inactive and each icon route actually runs.)
+      let indexRoutesMs = index.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.meta,
+        'number',
+        'index visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.icon,
+        'number',
+        'index visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.file?.fileExtract,
+        'number',
+        'index visit records the file extract route timing',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.file?.icon,
+        'number',
+        'index visit records the file icon route timing',
+      );
+      assert.notOk(
+        html.meta?.diagnostics?.indexRoutesMs,
+        'prerender-html visit records no per-route index timings',
+      );
+      // The fused visit runs both halves, so it records the index routes too.
+      let fusedIndexRoutesMs = fused.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.meta,
+        'number',
+        'fused visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.icon,
+        'number',
+        'fused visit records the card icon route timing',
       );
     });
 

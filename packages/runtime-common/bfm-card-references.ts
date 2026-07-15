@@ -375,11 +375,16 @@ export interface MarkdownEmbedInitialTarget {
   // from `sizeSpec` so a size-less block directive seeds block placement
   // instead of collapsing to an inline atom.
   kind?: 'inline' | 'block';
+  // The editing document's own URL. The chooser relativizes the picked ref
+  // against it so the inserted directive is `../`-relative, matching the
+  // format-picker insertion path.
+  documentBaseUrl?: string;
 }
 
 export interface MarkdownEmbedChooser {
   chooseCardOrFile(opts: {
     defaultTab?: 'card' | 'file';
+    documentBaseUrl?: string;
   }): Promise<MarkdownEmbedResolution>;
   editEmbed(
     target: MarkdownEmbedInitialTarget,

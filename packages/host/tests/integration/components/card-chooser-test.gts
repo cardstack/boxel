@@ -276,7 +276,7 @@ module('Integration | card-chooser', function (hooks) {
         .exists('show pagination button for test realm');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
-        .containsText('Show 1 more card (1 not shown)');
+        .containsText('Show 1 more result (1 not shown)');
 
       await click(
         `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,

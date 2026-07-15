@@ -16,6 +16,14 @@ import {
   type Sort,
 } from './query.ts';
 
+import {
+  CARD_INSTANCE_FILE_KEY,
+  CARD_TITLE_KEY,
+  CARD_TYPE_KEY,
+  isSyntheticSearchDocKey,
+} from './search-doc-keys.ts';
+import { friendlyCardType } from './helpers/card-type-display-name.ts';
+
 import type { CodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { BaseDef, CardDef, Field } from '@cardstack/base/card-api';
@@ -86,10 +94,38 @@ export function isClientEvaluable(filter: Filter): boolean {
     isRangeFilter(filter) ||
     isCardTypeFilter(filter)
   ) {
+    // A synthetic underscore-prefixed key that the matcher doesn't shim (see
+    // resolveSyntheticKey) can't be evaluated locally without silently
+    // diverging from the server, so force server-only evaluation for it. This
+    // makes a future synthetic key added on the server without a matcher shim
+    // degrade to "no instant results" rather than "reconciler blanks correct
+    // server results".
+    for (let op of ['eq', 'contains', 'in', 'range'] as const) {
+      let operator = (filter as unknown as Record<string, unknown>)[op];
+      if (
+        operator &&
+        typeof operator === 'object' &&
+        !operatorPathsClientEvaluable(operator as Record<string, unknown>)
+      ) {
+        return false;
+      }
+    }
     return true;
   }
   // Unknown / non-replicable operator.
   return false;
+}
+
+// A filter operator object is keyed by field paths. An underscore-prefixed path
+// head is a synthetic search-doc key; only the ones the matcher shims are
+// client-evaluable.
+function operatorPathsClientEvaluable(
+  operator: Record<string, unknown>,
+): boolean {
+  return Object.keys(operator).every((path) => {
+    let head = path.split('.')[0];
+    return !head.startsWith('_') || isSyntheticSearchDocKey(head);
+  });
 }
 
 export function matchInstanceAgainstFilter(
@@ -182,11 +218,63 @@ interface PathResolution {
   sawUnresolvable: boolean;
 }
 
+// Client-side counterpart to the engine's `getField` synthetic-key shim
+// (index-query-engine.ts) plus the `_isCardInstanceFile` special case in
+// `fieldEqFilter`. These keys are stamped into a row's search_doc at index time
+// (see search-doc-keys.ts), so they are not real fields on a hydrated instance;
+// resolve them to the value the server agrees they denote. Kept in sync with the
+// engine and the parity differ (searchable-parity.ts) — a synthetic key added
+// on the server without a shim here re-introduces the reconciler-blanks-results
+// bug this guards against (see `isClientEvaluable`).
+function resolveSyntheticKey(
+  instance: BaseDef,
+  path: string,
+  api: CardAPIForMatching,
+): PathResolution | undefined {
+  if (!isSyntheticSearchDocKey(path)) {
+    return undefined;
+  }
+  // A CardDef instance can reproduce all three keys; a file-meta instance
+  // cannot derive them from its attributes (the stamp lives in the search doc,
+  // not the file's fields), so it is 'unresolvable' — which the reconciler
+  // treats as "trust the server" rather than dropping a correct result.
+  let isCard = Boolean(getField(instance, 'cardTitle'));
+  if (!isCard) {
+    return { values: [], leafField: undefined, sawUnresolvable: true };
+  }
+  if (path === CARD_TITLE_KEY) {
+    // Stamped as `searchDoc.cardTitle`; `cardTitle` is a real CardDef field, so
+    // resolve it the normal way (identical value, correct leafField for
+    // formatting).
+    return resolvePath(instance, 'cardTitle', api);
+  }
+  if (path === CARD_TYPE_KEY) {
+    let ctor = instance.constructor as { displayName: string; name: string };
+    return {
+      values: [friendlyCardType(ctor)],
+      leafField: undefined,
+      sawUnresolvable: false,
+    };
+  }
+  if (path === CARD_INSTANCE_FILE_KEY) {
+    // The stamp marks a card `.json`'s *file* row, which hydrates as a FileDef
+    // (handled by the non-card branch above), never as this CardDef — so a
+    // hydrated card is definitively not a card-instance file. The value is
+    // `false`, so the canonical dedup filter `eq: { …: false }` matches.
+    return { values: [false], leafField: undefined, sawUnresolvable: false };
+  }
+  return { values: [], leafField: undefined, sawUnresolvable: true };
+}
+
 function resolvePath(
   instance: BaseDef,
   path: string,
   api: CardAPIForMatching,
 ): PathResolution {
+  let synthetic = resolveSyntheticKey(instance, path, api);
+  if (synthetic) {
+    return synthetic;
+  }
   let segments = path.split('.');
   let nodes: BaseDef[] = [instance];
 

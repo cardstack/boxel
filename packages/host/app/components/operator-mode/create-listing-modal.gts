@@ -21,7 +21,6 @@ import { IconX, IconPlus } from '@cardstack/boxel-ui/icons';
 import {
   chooseCard,
   isResolvedCodeRef,
-  removeFileExtension,
   rri,
   type ToolContext,
   type ResolvedCodeRef,
@@ -37,6 +36,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
+import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
 
 interface Signature {
   Args: {};
@@ -113,13 +113,19 @@ export default class CreateListingModal extends Component<Signature> {
   // chosen card URLs (matched by index file URL, hence the `.json`-suffixed
   // `selectedExampleCardUrls`) and their realms, with the `atom` rendering
   // bound through the filter's `htmlQuery` (the way to select a prerendered
-  // format). The eq carries only that binding, which the engine lifts out,
-  // leaving the result set scoped purely by `cardUrls`.
+  // format). The engine lifts the htmlQuery binding out of the eq (which then
+  // dissolves). `scope: 'cards'` pins the instance row, dropping each example's
+  // dual-indexed `.json` file row that shares its `cardUrls` URL.
   private get exampleSearchQuery(): SearchEntryWireQuery {
     return {
       cardUrls: this.selectedExampleCardUrls,
       realms: this.selectedExampleRealms,
-      filter: { eq: { htmlQuery: { eq: { format: 'atom' } } } },
+      scope: 'cards',
+      filter: {
+        eq: {
+          htmlQuery: { eq: { format: 'atom' } },
+        },
+      },
     };
   }
 
@@ -146,9 +152,9 @@ export default class CreateListingModal extends Component<Signature> {
   });
 
   @action private removeSelectedExample(urlToRemove: string) {
-    let normalizedUrlToRemove = removeFileExtension(urlToRemove);
+    let normalizedUrlToRemove = removeCardJsonExtension(urlToRemove);
     this._selectedExampleURLs = this.selectedExampleURLs.filter(
-      (url) => removeFileExtension(url) !== normalizedUrlToRemove,
+      (url) => removeCardJsonExtension(url) !== normalizedUrlToRemove,
     );
   }
 

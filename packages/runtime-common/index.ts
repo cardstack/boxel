@@ -103,6 +103,41 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// Same symbol-channel pattern for a frontmatter value that must differ
+// between the search doc and the file-meta resource: when a
+// `FrontmatterField` subclass produces index-only enrichment (e.g. a skill's
+// generated tool definitions, which are multi-KB and must never land in
+// `search_doc`), `extractAttributes` routes the enriched copy under this key
+// and the host file extractor stamps it onto the resource, leaving the
+// search doc's `frontmatter` as authored.
+export const FRONTMATTER_FILE_META_VALUE_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-file-meta-value',
+);
+
+// Same symbol-channel pattern for the `Partial<Diagnostics>` a
+// `FrontmatterField` subclass contributes to the indexed row (e.g. a skill's
+// `toolSchemaErrors`); the host file extractor lifts it into the extract
+// result so the indexer can merge it onto the row's `diagnostics`. Which
+// keys the bag carries is the subclass's own knowledge.
+export const FRONTMATTER_DIAGNOSTICS_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-diagnostics',
+);
+
+// One tool a skill's frontmatter declared whose schema generation failed
+// during file extraction — the module wouldn't load, the export was missing,
+// or the tool's input-schema generation threw. The skill still indexes
+// (instructions plus whichever tools did enrich), so this diagnostics entry
+// is the only indexed signal that the tool won't be callable. Surfaced on
+// `diagnostics.toolSchemaErrors`, alongside `frontmatterParseError`, via
+// `/_indexing-errors`.
+export interface ToolSchemaError {
+  // The tool's code ref as resolved at extract time (absolute module URL, or
+  // the package specifier verbatim when the module isn't realm-hosted).
+  module: string;
+  name: string;
+  message: string;
+}
+
 // One performed load of a link target during search-doc production. `path`
 // is the dotted field path (from the indexed card's root) of the `linksTo` /
 // `linksToMany` field that owns the link; `target` is the resolved
@@ -311,6 +346,23 @@ export interface RenderTimeoutDiagnostics {
     card?: Record<string, number>;
     file?: Record<string, number>;
   };
+  // Per-route wall-clock of the index-visit route steps in this visit, split
+  // by the card indexing and the FileDef file indexing — the index-half
+  // sibling of `renderFormatsMs`. Keys are the route steps an index visit
+  // runs: `meta` and `icon` for a card, `fileExtract` and `icon` for a file.
+  // The `meta` number covers the whole `render.meta` route, so the
+  // types / displayNames chain that route builds is inside that bucket, not a
+  // step of its own — the standalone `types` route is html-half work driving
+  // the fitted/embedded renders, and never runs on an index visit. Only
+  // populated where the index-half step actually runs, so it decomposes the
+  // per-visit floor into measured route buckets rather than leaving it
+  // inferred from `renderElapsedMs`: on an index visit it rides
+  // `boxel_index.diagnostics`; the `fileExtract` leg can also appear on a
+  // prerender-html visit that resolves its own file resource.
+  indexRoutesMs?: {
+    card?: Record<string, number>;
+    file?: Record<string, number>;
+  };
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
@@ -476,6 +528,12 @@ export interface FileExtractResponse {
   // the file indexer merges this onto `diagnostics.frontmatterParseError` so
   // the failure surfaces via `/_indexing-errors` instead of vanishing.
   frontmatterParseError?: FrontmatterParseError;
+  // Diagnostics findings the file's frontmatter contributed during the
+  // extract (e.g. a skill's `toolSchemaErrors`). The extract still succeeds;
+  // the file indexer merges the bag onto the row's `diagnostics` so each
+  // finding surfaces via `/_indexing-errors`. Which keys the bag carries is
+  // the producing `FrontmatterField` subclass's own knowledge.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 }
 
 export interface FileRenderResponse {
@@ -513,6 +571,12 @@ export interface ModulePrerenderModel {
   createdAt: number;
   deps: string[];
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
+  // Every export name of the module, not just the card/field definitions
+  // that `definitions` records. Lets callers validate a codeRef whose export
+  // is not a BaseDef (e.g. a skill command class) without importing the
+  // module themselves. Absent on error responses and on responses from hosts
+  // that predate this field.
+  exports?: string[];
   error?: ErrorEntry;
 }
 
@@ -616,6 +680,12 @@ export interface Diagnostics
   // by the file indexer from the extract response. Absent when the
   // frontmatter parsed (or there was none).
   frontmatterParseError?: FrontmatterParseError;
+  // Skill frontmatter tools whose index-time schema generation failed. The
+  // row still indexes (instructions plus the tools that did enrich); this is
+  // the only indexed signal that a declared tool won't be callable. Merged
+  // in by the file indexer from the extract response. Absent when every
+  // declared tool enriched (or the file declared none).
+  toolSchemaErrors?: ToolSchemaError[];
   // Per-visit client-side overhead of producing this row (file read, render
   // round-trip transport, post-render bookkeeping) — the index-job wall spent
   // on this row outside the server render. See `IndexVisitClientTimings`.

@@ -265,6 +265,7 @@ export class Batch {
   // changed mid-attempt is re-visited rather than silently resumed
   // with stale content.
   #resumedRows = new Map<string, number | null>();
+  #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
   // Correlation ID minted once per Batch and stamped into every row's
   // `diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE diagnostics->>'invalidationId' = '...'`
@@ -491,6 +492,18 @@ export class Batch {
    */
   get resumedRows(): ReadonlyMap<string, number | null> {
     return this.#resumedRows;
+  }
+
+  /**
+   * Row types `tombstoneEntries` overwrote with tombstones this pass,
+   * restricted to rows that were live (not already deleted) in the
+   * production index. IndexRunner's per-file failure isolation consults
+   * this to decide whether a failed URL had a card instance to protect —
+   * the index is a more reliable oracle than re-reading the file, since
+   * the read path may be exactly what failed.
+   */
+  tombstonedLiveTypes(url: string): BoxelIndexTable['type'][] | undefined {
+    return this.#tombstonedLiveTypes.get(url);
   }
 
   /**
@@ -841,7 +854,7 @@ export class Batch {
           // favor the last known good types over the types derived from the error state
           ...production,
           // Assign search_doc AFTER the production spread so the freshly-stamped
-          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // synthetic keys (`_title`, `_isCardInstanceFile`, `_cardType`) survive
           // rather than being clobbered by the last-known-good doc. Overlaying
           // the current searchData onto that doc keeps an instance's rich fields
           // when it degrades to a sparse error searchData, while a file /
@@ -1526,6 +1539,14 @@ export class Batch {
       return;
     }
     let existingTypes = await this.existingIndexTypes(toTombstone);
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#tombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
     // `has_error` and `error_doc` are listed (with explicit false / null
     // values per row) so the upsert's ON CONFLICT SET clause clears them.
     // The primary key is `(url, realm_url, type)` — no `generation` —
@@ -1563,7 +1584,7 @@ export class Batch {
       if (!types || types.length === 0) {
         return [];
       }
-      return types.map((type) =>
+      return types.map(({ type }) =>
         [
           id,
           // The same file_alias form `updateEntry` writes, so a tombstone
@@ -1667,13 +1688,17 @@ export class Batch {
 
   private async existingIndexTypes(
     invalidations: string[],
-  ): Promise<Map<string, BoxelIndexTable['type'][]>> {
+  ): Promise<
+    Map<string, { type: BoxelIndexTable['type']; isDeleted: boolean }[]>
+  > {
     if (invalidations.length === 0) {
       return new Map();
     }
     let uniqueInvalidations = [...new Set(invalidations)];
+    // One row per (url, type) — the table's primary key is
+    // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT DISTINCT url, type FROM boxel_index WHERE',
+      'SELECT url, type, is_deleted FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -1683,14 +1708,18 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type'>[];
-    let typesByUrl = new Map<string, BoxelIndexTable['type'][]>();
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'is_deleted'>[];
+    let typesByUrl = new Map<
+      string,
+      { type: BoxelIndexTable['type']; isDeleted: boolean }[]
+    >();
     for (let row of rows) {
+      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
       let existing = typesByUrl.get(row.url);
       if (existing) {
-        existing.push(row.type);
+        existing.push(entry);
       } else {
-        typesByUrl.set(row.url, [row.type]);
+        typesByUrl.set(row.url, [entry]);
       }
     }
     return typesByUrl;

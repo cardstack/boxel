@@ -175,6 +175,13 @@ class Isolated extends Component<typeof CardsGrid> {
       displayName: 'All Cards',
       icon: AllCardsIcon,
       query: {
+        // Cards-only by construction: file rows (both plain files and a
+        // card's dual-indexed `.json`) never carry `_cardType`, so the
+        // `not eq` excludes them via NULL semantics even though search is
+        // mixed by default — while errored instances (which have `_cardType`
+        // but may lack a `types` array) are kept, since this is a field
+        // filter with no type-anchor cross-join. The "All Files" group
+        // (`type: baseFileRef`) owns the file side.
         filter: {
           not: {
             eq: {

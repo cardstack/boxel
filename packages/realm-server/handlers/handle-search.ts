@@ -127,6 +127,15 @@ export default function handleSearch(opts: {
     if (parsed.cardUrls?.length) {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
+    // `scope` changes which row kinds the response contains, so it must key the
+    // cache — otherwise a `scope: 'cards'` and a `scope: 'all'` request for the
+    // same query would collide on one ETag/body. An explicit `'all'` folds the
+    // same as an absent scope (both mean the default), so the two spellings
+    // share one cache entry/ETag — which also keeps the key identical to
+    // pre-scope requests.
+    if (parsed.scope && parsed.scope !== 'all') {
+      cacheKeyOpts.scope = parsed.scope;
+    }
 
     // `loggingCorrelationId` / `timings` deliberately stay OUT of the
     // cache-key opts (per-request values would make every key unique) and

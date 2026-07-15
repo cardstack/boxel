@@ -28,6 +28,10 @@ export interface PrerenderHtmlEnqueueArgs {
   spawningJobId: number | null;
   spawningPriority: number;
   timeoutSec: number;
+  // True when a from-scratch index pass spawned this job. The realm-wide
+  // module pre-warm sweep — O(realm module count) — runs at the start of the
+  // job only when set; incremental spawns leave it false.
+  preWarm: boolean;
 }
 
 // Every realm's prerender-html jobs share one concurrency group so they
@@ -54,6 +58,7 @@ export async function enqueuePrerenderHtmlJob(
     spawningJobId,
     spawningPriority,
     timeoutSec,
+    preWarm,
   }: PrerenderHtmlEnqueueArgs,
 ): Promise<Job<PgPrimitive>> {
   let args: PrerenderHtmlArgs = {
@@ -64,6 +69,7 @@ export async function enqueuePrerenderHtmlJob(
     loaderEpoch,
     spawningJobId,
     coalescedPublishes: null,
+    preWarm,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',

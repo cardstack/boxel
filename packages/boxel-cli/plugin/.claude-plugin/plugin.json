@@ -1,7 +1,7 @@
 {
   "name": "boxel-cli",
   "description": "Claude Code skills for working with Boxel realms via @cardstack/boxel-cli. Requires @cardstack/boxel-cli >= 0.0.1 installed on PATH (npm install -g @cardstack/boxel-cli).",
-  "version": "0.6.0",
+  "version": "0.9.0",
   "author": {
     "name": "Cardstack",
     "url": "https://boxel.ai"

@@ -503,6 +503,21 @@ export default class MatrixService extends Service {
     return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
+  // True when there's persisted auth to boot from but the post-login boot never
+  // finished (or was undone). `start()` sets `postLoginCompleted`, and the index
+  // route only calls `start()` once, so if `postLoginCompleted` is cleared
+  // afterward — a `resetState()` racing a re-navigation — nothing re-establishes
+  // the session and the route would strand the app on the login form. A route
+  // that sees this can re-run `start()` to recover; `start()` re-derives the
+  // client from the persisted auth, so it recovers even when `resetState()` left
+  // a bare (logged-out) client behind. A genuine logout clears the persisted
+  // auth, so this stays false there. The index route reads this on every model
+  // refresh, so it only tests for the auth key's presence — the value is never
+  // parsed here.
+  get needsPostLoginRecovery() {
+    return !this.postLoginCompleted && Boolean(this.storage?.getItem('auth'));
+  }
+
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
   // decides to render <Auth/>, plus a compact tail of the `postLoginCompleted`
@@ -976,6 +991,14 @@ export default class MatrixService extends Service {
       this.saveAuth(auth);
       this.bindEventListeners();
 
+      // Whether *this* start() invocation completed the post-login boot. The
+      // catch below keys off this, not the `postLoginCompleted` field, because
+      // start() can run again on an already-established session (e.g. the
+      // /connect route starts on every visit): the field would still be true
+      // from the previous run, so a fresh attempt that fails before completing
+      // would wrongly skip logout and leave revoked auth in storage.
+      let loginCompletedThisRun = false;
+
       try {
         let deviceId = this.client.getDeviceId();
         if (deviceId) {
@@ -1141,6 +1164,7 @@ export default class MatrixService extends Service {
         await this.loginToRealms();
 
         this.setPostLoginCompleted(true, 'start-success');
+        loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
 
         // If any trusted server was unreachable during boot assembly, keep
@@ -1149,7 +1173,14 @@ export default class MatrixService extends Service {
         this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
-        await this.logout();
+        // Only tear the session down for a failure that happened before this
+        // run completed login. A late, post-login rejection must not unwind an
+        // already-established session: logout() clears realm state the app has
+        // already populated and resets postLoginCompleted, which would strand
+        // the index route on the login form.
+        if (!loginCompletedThisRun) {
+          await this.logout();
+        }
       }
 
       let indexController = getOwner(this)!.lookup(

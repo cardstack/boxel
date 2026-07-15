@@ -24,6 +24,9 @@ export type TooltipThemeVariant = (typeof TOOLTIP_VARIANTS)[number];
 
 interface Signature {
   Args: {
+    // When true, hovering the trigger does not reveal the tooltip content.
+    // Useful for wrapping a disabled control whose hint would otherwise show.
+    disabled?: boolean;
     offset?: number;
     placement?: MiddlewareState['placement'];
     variant?: TooltipThemeVariant;
@@ -47,6 +50,10 @@ export default class Tooltip extends Component<Signature> {
 
   get triggerEl(): HTMLElement {
     return this.triggerElement as HTMLElement;
+  }
+
+  get showContent(): boolean {
+    return this.isHoverOnTrigger && !this.args.disabled;
   }
 
   get appRootEl(): HTMLElement {
@@ -177,7 +184,7 @@ export default class Tooltip extends Component<Signature> {
       >
         {{yield to='trigger'}}
       </div>
-      {{#if this.isHoverOnTrigger}}
+      {{#if this.showContent}}
         {{#in-element this.tooltipOverlay}}
           {{! @glint-ignore velcro.loop }}
           <div

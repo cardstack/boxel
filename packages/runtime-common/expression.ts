@@ -8,9 +8,9 @@ import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 export type Expression = (
   | string
   | Param
-  | TableValuedEach
   | TableValuedTree
   | JsonContains
+  | TypesContains
   | DBSpecificExpression
 )[];
 
@@ -58,11 +58,6 @@ export interface FieldValue {
   kind: 'field-value';
 }
 
-export interface TableValuedEach {
-  kind: 'table-valued-each';
-  column: string;
-}
-
 export interface TableValuedTree {
   kind: 'table-valued-tree';
   column: string;
@@ -94,6 +89,19 @@ export interface JsonContains {
   value: Param;
 }
 
+// Self-contained membership test: does the JSON array in `column` contain
+// `key`? Rendered per adapter (Postgres `@>`, SQLite `json_each` EXISTS).
+// Unlike a `jsonb_array_elements_text` cross join — which fans a row out into
+// one row per array element and so gives a type condition exists-one-element
+// semantics that miscompose under AND/NOT — this is a single per-row scalar
+// predicate, so type conditions compose correctly (a real `NOT` exclusion, an
+// AND intersection) and no GROUP BY is needed to recollapse the fan-out.
+export interface TypesContains {
+  kind: 'types-contains';
+  column: string;
+  key: string;
+}
+
 export interface FieldArity {
   type: CodeRef;
   path: string;
@@ -108,9 +116,9 @@ export type CardExpression = (
   | string
   | Param
   | DBSpecificExpression
-  | TableValuedEach
   | TableValuedTree
   | JsonContains
+  | TypesContains
   | JsonContainsQuery
   | FieldQuery
   | FieldValue
@@ -186,13 +194,6 @@ export function isDbExpression(
   );
 }
 
-export function tableValuedEach(column: string): TableValuedEach {
-  return {
-    kind: 'table-valued-each',
-    column,
-  };
-}
-
 export function tableValuedTree(
   column: string,
   rootPath: string,
@@ -218,6 +219,14 @@ export function jsonContainsQuery(
     path,
     type,
     value,
+  };
+}
+
+export function typesContains(key: string, column = 'i.types'): TypesContains {
+  return {
+    kind: 'types-contains',
+    column,
+    key,
   };
 }
 
@@ -505,19 +514,6 @@ export function expressionToSql(
         });
       }
       return `${name}.${treeColumn}`;
-    } else if (element.kind === 'table-valued-each') {
-      let { column } = element;
-      let key = `each_${column}`;
-      let { name } = tableValuedFunctions.get(key) ?? {};
-      if (!name) {
-        name = `${column}${nonce++}_array_element`;
-
-        tableValuedFunctions.set(key, {
-          name,
-          fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
-        });
-      }
-      return name;
     } else if (element.kind === 'json-contains') {
       // Render the containment of `column` by {segments: value}. Both branches
       // re-use renderElement so binds are pushed in left-to-right order.
@@ -539,6 +535,26 @@ export function expressionToSql(
         (value[dbAdapterKind] ?? value.param ?? null) as JSONTypes.Value,
       );
       return [column, '@>', param(nested as JSONTypes.Object), '::jsonb']
+        .map(renderElement)
+        .join(' ');
+    } else if (element.kind === 'types-contains') {
+      // Per-row array membership. COALESCE keeps a NULL/absent `types` array a
+      // definite FALSE (not SQL NULL) at positive polarity, so an enclosing
+      // `NOT (...)` keeps rows whose types never indexed rather than dropping
+      // them — the fan-out approach eliminated those rows before WHERE ran.
+      let { column, key } = element;
+      if (dbAdapterKind === 'sqlite') {
+        return [
+          'EXISTS (SELECT 1 FROM json_each(COALESCE(',
+          column,
+          `, '[]')) WHERE value =`,
+          param(key),
+          ')',
+        ]
+          .map(renderElement)
+          .join(' ');
+      }
+      return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
         .map(renderElement)
         .join(' ');
     } else {

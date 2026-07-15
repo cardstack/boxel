@@ -516,6 +516,46 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     assert.strictEqual(harness.last, `::file[${card.id} | embedded]`);
   });
 
+  test('the inserted ref is relativized against the document base URL', async function (assert) {
+    let card = await loadCard();
+    let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
+    // The editing document lives in a sibling directory (`posts/`) to the
+    // picked card (`books/`), so the ref collapses to a `../`-relative form —
+    // the same shape the codemirror format-picker path produces.
+    let documentBaseUrl = `${testRealmURL}posts/my-post`;
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @target={{card}}
+              @refType='card'
+              @selection={{selection}}
+              @documentBaseUrl={{documentBaseUrl}}
+              @onInsert={{harness.onInsert}}
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[../books/mango]`,
+      'the inline atom ref is relativized against the document base URL',
+    );
+
+    await chooseFormat('embedded');
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `::card[../books/mango | embedded]`,
+      'the block directive carries the relative ref plus the format specifier',
+    );
+  });
+
   test('atom, embedded, isolated carry the has-divider modifier; fitted/custom do not', async function (assert) {
     let card = await loadCard();
     let harness = new InsertHarness();
@@ -554,5 +594,46 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
           `${value} wrapper has no divider — only the non-fitted heads do`,
         );
     }
+  });
+
+  test('a broken ref surfaces the broken preview; the CTA still serializes the broken URL', async function (assert) {
+    let harness = new InsertHarness();
+    let selection = new EmbedFormatSelection();
+    let brokenUrl = `${testRealmURL}books/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PaneBox>
+          <HostContextProvider>
+            <MarkdownEmbedPreviewPane
+              @refType='card'
+              @selection={{selection}}
+              @onInsert={{harness.onInsert}}
+              @brokenUrl={{brokenUrl}}
+              @brokenDisplayName='Book'
+              @errorDoc={{errorDoc}}
+              @brokenState='not-found'
+            />
+          </HostContextProvider>
+        </PaneBox>
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-broken-link-template]')
+      .exists('the broken-ref visual surfaces in the pane');
+    assert.dom('[data-test-broken-link-type]').hasText('Book');
+
+    await click('[data-test-markdown-embed-preview-cta]');
+    assert.strictEqual(
+      harness.last,
+      `:card[${brokenUrl}]`,
+      'the CTA serializes the broken URL so Done/Accept keep the ref',
+    );
   });
 });

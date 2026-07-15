@@ -206,6 +206,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: '@cardstack/runtime-common/bfm-card-references',
     resolve: () => import('@cardstack/runtime-common/bfm-card-references'),
   });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/helpers/ai',
+    resolve: () => import('@cardstack/runtime-common/helpers/ai'),
+  });
 
   shimModulesForLiveTests(virtualNetwork);
 

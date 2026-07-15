@@ -28,11 +28,15 @@ import {
   Loader,
   type ResolvedCodeRef,
   isCardInstance,
+  cardTypeName,
 } from '@cardstack/runtime-common';
-import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import {
+  BrokenLinkTemplate,
+  Button,
+  IconButton,
+} from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import BrokenLinkTemplate from './default-templates/broken-link-template';
 import { type RelationshipState } from './field-support';
 
 // A broken singular link surfaces as a terminal failure state from
@@ -109,6 +113,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               @errorDoc={{@brokenLink.errorDoc}}
               @state={{@brokenLink.kind}}
               @format='embedded'
+              @displayName={{cardTypeName @brokenLink.reference}}
               @viewCard={{crud.viewCard}}
             />
           </CardCrudFunctionsConsumer>
