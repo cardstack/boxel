@@ -133,6 +133,7 @@ module('command runner', () => {
           runAs: '@alice:localhost',
           command: '@cardstack/boxel-host/commands/show-card/default',
           commandInput: { cardId: 'http://localhost:4201/test/Person/1' },
+          alertOnError: false,
         },
       },
       'publishes expected run-command payload',
@@ -337,6 +338,7 @@ module('command runner', () => {
             },
           ],
         },
+        alertOnError: false,
       },
       'enqueues PR card creation in submissions realm',
     );
@@ -359,6 +361,7 @@ module('command runner', () => {
             },
           },
         },
+        alertOnError: false,
       },
       'persists prCard link on the workflow card immediately after create-pr-card succeeds (so retry on later failure can reuse the existing PrCard)',
     );
@@ -385,6 +388,7 @@ module('command runner', () => {
             },
           },
         },
+        alertOnError: false,
       },
       'clears prior error attributes on the workflow card after the GitHub PR succeeds, re-asserting the prCard link to survive any stale-fetch race',
     );

@@ -17,6 +17,15 @@ export interface RunCommandArgs extends JSONTypes.Object {
   runAs: string;
   command: string;
   commandInput: JSONTypes.Object | null;
+  // When true, a command that finishes with an error status makes the job
+  // throw rather than resolving with the error in-band. The queue then marks
+  // the job rejected and reports it to Sentry. Interactive callers (bot-runner,
+  // the run-command HTTP endpoint, webhooks) pass false so a command error
+  // stays a normal result to hand back to the user. System-initiated jobs
+  // (cron syncs) pass true so a persistently failing job is never silent.
+  // Required (not optional) so the args object satisfies JSONTypes.Object's
+  // JSON-shape index signature, which excludes `undefined`.
+  alertOnError: boolean;
 }
 
 // No coalesce handler: each run-command enqueue is a distinct invocation
@@ -35,8 +44,27 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   matrixURL,
 }) =>
   async function (args) {
-    let { jobInfo, realmURL, realmUsername, runAs, command, commandInput } =
-      args;
+    let {
+      jobInfo,
+      realmURL,
+      realmUsername,
+      runAs,
+      command,
+      commandInput,
+      alertOnError,
+    } = args;
+    // Turn an error outcome into either a thrown failure (so the queue rejects
+    // the job and reports it to Sentry) or an in-band error result, depending
+    // on whether the caller asked to be alerted.
+    let fail = (message: string): RunCommandResponse => {
+      if (alertOnError) {
+        throw new Error(message);
+      }
+      return {
+        status: 'error',
+        error: message,
+      };
+    };
     log.debug(
       `${jobIdentity(jobInfo)} starting run-command for job: ${JSON.stringify({
         realmURL,
@@ -58,10 +86,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
       log.error(message);
       reportStatus(jobInfo, 'finish');
-      return {
-        status: 'error',
-        error: message,
-      };
+      return fail(message);
     }
 
     // Include JWTs for all realms the user has access to
@@ -82,10 +107,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       let message = `${jobIdentity(jobInfo)} invalid command specifier`;
       log.error(message, { command, realmURL: normalizedRealmURL });
       reportStatus(jobInfo, 'finish');
-      return {
-        status: 'error',
-        error: message,
-      };
+      return fail(message);
     }
 
     let augmentedCommandInput = commandInput
@@ -99,6 +121,12 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       commandInput: augmentedCommandInput,
       priority: jobInfo?.priority,
     });
+
+    if (alertOnError && result.status === 'error') {
+      let message = `${jobIdentity(jobInfo)} command ${command} failed in ${normalizedRealmURL}: ${result.error ?? 'unknown error'}`;
+      log.error(message);
+      throw new Error(message);
+    }
 
     reportStatus(jobInfo, 'finish');
     return result;

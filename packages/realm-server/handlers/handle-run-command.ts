@@ -82,6 +82,9 @@ export default function handleRunCommand({
           runAs: userId,
           command,
           commandInput: commandInput ?? null,
+          // Interactive endpoint: a command error is returned to the caller,
+          // not treated as a job failure.
+          alertOnError: false,
         },
         queue,
         dbAdapter,
