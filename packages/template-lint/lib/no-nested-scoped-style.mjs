@@ -6,6 +6,11 @@ import { Rule } from 'ember-template-lint';
 // nested"), so catch it here at lint time instead. We track the enclosing
 // container nodes (elements and blocks) as we descend; a scoped style is only
 // valid when that stack is empty (i.e. its immediate parent is the template).
+//
+// A nested `<style>` without `scoped` needs no special handling here: under
+// verifyAndFix, `require-scoped-style` adds `scoped` in the fix pass and the
+// verify of the fixed output is where this rule judges placement. The nesting
+// error itself is not fixable, so it survives to the final message list.
 export default class NoNestedScopedStyle extends Rule {
   visitor() {
     let containers = [];
