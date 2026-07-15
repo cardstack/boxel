@@ -440,10 +440,16 @@ export function getTypes(klass: FileDefConstructor): CodeRef[] {
 
   while (current) {
     let ref = identifyCard(current as unknown as typeof BaseDef);
-    if (!ref || isEqual(ref, baseRef)) {
+    if (!ref) {
       break;
     }
     types.push(ref);
+    // Include BaseDef as the final element then stop, matching the card-side
+    // getTypes (routes/render/meta.ts) so a `{ type: baseRef }` filter spans
+    // file and card rows. getDisplayNames below intentionally does not.
+    if (isEqual(ref, baseRef)) {
+      break;
+    }
     current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
   }
   return types;

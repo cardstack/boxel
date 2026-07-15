@@ -1202,7 +1202,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by card display name (card type shown in the interface)', async function (assert) {
+    // Anchor to card instances: search is mixed cards + files by default, and
+    // this test asserts the card ordering, so exclude file rows via the type.
     let { data: matching } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
       sort: [
         {
           on: baseCardRef,

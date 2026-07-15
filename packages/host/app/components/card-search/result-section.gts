@@ -26,7 +26,7 @@ import type {
 } from '@cardstack/host/utils/card-search/sections';
 
 import {
-  removeFileExtension,
+  removeCardJsonExtension,
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
 
@@ -400,7 +400,7 @@ export default class ResultSection extends Component<Signature> {
             Show
             {{this.nextShowMoreCount}}
             more
-            {{pluralize 'card' this.nextShowMoreCount}}
+            {{pluralize 'result' this.nextShowMoreCount}}
             ({{this.remainingCount}}
             not shown)
           </Button>
@@ -470,7 +470,9 @@ export default class ResultSection extends Component<Signature> {
                   @adorn={{@adorn}}
                   @adornStrokeClass={{@adornStrokeClass}}
                   @adornPositionLabel={{@adornPositionLabel}}
-                  data-test-recent-card-result={{removeFileExtension card.id}}
+                  data-test-recent-card-result={{removeCardJsonExtension
+                    card.id
+                  }}
                 />
               </:default>
               <:after>
@@ -552,7 +554,9 @@ export default class ResultSection extends Component<Signature> {
           >
             Show
             {{this.nextShowMoreCount}}
-            more cards ({{this.remainingCount}}
+            more
+            {{pluralize 'result' this.nextShowMoreCount}}
+            ({{this.remainingCount}}
             not shown)
           </Button>
         {{/if}}

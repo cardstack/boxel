@@ -480,10 +480,19 @@ export function getTypes(klass: typeof BaseDef): CodeRef[] {
 
   while (current) {
     let ref = identifyCard(current);
-    if (!ref || isEqual(ref, baseRef)) {
+    if (!ref) {
       break;
     }
     types.push(ref);
+    // Include BaseDef (the common ancestor of CardDef and FileDef) as the final
+    // element, then stop — so a `{ type: baseRef }` filter matches both card
+    // and file rows (e.g. a `scope: 'all'` search using one type ref). The file
+    // chains (file-indexer.ts, file-def-attributes-extractor.ts) terminate at
+    // BaseDef the same way. `getDisplayNames` deliberately does NOT — no
+    // consumer reads past element 0, and a BaseDef display name would be noise.
+    if (isEqual(ref, baseRef)) {
+      break;
+    }
     current = Reflect.getPrototypeOf(current) as typeof BaseDef | undefined;
   }
   return types;
