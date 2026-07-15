@@ -9,12 +9,12 @@ import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
-  baseRealm,
-  trimJsonExtension,
+  baseRRI,
   maybeRelativeReference,
   resolveRRIReference,
   rri,
   CardContextName,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
 import { type BfmRefRange } from '@cardstack/runtime-common/bfm-card-references';
 import { consume } from 'ember-provide-consume-context';
@@ -924,7 +924,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
               return {
                 filter: {
                   in: { url: urls },
-                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                  on: { module: baseRRI('card-api'), name: 'FileDef' },
                 },
               };
             }),

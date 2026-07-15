@@ -222,7 +222,7 @@ export default class GenerateThumbnailTool extends HostBaseTool<
     if (targetCardId?.trim()) {
       const cardApiModule = await this.loaderService.loader.import<
         typeof CardAPI
-      >('https://cardstack.com/base/card-api');
+      >('@cardstack/base/card-api');
 
       await new PatchCardInstanceTool(this.toolContext, {
         cardType: cardApiModule.CardDef as unknown as typeof CardDef,

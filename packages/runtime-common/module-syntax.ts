@@ -21,12 +21,12 @@ import { isEqual } from 'lodash-es';
 import * as ContentTag from 'content-tag';
 
 import {
-  baseRealm,
-  maybeRelativeReference,
-  trimExecutableExtension,
-  codeRefWithAbsoluteIdentifier,
   baseCardRef,
   baseFieldRef,
+  baseRRI,
+  codeRefWithAbsoluteIdentifier,
+  maybeRelativeReference,
+  trimExecutableExtension,
   type CodeRef,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
@@ -421,9 +421,7 @@ function makeNewField({
   // card-api import — in whatever specifier form the file uses — so the new
   // identifiers merge into it instead of emitting a second card-api import in
   // a different form.
-  let cardApiCanonical = virtualNetwork.unresolveURL(
-    `${baseRealm.url}card-api`,
-  );
+  let cardApiCanonical = virtualNetwork.unresolveURL(baseRRI('card-api'));
   let cardApiSource =
     findEquivalentImportSource(
       programPath,

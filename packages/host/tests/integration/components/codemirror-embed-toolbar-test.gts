@@ -100,9 +100,9 @@ function waitOutDebounce() {
 
 async function loadCodeMirrorEditor() {
   let loader = (getService('loader-service') as LoaderService).loader;
-  let mod = (await loader.import(
-    'https://cardstack.com/base/codemirror-editor',
-  )) as { default: unknown };
+  let mod = (await loader.import('@cardstack/base/codemirror-editor')) as {
+    default: unknown;
+  };
   return mod.default as any;
 }
 
