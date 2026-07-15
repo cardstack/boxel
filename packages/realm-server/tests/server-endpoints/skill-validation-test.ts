@@ -132,9 +132,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('reports each tool codeRef that fails to resolve', async function (assert) {
+        // refresh=true forces a synchronous recompute so the assertion doesn't
+        // depend on the per-realm result cache (the two modules here share a
+        // realm URL).
         let response = await request
           .get(
-            `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
+            `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}&refresh=true`,
           )
           .set(
             'Authorization',
@@ -223,7 +226,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       test('passes when every tool codeRef resolves in a private realm', async function (assert) {
         let response = await request
           .get(
-            `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}`,
+            `/_skill-validation?realm=${encodeURIComponent(testRealmURL.href)}&refresh=true`,
           )
           .set(
             'Authorization',
