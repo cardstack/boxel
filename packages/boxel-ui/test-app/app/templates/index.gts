@@ -9,6 +9,7 @@ import { service } from '@ember/service';
 import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown';
 
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
+import FreestyleMenu from 'ember-freestyle/components/freestyle-menu';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
@@ -33,6 +34,26 @@ interface UsageComponent {
   component: ComponentLike;
   importStatement: string;
 }
+
+// The scroll spy schedules FreestyleMenu#scrollActiveItemIntoView while the
+// user scrolls the page. Upstream it uses Element#scrollIntoView, which also
+// scrolls the document — hijacking the in-progress page scroll whenever the
+// active menu item sits outside the nav's visible area. Constrain the
+// auto-scroll to the nav's own scroll container.
+FreestyleMenu.prototype.scrollActiveItemIntoView = function () {
+  let el = document.querySelector('.FreestyleMenu-submenuItem.is-active');
+  let nav = el?.closest('.FreestyleGuide-nav');
+  if (!el || !nav) {
+    return;
+  }
+  let elRect = el.getBoundingClientRect();
+  let navRect = nav.getBoundingClientRect();
+  if (elRect.top < navRect.top) {
+    nav.scrollTop += elRect.top - navRect.top;
+  } else if (elRect.bottom > navRect.bottom) {
+    nav.scrollTop += elRect.bottom - navRect.bottom;
+  }
+};
 
 // A handful of usage titles differ from the name the component is exported as.
 const EXPORT_NAME_OVERRIDES: Record<string, string> = {
