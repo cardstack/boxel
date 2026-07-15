@@ -49,7 +49,7 @@ import {
   AdornCheckmarkSelected,
 } from '@cardstack/host/components/adorn/adorn-select-checkmark';
 
-import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
+import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
 
 import { htmlComponent } from '../../lib/html-component';
 import { knownFileMetaUrls } from '../../lib/known-file-meta-urls';
@@ -117,9 +117,9 @@ export default class OperatorModeOverlays extends Overlays {
               {{this.trackCompact renderedCard.element}}
               data-test-overlay-selected={{if
                 isSelected
-                (removeFileExtension cardId)
+                (removeCardJsonExtension cardId)
               }}
-              data-test-overlay-card={{removeFileExtension cardId}}
+              data-test-overlay-card={{removeCardJsonExtension cardId}}
               style={{renderedCard.overlayZIndexStyle}}
               ...attributes
             >
@@ -206,7 +206,7 @@ export default class OperatorModeOverlays extends Overlays {
                   class='overlay-select-button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
                   {{on 'click' (fn @toggleSelect cardDefOrId)}}
-                  data-test-overlay-select={{removeFileExtension cardId}}
+                  data-test-overlay-select={{removeCardJsonExtension cardId}}
                 />
               {{/if}}
             </div>

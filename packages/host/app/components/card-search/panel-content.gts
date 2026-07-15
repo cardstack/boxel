@@ -30,6 +30,7 @@ import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import {
   buildRecentsQuery,
   buildSearchQuery,
+  searchScopeForOptions,
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
@@ -112,6 +113,9 @@ interface Signature {
     realmFilter: RealmFilter;
     typeFilter: TypeFilter;
     baseFilter?: Filter;
+    // Pin the result set to card instances. Search is mixed (cards + files)
+    // by default; the card choosers set this so file rows never surface.
+    cardsOnly?: boolean;
     isCompact: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
     selectedCards?: (string | NewCardArgs)[];
@@ -206,7 +210,9 @@ export default class PanelContent extends Component<Signature> {
           this.args.activeSort,
           this.args.baseFilter,
           selectedTypeIds,
+          { cardsOnly: this.args.cardsOnly },
         ),
+        { scope: searchScopeForOptions({ cardsOnly: this.args.cardsOnly }) },
       ),
       realms: this.args.realmFilter.selectedURLs,
       // Cap each realm's results at the focused-section display limit — the
@@ -286,7 +292,11 @@ export default class PanelContent extends Component<Signature> {
     }
     if (this.args.isCompact) {
       return this.withMiniHtmlQuery({
-        ...searchEntryWireQueryFromQuery({}),
+        // A recent's `.json` URL also names the card's dual-indexed file row, so
+        // an unfiltered `cardUrls` query would surface each recent twice.
+        // Recents are always cards, so `scope: 'cards'` keeps only the instance
+        // rows (regardless of the sheet's cardsOnly mode).
+        ...searchEntryWireQueryFromQuery({}, { scope: 'cards' }),
         realms: this.realms,
         cardUrls: this.recentCardUrls,
       });
@@ -309,7 +319,11 @@ export default class PanelContent extends Component<Signature> {
           this.args.activeSort,
           this.args.baseFilter,
           selectedTypeIds,
+          // Recents are always cards, so pin the card scope regardless of the
+          // sheet's cardsOnly mode (this also skips the redundant dedup filter).
+          { cardsOnly: true },
         ),
+        { scope: 'cards' },
       ),
       realms: this.recentsSearchRealms,
       cardUrls: this.recentCardUrls,

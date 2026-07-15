@@ -3,14 +3,11 @@ import { click, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
+import { BrokenLinkTemplate } from '@cardstack/boxel-ui/components';
+
 import type { SerializedError } from '@cardstack/runtime-common';
 
-// Relative import (not the `https://cardstack.com/base/…` realm URL): test
-// runner files are part of the host bundle, not loaded by the realm-loader,
-// so they need a real file-system path the bundler can resolve at build time.
-// @ts-ignore — bundler resolves this; TS lookup runs through the tsconfig
-// path map and the relative path is from .gts source.
-import BrokenLinkTemplate from '../../../../base/default-templates/broken-link-template';
+import { cardTypeName } from '@cardstack/runtime-common/bfm-card-references';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -50,6 +47,9 @@ type Scenario = {
 };
 
 async function renderTemplate(scenario: Scenario) {
+  // The display-name label is now a caller-supplied prop; base card sites pass
+  // `cardTypeName(reference)`, so derive it the same way here.
+  let displayName = cardTypeName(scenario.brokenUrl);
   await render(
     <template>
       <BrokenLinkTemplate
@@ -57,6 +57,7 @@ async function renderTemplate(scenario: Scenario) {
         @errorDoc={{scenario.errorDoc}}
         @state={{scenario.state}}
         @format={{scenario.format}}
+        @displayName={{displayName}}
       />
     </template>,
   );

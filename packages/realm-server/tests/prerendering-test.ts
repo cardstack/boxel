@@ -4387,6 +4387,7 @@ module(basename(import.meta.filename), function () {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
             '@cardstack/base/card-api/CardDef',
+            '@cardstack/base/card-api/BaseDef',
           ]);
         });
 

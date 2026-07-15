@@ -9,20 +9,19 @@ import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
-  baseRealm,
-  trimJsonExtension,
+  baseRRI,
   maybeRelativeReference,
   resolveRRIReference,
   rri,
+  CardContextName,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
-import {
-  type BfmRefRange,
-  chooseMarkdownEmbed,
-  editMarkdownEmbed,
-} from '@cardstack/runtime-common/bfm-card-references';
+import { type BfmRefRange } from '@cardstack/runtime-common/bfm-card-references';
+import { consume } from 'ember-provide-consume-context';
 import {
   type BaseDef,
   type CardDef,
+  type CardContext,
   type FileDef,
   getComponent,
 } from './card-api';
@@ -222,6 +221,11 @@ function sameToolbarState(a: SelectionInfo, b: SelectionInfo): boolean {
 }
 
 export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorSignature> {
+  // Host bridge for the embed chooser, provided down the operator-mode tree via
+  // CardContext. Absent when the editor renders with no chooser modal mounted
+  // (e.g. prerender); the toolbar handlers guard on it.
+  @consume(CardContextName) declare cardContext: CardContext | undefined;
+
   @tracked _cm: CodeMirrorContext | null = null;
   @tracked _widgetTargets: CardWidgetTarget[] = [];
   @tracked _isLoaded = false;
@@ -671,13 +675,21 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
     this._embedPopoverOpen = false;
+    let chooser = this.cardContext?.markdownEmbedChooser;
+    if (!chooser) {
+      // No chooser provided (e.g. card running outside the host) — warn and
+      // no-op so the toolbar click doesn't blow up the editor.
+      console.warn('markdown-embed chooser unavailable');
+      return;
+    }
     let result;
     try {
-      result = await chooseMarkdownEmbed({ defaultTab });
+      result = await chooser.chooseCardOrFile({
+        defaultTab,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
+      });
     } catch (e) {
-      // Bridge not registered (e.g. card running outside the host) — silently
-      // no-op so the toolbar click doesn't blow up the editor.
-      console.warn('markdown-embed chooser unavailable', e);
+      console.warn('markdown-embed chooser failed', e);
       return;
     }
     if (!result || 'remove' in result) {
@@ -693,22 +705,25 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     if (!ref) return;
     let view = this.editorView;
     if (!view) return;
+    let chooser = this.cardContext?.markdownEmbedChooser;
+    if (!chooser) {
+      console.warn('markdown-embed chooser unavailable');
+      return;
+    }
     let result;
     try {
-      result = await editMarkdownEmbed({
+      result = await chooser.editEmbed({
         refType: ref.refType as 'card' | 'file',
         // Resolve the directive's raw ref (which may be relative to the field's
         // base URL) to an absolute URL. The chooser loads the preview via
         // `store.get`, which can't resolve a relative specifier on its own.
-        url: resolveUrl(
-          ref.url,
-          this.args.cardReferenceBaseUrl,
-        ),
+        url: resolveUrl(ref.url, this.args.cardReferenceBaseUrl),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
       });
     } catch (e) {
-      console.warn('markdown-embed chooser unavailable', e);
+      console.warn('markdown-embed chooser failed', e);
       return;
     }
     if (!result) return;
@@ -909,7 +924,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
               return {
                 filter: {
                   in: { url: urls },
-                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                  on: { module: baseRRI('card-api'), name: 'FileDef' },
                 },
               };
             }),

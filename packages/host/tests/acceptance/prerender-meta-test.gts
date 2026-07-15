@@ -355,6 +355,7 @@ module('Acceptance | prerender | meta', function (hooks) {
         `${testRealmURL}cat/Cat`,
         `${testRealmURL}pet/Pet`,
         `${baseRealmRRI}card-api/CardDef`,
+        `${baseRealmRRI}card-api/BaseDef`,
       ],
       'types are correct',
     );

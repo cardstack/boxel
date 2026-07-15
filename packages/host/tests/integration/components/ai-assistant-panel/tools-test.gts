@@ -2072,6 +2072,76 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     );
   });
 
+  test('an invalid result is terminal for auto-execution: a later drain pass does not re-resolve the request', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getService('matrix-service');
+    let toolService = getService('tool-service');
+
+    // Capture result events without forwarding them. The swallowed event
+    // recreates the window where the invalid result has not round-tripped
+    // into the room resource yet, so the MessageTool's status still reads
+    // 'ready' — the window in which a second drain pass used to re-validate
+    // the request and post a contradictory second result (CS-12103's
+    // invalid-then-applied signature).
+    let captured: Array<{ toolCallId: string; status: string }> = [];
+    let originalSend = matrixService.sendToolResultEvent.bind(matrixService);
+    (matrixService as any).sendToolResultEvent = async (params: any) => {
+      captured.push({ toolCallId: params.toolCallId, status: params.status });
+    };
+    try {
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Do the thing',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'cs-12103-invalid-terminal',
+            name: 'no-such-command',
+            arguments: JSON.stringify({
+              description: 'do it',
+              attributes: {},
+            }),
+          },
+        ],
+        data: {
+          context: {
+            agentId: matrixService.agentId,
+          },
+        },
+      });
+      await settled();
+
+      assert.deepEqual(
+        captured,
+        [{ toolCallId: 'cs-12103-invalid-terminal', status: 'invalid' }],
+        'validation resolves the request invalid exactly once',
+      );
+      assert.true(
+        toolService.invalidatedToolRequestIds.has('cs-12103-invalid-terminal'),
+        'the terminal resolution is recorded locally, not just in the (still in-flight) result event',
+      );
+
+      // A later pass over the same event — e.g. a trailing m.replace
+      // re-queuing it — must not re-validate a request the model has
+      // already been told failed.
+      toolService.queueEventForToolProcessing({
+        event_id: eventId,
+        room_id: roomId,
+        content: {} as any,
+      });
+      await settled();
+
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the resolved request gets no second result and is not executed',
+      );
+    } finally {
+      (matrixService as any).sendToolResultEvent = originalSend;
+    }
+  });
+
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 

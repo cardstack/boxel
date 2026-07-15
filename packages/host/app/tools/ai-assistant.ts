@@ -39,7 +39,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
   async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;

@@ -383,6 +383,9 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+          // From-scratch: the prerender job runs the realm-wide module
+          // pre-warm sweep before its format renders.
+          preWarm: true,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -495,6 +498,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          // Incremental: no realm-wide sweep — its cost is O(realm module
+          // count), deliberately not paid on incrementals.
+          preWarm: false,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,

@@ -100,8 +100,11 @@ async function uploadTextToMatrix(
 // are named in the result's failureReason: the result stays `applied` while at
 // least one file came back (so the successful content isn't thrown away), and
 // resolves as invalid only when nothing did — either way a partial or failed
-// read never reads as a clean one. Returns one outcome per call; never throws
-// (a publish failure is logged so the turn still settles).
+// read never reads as a clean one. failureReason also names any skill tools
+// that were declared but couldn't be offered (no usable indexed definition),
+// so a degraded skill read never looks like a tool-less one. Returns one
+// outcome per call; never throws (a publish failure is logged so the turn
+// still settles).
 export async function fulfillReadRealmFileCalls(
   botToolCalls: ChatCompletionMessageToolCall[],
   deps: ReadRealmFileFulfillmentDeps,
@@ -128,6 +131,11 @@ type FileRead =
       // declares, when the file is a skill whose index row carries usable
       // (schema-stamped) entries.
       discoveredTools?: DiscoveredToolDefinition[];
+      // Present when the file declares tools that could not be offered
+      // (no usable stamped definition in the index); rides the result's
+      // failureReason so the model learns the skill's tools are unavailable
+      // and why, instead of hunting for a tool that will never appear.
+      degradedToolsNote?: string;
     }
   | { url: string; error: string };
 
@@ -181,7 +189,13 @@ async function readAndUpload(
     log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
     return { url, error: `could not store ${url} for reading` };
   }
+  let declaredToolCount = result.tools?.length ?? 0;
   let discoveredTools = discoveredToolDefinitions(url, result.tools);
+  let degradedToolCount = declaredToolCount - discoveredTools.length;
+  let degradedToolsNote =
+    degradedToolCount > 0
+      ? `${url}: ${degradedToolCount} of ${declaredToolCount} tools declared by this skill lack a usable definition in the realm's index, so they cannot be offered as callable tools. This usually means the realm's index is stale — suggest that the user reindex the realm.`
+      : undefined;
   return {
     url,
     attachment: {
@@ -192,6 +206,7 @@ async function readAndUpload(
       contentSize: Buffer.byteLength(result.content),
     },
     ...(discoveredTools.length ? { discoveredTools } : {}),
+    ...(degradedToolsNote ? { degradedToolsNote } : {}),
   };
 }
 
@@ -239,19 +254,24 @@ async function fulfillOne(
   let discoveredTools = successfulReads.flatMap(
     (read) => read.discoveredTools ?? [],
   );
+  let readFailures = reads
+    .filter(
+      (read): read is Extract<FileRead, { error: string }> => 'error' in read,
+    )
+    // Most read errors already name the file; prefix the ones (e.g. realm
+    // access errors) that don't, so the model knows which URL to retry.
+    .map((read) =>
+      read.error.includes(read.url) ? read.error : `${read.url}: ${read.error}`,
+    );
+  // Degraded-tool notes share failureReason with read failures: it is the
+  // one channel prompt assembly already folds into the model-visible tool
+  // message, on failed and applied results alike. They stay out of the
+  // outcome's ok/error, which report file reads only.
+  let degradedToolsNotes = successfulReads
+    .map((read) => read.degradedToolsNote)
+    .filter((note): note is string => Boolean(note));
   let failureReason =
-    reads
-      .filter(
-        (read): read is Extract<FileRead, { error: string }> => 'error' in read,
-      )
-      // Most read errors already name the file; prefix the ones (e.g. realm
-      // access errors) that don't, so the model knows which URL to retry.
-      .map((read) =>
-        read.error.includes(read.url)
-          ? read.error
-          : `${read.url}: ${read.error}`,
-      )
-      .join('\n') || undefined;
+    [...readFailures, ...degradedToolsNotes].join('\n') || undefined;
 
   if (attachedFiles.length === 0) {
     return await publishFailure(call.id, failureReason!, deps);
@@ -274,8 +294,8 @@ async function fulfillOne(
   });
   return {
     commandRequestId: call.id,
-    ok: !failureReason,
-    ...(failureReason ? { error: failureReason } : {}),
+    ok: readFailures.length === 0,
+    ...(readFailures.length ? { error: readFailures.join('\n') } : {}),
   };
 }
 

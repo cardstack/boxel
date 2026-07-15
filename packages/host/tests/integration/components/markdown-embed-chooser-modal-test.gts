@@ -318,7 +318,124 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
       )
-      .hasText('DONE', 'edit-mode CTA reads DONE while the form is clean');
+      .hasText('Done', 'edit-mode CTA reads Done while the form is clean');
+
+    // The preloaded card must actually render its embed in the preview — not
+    // just the CTA row.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      )
+      .exists('the preloaded card renders its embed preview in edit mode');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('edit-mode preload of a broken ref shows the broken preview + Remove/Replace, not the empty placeholder', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // A card URL that isn't in the realm — the preload can't resolve it.
+    let brokenUrl = `${testRealmURL}books/ghost`;
+    // The editing document sits in a sibling directory, so the broken ref
+    // relativizes against it to a `../`-relative label.
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: brokenUrl,
+      sizeSpec: 'embedded',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    // The preview pane renders the broken-ref visual rather than the empty
+    // "search & preview" placeholder.
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      )
+      .exists('the broken preview shows for an unresolvable preload');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-empty]',
+      )
+      .doesNotExist('the empty placeholder is suppressed for a broken ref');
+
+    // The current-target tile still offers Remove / Replace as the fix/remove
+    // affordance, and labels the broken ref by its URL.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
+      )
+      .exists('the current-target tile renders for the broken preload');
+    // The label falls back to the ref (no title to show). It relativizes
+    // against the editing document's URL, so it reads as the `../`-relative
+    // path — the same form the pane serializes into the directive.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+      )
+      .hasText(
+        '../books/ghost',
+        'a broken ref labels as its document-relative path',
+      );
+    assert
+      .dom('[data-test-markdown-embed-chooser-remove]')
+      .exists('Remove is available');
+    assert
+      .dom('[data-test-markdown-embed-chooser-replace]')
+      .exists('Replace is available');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('a broken ref in a different realm than the document keeps its full URL as the label', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // A broken ref in the base realm while the editing document lives in the
+    // test realm — the two are in different namespaces, so the ref can't be
+    // relativized and keeps its absolute URL.
+    let brokenUrl = `${baseRealm.url}ghost-card`;
+    let pending = svc.editEmbed({
+      refType: 'card',
+      url: brokenUrl,
+      sizeSpec: 'embedded',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
+    });
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+      )
+      .hasText(
+        brokenUrl,
+        'a broken ref in another realm keeps its absolute URL',
+      );
 
     svc.resolve(undefined);
     await pending;
@@ -429,6 +546,53 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     );
   });
 
+  test('a picked card serializes a document-relative ref when a base URL is supplied', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    // The editing document lives in a sibling directory (`posts/`) to the
+    // picked card (`books/`), so the inserted ref collapses to `../books/mango`
+    // — matching the codemirror format-picker insertion path. The `url` in the
+    // result stays absolute (it's metadata; only the `bfm` ref is relativized).
+    let pending = svc.chooseCardOrFile({
+      defaultTab: 'card',
+      documentBaseUrl: `${testRealmURL}posts/my-post`,
+    });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+    );
+
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    let result = await pending;
+    assert.deepEqual(
+      result,
+      { refType: 'card', url: mango, bfm: `:card[../books/mango]` },
+      'resolves with a document-relative BFM ref while keeping url absolute',
+    );
+  });
+
   test('the chosen format sticks when switching from the cards tab to the files tab', async function (assert) {
     await render(
       <template>
@@ -522,7 +686,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
       )
-      .hasText('DONE', 'a clean edit keeps the DONE label');
+      .hasText('Done', 'a clean edit keeps the Done label');
 
     await click(
       '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',

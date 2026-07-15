@@ -22,7 +22,7 @@ import AdornSelectChip from '@cardstack/host/components/adorn/adorn-select-chip'
 import { htmlComponent } from '@cardstack/host/lib/html-component';
 
 import {
-  removeFileExtension,
+  removeCardJsonExtension,
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
 
@@ -207,7 +207,7 @@ export default class SearchResultTile extends Component<Signature> {
       {{on 'keydown' this.handleKeydown}}
       {{this.registerCardEl}}
       data-test-item-button-create-new={{@newCard.realmURL}}
-      data-test-item-button={{removeFileExtension this.resolvedItemId}}
+      data-test-item-button={{removeCardJsonExtension this.resolvedItemId}}
       data-test-item-button-selected={{if @isSelected 'true'}}
       ...attributes
     >
@@ -272,7 +272,9 @@ export default class SearchResultTile extends Component<Signature> {
       {{else if @entry}}
         <@entry.component
           class='hide-boundaries'
-          data-test-search-result={{removeFileExtension this.resolvedItemId}}
+          data-test-search-result={{removeCardJsonExtension
+            this.resolvedItemId
+          }}
         />
       {{else if @card}}
         <CardRenderer
@@ -280,7 +282,9 @@ export default class SearchResultTile extends Component<Signature> {
           @format='fitted'
           @codeRef={{defaultResultsCardRef}}
           @displayContainer={{false}}
-          data-test-search-result={{removeFileExtension this.resolvedItemId}}
+          data-test-search-result={{removeCardJsonExtension
+            this.resolvedItemId
+          }}
         />
       {{/if}}
     </Button>

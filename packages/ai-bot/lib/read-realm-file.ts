@@ -152,10 +152,11 @@ export async function executeReadRealmFile(
     : { ok: false, error: raw.error };
 }
 
-// The `attributes.content` and `attributes.frontmatter.tools` of a file-meta
-// document, or undefined when the body isn't a document carrying a string
-// `content` (malformed JSON, an error document, a row indexed without a
-// body). Tools pass through as indexed.
+// The `attributes.content` and `attributes.frontmatter.tools` (falling back
+// to the pre-rename `frontmatter.commands`) of a file-meta document, or
+// undefined when the body isn't a document carrying a string `content`
+// (malformed JSON, an error document, a row indexed without a body). Tools
+// pass through as indexed.
 function parseFileMetaBody(
   body: string,
 ): { content: string; tools?: ReadRealmFileTool[] } | undefined {
@@ -170,7 +171,13 @@ function parseFileMetaBody(
   if (typeof content !== 'string') {
     return undefined;
   }
-  let rawTools = attributes?.frontmatter?.tools;
+  // Index rows extracted before the command -> tool rename persist the
+  // declared entries under `commands`. Reading them too means a pre-rename
+  // row still reports what the skill declares; such entries carry no stamped
+  // definition, which the fulfillment layer surfaces as a degradation note
+  // instead of pretending the skill declares nothing.
+  let rawTools =
+    attributes?.frontmatter?.tools ?? attributes?.frontmatter?.commands;
   let tools = Array.isArray(rawTools)
     ? rawTools.filter(
         (tool): tool is ReadRealmFileTool =>

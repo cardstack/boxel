@@ -46,12 +46,22 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // joins can't be counted here — a running worker holds its args in memory,
   // so the queue never writes an update for them.
   coalescedPublishes: number | null;
+  // True when a from-scratch index pass spawned this job (directly or via
+  // coalescing, OR-preserved below): the realm-wide module pre-warm sweep runs
+  // once at the start of the pass. Incremental spawns leave it false — the
+  // sweep is O(realm module count), deliberately not paid on incrementals.
+  preWarm: boolean;
 }
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
   invalidations: string[];
   generation: number;
   stats: Stats;
+  // The pre-warm sweep's wall-clock when it ran (from-scratch-spawned jobs),
+  // else null — so dashboards attribute the sweep to the job that pays it.
+  // Non-optional `| null` rather than `?:` because the result is a
+  // `JSONTypes.Object`, whose index signature rejects `undefined`.
+  phaseTimings: { preWarmMs: number } | null;
 }
 
 function parsePrerenderHtmlArgsForCoalesce(
@@ -68,6 +78,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     loaderEpoch,
     spawningJobId,
     coalescedPublishes,
+    preWarm,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -87,6 +98,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     spawningJobId: typeof spawningJobId === 'number' ? spawningJobId : null,
     coalescedPublishes:
       typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
+    preWarm: preWarm === true,
   };
 }
 
@@ -174,6 +186,11 @@ function choosePrerenderHtmlCoalesceDecision(
             (existingArgs.coalescedPublishes ?? 0) +
             (incomingArgs.coalescedPublishes ?? 0) +
             1,
+          // OR semantics: a from-scratch-spawned publish merged with
+          // incremental-spawned work keeps the pre-warm bit, so the merged
+          // job still runs the realm-wide sweep. The pass runs the sweep once
+          // at its start regardless of how many publishes coalesced into it.
+          preWarm: existingArgs.preWarm || incomingArgs.preWarm,
         },
       },
     };
@@ -218,14 +235,25 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   getReader,
   getAuthedFetch,
   prerenderer,
+  definitionLookup,
   virtualNetwork,
   createPrerenderAuth,
 }) =>
   async function (args) {
-    let { jobInfo, realmUsername, realmURL, changes, generation, loaderEpoch } =
-      args;
+    let {
+      jobInfo,
+      realmUsername,
+      realmURL,
+      changes,
+      generation,
+      loaderEpoch,
+      // A job enqueued by an older worker (rolling deploy) or by a code path
+      // predating the flag carries no `preWarm`; default it to false so the
+      // boolean contract holds and a legacy job simply skips the sweep.
+      preWarm = false,
+    } = args;
     log.debug(
-      `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} at generation ${generation} (${changes.length} changes, spawned by job ${args.spawningJobId})`,
+      `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} at generation ${generation} (${changes.length} changes, spawned by job ${args.spawningJobId}, preWarm ${preWarm})`,
     );
     reportStatus(jobInfo, 'start');
     let userId = userIdFromUsername(realmUsername, matrixURL);
@@ -238,14 +266,18 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
-    let { invalidations, stats } = await runPrerenderHtmlPass({
+    let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
       generation,
       loaderEpoch,
+      preWarm,
       indexWriter,
+      definitionLookup,
       virtualNetwork,
       reader,
+      fetch: _fetch,
+      realmOwnerUserId: userId,
       prerenderer,
       auth,
       jobInfo: jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 },
@@ -267,5 +299,10 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     log.debug(
       `${jobIdentity(jobInfo)} completed prerender-html for realm ${realmURL} at generation ${generation}:\n${JSON.stringify(stats, null, 2)}`,
     );
-    return { invalidations, generation, stats };
+    return {
+      invalidations,
+      generation,
+      stats,
+      phaseTimings: preWarmMs !== undefined ? { preWarmMs } : null,
+    };
   };

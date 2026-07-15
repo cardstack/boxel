@@ -450,6 +450,32 @@ module('Integration | operator-mode | ui', function (hooks) {
       .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
   });
 
+  test('cards-grid "All Cards" group stays cards-only', async function (assert) {
+    // Search spans card and file rows in one query, but the "All Cards"
+    // group's `not: { eq: { _cardType } }` filter keeps it cards-only:
+    // file rows (module files and the cards' own dual-indexed `.json`)
+    // never carry `_cardType`, so they drop out via NULL semantics.
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`)
+      .exists(
+        { count: 1 },
+        'a card appears once — its `.json` file row is not a second grid item',
+      );
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}blog-post"]`)
+      .doesNotExist('a module file row is not an "All Cards" grid item');
+  });
+
   test(`can open and close search sheet`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(

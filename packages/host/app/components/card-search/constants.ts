@@ -55,7 +55,12 @@ export const SORT_OPTIONS: SortOption[] = [
           module: baseRRI('card-api'),
           name: 'CardDef',
         },
-        by: 'cardTitle',
+        // The sheet is mixed cards + files, so sort on the synthetic `_title`
+        // key that both row types carry (a card's title — mirrored from
+        // `cardTitle` at index time — and a file's name). Sorting on
+        // `cardTitle` alone would leave file rows NULL and sink them all below
+        // the cards under NULLS LAST.
+        by: '_title',
         direction: 'asc',
       },
     ],

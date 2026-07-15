@@ -32,6 +32,7 @@ import InteractSubmode from '@cardstack/host/components/operator-mode/interact-s
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type MarkdownEmbedChooserService from '@cardstack/host/services/markdown-embed-chooser';
 import type MessageService from '@cardstack/host/services/message-service';
 
 import CardChooserModal from '../card-chooser/modal';
@@ -63,6 +64,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private messageService: MessageService;
+  @service declare private markdownEmbedChooser: MarkdownEmbedChooserService;
   @service declare realmServer: RealmServerService;
   @service declare private toolService: ToolService;
   @service declare private store: StoreService;
@@ -111,6 +113,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       // pre-rename spelling
       commandContext: this.toolContext,
       searchResultsComponent: SearchResults,
+      markdownEmbedChooser: this.markdownEmbedChooser,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,
     };

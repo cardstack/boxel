@@ -129,6 +129,10 @@ const prerenderHtmlReconcile: Task<
           // that never competes with indexing or user work.
           spawningPriority: systemInitiatedPriority,
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+          // Targeted repair of specific stale/missing rows, not a from-scratch:
+          // skip the O(realm) pre-warm sweep. Any mid-render `lookupDefinition`
+          // falls back to the on-demand read-through.
+          preWarm: false,
         });
         realmsRepaired++;
         urlsEnqueued += urls.length;

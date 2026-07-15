@@ -1,8 +1,6 @@
-import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -43,26 +41,14 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
   @tracked
   private manualSelectionRequest: MarkdownEmbedChooserRequest | undefined;
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    // Registers the global bridge `chooseMarkdownEmbed` / `editMarkdownEmbed`
-    // in runtime-common dispatch to. Mirrors the card-chooser/file-chooser
-    // pattern so the base-realm markdown editor can open the modal without a
-    // direct host import.
-    (globalThis as any)._CARDSTACK_MARKDOWN_EMBED_CHOOSER = {
-      chooseCardOrFile: (opts: { defaultTab?: MarkdownEmbedRefType }) =>
-        this.markdownEmbedChooser.chooseCardOrFile(opts),
-      editEmbed: (
-        target: Parameters<MarkdownEmbedChooserService['editEmbed']>[0],
-      ) => this.markdownEmbedChooser.editEmbed(target),
-    };
-    registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_MARKDOWN_EMBED_CHOOSER;
-    });
-  }
-
   private get request() {
     return this.markdownEmbedChooser.currentRequest;
+  }
+
+  // The editing document's own URL, threaded to both tabs so the chooser
+  // relativizes the picked ref against it (matching the format-picker path).
+  private get documentBaseUrl(): string | undefined {
+    return this.request?.documentBaseUrl;
   }
 
   // Seeds for the shared format selection. `Tabs` owns the actual
@@ -165,6 +151,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @onInsert={{this.handleInsertCard}}
                 @selection={{selection}}
                 @initialTarget={{this.cardInitialTarget}}
+                @documentBaseUrl={{this.documentBaseUrl}}
                 @onRemove={{this.handleRemove}}
               />
             </:cards>
@@ -176,6 +163,7 @@ export default class MarkdownEmbedChooserModal extends Component<Signature> {
                 @onInsert={{this.handleInsertFile}}
                 @selection={{selection}}
                 @initialTarget={{this.fileInitialTarget}}
+                @documentBaseUrl={{this.documentBaseUrl}}
                 @onRemove={{this.handleRemove}}
               />
             </:files>

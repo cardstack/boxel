@@ -155,7 +155,7 @@ export default class EmbedFormatSelection {
 
   // Frozen snapshot of the seeded state, captured once on construction from the
   // edit-mode preload. `isDirty` compares against it so the parent can flip the
-  // CTA between DONE and ACCEPT.
+  // CTA between Done and Accept.
   private initialSelectedValue: OptionValue;
   private initialKind: 'inline' | 'block';
   private initialWidthInput: string;
