@@ -673,7 +673,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._embedPopoverOpen = false;
     let result;
     try {
-      result = await chooseMarkdownEmbed({ defaultTab });
+      result = await chooseMarkdownEmbed({
+        defaultTab,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
+      });
     } catch (e) {
       // Bridge not registered (e.g. card running outside the host) — silently
       // no-op so the toolbar click doesn't blow up the editor.
@@ -700,12 +703,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         // Resolve the directive's raw ref (which may be relative to the field's
         // base URL) to an absolute URL. The chooser loads the preview via
         // `store.get`, which can't resolve a relative specifier on its own.
-        url: resolveUrl(
-          ref.url,
-          this.args.cardReferenceBaseUrl,
-        ),
+        url: resolveUrl(ref.url, this.args.cardReferenceBaseUrl),
         sizeSpec: ref.sizeSpec,
         kind: ref.kind,
+        documentBaseUrl: this.args.cardReferenceBaseUrl ?? undefined,
       });
     } catch (e) {
       console.warn('markdown-embed chooser unavailable', e);

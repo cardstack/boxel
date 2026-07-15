@@ -2,7 +2,12 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
-import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  BrokenLinkTemplate,
+  CopyButton,
+  type BrokenLinkFormat,
+} from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
   type MenuItemOptions,
@@ -97,6 +102,7 @@ import {
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
+  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -113,9 +119,6 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
-import BrokenLinkTemplate, {
-  type BrokenLinkFormat,
-} from './default-templates/broken-link-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
@@ -1627,6 +1630,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  @displayName={{cardTypeName broken.reference}}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />

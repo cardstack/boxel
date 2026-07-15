@@ -107,12 +107,15 @@ async function loadCodeMirrorEditor() {
 async function renderEditorAndModal(opts: {
   CodeMirrorEditor: any;
   harness: ContentHarness;
+  // The editing document's own URL. When set, document-relative refs in the
+  // body (`../books/mango`) resolve against it — matching the live editor.
+  cardReferenceBaseUrl?: string;
 }) {
   // Static `<template>` in this file can't reference a runtime-loaded
   // component, so build the layout with precompileTemplate and inject
   // CodeMirrorEditor through the scope. The modal is a regular host
   // component import so it can live alongside in static scope.
-  let { CodeMirrorEditor, harness } = opts;
+  let { CodeMirrorEditor, harness, cardReferenceBaseUrl } = opts;
   await render(
     precompileTemplate(
       `
@@ -122,6 +125,7 @@ async function renderEditorAndModal(opts: {
           <CodeMirrorEditor
             @content={{harness.content}}
             @onUpdate={{harness.set}}
+            @cardReferenceBaseUrl={{cardReferenceBaseUrl}}
           />
         </div>
       </HostContextProvider>
@@ -139,6 +143,7 @@ async function renderEditorAndModal(opts: {
           MarkdownEmbedChooserModal,
           CodeMirrorEditor,
           harness,
+          cardReferenceBaseUrl,
         }),
       },
     ),
@@ -520,6 +525,62 @@ module('Integration | codemirror embed toolbar', function (hooks) {
       manga,
       'the pencil edits the freshly-typed URL, not the stale one',
     );
+    svc.resolve(undefined);
+    await settled();
+  });
+
+  test('the pencil resolves a document-relative ref so the preview loads (not a blank pane)', async function (assert) {
+    // The body stores refs relative to the editing document; the chooser loads
+    // its preview through `store.get`, which needs the canonical absolute URL.
+    // A verbatim `../books/mango` would fail to resolve and the pane would show
+    // nothing — the pencil must resolve it against the document base first.
+    let docUrl = `${testRealmURL}experiments/playground`;
+    let harness = new ContentHarness();
+    harness.content = `:card[../books/mango]`;
+    await renderEditorAndModal({
+      CodeMirrorEditor,
+      harness,
+      cardReferenceBaseUrl: docUrl,
+    });
+
+    await waitFor('[data-test-codemirror-editor] .cm-content', {
+      timeout: 5000,
+    });
+    let editor = document.querySelector(
+      '[data-test-codemirror-editor] .cm-editor',
+    ) as HTMLElement | null;
+    let view = editor ? cmContext.EditorView.findFromDOM(editor) : null;
+    view?.focus();
+    // Drop the caret inside the relative URL (`:card[` is 6 chars).
+    view?.dispatch({ selection: { anchor: 8, head: 8 } });
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    assert.strictEqual(
+      svc.currentRequest?.initialTarget?.url,
+      mango,
+      'the relative ref resolves to its absolute URL before the chooser loads it',
+    );
+
+    // The resolved card actually renders its embed preview — the regression was
+    // a blank pane because the unresolved relative URL never loaded.
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      )
+      .exists('the resolved card renders its preview in edit mode');
+
     svc.resolve(undefined);
     await settled();
   });

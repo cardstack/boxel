@@ -6,6 +6,7 @@ import AddButtonUsage from './components/add-button/usage.gts';
 import AlertUsage from './components/alert/usage.gts';
 import AvatarUsage from './components/avatar/usage.gts';
 import BasicFittedUsage from './components/basic-fitted/usage.gts';
+import BrokenLinkUsage from './components/broken-link/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
@@ -63,6 +64,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Alert', AlertUsage],
   ['Avatar', AvatarUsage],
   ['BasicFitted', BasicFittedUsage],
+  ['BrokenLink', BrokenLinkUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
   ['CardHeader', CardHeaderUsage],

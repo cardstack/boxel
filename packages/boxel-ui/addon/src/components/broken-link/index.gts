@@ -1,37 +1,74 @@
-import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { htmlSafe } from '@ember/template';
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import LinkOffIcon from '@cardstack/boxel-icons/link-off';
-import { Button, CopyButton } from '@cardstack/boxel-ui/components';
-import { cardTypeName } from '@cardstack/runtime-common';
-import type { SerializedError } from '@cardstack/runtime-common';
-import type { ViewCardFn } from '../card-api';
+
+import WarningTriangleFilled from '../../icons/warning-triangle-filled.gts';
+import Button from '../button/index.gts';
+import ContextButton from '../context-button/index.gts';
+import CopyButton from '../copy-button/index.gts';
 
 type TipCorner = 'tl' | 'tr' | 'bl' | 'br';
 
 export type BrokenLinkState = 'error' | 'not-found';
 export type BrokenLinkFormat = 'isolated' | 'fitted' | 'embedded' | 'atom';
+// The kind of thing the broken reference points at. Card sites always pass
+// 'card'; the BFM chooser passes 'file' for `:file[...]` refs.
+export type BrokenLinkItemType = 'card' | 'file';
+
+// The failure payload the overlay reads. Kept local so boxel-ui carries no
+// dependency on runtime-common (which would invert the existing
+// runtime-common → boxel-ui edge into a cycle). It lists only the fields the
+// template renders; runtime-common's `SerializedError` is a structural
+// superset, so base callers can pass one unchanged.
+export interface BrokenLinkErrorDoc {
+  additionalErrors?: Array<{
+    message?: string;
+    stack?: string;
+    status?: number;
+    title?: string;
+  }> | null;
+  message?: string;
+  stack?: string;
+  status?: number;
+  title?: string;
+}
+
+// Navigates to the broken reference for "Open anyway". Local so boxel-ui needn't
+// import base's `ViewCardFn`; base's wider `crud.viewCard` (its first param
+// accepts `URL`) stays assignable to this.
+export type BrokenLinkViewFn = (url: URL) => void;
 
 export interface BrokenLinkTemplateArgs {
   brokenUrl: string;
-  errorDoc: SerializedError;
-  state: BrokenLinkState;
+  // Human-readable label shown next to the link-off icon. Card sites pass the
+  // card type name; the BFM file chooser passes the filename. Falls back to
+  // the capitalized `itemType` ('Card' / 'File') when omitted.
+  displayName?: string;
+  errorDoc: BrokenLinkErrorDoc;
   format: BrokenLinkFormat;
+  // The kind of reference, used for the reveal-overlay headline ("Linked card
+  // not found" vs "Linked file not found") and as the fallback label when no
+  // `displayName` is given. `linksTo` field sites are always cards; the BFM
+  // chooser passes 'file' for `:file[...]` refs. Falls back to 'card' when
+  // omitted.
+  itemType?: BrokenLinkItemType;
+  state: BrokenLinkState;
   // Threaded from the field component's CardCrudFunctions. When present, the
   // overlay offers an "Open anyway" affordance that navigates to the broken
   // reference (a stack visit in interact mode, a code-editor jump in code
   // mode — whatever the host's viewCard does for the current submode).
-  viewCard?: ViewCardFn;
+  viewCard?: BrokenLinkViewFn;
 }
 
 interface NormalizedAdditionalError {
   message: string;
+  stack?: string;
   status?: number;
   title?: string;
-  stack?: string;
 }
 
 // Only http(s) references are navigable. The brokenUrl is a card reference
@@ -50,62 +87,24 @@ function parseHttpUrl(url: string): URL | null {
   }
 }
 
-// Solid amber warning triangle with a black "!" — a two-tone svg the
-// single-colour boxel icon can't express. Shared by the reveal trigger and the
-// overlay title; `@size` sets both svg dimensions so each caller can match its
-// context.
-class WarningIcon extends GlimmerComponent<{
-  Element: SVGElement;
-  Args: { size: string };
-}> {
-  <template>
-    <svg
-      class='warn-icon'
-      viewBox='0 0 24 24'
-      width={{@size}}
-      height={{@size}}
-      aria-hidden='true'
-      ...attributes
-    >
-      <path
-        class='warn-icon-tri'
-        d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'
-      />
-      <path class='warn-icon-mark' d='M12 9.2v4.3' />
-      <circle class='warn-icon-dot' cx='12' cy='16.9' r='1.05' />
-    </svg>
-    <style scoped>
-      .warn-icon {
-        display: block;
-      }
-      .warn-icon-tri {
-        fill: var(--boxel-warning-200, #ffba00);
-        stroke: var(--boxel-warning-200, #ffba00);
-        stroke-width: 1.5;
-        stroke-linejoin: round;
-      }
-      .warn-icon-mark {
-        fill: none;
-        stroke: #1a1a1a;
-        stroke-width: 2.2;
-        stroke-linecap: round;
-      }
-      .warn-icon-dot {
-        fill: #1a1a1a;
-      }
-    </style>
-  </template>
-}
-
 export default class BrokenLinkTemplate extends GlimmerComponent<{
-  Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
+  Element: HTMLDivElement;
 }> {
+  private get itemType(): BrokenLinkItemType {
+    return this.args.itemType ?? 'card';
+  }
+
   // The placeholder box is identical for every failure — what went wrong only
-  // surfaces inside the reveal overlay. `typeName` is the human-readable label
-  // shown next to the link-off icon, derived from the reference URL.
-  private get typeName(): string {
-    return cardTypeName(this.args.brokenUrl);
+  // surfaces inside the reveal overlay. `displayName` is the human-readable
+  // label shown next to the link-off icon; when the caller supplies none it
+  // falls back to the capitalized itemType ('Card' / 'File').
+  private get displayName(): string {
+    let { displayName } = this.args;
+    if (displayName) {
+      return displayName;
+    }
+    return this.itemType.charAt(0).toUpperCase() + this.itemType.slice(1);
   }
 
   private get isNotFound() {
@@ -114,8 +113,8 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
 
   private get headline() {
     return this.isNotFound
-      ? 'Linked card not found'
-      : 'Linked card failed to load';
+      ? `Linked ${this.itemType} not found`
+      : `Linked ${this.itemType} failed to load`;
   }
 
   private get statusLabel(): string {
@@ -181,9 +180,10 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return `${n} additional error${n === 1 ? '' : 's'}`;
   }
 
-  // The toggle checkbox and the trigger/close labels are wired by id; the
-  // overlay and tip anchor by dashed-ident. All must be unique per instance so
-  // multiple broken links on a page don't cross-trigger.
+  // The toggle checkbox and the trigger <label> are wired by id (the close
+  // button unchecks the toggle in JS instead); the overlay and tip anchor by
+  // dashed-ident. All must be unique per instance so multiple broken links on a
+  // page don't cross-trigger.
   private toggleId = `broken-link-reveal-${guidFor(this)}`;
   private anchorName = `--${this.toggleId}`;
   private overlayAnchorName = `--${this.toggleId}-ov`;
@@ -238,6 +238,20 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
   // and squares that corner.
   @tracked private tipCorner: TipCorner = 'br';
 
+  // The close control is a real button (ContextButton), not a <label>, so it
+  // can't toggle the reveal checkbox by `for=`. Uncheck it directly; the
+  // pure-CSS `:checked ~ .overlay` rule then hides the overlay. Unchecking
+  // programmatically fires no 'change' event, which is fine — onToggle only
+  // acts on the checked transition.
+  private close = () => {
+    let input = document.getElementById(
+      this.toggleId,
+    ) as HTMLInputElement | null;
+    if (input) {
+      input.checked = false;
+    }
+  };
+
   private onToggle = (event: Event) => {
     let input = event.target as HTMLInputElement;
     if (!input.checked) {
@@ -245,6 +259,11 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     }
     let root = input.closest('.broken-link-template') as HTMLElement | null;
     if (root) {
+      // The overlay is revealed by pure CSS (`:checked ~ .overlay`), not an
+      // Ember render, so `afterRender` can't observe it. We genuinely need a
+      // post-paint callback to measure the laid-out overlay before picking the
+      // tip corner — the sanctioned use for rAF per the rule's own escape hatch.
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
       requestAnimationFrame(() => this.updateTipCorner(root));
     }
   };
@@ -347,7 +366,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
           <span
             class='type-name'
             data-test-broken-link-type
-          >{{this.typeName}}</span>
+          >{{this.displayName}}</span>
         </span>
         <label
           for={{this.toggleId}}
@@ -356,7 +375,12 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
           aria-label='Show broken link details'
           data-test-broken-link-reveal
         >
-          <WarningIcon @size='17' />
+          <WarningTriangleFilled
+            class='warn-icon'
+            width='17'
+            height='17'
+            aria-hidden='true'
+          />
         </label>
       </div>
 
@@ -373,15 +397,23 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         <div class='overlay-header'>
           <div class='overlay-title-row'>
             <span class='overlay-title'>
-              <WarningIcon @size='16' />
+              <WarningTriangleFilled
+                class='warn-icon'
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />
               <span data-test-broken-link-headline>{{this.headline}}</span>
             </span>
-            <label
-              for={{this.toggleId}}
+            <ContextButton
               class='overlay-close'
-              aria-label='Close'
+              @icon='close'
+              @label='Close'
+              @variant='ghost'
+              @size='extra-small'
+              {{on 'click' this.close}}
               data-test-broken-link-overlay-close
-            >×</label>
+            />
           </div>
           {{! The reference is informational only, never a clickable link. A
               copy affordance to its left puts the URL on the clipboard (same
@@ -549,7 +581,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         min-height: inherit;
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light-100);
+        background-color: var(--boxel-light-400);
         background-image:
           linear-gradient(
             to top right,
@@ -574,7 +606,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
            label's own padding is zeroed below so this gap is measured from the
            text edge, not the chip's padding box. */
         gap: 10px;
-        border-radius: var(--boxel-border-radius-sm);
+        border-radius: var(--boxel-border-radius-2xs);
       }
       .broken-link-template.atom .label {
         padding: 0;
@@ -585,13 +617,17 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         align-items: center;
         gap: var(--boxel-sp-5xs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
-        background-color: var(--boxel-light-100);
-        color: var(--boxel-500);
+        background-color: var(--boxel-light-400);
+        color: var(--boxel-dark);
         font: 500 var(--boxel-font-xs);
         line-height: 1.5;
         white-space: nowrap;
       }
       .label svg {
+        flex: none;
+      }
+      .warn-icon {
+        display: block;
         flex: none;
       }
       .type-name {
@@ -661,7 +697,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
            the trigger; the gap (defined on the root, shared with the tip)
            leaves the apex ~5px short of the trigger. */
         background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-200);
+        border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
@@ -695,21 +731,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       }
       .overlay-close {
         flex: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.25rem;
-        height: 1.25rem;
         margin: -2px -2px 0 0;
-        border-radius: 50%;
-        color: var(--boxel-400);
-        font-size: 1.1rem;
-        line-height: 1;
-        cursor: pointer;
-      }
-      .overlay-close:hover {
-        background-color: var(--boxel-100);
-        color: var(--boxel-dark);
       }
       .overlay-url-row {
         display: flex;
@@ -758,8 +780,8 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         margin-top: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-2xs);
         font-size: 0.6875rem;
         font-weight: 700;
         letter-spacing: 0.04em;
@@ -773,13 +795,13 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
          white, separated by hairline dividers. */
       .diagnostics {
         margin-top: var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-form-control-border-radius);
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-2xs);
         overflow: hidden;
         background-color: var(--boxel-light);
       }
       .diag-section + .diag-section {
-        border-top: 1px solid var(--boxel-200);
+        border-top: 1px solid var(--boxel-border-color);
       }
       .diag-summary {
         display: flex;
@@ -822,7 +844,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       }
       .diag-body {
         padding: var(--boxel-sp-sm);
-        border-top: 1px solid var(--boxel-200);
+        border-top: 1px solid var(--boxel-border-color);
         background-color: var(--boxel-light);
       }
       .error-message {
@@ -901,7 +923,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         top: anchor(bottom);
         translate: 0 -1px;
         clip-path: polygon(0 0, 100% 0, 100% 100%);
-        border-right: 1px solid var(--boxel-200);
+        border-right: 1px solid var(--boxel-border-color);
       }
       .tip-br .overlay {
         right: anchor(center);
@@ -915,7 +937,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         bottom: anchor(top);
         translate: 0 1px;
         clip-path: polygon(0 100%, 100% 0, 100% 100%);
-        border-right: 1px solid var(--boxel-200);
+        border-right: 1px solid var(--boxel-border-color);
       }
       .tip-tr .overlay {
         right: anchor(center);
@@ -929,7 +951,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         top: anchor(bottom);
         translate: 0 -1px;
         clip-path: polygon(0 0, 100% 0, 0 100%);
-        border-left: 1px solid var(--boxel-200);
+        border-left: 1px solid var(--boxel-border-color);
       }
       .tip-bl .overlay {
         left: anchor(center);
@@ -943,7 +965,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         bottom: anchor(top);
         translate: 0 1px;
         clip-path: polygon(0 0, 0 100%, 100% 100%);
-        border-left: 1px solid var(--boxel-200);
+        border-left: 1px solid var(--boxel-border-color);
       }
       .tip-tl .overlay {
         left: anchor(center);
