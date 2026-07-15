@@ -4,6 +4,8 @@ import { Tooltip } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
+import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
+
 function importStatement(name: string): string {
   return `import ${toPascalCase(name)} from '@cardstack/boxel-icons/${name}';`;
 }
@@ -48,20 +50,25 @@ export default class IconsGridComponent extends Component {
       return c.name.toLowerCase().includes(this.iconFilterString.toLowerCase());
     });
   }
-  updateIconFilterString = (ev: Event) => {
-    this.iconFilterString = (ev.target as HTMLInputElement).value;
+  updateIconFilterString = (value: string) => {
+    this.iconFilterString = value;
   };
 
   <template>
-    <div>
+    <div class='boxel-lucide-icons'>
       <div class='boxel-icons-header'>
-        <label>Filter:
-          <input
-            type='text'
+        <FieldContainer
+          class='boxel-icon-search'
+          @tag='label'
+          @label='Filter'
+          @inline={{true}}
+        >
+          <BoxelInput
+            type='search'
             placeholder='Search for an icon'
-            class='boxel-input'
-            {{on 'input' this.updateIconFilterString}}
-          /></label>
+            @onInput={{this.updateIconFilterString}}
+          />
+        </FieldContainer>
         <div class='boxel-icons-count'>
           Showing
           {{this.boxelIconsComponents.length}}
@@ -72,7 +79,7 @@ export default class IconsGridComponent extends Component {
       </div>
       <div class='boxel-icons-grid'>
         {{#each this.boxelIconsComponents as |c|}}
-          <div>
+          <div class='boxel-icons-grid-item'>
             {{#let (makeCopyable) as |copyable|}}
               <Tooltip>
                 <:trigger>
@@ -99,36 +106,61 @@ export default class IconsGridComponent extends Component {
       </div>
     </div>
     <style scoped>
+      .boxel-lucide-icons {
+        --bli-item-size: 50px;
+      }
       .boxel-icons-header {
-        padding: 1rem;
+        padding: 0 1rem 1rem;
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+      }
+      .boxel-icon-search {
+        --boxel-input-height: var(--boxel-button-sm);
+        --boxel-input-width: 10rem;
       }
       .boxel-icons-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--bli-item-size), 1fr)
+        );
         gap: 1rem;
         max-height: 500px;
         overflow-y: scroll;
-        border: 1px solid #f0f0f0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
       }
-
-      .boxel-icons-grid div {
+      .boxel-icons-grid-item {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 80px;
+        height: var(--bli-item-size);
         border-radius: 4px;
         cursor: pointer;
       }
-
-      .boxel-icons-grid div:hover {
-        background-color: #f0f0f0;
+      .boxel-icons-grid-item:hover {
+        background-color: color-mix(
+          in oklab,
+          var(--foreground) 10%,
+          transparent
+        );
+      }
+      .boxel-icons-grid-item svg {
+        width: 30px;
+        height: 30px;
       }
 
-      .boxel-icons-grid div svg {
-        width: 50px;
-        height: 50px;
+      @media (max-width: 599px) {
+        .boxel-icons-grid {
+          margin-inline: var(--boxel-sp);
+          margin-bottom: var(--boxel-sp);
+          border: 1px solid var(--border);
+          height: 200px;
+          border-radius: var(--radius);
+        }
       }
     </style>
   </template>

@@ -78,37 +78,45 @@ class IndexComponent extends Component {
             class='boxel-freestyle-theme-settings'
             @display='flex'
           >
-            <div class='boxel-freestyle-theme-row'>
-              <FieldContainer
-                class='boxel-freestyle-theme-field'
-                @inline={{true}}
-                @label='Theme'
-                @tag='label'
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Theme'
+              @tag='label'
+            >
+              <BoxelSelect
+                class='boxel-freestyle-theme-selector'
+                @placeholder='Select Theme'
+                @selected={{this.theme}}
+                @options={{this.themes}}
+                @onChange={{this.selectTheme}}
+                as |theme|
               >
-                <BoxelSelect
-                  class='boxel-freestyle-theme-selector'
-                  @placeholder='Select Theme'
-                  @selected={{this.theme}}
-                  @options={{this.themes}}
-                  @onChange={{this.selectTheme}}
-                  as |theme|
-                >
-                  {{theme.name}}
-                </BoxelSelect>
-              </FieldContainer>
-              <FieldContainer @inline={{true}} @label='Dark Mode' @tag='label'>
-                <Switch
-                  @label='Dark Mode'
-                  @isEnabled={{this.isDarkMode}}
-                  @onChange={{this.toggleMode}}
-                />
-              </FieldContainer>
-            </div>
-            <FieldContainer @inline={{true}} @label='Cycle Themes' @tag='label'>
+                {{theme.name}}
+              </BoxelSelect>
+            </FieldContainer>
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Cycle Themes'
+              @tag='label'
+            >
               <Switch
                 @label='Cycle Themes'
                 @isEnabled={{this.isCycleThemesEnabled}}
                 @onChange={{this.toggleCycling}}
+              />
+            </FieldContainer>
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Dark Mode'
+              @tag='label'
+            >
+              <Switch
+                @label='Dark Mode'
+                @isEnabled={{this.isDarkMode}}
+                @onChange={{this.toggleMode}}
               />
             </FieldContainer>
           </BoxelContainer>
@@ -174,36 +182,11 @@ class IndexComponent extends Component {
         border-radius: 0;
       }
       .boxel-freestyle-theme-settings {
-        --boxel-container-gap: 0;
-        --boxel-container-padding: 0;
-        --boxel-form-control-height: 30px;
-        position: absolute;
-        top: var(--boxel-sp-lg);
-        right: var(--boxel-sp-4xl);
-        width: min-content;
-      }
-      .boxel-freestyle-theme-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
+        --boxel-container-gap: var(--boxel-sp-2xs) var(--boxel-sp);
+        --boxel-container-padding: var(--boxel-sp-xs) var(--boxel-sp);
       }
       .boxel-freestyle-theme-selector {
         min-width: 10rem;
-      }
-      @media (max-width: 1279px) {
-        /* At narrow widths the header no longer has room for the floating
-           settings box, so it flows in the content area instead. */
-        .boxel-freestyle-theme-settings {
-          position: static;
-          width: auto;
-          --boxel-container-gap: var(--boxel-sp-xs) var(--boxel-sp);
-          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-          border-bottom: 1px solid
-            color-mix(in oklab, var(--border) 60%, transparent);
-        }
-        .boxel-freestyle-theme-row {
-          flex-wrap: wrap;
-        }
       }
       .subsection-import {
         display: flex;
@@ -252,7 +235,7 @@ class IndexComponent extends Component {
       }
       .FreestyleGuide-subtitle {
         margin-top: var(--boxel-sp-4xs);
-        font-size: 0.875rem;
+        font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -267,27 +250,33 @@ class IndexComponent extends Component {
         border-right-color: var(--sidebar-border);
       }
       @media (max-width: 599px) {
-        /* Below 600px ember-freestyle stacks the nav above the content;
-           cap its height and let the content column scroll instead. */
+        body:has(.FreestyleGuide-nav) {
+          overflow: hidden;
+        }
         .FreestyleGuide-header {
           padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
         }
         .FreestyleGuide-title {
-          font-size: 1.375rem;
+          font-size: 20px;
+        }
+        .FreestyleGuide-subtitle {
+          font-size: 10px;
+        }
+        .theme-field {
+          --boxel-label-font-size: var(--boxel-font-size-xs);
         }
         .FreestyleGuide-nav {
-          position: static;
-          height: auto;
-          max-height: 40vh;
-          border-bottom: 1px solid var(--sidebar-border);
+          position: fixed;
+          width: var(--boxel-xs-container);
+          height: calc(100vh - 70px);
+          top: 70px;
+          background: var(--muted);
+          overscroll-behavior: none;
         }
         .FreestyleGuide-content {
           flex: 1;
           min-height: 0;
           margin-top: 0;
-        }
-        .boxel-freestyle-theme-settings {
-          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp);
         }
         .FreestyleUsage-apiTable,
         .FreestyleUsage-cssVarsTable {
@@ -365,6 +354,7 @@ class IndexComponent extends Component {
       .FreestyleUsage-description {
         line-height: 1.55;
         color: color-mix(in oklab, var(--foreground) 75%, transparent);
+        font-size: var(--boxel-font-size-sm);
       }
       .FreestyleUsage-preview {
         --radius: var(--theme-radius, var(--boxel-border-radius));
@@ -379,11 +369,7 @@ class IndexComponent extends Component {
       }
       .FreestyleUsage-apiTable tr:nth-child(even),
       .FreestyleUsage-cssVarsTable tr:nth-child(even) {
-        background-color: color-mix(
-          in oklab,
-          var(--background) 90%,
-          var(--foreground)
-        );
+        background-color: color-mix(in oklab, var(--muted) 90%, transparent);
       }
       .FreestyleUsage-apiTable tr,
       .FreestyleUsage-cssVarsTable tr {
