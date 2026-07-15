@@ -21,6 +21,10 @@ const baseRealmURL = new URL('https://cardstack.com/base/');
 const foreignRealmURL = new URL('https://localhost:4201/user1/personal-realm/');
 
 const virtualNetwork = new VirtualNetwork();
+// The install planner canonicalizes module refs through the virtual
+// network's realm mappings, so register the base realm prefix the same way
+// the host's network service does at construction.
+virtualNetwork.addRealmMapping('@cardstack/base/', baseRealmURL.href);
 
 module('Unit | Catalog | Install Plan Builder', function () {
   test('when listing name is not provided, just provides uuid (in this case uuid="xyz")', function (assert) {

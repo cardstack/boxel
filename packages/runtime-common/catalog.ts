@@ -7,7 +7,7 @@ import type { CardDef } from '@cardstack/base/card-api';
 import { RealmPaths, join } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
 import { resolveAdoptedCodeRef } from './code-ref.ts';
-import { baseRealm, baseRealmRRI, realmURL } from './constants.ts';
+import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
@@ -23,23 +23,20 @@ export interface Listing extends CardDef {
   skills: any[];
 }
 
-// A codeRef.module for a base-realm class may show up in either form: the
-// literal symbolic `https://cardstack.com/base/` URL, or the base realm's
-// real backing URL (e.g. `https://localhost:4201/base/skill`).
-// VirtualNetwork.unresolveURL() can canonicalize either form to the
-// `@cardstack/base/` RRI prefix, but only when the base realm's URL and
-// realm mappings are actually registered on that VirtualNetwork instance —
-// a bare VirtualNetwork (e.g. the plan-install unit test) leaves both
-// forms unchanged, so the literal-URL check below is still needed.
-// Without it, a base-realm module can get wrongly treated as something
-// that needs to be copied into the install destination.
+// A codeRef.module for a base-realm class may reach the planner as the
+// literal symbolic `https://cardstack.com/base/` URL or as the base realm's
+// real backing URL (e.g. `https://localhost:4201/base/skill`), so
+// canonicalize once to RRI form and compare against the `@cardstack/base/`
+// prefix. This requires the base realm's URL and realm mappings to be
+// registered on the VirtualNetwork the caller hands us — every production
+// VirtualNetwork registers them at construction (see the host's network
+// service), and tests must do the same. The durable end-state is for refs
+// to already be canonical before they reach this layer, at which point the
+// unresolveURL call collapses to a no-op prefix check.
 function isInBaseRealm(
   module: RealmResourceIdentifier,
   virtualNetwork: VirtualNetwork,
 ): boolean {
-  if (module.startsWith(baseRealm.url)) {
-    return true;
-  }
   return virtualNetwork.unresolveURL(module).startsWith(baseRealmRRI);
 }
 
