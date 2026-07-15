@@ -63,7 +63,10 @@ interface ComputeDeps {
   definitionLookup: CreateRoutesArgs['definitionLookup'];
   virtualNetwork: CreateRoutesArgs['virtualNetwork'];
   prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
-  createPrerenderAuth: (userId: string, permissions: RealmPermissions) => string;
+  createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
 }
 
 interface CachedValidation {
