@@ -633,7 +633,7 @@ module('Integration | markdown-embed-preview-pane', function (hooks) {
     assert.strictEqual(
       harness.last,
       `:card[${brokenUrl}]`,
-      'the CTA serializes the broken URL so DONE/ACCEPT keep the ref',
+      'the CTA serializes the broken URL so Done/ACCEPT keep the ref',
     );
   });
 });

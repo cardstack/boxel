@@ -119,13 +119,13 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     return this.currentUrl !== initial;
   }
 
-  // 'DONE' until the user diverges from the initial preload, 'ACCEPT' once
+  // 'Done' until the user diverges from the initial preload, 'Accept' once
   // they do — matches Zeplin 08B. Non-edit (choose) tabs keep the dynamic
   // "Insert as …" label.
   private get ctaLabelOverride(): string | undefined {
     if (!this.isEditMode) return undefined;
     let dirty = this.args.selection.isDirty || this.targetChanged;
-    return dirty ? 'ACCEPT' : 'DONE';
+    return dirty ? 'Accept' : 'Done';
   }
 
   private get currentTargetLabel(): string {

@@ -39,7 +39,7 @@ interface Signature {
     refType: 'card' | 'file';
     // Broken-ref state, set by the parent when the ref can't resolve. When
     // `brokenUrl` is present (and `target` is not), the preview renders the
-    // broken-ref visual; the CTA still serializes `brokenUrl` so DONE/ACCEPT
+    // broken-ref visual; the CTA still serializes `brokenUrl` so Done/Accept
     // keep the ref.
     brokenUrl?: string;
     errorDoc?: BrokenLinkErrorDoc;
@@ -57,7 +57,7 @@ interface Signature {
     // owns actual cursor insertion.
     onInsert: (bfm: string) => void;
     // Overrides the dynamic "Insert as …" CTA label. Used in edit mode to
-    // show 'DONE' (clean) or 'ACCEPT' (dirty) per the design spec.
+    // show 'Done' (clean) or 'Accept' (dirty) per the design spec.
     ctaLabelOverride?: string;
   };
 }
