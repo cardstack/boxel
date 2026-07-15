@@ -102,12 +102,11 @@ function refreshValidation(
       // Clean up inside the promise body rather than via `pending.finally(...)`:
       // that would spawn a second promise which, on a refresh rejection,
       // rejects unobserved and surfaces as an unhandled rejection (the only
-      // observed promise is `pending`, returned to the caller). Identity-check
-      // so a newer in-flight entry installed after this one settled isn't
-      // dropped.
-      if (refreshInFlight.get(realm.url) === pending) {
-        refreshInFlight.delete(realm.url);
-      }
+      // observed promise is `pending`, returned to the caller). A concurrent
+      // call for this realm gets the existing in-flight promise (the guard
+      // above), so no other refresh can be queued while this one runs — the
+      // map entry is always this one, so clear it unconditionally.
+      refreshInFlight.delete(realm.url);
     }
   })();
   refreshInFlight.set(realm.url, pending);
