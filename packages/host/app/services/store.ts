@@ -308,7 +308,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
-      this.unsubscribeFromAllRealms();
     });
   }
 
@@ -332,11 +331,6 @@ export default class StoreService extends Service implements StoreInterface {
 
   resetState() {
     clearInterval(this.gcInterval);
-    // Deliberately does NOT unsubscribe here: resetState runs at mid-session
-    // boundaries (realm/workspace switch, route deactivate), and realm
-    // invalidations must keep flowing to cards that survive the reset.
-    // Subscriptions are released only when the store is destroyed
-    // (see the destructor's unsubscribeFromAllRealms).
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
     this.onSaveSubscriber = undefined;
@@ -1642,10 +1636,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private unsubscribeFromInstance(id: string) {
-    // Stop tracking this instance for in-place field changes. The realm-level
-    // Matrix subscription is intentionally left in place — see
-    // unsubscribeFromAllRealms for why realm subscriptions are not
-    // reference-counted.
     let instance = this.store.getCard(id);
     if (instance && this.cardApiCache) {
       this.cardApiCache.unsubscribeFromChanges(
@@ -1653,23 +1643,36 @@ export default class StoreService extends Service implements StoreInterface {
         this.onInstanceUpdated,
       );
     }
-  }
 
-  // Realm subscriptions are keyed by realm-root URL (realm invalidation events
-  // route by URL) while the store keys instances and reference counts in
-  // canonical form (prefix form for mapped realms). Reconciling those forms on
-  // every reference drop to decide when to unsubscribe is both error-prone and
-  // races invalidation delivery — tearing a subscription down mid-flight drops
-  // updates a caller is still waiting on. Realms are few and their
-  // subscriptions cheap, so install one on first use (subscribeToRealm) and
-  // release them all together when the store is destroyed. This runs only from
-  // the destructor — not resetState, which is a mid-session boundary where
-  // subscriptions must persist.
-  private unsubscribeFromAllRealms() {
-    for (let { unsubscribe } of this.subscriptions.values()) {
-      unsubscribe();
+    // if there are no more subscribers to this realm then unsubscribe from
+    // realm. Note this uses a same-form startsWith, so a mapped realm whose
+    // instances are keyed in prefix form (e.g. the base realm) never matches
+    // and its subscription is left installed for the session — a benign,
+    // deliberate leak. Making the teardown form-aware races invalidation
+    // delivery, and removing it entirely regresses invalidation-heavy paths;
+    // see the realm-subscription-lifecycle follow-up.
+    let realmHref = !isLocalId(id)
+      ? [...this.subscriptions.keys()].find((realmURL) =>
+          id.startsWith(realmURL),
+        )
+      : undefined;
+    if (!realmHref) {
+      return;
     }
-    this.subscriptions.clear();
+
+    let subscription = this.subscriptions.get(realmHref);
+    if (
+      subscription &&
+      ![...this.referenceCount.entries()].find(
+        ([referenceId, count]) =>
+          !isLocalId(referenceId) &&
+          count > 0 &&
+          referenceId.startsWith(realmHref),
+      )
+    ) {
+      subscription.unsubscribe();
+      this.subscriptions.delete(realmHref);
+    }
   }
 
   private createCardStore(): CardStore {

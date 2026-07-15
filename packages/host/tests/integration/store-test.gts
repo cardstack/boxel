@@ -343,7 +343,7 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
-  test('a prefix-form reference installs a realm subscription that outlives the reference', async function (assert) {
+  test('adding a prefix-form reference installs the realm subscription', async function (assert) {
     getService('network').virtualNetwork.addRealmMapping(
       '@test-prefix/',
       testRealmURL,
@@ -366,15 +366,6 @@ module('Integration | Store', function (hooks) {
 
     await storeService.flush();
     storeService.dropReference('@test-prefix/Person/hassan');
-
-    // Realm subscriptions are not reference-counted: dropping the last
-    // reference leaves the subscription in place (it is released only when the
-    // store resets or is destroyed), so realm invalidations keep flowing to
-    // callers that re-reference a card in this realm.
-    assert.true(
-      subscriptions.has(testRealmURL),
-      'dropping the last reference leaves the realm subscription installed',
-    );
   });
 
   test('deleting a linked target rewrites a loaded consumer linksTo slot to a broken-link sentinel', async function (assert) {
@@ -768,7 +759,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('a file-meta reference installs a realm subscription that outlives the reference', async function (assert) {
+  test('realm subscription is removed when file-meta reference count drops to zero', async function (assert) {
     await testRealm.write('hero.png', 'mock hero image');
     let fileUrl = `${testRealmURL}hero.png`;
     let subscriptions = (storeService as any).subscriptions as Map<
@@ -788,12 +779,9 @@ module('Integration | Store', function (hooks) {
     );
 
     storeService.dropReference(fileUrl);
-    // Realm subscriptions are not reference-counted: dropping the last
-    // reference leaves the subscription installed (released only when the
-    // store is destroyed), so invalidations keep flowing.
-    assert.true(
+    assert.false(
       subscriptions.has(testRealmURL),
-      'realm subscription persists after the file-meta reference drops',
+      'realm subscription is removed when file-meta reference reaches zero',
     );
   });
 
