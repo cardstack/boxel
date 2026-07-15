@@ -2892,10 +2892,10 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
+      '@cardstack/base/card-api',
     );
     let { default: StringField } = await loader.import<typeof StringFieldMod>(
-      'https://cardstack.com/base/string',
+      '@cardstack/base/string',
     );
 
     class Person extends CardDef {

@@ -401,7 +401,7 @@ export class FileDefAttributesExtractor {
     try {
       let cardApiModule = await this.#loaderService.loader.import<
         typeof CardAPI
-      >('https://cardstack.com/base/card-api');
+      >('@cardstack/base/card-api');
       let { fields, fieldDefs } = getFieldDefinitions(
         cardApiModule,
         klass as unknown as typeof BaseDef,

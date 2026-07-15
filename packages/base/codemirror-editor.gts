@@ -9,11 +9,11 @@ import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
-  baseRealm,
-  trimJsonExtension,
+  baseRRI,
   maybeRelativeReference,
   resolveRRIReference,
   rri,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
 import {
   type BfmRefRange,
@@ -910,7 +910,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
               return {
                 filter: {
                   in: { url: urls },
-                  on: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+                  on: { module: baseRRI('card-api'), name: 'FileDef' },
                 },
               };
             }),
