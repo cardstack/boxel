@@ -874,6 +874,74 @@ export default class Sample extends Component {
       );
     });
 
+    test('flags a `<style scoped>` nested inside an element (no-nested-scoped-style)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'nested-style.gts').send(`<template>
+  <div class="my-card">
+    <style scoped>
+      .my-card { color: red; }
+    </style>
+  </div>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        severity: number;
+      }[];
+      let hit = messages.find(
+        (m) =>
+          m.source === 'template-lint' && m.ruleId === 'no-nested-scoped-style',
+      );
+      assert.ok(
+        hit,
+        `nested <style scoped> should be flagged by template-lint: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.strictEqual(
+        hit?.severity,
+        2,
+        'no-nested-scoped-style is error severity (nested scoped styles fail transpilation)',
+      );
+    });
+
+    test('does not flag a `<style scoped>` at the template root (no-nested-scoped-style)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'root-style.gts').send(`<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card { color: red; }
+  </style>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string | null }[];
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'no-nested-scoped-style'),
+        `root-level <style scoped> should not be flagged: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+    });
+
     test('lints .gjs files with the gts parser (host config has no .gjs override)', async function (assert) {
       let response = await request
         .post('/_lint')
