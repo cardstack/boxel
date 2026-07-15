@@ -293,7 +293,7 @@ class IndexComponent extends Component {
         .FreestyleGuide-nav {
           position: fixed;
           width: var(--boxel-xs-container);
-          height: calc(100vh - 70px);
+          height: calc(100vh - 60px);
           top: 70px;
           background: var(--muted);
           overscroll-behavior: none;

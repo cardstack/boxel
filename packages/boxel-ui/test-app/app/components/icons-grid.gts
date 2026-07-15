@@ -3,8 +3,13 @@ import { ALL_ICON_COMPONENTS } from '@cardstack/boxel-icons/boxel-icons-meta';
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
-import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  FieldContainer,
+  Switch,
+} from '@cardstack/boxel-ui/components';
 
 function importStatement(name: string): string {
   return `import ${toPascalCase(name)} from '@cardstack/boxel-icons/${name}';`;
@@ -45,6 +50,10 @@ export default class IconsGridComponent extends Component {
     });
   }
   @tracked iconFilterString = '';
+  @tracked showAll = false;
+  toggleShowAll = () => {
+    this.showAll = !this.showAll;
+  };
   get boxelIconsComponents() {
     return this.allBoxelIconsComponents.filter((c) => {
       return c.name.toLowerCase().includes(this.iconFilterString.toLowerCase());
@@ -69,6 +78,18 @@ export default class IconsGridComponent extends Component {
             @onInput={{this.updateIconFilterString}}
           />
         </FieldContainer>
+        <FieldContainer
+          class='boxel-icons-show-all'
+          @tag='label'
+          @label='Show All'
+          @inline={{true}}
+        >
+          <Switch
+            @label='Show All'
+            @isEnabled={{this.showAll}}
+            @onChange={{this.toggleShowAll}}
+          />
+        </FieldContainer>
         <div class='boxel-icons-count'>
           Showing
           {{this.boxelIconsComponents.length}}
@@ -77,7 +98,7 @@ export default class IconsGridComponent extends Component {
           icons
         </div>
       </div>
-      <div class='boxel-icons-grid'>
+      <div class={{cn 'boxel-icons-grid' show-all=this.showAll}}>
         {{#each this.boxelIconsComponents as |c|}}
           <div class='boxel-icons-grid-item'>
             {{#let (makeCopyable) as |copyable|}}
@@ -132,6 +153,10 @@ export default class IconsGridComponent extends Component {
         overflow-y: scroll;
         border-top: 1px solid var(--border);
         border-bottom: 1px solid var(--border);
+      }
+      .boxel-icons-grid.show-all {
+        max-height: none;
+        overflow-y: visible;
       }
       .boxel-icons-grid-item {
         display: flex;
