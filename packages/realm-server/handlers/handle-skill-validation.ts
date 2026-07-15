@@ -93,17 +93,24 @@ function refreshValidation(
     return existing;
   }
   let pending = (async () => {
-    let attributes = await computeValidation(realm, deps);
-    let entry: CachedValidation = { computedAt: Date.now(), attributes };
-    validationCache.set(realm.url, entry);
-    return entry;
+    try {
+      let attributes = await computeValidation(realm, deps);
+      let entry: CachedValidation = { computedAt: Date.now(), attributes };
+      validationCache.set(realm.url, entry);
+      return entry;
+    } finally {
+      // Clean up inside the promise body rather than via `pending.finally(...)`:
+      // that would spawn a second promise which, on a refresh rejection,
+      // rejects unobserved and surfaces as an unhandled rejection (the only
+      // observed promise is `pending`, returned to the caller). Identity-check
+      // so a newer in-flight entry installed after this one settled isn't
+      // dropped.
+      if (refreshInFlight.get(realm.url) === pending) {
+        refreshInFlight.delete(realm.url);
+      }
+    }
   })();
   refreshInFlight.set(realm.url, pending);
-  pending.finally(() => {
-    if (refreshInFlight.get(realm.url) === pending) {
-      refreshInFlight.delete(realm.url);
-    }
-  });
   return pending;
 }
 
