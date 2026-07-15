@@ -35,7 +35,7 @@ fi
 
 echo "Using base SHA $BASE_SHA"
 
-CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts')"
+CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts' 'packages/postgres/migrations-removal/*.js' 'packages/postgres/migrations-removal/*.ts')"
 echo "$CHANGED"
 
 COUNT="$(printf '%s\n' "$CHANGED" | awk 'NF' | wc -l | tr -d ' ')"

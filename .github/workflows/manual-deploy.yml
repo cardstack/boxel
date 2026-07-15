@@ -237,6 +237,9 @@ jobs:
       # migration must finish under it. Genuine failures exit immediately.
       TIMEOUT_SECONDS: "1800"
     steps:
+      - name: Check out
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Set up env
         run: |
           if [ "${{ inputs.environment }}" = "production" ]; then
@@ -255,84 +258,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Run migrations and gate on exit code
-        run: |
-          set -euo pipefail
-          region=us-east-1
-          console_logs="https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${LOG_GROUP}"
-
-          # Register a new revision of the pg-migration task definition pinned to
-          # the image just built. Strip the read-only fields describe returns
-          # that register-task-definition rejects.
-          aws ecs describe-task-definition --task-definition "$SERVICE" \
-            --query 'taskDefinition' --output json > td.json
-          jq --arg IMAGE "$IMAGE" --arg CONTAINER "$CONTAINER" '
-            .containerDefinitions |= map(if .name == $CONTAINER then .image = $IMAGE else . end)
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                  .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
-          ' td.json > td-new.json
-          task_def=$(aws ecs register-task-definition --cli-input-json file://td-new.json \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "Registered migration task definition: $task_def"
-
-          # Place the one-shot task in the pg-migration service's own network
-          # config — its security group is the one allowed to reach the DB.
-          net=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query 'services[0].networkConfiguration.awsvpcConfiguration' --output json)
-          subnets=$(echo "$net" | jq -r '.subnets | join(",")')
-          groups=$(echo "$net" | jq -r '.securityGroups | join(",")')
-          public=$(echo "$net" | jq -r '.assignPublicIp // "DISABLED"')
-
-          # Override the command to run the migrations WITHOUT the service's
-          # trailing `sleep infinity`, so the task exits with the migration's
-          # status instead of staying up.
-          overrides=$(jq -cn --arg CONTAINER "$CONTAINER" \
-            '{containerOverrides: [{name: $CONTAINER, command: ["./scripts/run-migrations.sh"]}]}')
-          run_out=$(aws ecs run-task \
-            --cluster "$CLUSTER" \
-            --task-definition "$task_def" \
-            --launch-type FARGATE \
-            --count 1 \
-            --started-by "deploy-${GITHUB_SHA:0:7}" \
-            --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$groups],assignPublicIp=$public}" \
-            --overrides "$overrides" \
-            --output json)
-          task_arn=$(echo "$run_out" | jq -r '.tasks[0].taskArn // empty')
-          if [ -z "$task_arn" ]; then
-            echo "::error::Failed to start the migration task."
-            echo "$run_out" | jq '.failures'
-            exit 1
-          fi
-          echo "Started migration task: $task_arn"
-
-          # Wait for the task to stop, then gate on the container's exit code.
-          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
-          while :; do
-            status=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
-              --query 'tasks[0].lastStatus' --output text)
-            echo "migration task status: $status"
-            [ "$status" = "STOPPED" ] && break
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::Timed out after ${TIMEOUT_SECONDS}s waiting for the migration task to finish."
-              echo "Migration logs: ${console_logs}"
-              aws ecs stop-task --cluster "$CLUSTER" --task "$task_arn" \
-                --reason "migration gate timeout" >/dev/null 2>&1 || true
-              exit 1
-            fi
-            sleep 10
-          done
-
-          exit_code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
-            --query "tasks[0].containers[?name=='${CONTAINER}']|[0].exitCode" --output text)
-          echo "migration container exit code: ${exit_code}"
-          if [ "$exit_code" != "0" ]; then
-            echo "::error::DB migration failed (exit ${exit_code}) — deploy blocked so the app never runs ahead of its schema."
-            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
-              --query "tasks[0].{stopCode:stopCode,taskReason:stoppedReason,containerReason:containers[?name=='${CONTAINER}']|[0].reason}" \
-              --output table || true
-            echo "Migration logs: ${console_logs}"
-            exit 1
-          fi
-          echo "DB migration succeeded."
+        run: .github/scripts/run-gated-migration-task.sh ./scripts/run-migrations.sh
 
   deploy-prerender:
     name: Deploy prerender
@@ -364,8 +290,7 @@ jobs:
 
   deploy-worker:
     name: Deploy worker
-    needs:
-      [build-worker, deploy-host, migrate-db, deploy-prerender-manager]
+    needs: [build-worker, deploy-host, migrate-db, deploy-prerender-manager]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -388,8 +313,7 @@ jobs:
 
   deploy-realm-server:
     name: Deploy realm server
-    needs:
-      [post-deploy-worker, build-realm-server, deploy-host, migrate-db]
+    needs: [post-deploy-worker, build-realm-server, deploy-host, migrate-db]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -431,6 +355,62 @@ jobs:
             echo "Response body: $response_body"
             exit 1
           fi
+
+  # Destructive ("removal") migrations — column/table drops and renames, held in
+  # packages/postgres/migrations-removal/ — run HERE, after deploy-realm-server
+  # has reached stability. `wait-for-service-stability: true` on that job means
+  # the previous realm-server task set has fully drained (and, via its
+  # post-deploy-worker dependency, the previous worker task set too), so no task
+  # on the old code revision is left to query a column this phase drops. That is
+  # the whole point: running drops before the old tasks drain is what takes the
+  # published realms down (old code 500s on `column i.<x> does not exist`).
+  #
+  # A failure here is non-fatal to serving: the new code, by definition, no
+  # longer reads the removed columns, so it is already live and healthy — the
+  # drop simply hasn't happened yet and can be retried on the next deploy.
+  #
+  # Gate on deploy-realm-server, NOT post-deploy-realm-server: the latter is a
+  # separate /_post-deployment hook that can fail independently of the only real
+  # precondition here — the old tasks being gone.
+  migrate-db-remove:
+    needs: [build-pg-migration, deploy-realm-server]
+    name: Run DB removal migrations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLUSTER: ${{ inputs.environment }}
+      SERVICE: boxel-pg-migration-${{ inputs.environment }}
+      CONTAINER: boxel-pg-migration
+      IMAGE: ${{ needs.build-pg-migration.outputs.image }}
+      LOG_GROUP: ecs-boxel-pg-migration-${{ inputs.environment }}
+      # Bounds a migration that hangs (e.g. blocked on a lock); a long backfill
+      # migration must finish under it. Genuine failures exit immediately.
+      TIMEOUT_SECONDS: "1800"
+    steps:
+      - name: Check out
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up env
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
+          else
+            echo "unrecognized environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Run removal migrations and gate on exit code
+        run: .github/scripts/run-gated-migration-task.sh ./scripts/run-migrations.sh migrations-removal migrations_removal
 
   recycle-prerender:
     name: Recycle prerender after host is live
@@ -500,6 +480,7 @@ jobs:
         post-deploy-worker,
         deploy-realm-server,
         post-deploy-realm-server,
+        migrate-db-remove,
         recycle-prerender,
         apply-observability,
       ]
