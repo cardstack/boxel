@@ -63,9 +63,6 @@ export interface IndexPhaseTimings {
   // Ordering the invalidation set by dependency so files precede the cards
   // that consume them.
   orderMs?: number;
-  // Module pre-warm before the visit loop (from-scratch only; incremental does
-  // none).
-  preWarmMs?: number;
   // The whole serial visit loop wall. Equals Σ server render
   // (`boxel_index.diagnostics.totalElapsedMs`) + Σ per-visit
   // `indexVisitClientMs` + `writeMs`.

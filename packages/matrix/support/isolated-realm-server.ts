@@ -460,6 +460,16 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
+    // Production parity for the worker tiers: a dedicated high-priority
+    // worker (floor 9) serves user-initiated jobs — a test's createRealm
+    // indexing (priority 10) and its spawned prerender-html (9) — while the
+    // all-priority worker digests system-tier work. Without it, the lone
+    // all-priority worker claims jobs oldest-first regardless of priority,
+    // so the boot realms' system prerender-html jobs (which include the
+    // realm-wide module pre-warm sweep, minutes of work on a loaded runner)
+    // hold the only worker while the first tests' createRealm index jobs sit
+    // queued past their 30s provisioning wait.
+    `--highPriorityCount=1`,
 
     `--fromUrl='https://localhost:4205/test/'`,
     `--toUrl='https://localhost:4205/test/'`,
