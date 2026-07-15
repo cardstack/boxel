@@ -253,7 +253,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
       )
-      .hasText('DONE', 'edit-mode CTA reads DONE while the form is clean');
+      .hasText('Done', 'edit-mode CTA reads Done while the form is clean');
 
     // The preloaded card must actually render its embed in the preview — not
     // just the CTA row.
@@ -621,7 +621,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       .dom(
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
       )
-      .hasText('DONE', 'a clean edit keeps the DONE label');
+      .hasText('Done', 'a clean edit keeps the Done label');
 
     await click(
       '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-cta]',
