@@ -220,14 +220,17 @@ export function decodeToolRequest(
     decodedCommandRequest.name = commandRequest.name;
   }
   if (commandRequest.arguments) {
-    decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
     try {
+      decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
       let attributes = decodedCommandRequest.arguments?.attributes;
       if (typeof attributes === 'string') {
         decodedCommandRequest.arguments!.attributes = JSON.parse(attributes);
       }
     } catch {
-      // ignore malformed nested json; validation will report a clearer error later
+      // ignore malformed json — e.g. a still-streaming arguments payload or
+      // malformed nested attributes; `arguments` stays undefined (or keeps
+      // the outer parse) and validation reports a clearer error once the
+      // request is finalized
     }
   }
   if (commandRequest.executedBy != null) {
