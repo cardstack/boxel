@@ -29,6 +29,7 @@ import {
   type RunCommandArgs,
   type RunCommandResponse,
   type Format,
+  type FusedIndexMeta,
   type PrerenderMeta,
   type RenderRouteOptions,
   VISIT_PASS_ORDER,
@@ -206,10 +207,11 @@ export default class CardPrerender extends Component {
   // Composite visit task — runs the caller-selected subset of
   // {fileExtract, cardRender, fileRender} on a shared nonce and with a single
   // clearCache consumption. Mirrors the server-side prerenderVisitAttempt,
-  // including its visitType bifurcation: an 'index' visit runs the extract,
-  // the card's meta + icon and the file's icon — never an html-format
-  // render; a 'prerender-html' visit runs only the html formats + markdown.
-  // No visitType runs the fused union.
+  // including its visitType bifurcation: an 'index' visit of a card instance
+  // runs the fused meta entry (which carries the file extract) plus the
+  // card's and the file's icons — never an html-format render; a non-card
+  // index visit runs the standalone extract; a 'prerender-html' visit runs
+  // only the html formats + markdown. No visitType runs the fused union.
   private prerenderVisitTask = enqueueTask(
     async ({
       url,
@@ -237,6 +239,15 @@ export default class CardPrerender extends Component {
         cardRender: Boolean(baseOptions.cardRender),
         fileRender: Boolean(baseOptions.fileRender),
       };
+      // A card-instance index visit fuses the extract into the render.meta
+      // entry — one route entry produces both the instance row and the file
+      // row — mirroring the server-side runner. No capability probe is
+      // needed: this driver and the render routes ship in the same build.
+      let fusedIndexPass =
+        visitType === 'index' && requested.cardRender && requested.fileExtract;
+      if (fusedIndexPass) {
+        requested.fileExtract = false;
+      }
       if (shouldClearCache) {
         this.loaderService.resetLoader({
           clearFetchCache: true,
@@ -246,12 +257,17 @@ export default class CardPrerender extends Component {
       }
       let clearCacheConsumed = !shouldClearCache;
       let optionsForPass = (
-        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+        pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ): RenderRouteOptions => {
         let out: RenderRouteOptions = {
           ...baseOptions,
-          fileExtract: pass === 'fileExtract' ? true : undefined,
-          cardRender: pass === 'cardRender' ? true : undefined,
+          // The fused index pass carries both flags — the render route
+          // serves it from the card branch and folds the file extract into
+          // the render.meta payload.
+          fileExtract:
+            pass === 'fileExtract' || pass === 'fusedIndex' ? true : undefined,
+          cardRender:
+            pass === 'cardRender' || pass === 'fusedIndex' ? true : undefined,
           fileRender: pass === 'fileRender' ? true : undefined,
         };
         if (!clearCacheConsumed) {
@@ -275,8 +291,15 @@ export default class CardPrerender extends Component {
       // is explicit below.
       void VISIT_PASS_ORDER;
 
-      // ── fileExtract pass ───────────────────────────────────────────────
-      if (requested.fileExtract) {
+      // Runs a standalone render.file-extract route entry and stores its
+      // result on `response.fileExtract`. Serves the fileExtract pass and
+      // the fused-index fallback (a card render error must still yield a
+      // file row). Self-contained: bumps the nonce and clears any earlier
+      // pass's render error so it keys and captures independently of
+      // whatever ran before it.
+      let runFileExtractPass = async () => {
+        this.#nonce++;
+        this.localIndexer.renderError = undefined;
         let passOptions = optionsForPass('fileExtract');
         try {
           let routeInfo = await this.router.recognizeAndLoad(
@@ -321,6 +344,11 @@ export default class CardPrerender extends Component {
           // behaves the same way — only genuine page-unusable conditions
           // (eviction, auth failure) short-circuit the visit.
         }
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        await runFileExtractPass();
       }
 
       // ── cardRender pass ────────────────────────────────────────────────
@@ -337,7 +365,9 @@ export default class CardPrerender extends Component {
         this.#currentContext = context;
         this.localIndexer.renderError = undefined;
         this.localIndexer.prerenderStatus = 'loading';
-        let initialRenderOptions = optionsForPass('cardRender');
+        let initialRenderOptions = optionsForPass(
+          fusedIndexPass ? 'fusedIndex' : 'cardRender',
+        );
         let cardError: RenderError | undefined;
         let isolatedHTML: string | null = null;
         let headHTML: string | null = null;
@@ -377,10 +407,18 @@ export default class CardPrerender extends Component {
             }
           }
           if (runIndexSteps) {
-            meta = await this.renderMeta.perform(
+            let metaResult = (await this.renderMeta.perform(
               url,
               runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
-            );
+            )) as FusedIndexMeta;
+            // Split the extract off before `meta` is spread into
+            // `response.card` below — the card row's payload must never
+            // carry the file half.
+            let { fileExtract: fusedExtract, ...cardMeta } = metaResult;
+            meta = cardMeta;
+            if (fusedExtract) {
+              response.fileExtract = fusedExtract;
+            }
           }
           if (runHtmlSteps) {
             headHTML = await this.renderHTML.perform(
@@ -483,6 +521,15 @@ export default class CardPrerender extends Component {
           markdown,
           ...(cardError ? { error: cardError } : {}),
         };
+
+        // ── fused-extract fallback ─────────────────────────────────────
+        // A fused index pass carries the file extract inside render.meta,
+        // so a card render error leaves the file half missing. Run the
+        // standalone extract entry — a broken card must still yield a good
+        // file row.
+        if (fusedIndexPass && !response.fileExtract) {
+          await runFileExtractPass();
+        }
       }
 
       // ── fileRender pass ────────────────────────────────────────────────

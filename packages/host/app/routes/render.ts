@@ -89,19 +89,6 @@ const READY_SETTLE_MAX_PASSES = 20;
 const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
 const SETTLE_LOG_PRECISION = 1;
 
-// Capability contract with the prerender drivers. A pooled page pins
-// whatever host build it loaded, and the host and the prerender server
-// deploy independently, so the driver probes this per page (alongside its
-// per-visit auth/job stamping) before choosing a render strategy the host
-// must understand. `fusedIndexMeta`: render options carrying both
-// `cardRender` and `fileExtract` produce a single render.meta payload that
-// includes the file-extract result; a page without the flag gets one
-// transition per pass instead.
-(globalThis as any).__boxelHostCapabilities = {
-  ...(globalThis as any).__boxelHostCapabilities,
-  fusedIndexMeta: true,
-};
-
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
