@@ -945,19 +945,30 @@ export class Batch {
       // row's values align with the single `nameExpressions` list.
       let columns = Object.keys(group[0].preparedEntry).sort();
       let nameExpressions = columns.map((column) => [column]);
-      let valueExpressions = group.map(
-        (row) =>
-          asExpressions(orderKeys(row.preparedEntry, columns), { jsonFields })
-            .valueExpressions,
-      );
-      await this.#query([
-        ...upsertMultipleRows(
-          'boxel_index_working',
-          'boxel_index_working_pkey',
-          nameExpressions,
-          valueExpressions,
-        ),
-      ]);
+      // Keep each INSERT within the adapter's bind-parameter ceiling: one
+      // multi-row upsert binds `rows * columns` params, and SQLite caps that
+      // (~999) — reachable when a batch flushes in split mode under SQLite
+      // (forced in tests) — while Postgres tolerates far more. Chunk the group
+      // so the statement stays under the limit, mirroring the per-adapter
+      // chunking in `getDependencyRows`.
+      let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+      let rowsPerUpsert = Math.max(1, Math.floor(bindBudget / columns.length));
+      for (let i = 0; i < group.length; i += rowsPerUpsert) {
+        let slice = group.slice(i, i + rowsPerUpsert);
+        let valueExpressions = slice.map(
+          (row) =>
+            asExpressions(orderKeys(row.preparedEntry, columns), { jsonFields })
+              .valueExpressions,
+        );
+        await this.#query([
+          ...upsertMultipleRows(
+            'boxel_index_working',
+            'boxel_index_working_pkey',
+            nameExpressions,
+            valueExpressions,
+          ),
+        ]);
+      }
     }
   }
 
