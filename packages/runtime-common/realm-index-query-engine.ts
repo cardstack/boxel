@@ -146,6 +146,12 @@ type Options = {
   // across stages. Absent (and so a no-op) for everything except
   // instrumented `_federated-search` calls.
   timings?: RequestTimings;
+  // Cooperative-cancellation signal for the search handler's per-request time
+  // budget. When present, `loadLinks` checks it between BFS layers so an
+  // over-budget item-leg search stops its relationship-assembly fan-out
+  // promptly instead of running every layer to completion. Threaded like
+  // `timings`; absent for everything except a bounded live search.
+  signal?: AbortSignal;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -1450,6 +1456,12 @@ export class RealmIndexQueryEngine {
 
     let layerIndex = 0;
     while (layer.length > 0) {
+      // Bail before each layer's batched DB queries + cross-realm fetches if
+      // the search's time budget has fired, so an over-budget item-leg search
+      // stops here rather than expanding the full transitive closure. The
+      // federated fan-out treats the resulting rejection as a failed realm; the
+      // handler's time-budget race is what actually returns the 408.
+      opts?.signal?.throwIfAborted();
       let currentLayerIndex = layerIndex++;
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its

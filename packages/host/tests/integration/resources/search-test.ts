@@ -12,6 +12,7 @@ import {
   Deferred,
   isFileDefInstance,
   rri,
+  SEARCH_CONCURRENCY_CAP,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -2000,6 +2001,61 @@ module(`Integration | search resource`, function (hooks) {
       assert.ok(
         ids.includes(rri(`${testRealmURL}books/local-add`)),
         'the local-only matching candidate is present',
+      );
+    });
+
+    // The card `@context` search surface (`getSearchResource`) routes item-leg
+    // searches through the store's concurrency throttle so a card firing many
+    // at once can't burst concurrent `_federated-search` requests at the
+    // realm-server. `enqueue` queues the excess rather than dropping it.
+    test('performThrottledSearch caps concurrent card searches at the configured limit', async function (assert) {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      let started = 0;
+      let gates: Deferred<void>[] = [];
+      let count = SEARCH_CONCURRENCY_CAP + 2;
+      let makeRun = () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return async () => {
+          started++;
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await gate.promise;
+          inFlight--;
+        };
+      };
+      let results = Array.from({ length: count }, () =>
+        storeService.performThrottledSearch(makeRun()),
+      );
+      try {
+        await waitUntil(() => started >= SEARCH_CONCURRENCY_CAP);
+        assert.strictEqual(
+          maxInFlight,
+          SEARCH_CONCURRENCY_CAP,
+          'no more than the cap run at once',
+        );
+        assert.strictEqual(
+          started,
+          SEARCH_CONCURRENCY_CAP,
+          'excess searches are queued, not started',
+        );
+      } finally {
+        for (let gate of gates) {
+          gate.fulfill();
+          await settled();
+        }
+        await Promise.all(results);
+      }
+      assert.strictEqual(
+        maxInFlight,
+        SEARCH_CONCURRENCY_CAP,
+        'the cap held across the whole drain',
+      );
+      assert.strictEqual(
+        started,
+        count,
+        'every queued search eventually ran (enqueue, not drop)',
       );
     });
   });

@@ -2,7 +2,13 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { rri, type Realm } from '@cardstack/runtime-common';
+import {
+  MAX_SEARCH_PAGE_SIZE,
+  resetSearchBoundsForTests,
+  rri,
+  setSearchBoundsForTests,
+  type Realm,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupPermissionedRealmCached,
@@ -77,6 +83,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         },
       },
       onRealmSetup,
+    });
+
+    hooks.afterEach(function () {
+      resetSearchBoundsForTests();
     });
 
     function postSearch(body: Record<string, unknown>) {
@@ -269,6 +279,49 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Accept', 'application/vnd.card+json');
       assert.strictEqual(get.status, 400);
       assert.true(get.body.errors[0].message.includes('method must be QUERY'));
+    });
+
+    test('an item-leg search with an explicit oversized page is a 400', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        fields: { entry: ['item'] },
+        page: { size: MAX_SEARCH_PAGE_SIZE + 1 },
+      });
+      assert.strictEqual(response.status, 400, 'page.size over the max → 400');
+      assert.true(
+        response.body.errors[0].message.includes('page.size'),
+        'the error names page.size',
+      );
+    });
+
+    test('an item-leg search with no page is clamped, not rejected', async function (assert) {
+      setSearchBoundsForTests({ maxPageSize: 1 });
+      let response = await postSearch({
+        filter: personFilter(),
+        fields: { entry: ['item'] },
+      });
+      assert.strictEqual(response.status, 200, 'a missing page is allowed');
+      assert.strictEqual(
+        response.body.data.length,
+        1,
+        'results are clamped to the page cap',
+      );
+      assert.strictEqual(
+        response.body.meta.page.total,
+        2,
+        'meta.page.total still reflects the full match count',
+      );
+    });
+
+    test('the prerendered-HTML leg is exempt from the page cap', async function (assert) {
+      setSearchBoundsForTests({ maxPageSize: 1 });
+      let response = await postSearch({ filter: personFilter() });
+      assert.strictEqual(response.status, 200, 'the html leg is not bounded');
+      assert.strictEqual(
+        response.body.meta.page.total,
+        2,
+        'all rows returned regardless of the item-leg page cap',
+      );
     });
   });
 });

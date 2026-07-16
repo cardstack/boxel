@@ -49,6 +49,7 @@ import {
   formattedError,
   stringifyErrorForLog,
   isJsonContentType,
+  SEARCH_CONCURRENCY_CAP,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
@@ -1124,6 +1125,30 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
+  // Client-side concurrency throttle for card-initiated (`@context`) item-leg
+  // searches. `getSearchResource` — the function bound as `getCards` on the
+  // card `@context` — routes its search through this task; the host app's own
+  // direct `store.search` / `getSearch` callers do not, so the trusted host is
+  // never throttled. `enqueue` + `maxConcurrency` queues (never drops) excess
+  // card searches, so a card firing many searches at once (e.g. a per-keystroke
+  // grid) can't fan a burst of concurrent `_federated-search` requests at the
+  // realm-server. The server's per-request bounds (page / realms / time) are
+  // the un-overridable backstop; this keeps well-behaved cards from tripping
+  // them in the first place.
+  private searchThrottle = task(
+    { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run a card-`@context` search under the concurrency throttle. Returns the
+  // task instance (a thenable) so a caller awaiting it inside its own
+  // (restartable) task links cancellation and frees the slot when superseded.
+  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
+    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  }
+
   private async fetchAndHydrateSearchResults<
     T extends CardDef | FileDef = CardDef,
   >(
@@ -1482,6 +1507,9 @@ export default class StoreService extends Service implements StoreInterface {
     return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
       ...opts,
       storeService: this,
+      // Card-facing surface: throttle these item-leg searches (host-internal
+      // `store.search` / `getSearch` callers pass no throttle flag).
+      throttle: true,
     }) as unknown as SearchResource<T>;
   }
 

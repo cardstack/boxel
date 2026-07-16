@@ -124,6 +124,10 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     isLive: boolean;
     isAutoSaved?: boolean;
     storeService?: StoreService;
+    // Route this resource's search through the store's concurrency throttle.
+    // Set only by `StoreService.getSearchResource` (the card `@context`
+    // surface); host-internal `getSearch` callers leave it unset.
+    throttle?: boolean;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
@@ -181,6 +185,7 @@ export class SearchResource<
   // changes, but reading this keeps the derivation self-contained).
   @tracked private activeQuery: Query | undefined;
   #isLive = false;
+  #throttle = false;
   #seedApplied = false;
   #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
@@ -317,6 +322,7 @@ export class SearchResource<
       seed,
       owner,
       storeService,
+      throttle,
     } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
@@ -324,6 +330,9 @@ export class SearchResource<
     // subsequent modify() calls.
     if (storeService !== undefined) {
       this.#storeServiceOverride = storeService;
+    }
+    if (throttle !== undefined) {
+      this.#throttle = throttle;
     }
 
     if (query === undefined) {
@@ -762,14 +771,16 @@ export class SearchResource<
         'search-resource:search',
       );
       try {
-        let { instances, meta } = await this.runtimeStore.search<T>(
-          query,
-          this.realmsToSearch,
-          {
+        let doSearch = () =>
+          this.runtimeStore.search<T>(query, this.realmsToSearch, {
             includeMeta: true,
             dependencyTrackingContext,
-          },
-        );
+          });
+        // Card-`@context` searches run under the store's concurrency throttle;
+        // host-internal searches (throttle unset) run directly.
+        let { instances, meta } = this.#throttle
+          ? await this.runtimeStore.performThrottledSearch(doSearch)
+          : await doSearch();
         this.#log.info(
           `search task complete; total instances=${instances.length}; refs=${instances
             .map((r) => r.id)
@@ -828,6 +839,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
   opts?: {
     isLive?: boolean;
     storeService?: StoreService;
+    throttle?: boolean;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
@@ -853,6 +865,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       realms: getRealms ? getRealms() : undefined,
       isLive: opts?.isLive != null ? opts.isLive : false,
       storeService: opts?.storeService,
+      throttle: opts?.throttle,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
