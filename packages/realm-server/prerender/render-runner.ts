@@ -1606,10 +1606,13 @@ export class RenderRunner {
         // (the window-level trap in the host's render route); a route-level
         // card error leaves the page fully able to serve transitions. A
         // broken card must still yield a good file row, so run the
-        // standalone extract transition. Auth failure is the exception:
-        // the extract would hit the same wall, so mirror the card error
-        // onto the file half and end the visit — the same short-circuit a
-        // standalone extract pass takes on auth failure.
+        // standalone extract transition. On the eviction path no fallback
+        // is possible (nothing can run on an unusable page), so the file
+        // half is absent for that attempt and its row degrades to an error
+        // row until the next index of the file. Auth failure is the other
+        // exception: the extract would hit the same wall, so mirror the
+        // card error onto the file half and end the visit — the same
+        // short-circuit a standalone extract pass takes on auth failure.
         if (fusedIndexPass && !response.fileExtract) {
           if (cardError && this.#isAuthError(cardError)) {
             response.fileExtract = {

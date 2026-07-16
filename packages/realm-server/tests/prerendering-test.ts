@@ -7984,6 +7984,42 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('an eviction during the fused pass ends the visit without a fallback extract', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // A render timeout is a wedged-page signal: the page gets evicted and
+      // no further transition can run on it, so the fused visit ends with
+      // the file half absent. The file row degrades to an error row for
+      // this attempt and heals on the next index of the file — the pinned
+      // trade-off for carrying the extract inside the meta transition.
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+        opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+      });
+
+      assert.true(pool.timedOut, 'the fused transition timed out');
+      assert.true(pool.evicted, 'the timeout evicted the page');
+      assert.ok(
+        response.pageUnusableError,
+        'the visit reports the page unusable',
+      );
+      assert.strictEqual(
+        response.fileExtract,
+        undefined,
+        'no fallback extract runs on an evicted page',
+      );
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition was recorded',
+      );
+    });
+
     test('reuses a single pooled page for all three passes', async function (assert) {
       const cardFileURL = `${realmURL}maple.json`;
       // Warm the pool

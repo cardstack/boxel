@@ -410,11 +410,14 @@ export default class CardPrerender extends Component {
             let metaResult = (await this.renderMeta.perform(
               url,
               runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
-            )) as FusedIndexMeta;
+            )) as FusedIndexMeta | undefined;
             // Split the extract off before `meta` is spread into
             // `response.card` below — the card row's payload must never
-            // carry the file half.
-            let { fileExtract: fusedExtract, ...cardMeta } = metaResult;
+            // carry the file half. The meta route's abort path resolves
+            // with no payload; falling back to the empty meta keeps that
+            // producing an empty card payload rather than a throw.
+            let { fileExtract: fusedExtract, ...cardMeta } = (metaResult ??
+              meta) as FusedIndexMeta;
             meta = cardMeta;
             if (fusedExtract) {
               response.fileExtract = fusedExtract;
