@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
@@ -110,12 +111,34 @@ export default function handleSearch(opts: {
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
-    // The time budget is the one bound enforced server-side — a wall-clock
-    // cutoff can't live anywhere else. Page-size and realms caps are enforced
-    // client-side at the card `@context` surface (untrusted card code), so the
-    // trusted host can legitimately exceed them. Applies to the item leg only;
-    // the prerendered-HTML leg and during-prerender traffic are exempt.
-    let timeBounded = isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
+    // Two bounds are enforced server-side on the live item leg (never during
+    // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
+    // (applied just below) and the wall-clock time budget (further down). Both
+    // hold for every caller — a wall-clock cutoff can't live client-side, and a
+    // page ceiling must bound the result set even when the client card cap was
+    // skipped. The realms fan-out and concurrency caps stay client-side on the
+    // card `@context` surface, since the trusted host must be free to exceed
+    // them.
+    let itemLegBounded =
+      isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
+
+    // The server hard page ceiling. An explicit item-leg page over the ceiling
+    // is rejected fast (400); an absent page is clamped so the query carries a
+    // LIMIT and the server never assembles/serializes an unbounded result set.
+    if (itemLegBounded) {
+      try {
+        parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
+      } catch (e) {
+        if (e instanceof SearchBoundError) {
+          await setContextResponse(
+            ctxt,
+            buildSearchErrorResponse(e.message, e.status),
+          );
+          return;
+        }
+        throw e;
+      }
+    }
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
@@ -186,7 +209,7 @@ export default function handleSearch(opts: {
       };
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      return timeBounded ? runWithSearchTimeBudget(doRun) : doRun();
+      return itemLegBounded ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
     let emitTimeline = () => {

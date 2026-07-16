@@ -16,6 +16,8 @@ import {
   rri,
   query,
   param,
+  setSearchBoundsForTests,
+  resetSearchBoundsForTests,
   type Expression,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -467,26 +469,47 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('page/realms bounds are not enforced server-side', async function (assert) {
-      // The page-size and realms caps live at the card `@context` surface, not
-      // the server — so the trusted host (and any other caller) can exceed
-      // them. An oversized item-leg page runs as asked rather than 400ing.
-      let response = await postSearch({
-        filter: personFilter(),
-        fields: { entry: ['item'] },
-        realms: [testRealm.url, secondaryRealm.url],
-        page: { size: 1000 },
-      });
-      assert.strictEqual(
-        response.status,
-        200,
-        'an oversized item-leg page is not rejected server-side',
-      );
-      assert.strictEqual(
-        response.body.meta.page.total,
-        4,
-        'all matching rows are returned',
-      );
+    test('the item-leg page size is capped server-side; realms fan-out is not', async function (assert) {
+      // The server enforces a hard page ceiling on the live item leg for every
+      // caller (the ceiling is applied per realm before results merge). The
+      // realms fan-out cap is a separate client-side limit on the card
+      // `@context` surface, so the server accepts a wide federated request.
+      setSearchBoundsForTests({ serverMaxPageSize: 2 });
+      try {
+        // An explicit item-leg page over the ceiling is rejected.
+        let over = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          page: { size: 3 },
+        });
+        assert.strictEqual(
+          over.status,
+          400,
+          'an over-ceiling item-leg page is rejected',
+        );
+
+        // A multi-realm request within the ceiling is accepted — the realms
+        // fan-out is not capped server-side — and both realms are searched.
+        let wide = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          page: { size: 2 },
+        });
+        assert.strictEqual(
+          wide.status,
+          200,
+          'a multi-realm request within the page ceiling is accepted',
+        );
+        assert.strictEqual(
+          wide.body.meta.page.total,
+          4,
+          'both realms are searched',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
     });
   });
 });

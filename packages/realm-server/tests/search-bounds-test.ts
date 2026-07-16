@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   applySearchPageBound,
+  applyServerSearchPageBound,
   assertRealmsBound,
   isItemLegSearch,
   runWithSearchTimeBudget,
@@ -10,6 +11,7 @@ import {
   resetSearchBoundsForTests,
   SearchBoundError,
   MAX_SEARCH_PAGE_SIZE,
+  SERVER_MAX_SEARCH_PAGE_SIZE,
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
 } from '@cardstack/runtime-common';
@@ -120,6 +122,63 @@ module(basename(import.meta.filename), function (hooks) {
       );
       let clamped = applySearchPageBound({} as Query);
       assert.deepEqual(clamped.page, { size: 10 });
+    });
+  });
+
+  module('applyServerSearchPageBound', function () {
+    test('the server ceiling is higher than the card @context cap', function (assert) {
+      assert.true(
+        SERVER_MAX_SEARCH_PAGE_SIZE > MAX_SEARCH_PAGE_SIZE,
+        'the server backstop lets the host page larger than a card',
+      );
+    });
+
+    test('a page at or under the server ceiling passes through unchanged', function (assert) {
+      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE } } as Query;
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+    });
+
+    test('an absent page is clamped to the server ceiling', function (assert) {
+      let bounded = applyServerSearchPageBound({ filter: { eq: {} } } as Query);
+      assert.deepEqual(bounded.page, { size: SERVER_MAX_SEARCH_PAGE_SIZE });
+    });
+
+    test('an explicit page over the server ceiling is rejected with a 400', function (assert) {
+      try {
+        applyServerSearchPageBound({
+          page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1 },
+        } as Query);
+        assert.ok(false, 'expected a SearchBoundError');
+      } catch (e) {
+        assert.true(e instanceof SearchBoundError);
+        assert.strictEqual((e as SearchBoundError).status, 400);
+      }
+    });
+
+    test('a page allowed by the server ceiling can still exceed the card cap', function (assert) {
+      // The same page the card cap would reject is fine at the server ceiling —
+      // this is what lets the trusted host page larger than a card.
+      let query = { page: { size: MAX_SEARCH_PAGE_SIZE + 1 } } as Query;
+      assert.throws(
+        () => applySearchPageBound(query),
+        (e: Error) => e instanceof SearchBoundError,
+        'the card cap rejects it',
+      );
+      assert.strictEqual(
+        applyServerSearchPageBound(query),
+        query,
+        'the server ceiling passes it through',
+      );
+    });
+
+    test('the override lowers the effective server ceiling independently', function (assert) {
+      setSearchBoundsForTests({ serverMaxPageSize: 3 });
+      assert.throws(
+        () => applyServerSearchPageBound({ page: { size: 4 } } as Query),
+        (e: Error) => e instanceof SearchBoundError,
+      );
+      let clamped = applyServerSearchPageBound({} as Query);
+      assert.deepEqual(clamped.page, { size: 3 });
     });
   });
 

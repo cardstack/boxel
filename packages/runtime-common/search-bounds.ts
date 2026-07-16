@@ -2,28 +2,37 @@ import type { Query } from './query.ts';
 import type { SearchEntryFieldset } from './search-entry.ts';
 
 // ---------------------------------------------------------------------------
-// Hard resource bounds for search — server-enforced limits a query cannot
-// override, so no single userland search can exhaust the realm-server's single
-// event loop. Card code is untrusted, re-editable input; these bounds hold
-// whatever a card asks for.
-//
-// The bounds apply to the ITEM leg only (the live serialization + `loadLinks`
-// path whose per-request cost they contain): a page-size ceiling, a
-// realms-per-request ceiling for federated search, and a wall-clock budget. The
+// Hard resource bounds for search, so no single search can exhaust the
+// realm-server's single event loop. They apply to the ITEM leg only — the live
+// serialization + `loadLinks` path whose per-request cost they contain. The
 // prerendered-HTML leg is the cheap precomputed path and is left unbounded, as
 // is the realm-server's own during-prerender traffic. When a request trips a
 // ceiling, the error steers the author toward the HTML leg
 // (`@context.searchResultsComponent`), which the ceilings don't apply to.
 //
-// Concurrency is not enforced here: it is a client-side throttle on the card
-// `@context` surface (the trusted host app must not be throttled, and the
-// host/card distinction only exists on the client). This module exports the
-// shared cap constant the host reuses.
+// Where each bound lives follows one rule: the server can't tell a trusted-host
+// request from untrusted card code, so a bound the host must be free to exceed
+// is enforced client-side on the card `@context` surface, and a bound that must
+// hold for every caller is enforced server-side.
 //
-// All four bounds are exported consts, overridable via env for ops tuning.
+//   - Page size — two ceilings. The card `@context` cap (MAX_SEARCH_PAGE_SIZE)
+//     is enforced client-side, so a card gets a small page while the host can
+//     page larger. The server ceiling (SERVER_MAX_SEARCH_PAGE_SIZE, higher) is
+//     enforced server-side on every item-leg request — the host, and any card
+//     that skips the client cap, included — so the result set the server
+//     assembles and serializes is always bounded. The true match count still
+//     rides `meta.page.total`, so a caller can paginate.
+//   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) and concurrency
+//     (SEARCH_CONCURRENCY_CAP) — client-side only, on the card `@context`
+//     surface: the host federates widely and runs its own searches freely.
+//   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
+//     cutoff of the server's own work can't live anywhere else.
+//
+// All bounds are exported consts, overridable via env for ops tuning.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
+const DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE = 500;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
@@ -50,12 +59,26 @@ function parsePositiveInt(
 let env: Record<string, string | undefined> =
   typeof process !== 'undefined' ? (process.env ?? {}) : {};
 
-// Max results serialized/hydrated per item-leg request. An explicit page.size
+// The card `@context` page cap: max results a card-initiated item-leg search
+// requests. Enforced client-side (see host StoreService). An explicit page.size
 // above this is rejected; an absent page is clamped to it (mandatory
-// pagination) so a non-paginating caller gets the first page, not every row.
+// pagination) so a non-paginating card gets the first page, not every row.
 export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   env.MAX_SEARCH_PAGE_SIZE,
   DEFAULT_MAX_SEARCH_PAGE_SIZE,
+  MIN_PAGE_SIZE,
+);
+
+// The server-side hard page ceiling, enforced on every item-leg request
+// regardless of caller (the trusted host and any card that skips the client cap
+// included). Higher than the card `@context` cap — the host may legitimately
+// page larger — but no request may make the server assemble/serialize an
+// unbounded page. Same shape as the card cap: an explicit page above it is
+// rejected; an absent page is clamped to it (the true total rides
+// `meta.page.total`, so a caller can still paginate).
+export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
+  env.SERVER_MAX_SEARCH_PAGE_SIZE,
+  DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE,
   MIN_PAGE_SIZE,
 );
 
@@ -88,16 +111,21 @@ export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
 // waiting out the real time budget. Mirrors `setSearchTimingSinkForTests`.
 let maxPageSize = MAX_SEARCH_PAGE_SIZE;
+let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
+  serverMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
 }): void {
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
+  }
+  if (overrides.serverMaxPageSize !== undefined) {
+    serverMaxPageSize = overrides.serverMaxPageSize;
   }
   if (overrides.maxRealmsPerRequest !== undefined) {
     maxRealmsPerRequest = overrides.maxRealmsPerRequest;
@@ -109,6 +137,7 @@ export function setSearchBoundsForTests(overrides: {
 
 export function resetSearchBoundsForTests(): void {
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
+  serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 }
@@ -153,15 +182,16 @@ export function assertRealmsBound(realms: string[]): void {
   }
 }
 
-// Enforce mandatory pagination on an item-leg query. An explicit page.size over
-// the max is rejected (the author asked for more than allowed); an absent page
-// is clamped to the max so a non-paginating caller gets the first page rather
-// than every row. Returns the (possibly clamped) query without mutating input.
-export function applySearchPageBound(query: Query): Query {
+// Enforce mandatory pagination on an item-leg query against `max`. An explicit
+// page.size over `max` is rejected (the caller asked for more than allowed); an
+// absent page is clamped to `max` so a non-paginating caller gets the first
+// page rather than every row. Returns the (possibly clamped) query without
+// mutating input.
+function boundPageSize(query: Query, max: number): Query {
   let page = query.page;
   if (page == null) {
     // No page at all: apply the mandatory cap so the result set is bounded.
-    return { ...query, page: { size: maxPageSize } } as Query;
+    return { ...query, page: { size: max } } as Query;
   }
   let size = Number((page as { size?: unknown }).size);
   if (!Number.isFinite(size) || size < 1) {
@@ -169,15 +199,29 @@ export function applySearchPageBound(query: Query): Query {
     // bound the result set — and would compile to `LIMIT undefined` / a
     // negative limit — so treat it like an absent page and clamp to the cap
     // rather than let it through unbounded.
-    return { ...query, page: { ...page, size: maxPageSize } } as Query;
+    return { ...query, page: { ...page, size: max } } as Query;
   }
-  if (size > maxPageSize) {
+  if (size > max) {
     throw new SearchBoundError(
       400,
-      `page.size ${size} exceeds the maximum of ${maxPageSize}; request a smaller page, or ${HTML_LEG_HINT}`,
+      `page.size ${size} exceeds the maximum of ${max}; request a smaller page, or ${HTML_LEG_HINT}`,
     );
   }
   return query;
+}
+
+// The card `@context` page cap, enforced client-side on card-initiated
+// item-leg searches (see host StoreService).
+export function applySearchPageBound(query: Query): Query {
+  return boundPageSize(query, maxPageSize);
+}
+
+// The server-side hard page ceiling, enforced on every item-leg request the
+// server handles regardless of caller. Higher than the card `@context` cap; the
+// backstop that bounds what the server assembles/serializes even when the
+// client cap was skipped.
+export function applyServerSearchPageBound(query: Query): Query {
+  return boundPageSize(query, serverMaxPageSize);
 }
 
 // Run an item-leg search under the wall-clock budget. The runner receives an
