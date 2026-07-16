@@ -294,7 +294,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
     </div>
     <style scoped>
       .card-info-editor {
-        container-name: cardInfo-editor-template;
+        container-name: card-info-editor-template;
         container-type: inline-size;
         position: relative;
         width: 100%;
@@ -433,7 +433,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         min-width: 0;
       }
 
-      @container cardInfo-editor-template (width < 425px) {
+      @container card-info-editor-template (width < 425px) {
         .card-info-preview-group {
           margin-bottom: var(--boxel-sp);
         }
