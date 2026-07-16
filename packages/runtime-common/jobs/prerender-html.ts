@@ -43,21 +43,24 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
   return `prerender-html:${realmURL}`;
 }
 
-// Await a realm's published HTML being live for its current index
-// generation. The index pass spawns the prerender-html job fire-and-forget
-// and completes without it, so "indexed" does not imply "viewable" — a
-// freshly published realm can be reachable and searchable while still
-// serving a shell without card markup. Publishing awaits this so a published
-// realm reports ready only once its HTML exists.
+// Await the prerender-html channel having caught up to a realm's current
+// index generation. The index pass spawns the prerender-html job
+// fire-and-forget and completes without it, so "indexed" does not imply
+// "viewable" — a freshly published realm can be reachable and searchable
+// while still serving a shell without card markup. Publishing awaits this so a
+// published realm reports ready only once its current generation has been
+// rendered.
 //
-// Polls the artifact (`prerendered_html`) rather than the job: `batch.done()`
-// swaps a generation's rendered rows in atomically, so once any instance row
-// carries `isolated_html` at >= the realm's current generation, that
-// generation's HTML is live. Gating on `generation` (not job status) sidesteps
-// the fire-and-forget enqueue race and never settles on a prior publish's
-// stale rows. Resolves true when live, false on timeout — best-effort so a
-// stuck or failed render surfaces at the caller (e.g. a missing marker) rather
-// than hanging readiness forever.
+// Signal: `prerendered_html` carrying any row at >= the realm's current
+// generation. `batch.done()` swaps a generation's rendered rows into the
+// production table atomically, so a row at the current generation means that
+// generation's render batch has landed (a successful render leaves the
+// isolated HTML on those rows; a failed one leaves error rows — either way the
+// async render work for this publish is done, and a genuine render failure
+// surfaces downstream as missing markup rather than hanging readiness). Gating
+// on `generation` (not job status) sidesteps the fire-and-forget enqueue race
+// and never settles on a prior publish's stale (lower-generation) rows.
+// Resolves true when caught up, false on timeout.
 export async function awaitPublishedHtmlReady(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -81,7 +84,7 @@ export async function awaitPublishedHtmlReady(
       param(realmURL),
       'AND generation >=',
       param(currentGeneration),
-      "AND type = 'instance' AND isolated_html IS NOT NULL LIMIT 1",
+      'LIMIT 1',
     ]);
     if (rows.length > 0) {
       return true;
