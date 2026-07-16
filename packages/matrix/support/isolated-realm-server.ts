@@ -460,16 +460,21 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
-    // Production parity for the worker tiers: a dedicated high-priority
-    // worker (floor 9) serves user-initiated jobs — a test's createRealm
-    // indexing (priority 10) and its spawned prerender-html (9) — while the
-    // all-priority worker digests system-tier work. Without it, the lone
-    // all-priority worker claims jobs oldest-first regardless of priority,
-    // so the boot realms' system prerender-html jobs (which include the
-    // realm-wide module pre-warm sweep, minutes of work on a loaded runner)
-    // hold the only worker while the first tests' createRealm index jobs sit
-    // queued past their 30s provisioning wait.
-    `--highPriorityCount=1`,
+    // Worker tiers for this shared, contended stack. Both Playwright
+    // workers (fullyParallel) funnel their realm provisioning into one
+    // worker manager, and each new workspace enqueues a from-scratch index
+    // plus a ~110-file, ~10s prerender-html sweep. User indexing and
+    // prerender-html are co-equal (both priority 10 — see
+    // runtime-common/queue.ts: a published realm's rendered HTML is as
+    // first-class as its search index), so these three high-tier workers all
+    // floor at 10 and serve both kinds of user work. What keeps indexing
+    // (which gates createRealm / new-user provisioning) and rendering (which
+    // gates published-realm serving) both moving is capacity, not a dedicated
+    // lane: three user-work workers absorb the two-Playwright-worker producer
+    // rate. (The split across the two count knobs is immaterial now that both
+    // floor at 10; kept separate only for symmetry with production.)
+    `--userIndexCount=1`,
+    `--highPriorityCount=2`,
 
     `--fromUrl='https://localhost:4205/test/'`,
     `--toUrl='https://localhost:4205/test/'`,

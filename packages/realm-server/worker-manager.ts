@@ -41,6 +41,7 @@ writeSync(
 
 import {
   logger,
+  userInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
   systemInitiatedPrerenderHtmlPriority,
   query as _query,
@@ -128,6 +129,7 @@ let {
   matrixURL,
   allPriorityCount = 1,
   highPriorityCount = 0,
+  userIndexCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -144,6 +146,11 @@ let {
     highPriorityCount: {
       description:
         'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
+      type: 'number',
+    },
+    userIndexCount: {
+      description:
+        'The number of workers that service only user-initiated indexing (priority 10) and nothing below it — a dedicated index tier that never gets held by the slower user-initiated prerender-html jobs (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -641,7 +648,10 @@ let adapter: PgAdapter;
 
 (async () => {
   log.info(
-    `starting ${highPriorityCount} high-priority ${pluralize(
+    `starting ${userIndexCount} user-index ${pluralize(
+      'worker',
+      userIndexCount,
+    )}, ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
     )} and ${allPriorityCount} all-priority ${pluralize(
@@ -662,10 +672,19 @@ let adapter: PgAdapter;
   eventSink.setAdapter(adapter);
 
   // Each pool's minimum priority is a dequeue floor: its workers only
-  // claim jobs at or above it. The high-priority pool floors at the
-  // user-initiated prerender-html tier so it serves all user-initiated
-  // work — prerender-html included — and never system-tier jobs; the
-  // all-priority pool floors at the lowest tier and serves everything.
+  // claim jobs at or above it, oldest-first among those. User-initiated
+  // indexing and prerender-html are co-equal (both `userInitiatedPriority`
+  // — a published realm's rendered HTML is as first-class as its search
+  // index), so the user-index and high-priority pools both floor at that
+  // tier and serve all user-initiated work — indexing and prerender-html
+  // alike — and never system-tier jobs. The two counts stay separate knobs
+  // for deployment flexibility but land equivalent floor-10 workers; size
+  // the total to the user-work rate so neither indexing nor rendering
+  // starves the other. The all-priority pool floors at the lowest tier and
+  // serves everything, including system-initiated prerender-html.
+  for (let i = 0; i < userIndexCount; i++) {
+    await startWorker(userInitiatedPriority, urlMappings);
+  }
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
   }

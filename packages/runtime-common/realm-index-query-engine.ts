@@ -146,6 +146,12 @@ type Options = {
   // across stages. Absent (and so a no-op) for everything except
   // instrumented `_federated-search` calls.
   timings?: RequestTimings;
+  // Cooperative-cancellation signal for the search handler's per-request time
+  // budget. When present, `loadLinks` checks it between BFS layers so an
+  // over-budget item-leg search stops its relationship-assembly fan-out
+  // promptly instead of running every layer to completion. Threaded like
+  // `timings`; absent for everything except a bounded live search.
+  signal?: AbortSignal;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -1414,6 +1420,16 @@ export class RealmIndexQueryEngine {
       vnForIdentity.equivalentURLForms(vnForIdentity.toURLHref(id));
     let omitSet = new Set(omit.flatMap((id) => allIdForms(id)));
     let visited = new Set<string>();
+    // Mirror the id of every resource in included[] so dedup is O(1): the
+    // relationship-target check (per entry) and the pre-push check (per
+    // resource) are Set lookups rather than linear scans of an array that
+    // grows to the full transitive-closure size.
+    let includedIds = new Set<string>();
+    for (let existing of included) {
+      if (existing.id != null) {
+        includedIds.add(existing.id);
+      }
+    }
 
     type LayerItem = {
       resource: LooseCardResource | FileMetaResource;
@@ -1450,6 +1466,12 @@ export class RealmIndexQueryEngine {
 
     let layerIndex = 0;
     while (layer.length > 0) {
+      // Bail before each layer's batched DB queries + cross-realm fetches if
+      // the search's time budget has fired, so an over-budget item-leg search
+      // stops here rather than expanding the full transitive closure. The
+      // federated fan-out treats the resulting rejection as a failed realm; the
+      // handler's time-budget race is what actually returns the 408.
+      opts?.signal?.throwIfAborted();
       let currentLayerIndex = layerIndex++;
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
@@ -1800,7 +1822,7 @@ export class RealmIndexQueryEngine {
         if (
           foundLinks ||
           omitSet.has(entry.relationshipIdStr) ||
-          included.find((i) => i.id === entry.relationshipIdStr)
+          includedIds.has(entry.relationshipIdStr)
         ) {
           entry.relationship.data = {
             type: linkResource?.type ?? CardResourceType,
@@ -1848,7 +1870,7 @@ export class RealmIndexQueryEngine {
         if (omitSet.has(resource.id)) {
           continue;
         }
-        if (included.find((r) => r.id === resource.id)) {
+        if (includedIds.has(resource.id)) {
           continue;
         }
         let rewritten = cloneDeep({
@@ -1872,6 +1894,7 @@ export class RealmIndexQueryEngine {
           ),
         );
         included.push(rewritten);
+        includedIds.add(resource.id);
       }
 
       layer = nextLayer;

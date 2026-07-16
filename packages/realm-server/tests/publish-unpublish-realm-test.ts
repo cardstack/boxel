@@ -257,8 +257,8 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(
           response.headers['location'],
-          `${response.body.data.attributes.publishedRealmURL}_readiness-check`,
-          'Location points at the readiness-check status monitor for the 202',
+          `${response.body.data.attributes.publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`,
+          'Location points at the readiness-check status monitor for the 202, gated on the published HTML being rendered',
         );
         assert.ok(
           response.headers['retry-after'],

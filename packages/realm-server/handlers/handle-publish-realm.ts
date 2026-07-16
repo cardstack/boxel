@@ -689,8 +689,11 @@ export default function handlePublishRealm({
       // realm's readiness check, which resolves once it is indexed and
       // viewable, and `Retry-After` hints the poll interval. This lets a
       // consumer discover where to wait for completion from the response
-      // itself rather than hard-coding the readiness URL.
-      let readinessCheckURL = `${publishedRealmURL}_readiness-check`;
+      // itself rather than hard-coding the readiness URL. `awaitPrerenderHtml`
+      // holds that readiness until the rendered HTML is live, not just the
+      // index — a published realm's HTML is its deliverable, so a publish is
+      // not complete until it exists.
+      let readinessCheckURL = `${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`;
       let response = new Response(
         JSON.stringify(
           {

@@ -1,7 +1,7 @@
 import { rri } from '../realm-identifiers.ts';
 import { trimExecutableExtension } from '../index.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
-import { canonicalURL } from './dependency-url.ts';
+import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 
 export function isExtensionlessPath(url: URL): boolean {
   let lastSegment = url.pathname.split('/').pop() ?? '';
@@ -12,8 +12,9 @@ export function normalizeStoredDependency(
   dep: string,
   relativeTo: URL,
   virtualNetwork: VirtualNetwork,
+  memo?: CanonicalURLMemo,
 ): string {
-  return canonicalURL(dep, relativeTo.href, virtualNetwork);
+  return canonicalURL(dep, relativeTo.href, virtualNetwork, memo);
 }
 
 export function normalizeRelationshipDependency(
@@ -21,8 +22,9 @@ export function normalizeRelationshipDependency(
   relativeTo: URL,
   realmURL: URL,
   virtualNetwork: VirtualNetwork,
+  memo?: CanonicalURLMemo,
 ): string {
-  let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork);
+  let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork, memo);
   // Prefix-form deps (e.g. @cardstack/catalog/foo) are already canonical.
   // Resolve to check realm membership and add .json if needed.
   if (virtualNetwork.isRegisteredPrefix(canonical)) {
@@ -77,7 +79,8 @@ export function normalizeDependencyForLookup(
   dep: string,
   relativeTo: URL,
   virtualNetwork: VirtualNetwork,
+  memo?: CanonicalURLMemo,
 ): string {
-  let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork);
+  let canonical = canonicalURL(dep, relativeTo.href, virtualNetwork, memo);
   return trimExecutableExtension(rri(canonical));
 }

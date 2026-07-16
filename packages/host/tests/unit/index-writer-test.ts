@@ -13,6 +13,7 @@ import {
   mergeErrorsByGeneration,
   ri,
   rri,
+  type FileEntry,
   type LooseCardResource,
   type IndexedInstance,
   type BoxelIndexTable,
@@ -317,6 +318,71 @@ module('Unit | index-writer', function (hooks) {
       await batch.getContentMeta('4.json'),
       { contentHash: undefined, contentSize: undefined },
       'an unprefetched file with no hash/size falls back to a per-path read',
+    );
+  });
+
+  test('buffered index writes defer until flush, and a dependency read flushes them first', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    // Force the server (split) write path so a flush coalesces the buffered
+    // rows into one multi-row upsert; SQLite otherwise takes the fused
+    // per-row path. Both paths share the buffer + flush-on-dependency-read
+    // semantics this test pins.
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: true },
+    );
+
+    let depURL = new URL(`${testRealmURL}a.json`);
+    let dependentURL = new URL(`${testRealmURL}b.json`);
+    let fileEntry = (name: string): FileEntry => ({
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name },
+    });
+
+    await batch.bufferEntry(depURL, fileEntry('a'));
+    await batch.bufferEntry(dependentURL, fileEntry('b'));
+
+    // The invalidation set knows both URLs immediately — the swap in `done()`
+    // and the dependency skip both key off it — but nothing is written yet.
+    assert.deepEqual(
+      [...batch.invalidations].sort(),
+      [depURL.href, dependentURL.href],
+      'buffered URLs join the invalidation set synchronously',
+    );
+    let beforeFlush = await adapter.execute(
+      `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(beforeFlush, [], 'no rows are written while buffered');
+
+    // A dependency-error read that touches a buffered URL flushes the buffer
+    // first, so a dependent's bookkeeping sees the dependency's row.
+    let depRows = await batch.getDependencyRows([depURL.href]);
+    assert.deepEqual(
+      depRows.map((r) => r.url),
+      [depURL.href],
+      'the dependency read returns the now-flushed buffered row',
+    );
+
+    // The flush wrote every buffered row, not only the one queried — so a
+    // dependent's transitively-earlier writes are all visible too.
+    let afterFlush = await adapter.execute(
+      `SELECT url FROM boxel_index_working WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      afterFlush,
+      [{ url: depURL.href }, { url: dependentURL.href }],
+      'the flush coalesced all buffered rows into the working table',
     );
   });
 

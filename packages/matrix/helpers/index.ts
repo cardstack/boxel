@@ -179,6 +179,11 @@ export async function createRealm(
   let modal = page.locator('[data-test-create-workspace-modal]');
   let submitButton = page.locator('[data-test-create-workspace-submit]');
   let maxAttempts = 3;
+  // How long the modal is given to settle (tile or error) per attempt. The
+  // dominant cost is the newly-created realm's from-scratch-index waiting in
+  // the worker queue behind other realms' index + prerender-html jobs. Also
+  // used as the "near budget" yardstick below.
+  let settleTimeoutMs = 30_000;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // A previous attempt's provisioning may have landed late — if the tile is
     // already present, don't try to create a duplicate endpoint.
@@ -191,9 +196,10 @@ export async function createRealm(
     await page.locator('[data-test-endpoint-field]').fill(endpoint);
     await page.locator('[data-test-create-workspace-submit]').click();
 
+    let startedAt = Date.now();
     try {
       await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
-        timeout: 30_000,
+        timeout: settleTimeoutMs,
       });
     } catch (cause) {
       // Neither the tile nor an error surfaced. Distinguish "still creating"
@@ -210,9 +216,27 @@ export async function createRealm(
           : 'modal closed without the workspace tile appearing';
       let detail = cause instanceof Error ? cause.message : String(cause);
       throw new Error(
-        `createRealm("${endpoint}") did not settle within 30s: ${state}\n` +
-          `underlying expectation failure: ${detail}`,
+        `createRealm("${endpoint}") did not settle within ${
+          settleTimeoutMs / 1000
+        }s: ${state}\n` + `underlying expectation failure: ${detail}`,
       );
+    }
+    // Log how long provisioning took. Because the failure mode is the settle
+    // wait creeping up under worker-queue load, surfacing the elapsed time on
+    // every run (and flagging a near-budget "close call" even when the tile
+    // did appear) turns a future regression into a visible warning before it
+    // crosses the timeout and starts failing.
+    let elapsedMs = Date.now() - startedAt;
+    let elapsedS = (elapsedMs / 1000).toFixed(1);
+    let warnFraction = 0.6;
+    if (elapsedMs >= settleTimeoutMs * warnFraction) {
+      console.log(
+        `[createRealm] "${endpoint}" settled in ${elapsedS}s — past ${
+          warnFraction * 100
+        }% of the ${settleTimeoutMs / 1000}s budget (worker-queue pressure)`,
+      );
+    } else {
+      console.log(`[createRealm] "${endpoint}" settled in ${elapsedS}s`);
     }
     if ((await workspaceTile.count()) > 0) {
       return;

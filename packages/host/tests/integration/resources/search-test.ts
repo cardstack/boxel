@@ -12,6 +12,8 @@ import {
   Deferred,
   isFileDefInstance,
   rri,
+  SEARCH_CONCURRENCY_CAP,
+  SearchBoundError,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -2000,6 +2002,120 @@ module(`Integration | search resource`, function (hooks) {
       assert.ok(
         ids.includes(rri(`${testRealmURL}books/local-add`)),
         'the local-only matching candidate is present',
+      );
+    });
+
+    // The card `@context` search surface (`getSearchResource`) routes item-leg
+    // searches through the store's concurrency throttle so a card firing many
+    // at once can't burst concurrent `_federated-search` requests at the
+    // realm-server. `enqueue` queues the excess rather than dropping it.
+    test('performThrottledSearch caps concurrent card searches at the configured limit', async function (assert) {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      let started = 0;
+      let gates: Deferred<void>[] = [];
+      let count = SEARCH_CONCURRENCY_CAP + 2;
+      let makeRun = () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return async () => {
+          started++;
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await gate.promise;
+          inFlight--;
+        };
+      };
+      let results = Array.from({ length: count }, () =>
+        storeService.performThrottledSearch(makeRun()),
+      );
+      try {
+        await waitUntil(() => started >= SEARCH_CONCURRENCY_CAP);
+        assert.strictEqual(
+          maxInFlight,
+          SEARCH_CONCURRENCY_CAP,
+          'no more than the cap run at once',
+        );
+        assert.strictEqual(
+          started,
+          SEARCH_CONCURRENCY_CAP,
+          'excess searches are queued, not started',
+        );
+      } finally {
+        for (let gate of gates) {
+          gate.fulfill();
+          await settled();
+        }
+        await Promise.all(results);
+      }
+      assert.strictEqual(
+        maxInFlight,
+        SEARCH_CONCURRENCY_CAP,
+        'the cap held across the whole drain',
+      );
+      assert.strictEqual(
+        started,
+        count,
+        'every queued search eventually ran (enqueue, not drop)',
+      );
+    });
+
+    // A card-initiated search is capped; the same call from the host (no
+    // cardInitiated flag) is not. The caps throw before any network round-trip,
+    // so these assertions are self-contained.
+    test('a card-initiated search over the realms cap is rejected; the host is not', async function (assert) {
+      let query = { filter: { eq: {} } } as Query;
+      let realms = ['http://r1/', 'http://r2/', 'http://r3/'];
+      await assert.rejects(
+        storeService.search(query, realms, { cardInitiated: true }),
+        (e: Error) => e instanceof SearchBoundError,
+        'a card search over the realms cap throws a SearchBoundError',
+      );
+      // The host path skips the cap entirely — it never throws a
+      // SearchBoundError (it proceeds to the network, mocked elsewhere).
+      let hostErr: unknown;
+      try {
+        await storeService.search(query, realms);
+      } catch (e) {
+        hostErr = e;
+      }
+      assert.false(
+        hostErr instanceof SearchBoundError,
+        'the host search is not subject to the realms cap',
+      );
+    });
+
+    test('a card-initiated search over the page cap is rejected', async function (assert) {
+      await assert.rejects(
+        storeService.search({ page: { size: 1000 } } as Query, ['http://r1/'], {
+          cardInitiated: true,
+        }),
+        (e: Error) => e instanceof SearchBoundError,
+        'a card search over the page cap throws a SearchBoundError',
+      );
+    });
+
+    test('the card-facing store defaults a no-realm search to the current realm', async function (assert) {
+      // No explicit realms and no current realm → an empty realm set (no
+      // results), never a fan-out to every visible realm.
+      let noRealm = storeService.cardFacingStore(() => undefined);
+      let results = await noRealm.search({ filter: { eq: {} } } as Query);
+      assert.deepEqual(
+        results,
+        [],
+        'a no-realm search with no current realm is empty',
+      );
+
+      // An explicit over-cap realm list is still rejected through the facade.
+      let bound = storeService.cardFacingStore(() => 'http://current/');
+      await assert.rejects(
+        bound.search({ filter: { eq: {} } } as Query, [
+          'http://r1/',
+          'http://r2/',
+          'http://r3/',
+        ]),
+        (e: Error) => e instanceof SearchBoundError,
+        'the facade enforces the realms cap on an explicit list',
       );
     });
   });
