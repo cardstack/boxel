@@ -790,8 +790,6 @@ export class Batch {
       return;
     }
     let buffered = this.#writeBuffer;
-    this.#writeBuffer = [];
-    this.#writeBufferUrls.clear();
     let start = Date.now();
     try {
       if (this.#splitPrerenderHtml) {
@@ -812,6 +810,15 @@ export class Batch {
           await this.#writeEntryNow(url, entry);
         }
       }
+      // Clear only after the rows have durably landed. If a write throws, the
+      // buffer is retained so the healthy rows in it aren't lost: a later
+      // flush (the next dependency read, the size cap, or `done()`) retries
+      // them. `done()` flushes before it promotes, so a persistent failure
+      // surfaces there and aborts the batch before any swap — rather than
+      // dropping the buffered rows while their URLs stay in the invalidation
+      // set, which would let the swap promote tombstones or stale rows.
+      this.#writeBuffer = [];
+      this.#writeBufferUrls.clear();
     } finally {
       this.#writeMs += Date.now() - start;
     }
