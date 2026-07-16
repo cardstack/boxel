@@ -24,7 +24,7 @@ Pin, with sources: the exact incident window, per-code error counts (503 vs 504 
 
 ## The deliverable
 
-Default to an **Artifact** (via the `Artifact` tool) — it renders the house style directly. An incident report is meant to be read by the whole team, so its end state is **shared with the "Cardstack" organization**, not left private (see Publish & track). Load the `artifact-design` skill's fundamentals if you need a refresher, but the palette and structure here are already decided; do not re-derive them.
+Default to an **Artifact** (via the `Artifact` tool) — it renders the house style directly. An incident report is meant to be read by the whole team, so its end state is **shared with the "Cardstack" organization**, not left private (see Publish & track). The palette and structure here are already decided; do not re-derive them.
 
 Keep a plain-markdown copy in the scratchpad too when useful as a working draft, but the shared deliverable is the Artifact.
 
