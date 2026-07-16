@@ -5,14 +5,15 @@ import {
   type Job,
   type QueuePublisher,
 } from '../queue.ts';
-import type { PgPrimitive } from '../expression.ts';
+import { param, query, type PgPrimitive } from '../expression.ts';
+import type { DBAdapter } from '../db.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
-// The prerender-html tier sits one notch below its initiator's tier (see the
-// tier table in queue.ts): the high-priority worker pool still serves
-// user-initiated HTML work, while system-initiated HTML work drops to the
-// tier only the all-priority pool takes.
+// User-initiated HTML work shares its initiator's tier — for a published
+// realm the rendered HTML is a first-class artifact, as important as the
+// search index (see the tier table in queue.ts). System-initiated HTML work
+// still drops to the background tier only the all-priority pool takes.
 export function prerenderHtmlPriority(spawningPriority: number): number {
   return spawningPriority >= userInitiatedPriority
     ? userInitiatedPrerenderHtmlPriority
@@ -40,6 +41,56 @@ export interface PrerenderHtmlEnqueueArgs {
 // (enqueue, teardown) must use this same name.
 export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
   return `prerender-html:${realmURL}`;
+}
+
+// Await a realm's published HTML being live for its current index
+// generation. The index pass spawns the prerender-html job fire-and-forget
+// and completes without it, so "indexed" does not imply "viewable" — a
+// freshly published realm can be reachable and searchable while still
+// serving a shell without card markup. Publishing awaits this so a published
+// realm reports ready only once its HTML exists.
+//
+// Polls the artifact (`prerendered_html`) rather than the job: `batch.done()`
+// swaps a generation's rendered rows in atomically, so once any instance row
+// carries `isolated_html` at >= the realm's current generation, that
+// generation's HTML is live. Gating on `generation` (not job status) sidesteps
+// the fire-and-forget enqueue race and never settles on a prior publish's
+// stale rows. Resolves true when live, false on timeout — best-effort so a
+// stuck or failed render surfaces at the caller (e.g. a missing marker) rather
+// than hanging readiness forever.
+export async function awaitPublishedHtmlReady(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  opts?: { timeoutMs?: number; intervalMs?: number },
+): Promise<boolean> {
+  let timeoutMs = opts?.timeoutMs ?? 60_000;
+  let intervalMs = opts?.intervalMs ?? 250;
+  let [genRow] = (await query(dbAdapter, [
+    'SELECT current_generation FROM realm_generations WHERE realm_url =',
+    param(realmURL),
+  ])) as { current_generation: number }[];
+  let currentGeneration = genRow?.current_generation;
+  if (currentGeneration == null) {
+    // The realm has never been indexed — there is no generation to await.
+    return true;
+  }
+  let deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let rows = await query(dbAdapter, [
+      'SELECT 1 FROM prerendered_html WHERE realm_url =',
+      param(realmURL),
+      'AND generation >=',
+      param(currentGeneration),
+      "AND type = 'instance' AND isolated_html IS NOT NULL LIMIT 1",
+    ]);
+    if (rows.length > 0) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
 }
 
 // Publish a `prerender_html` job through the normal queue-publish path. The

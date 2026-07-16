@@ -60,6 +60,23 @@ async function publishRealm(
     },
     { realmURL, publishedRealmURL },
   );
+
+  // Publishing is 202/async. A published realm's rendered HTML is its
+  // deliverable, so wait until its readiness check reports both indexed AND
+  // rendered — `awaitPrerenderHtml` holds the readiness response until the
+  // prerendered HTML is live, not just the index. This blocks server-side, so
+  // one GET with a generous budget resolves when the realm is fully viewable
+  // (rather than polling the served URL and racing the HTML job).
+  let readinessURL = `${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`;
+  let readiness = await page.request.get(readinessURL, {
+    headers: { Accept: 'text/html' },
+    timeout: 120_000,
+  });
+  if (!readiness.ok()) {
+    throw new Error(
+      `published realm did not become ready: HTTP ${readiness.status()} for ${readinessURL}`,
+    );
+  }
 }
 
 // Create a fresh source realm, seed it with the host-mode fixture cards, and
