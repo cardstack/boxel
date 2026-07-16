@@ -1414,6 +1414,16 @@ export class RealmIndexQueryEngine {
       vnForIdentity.equivalentURLForms(vnForIdentity.toURLHref(id));
     let omitSet = new Set(omit.flatMap((id) => allIdForms(id)));
     let visited = new Set<string>();
+    // Mirror the id of every resource in included[] so dedup is O(1): the
+    // relationship-target check (per entry) and the pre-push check (per
+    // resource) are Set lookups rather than linear scans of an array that
+    // grows to the full transitive-closure size.
+    let includedIds = new Set<string>();
+    for (let existing of included) {
+      if (existing.id != null) {
+        includedIds.add(existing.id);
+      }
+    }
 
     type LayerItem = {
       resource: LooseCardResource | FileMetaResource;
@@ -1800,7 +1810,7 @@ export class RealmIndexQueryEngine {
         if (
           foundLinks ||
           omitSet.has(entry.relationshipIdStr) ||
-          included.find((i) => i.id === entry.relationshipIdStr)
+          includedIds.has(entry.relationshipIdStr)
         ) {
           entry.relationship.data = {
             type: linkResource?.type ?? CardResourceType,
@@ -1848,7 +1858,7 @@ export class RealmIndexQueryEngine {
         if (omitSet.has(resource.id)) {
           continue;
         }
-        if (included.find((r) => r.id === resource.id)) {
+        if (includedIds.has(resource.id)) {
           continue;
         }
         let rewritten = cloneDeep({
@@ -1872,6 +1882,7 @@ export class RealmIndexQueryEngine {
           ),
         );
         included.push(rewritten);
+        includedIds.add(resource.id);
       }
 
       layer = nextLayer;

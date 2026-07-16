@@ -734,6 +734,19 @@ jobs:
           name: testem-log-${{ matrix.shardIndex }}
           path: junit/host-testem.log
           retention-days: 30
+      # testem's internal server log — records the browser↔testem socket
+      # handshake (attach / disconnect / disconnectCount / reconnection-limit
+      # refusal / process exit) that the TAP output omits. It's the only
+      # server-side view of the intermittent post-suite `Browser timeout
+      # exceeded` synthetic failure.
+      - name: Upload testem debug log
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: testem-debug-log-${{ matrix.shardIndex }}
+          path: junit/host-testem-debug-${{ matrix.shardIndex }}.log
+          retention-days: 30
+          if-no-files-found: ignore
 
   host-percy-finalize:
     name: Finalise Percy
