@@ -13,9 +13,9 @@ if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
   # boxel-pg backs every service in a test stack at once — realm servers plus
   # their worker pools, and the matrix suite adds a second isolated stack on
   # top of the base one — and each process opens its own pg pool (up to
-  # PG_POOL_MAX=40). Six such pools already exceed the default ceiling, and a
-  # burst that crosses it fails callers with "sorry, too many clients
-  # already". Keep this in sync with mise-tasks/infra/ensure-pg.
-  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 -c max_connections=300 >/dev/null 2>&1 || true
+  # PG_POOL_MAX=40). That already clears half a dozen pools, and a burst that
+  # crosses the ceiling fails callers with "sorry, too many clients already".
+  # Keep this in sync with mise-tasks/infra/ensure-pg.
+  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 -c max_connections=400 >/dev/null 2>&1 || true
 fi
 docker start boxel-pg >/dev/null 2>&1 || true
