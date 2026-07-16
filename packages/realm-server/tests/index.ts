@@ -353,6 +353,7 @@ const ALL_TEST_FILES: string[] = [
   './search-entry-test',
   './search-entries-engine-test',
   './coerce-error-message-test',
+  './canonical-url-memo-test',
   './realm-operations-test',
   './resolve-published-realm-url-test',
   './fallback-models-test',
