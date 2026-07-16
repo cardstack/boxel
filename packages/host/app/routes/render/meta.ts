@@ -1,3 +1,4 @@
+import { getOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type Transition from '@ember/routing/transition';
 
@@ -8,6 +9,7 @@ import { isEqual } from 'lodash-es';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
+  beginRuntimeDependencyTrackingSession,
   identifyCard,
   internalKeyFor,
   logger,
@@ -18,16 +20,23 @@ import {
   type SearchDocLinkLoad,
   type SearchDocTimings,
   type SingleCardDocument,
-  type PrerenderMeta,
+  type FusedIndexMeta,
   type PrerenderMetaDiagnostics,
   type RenderError,
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RenderStoreService from '@cardstack/host/services/render-store';
 
+import { createAuthErrorGuard } from '../../utils/auth-error-guard';
+
+import { runFileExtract } from '../../utils/file-extract-runner';
+
 import { friendlyCardType } from '../../utils/render-error';
+
+import type { FileDefExtractResult } from '../../utils/file-def-attributes-extractor';
 
 import type { Model as ParentModel } from '../render';
 import type {
@@ -36,7 +45,7 @@ import type {
   ComputePassSnapshot,
 } from '@cardstack/base/card-api';
 
-export type Model = PrerenderMeta | RenderError | undefined;
+export type Model = FusedIndexMeta | RenderError | undefined;
 
 const computePerfLog = logger('host:computed-perf');
 
@@ -131,8 +140,10 @@ const SEARCHABLE_MODULE_URL = 'https://cardstack.com/base/searchable';
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
+  @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
   @service('render-store') declare private store: RenderStoreService;
+  #authGuard = createAuthErrorGuard();
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -145,7 +156,7 @@ export default class RenderMetaRoute extends Route<Model> {
     await renderModel?.readyPromise;
     let instance: CardDef | undefined = renderModel?.instance;
 
-    if (!instance) {
+    if (!renderModel || !instance) {
       // the lack of an instance is dealt with in the parent route
       transition.abort();
       return;
@@ -356,7 +367,7 @@ export default class RenderMetaRoute extends Route<Model> {
       `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs} searchDocSettleMs=${diagnostics.searchDocSettleMs} searchDocSettlePasses=${diagnostics.searchDocSettlePasses}`,
     );
 
-    return {
+    let metaPayload: FusedIndexMeta = {
       serialized,
       displayNames,
       types: types.map((t) =>
@@ -365,6 +376,54 @@ export default class RenderMetaRoute extends Route<Model> {
       searchDoc,
       deps: this.network.virtualNetwork.unresolveURLs(deps),
       diagnostics,
+    };
+
+    let parsedOptions = renderModel.renderOptions;
+    if (!parsedOptions?.fileExtract) {
+      return metaPayload;
+    }
+
+    // Fused index render: the render options carry `fileExtract` alongside
+    // `cardRender`, so this one transition also produces the file row's
+    // extract. It runs only now — the card payload above is fully
+    // materialized and its dependency snapshot taken, so nothing the extract
+    // does can leak into the card row. The extract gets a fresh tracking
+    // session: the tracker is session-scoped and a snapshot reads the whole
+    // session, so sharing the card's session would fold the hydration graph
+    // into the file row's deps. The instance id is the canonical (extension-
+    // less) card URL; the extract targets the `.json` file that stores it,
+    // the same URL a standalone render.file-extract receives.
+    let fileURL = renderModel.cardId.endsWith('.json')
+      ? renderModel.cardId
+      : `${renderModel.cardId}.json`;
+    let extractStart = performance.now();
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: `${renderModel.cardId}|${renderModel.nonce}|file-extract`,
+      rootURL: fileURL,
+      rootKind: 'file',
+    });
+    this.#authGuard.register();
+    let extractResult: FileDefExtractResult;
+    try {
+      extractResult = await runFileExtract({
+        fileURL,
+        renderOptions: parsedOptions,
+        loaderService: this.loaderService,
+        network: this.network,
+        authGuard: this.#authGuard,
+        owner: getOwner(this)!,
+      });
+    } finally {
+      this.#authGuard.unregister();
+    }
+    diagnostics.fileExtractMs = roundMs(performance.now() - extractStart);
+    return {
+      ...metaPayload,
+      fileExtract: {
+        id: fileURL,
+        nonce: renderModel.nonce,
+        ...extractResult,
+      },
     };
   }
 

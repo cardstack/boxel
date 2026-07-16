@@ -89,6 +89,19 @@ const READY_SETTLE_MAX_PASSES = 20;
 const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
 const SETTLE_LOG_PRECISION = 1;
 
+// Capability contract with the prerender drivers. A pooled page pins
+// whatever host build it loaded, and the host and the prerender server
+// deploy independently, so the driver probes this per page (alongside its
+// per-visit auth/job stamping) before choosing a render strategy the host
+// must understand. `fusedIndexMeta`: render options carrying both
+// `cardRender` and `fileExtract` produce a single render.meta payload that
+// includes the file-extract result; a page without the flag gets one
+// transition per pass instead.
+(globalThis as any).__boxelHostCapabilities = {
+  ...(globalThis as any).__boxelHostCapabilities,
+  fusedIndexMeta: true,
+};
+
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
@@ -328,8 +341,12 @@ export default class RenderRoute extends Route<Model> {
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
       rootURL: id,
+      // A fused index render (cardRender + fileExtract in one pass) hydrates
+      // the card, so its session root is the instance; the file extract it
+      // performs runs in its own session (see the render.meta route).
       rootKind:
-        parsedOptions.fileExtract || parsedOptions.fileRender
+        !parsedOptions.cardRender &&
+        (parsedOptions.fileExtract || parsedOptions.fileRender)
           ? 'file'
           : 'instance',
     });
@@ -384,7 +401,11 @@ export default class RenderRoute extends Route<Model> {
         this.lastStoreResetKey = resetKey;
       }
     }
-    if (parsedOptions.fileExtract) {
+    // A fused index render carries both `fileExtract` and `cardRender`; the
+    // card branch below serves it (hydration + settle) and the render.meta
+    // route performs the extract against the hydrated model's file. Only a
+    // fileExtract-only render gets this trivial model.
+    if (parsedOptions.fileExtract && !parsedOptions.cardRender) {
       let state = new TrackedMap<string, unknown>();
       state.set('status', 'ready');
       let readyDeferred = new Deferred<void>();
