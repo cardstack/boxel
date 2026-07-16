@@ -107,7 +107,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store,
+      store: this.store.cardFacingStore,
       toolContext: this.toolContext,
       // populated alongside toolContext for content still reading the
       // pre-rename spelling

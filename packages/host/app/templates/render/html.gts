@@ -53,7 +53,7 @@ class RenderHtmlTemplate extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store,
+      store: this.store.cardFacingStore,
       searchResultsComponent: SearchResults,
       mode: 'host',
       submode: 'host',

@@ -66,6 +66,28 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(applySearchPageBound(query), query);
     });
 
+    test('a page object with a missing size is clamped, not left unbounded', function (assert) {
+      let bounded = applySearchPageBound({
+        page: { number: 0 },
+      } as unknown as Query);
+      assert.deepEqual(
+        bounded.page,
+        { number: 0, size: MAX_SEARCH_PAGE_SIZE },
+        'the cap is injected and page.number is preserved',
+      );
+    });
+
+    test('a non-positive page.size is clamped, not left unbounded', function (assert) {
+      for (let bad of [-1, 0]) {
+        let bounded = applySearchPageBound({ page: { size: bad } } as Query);
+        assert.strictEqual(
+          bounded.page?.size,
+          MAX_SEARCH_PAGE_SIZE,
+          `size ${bad} is clamped to the cap`,
+        );
+      }
+    });
+
     test('an explicit page.size over the max is rejected with a 400', function (assert) {
       try {
         applySearchPageBound({

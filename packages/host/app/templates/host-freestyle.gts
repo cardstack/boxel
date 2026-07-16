@@ -84,7 +84,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       getCard: this.getCard,
       getCards: this.store.getSearchResource.bind(this.store),
       getCardCollection,
-      store: this.store,
+      store: this.store.cardFacingStore,
       toolContext: this.toolService.toolContext,
       commandContext: this.toolService.toolContext,
       searchResultsComponent: SearchResults,

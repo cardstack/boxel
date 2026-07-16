@@ -159,17 +159,25 @@ export function assertRealmsBound(realms: string[]): void {
 // than every row. Returns the (possibly clamped) query without mutating input.
 export function applySearchPageBound(query: Query): Query {
   let page = query.page;
-  if (page != null) {
-    let size = Number((page as { size?: unknown }).size);
-    if (Number.isFinite(size) && size > maxPageSize) {
-      throw new SearchBoundError(
-        400,
-        `page.size ${size} exceeds the maximum of ${maxPageSize}; request a smaller page, or ${HTML_LEG_HINT}`,
-      );
-    }
-    return query;
+  if (page == null) {
+    // No page at all: apply the mandatory cap so the result set is bounded.
+    return { ...query, page: { size: maxPageSize } } as Query;
   }
-  return { ...query, page: { size: maxPageSize } } as Query;
+  let size = Number((page as { size?: unknown }).size);
+  if (!Number.isFinite(size) || size < 1) {
+    // A page object with a missing / non-numeric / non-positive size can't
+    // bound the result set — and would compile to `LIMIT undefined` / a
+    // negative limit — so treat it like an absent page and clamp to the cap
+    // rather than let it through unbounded.
+    return { ...query, page: { ...page, size: maxPageSize } } as Query;
+  }
+  if (size > maxPageSize) {
+    throw new SearchBoundError(
+      400,
+      `page.size ${size} exceeds the maximum of ${maxPageSize}; request a smaller page, or ${HTML_LEG_HINT}`,
+    );
+  }
+  return query;
 }
 
 // Run an item-leg search under the wall-clock budget. The runner receives an

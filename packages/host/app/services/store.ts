@@ -1142,11 +1142,39 @@ export default class StoreService extends Service implements StoreInterface {
     },
   );
 
-  // Run a card-`@context` search under the concurrency throttle. Returns the
-  // task instance (a thenable) so a caller awaiting it inside its own
-  // (restartable) task links cancellation and frees the slot when superseded.
+  // Run a card-`@context` search under the concurrency throttle. The value is,
+  // at runtime, the ember-concurrency task instance, so awaiting it inside a
+  // caller's own (restartable) task links cancellation — a superseded search
+  // frees its slot. Typed as a plain Promise because callers only ever await
+  // the result; they don't drive the task instance directly.
   performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
     return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  }
+
+  private cardFacingStoreCache: StoreInterface | undefined;
+  // The store handed to cards as `@context.store`. It behaves exactly like the
+  // store service except `search` runs under the same concurrency throttle as
+  // the `getCards` @context surface — so a card can't dodge the cap by reaching
+  // for `@context.store.search` directly instead of `getCards`. Every other
+  // method delegates straight through. The host app injects the store service
+  // itself, never this view, so host search is never throttled.
+  get cardFacingStore(): StoreInterface {
+    if (!this.cardFacingStoreCache) {
+      let store = this;
+      this.cardFacingStoreCache = new Proxy(store, {
+        get(target, prop) {
+          if (prop === 'search') {
+            return (query: Query, realmURLs?: string[]) =>
+              store.performThrottledSearch(() =>
+                store.search(query, realmURLs),
+              );
+          }
+          let value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as unknown as StoreInterface;
+    }
+    return this.cardFacingStoreCache;
   }
 
   private async fetchAndHydrateSearchResults<
