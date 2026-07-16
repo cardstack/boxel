@@ -64,17 +64,25 @@ async function publishRealm(
   // Publishing is 202/async. A published realm's rendered HTML is its
   // deliverable, so wait until its readiness check reports both indexed AND
   // rendered — `awaitPrerenderHtml` holds the readiness response until the
-  // prerendered HTML is live, not just the index. This blocks server-side, so
-  // one GET with a generous budget resolves when the realm is fully viewable
-  // (rather than polling the served URL and racing the HTML job).
+  // prerendered HTML is live, not just the index (readiness returns 503 while
+  // it isn't). Poll until 200 rather than polling the served URL and racing
+  // the HTML job.
   let readinessURL = `${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`;
-  let readiness = await page.request.get(readinessURL, {
-    headers: { Accept: 'text/html' },
-    timeout: 120_000,
-  });
-  if (!readiness.ok()) {
+  let lastStatus: number | undefined;
+  try {
+    await waitUntil(async () => {
+      let readiness = await page.request.get(readinessURL, {
+        headers: { Accept: 'text/html' },
+        timeout: 120_000,
+      });
+      lastStatus = readiness.status();
+      return readiness.ok();
+    }, 120_000);
+  } catch {
     throw new Error(
-      `published realm did not become ready: HTTP ${readiness.status()} for ${readinessURL}`,
+      `published realm did not become ready (indexed + rendered): last HTTP ${
+        lastStatus ?? 'none'
+      } for ${readinessURL}`,
     );
   }
 }

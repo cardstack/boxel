@@ -286,6 +286,11 @@ export interface WaitForReadyInput {
   timeoutMs?: number;
   // Defaults to 1000ms.
   pollIntervalMs?: number;
+  // When true, hold readiness until the realm's published HTML is live for its
+  // current generation, not just the index. A published realm's rendered HTML
+  // is its deliverable (served to visitors), so publish callers set this;
+  // index-only readiness (e.g. createRealm) leaves it off to stay fast.
+  awaitPrerenderHtml?: boolean;
 }
 
 // Polls `<publishedRealmURL>_readiness-check` until it returns ok (the realm is
@@ -302,7 +307,11 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   let timeoutMs = input.timeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
   let pollIntervalMs =
     input.pollIntervalMs ?? DEFAULT_READINESS_POLL_INTERVAL_MS;
-  let readinessUrl = new URL('_readiness-check', publishedRealmURL).href;
+  let readinessUrlObj = new URL('_readiness-check', publishedRealmURL);
+  if (input.awaitPrerenderHtml) {
+    readinessUrlObj.searchParams.set('awaitPrerenderHtml', 'true');
+  }
+  let readinessUrl = readinessUrlObj.href;
   let startedAt = Date.now();
   let lastError: string | undefined;
 

@@ -1197,7 +1197,22 @@ export class Realm {
     if (
       new URL(request.url).searchParams.get('awaitPrerenderHtml') === 'true'
     ) {
-      await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
+      let htmlReady = await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
+      if (!htmlReady) {
+        // The current generation's HTML never became live within budget (a
+        // stuck/failed render, or a queue backlog longer than the wait). Report
+        // not-ready rather than a false 200 so a poller keeps waiting and a
+        // single-shot caller sees the failure instead of treating the publish
+        // as complete on an unrendered realm.
+        return createResponse({
+          body: null,
+          init: {
+            headers: { 'content-type': 'text/html', 'Retry-After': '1' },
+            status: 503,
+          },
+          requestContext,
+        });
+      }
     }
 
     return createResponse({

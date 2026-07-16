@@ -159,6 +159,9 @@ export async function publishRealm(
     await waitForReady(client, {
       publishedRealmURL: result.publishedRealmURL,
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      // A published realm's rendered HTML is its deliverable, so wait until it
+      // is live (not just indexed) before reporting the publish complete.
+      awaitPrerenderHtml: true,
     });
   }
 
