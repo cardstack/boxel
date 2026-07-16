@@ -7,6 +7,7 @@ import {
   getFieldIcon,
   getField,
   cardDefComputedFields,
+  primitive,
 } from '@cardstack/runtime-common';
 import CardInfoTemplates from './card-info';
 
@@ -50,6 +51,22 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     return Object.fromEntries(fields) as FieldsTypeFor<CardDef>;
   }
 
+  // A field can safely render inside a <label> only when its editor is a
+  // single form control: compound and linked editors contain buttons that an
+  // implicit label association would activate when the label text is clicked,
+  // and computed fields render a read-only view with no control to label.
+  private editFieldTag = (fieldName: string): 'label' | undefined => {
+    if (this.args.format !== 'edit') {
+      return undefined;
+    }
+    let field = getField(this.args.model.constructor, fieldName);
+    return field?.fieldType === 'contains' &&
+      !field.computeVia &&
+      primitive in field.card
+      ? 'label'
+      : undefined;
+  };
+
   private get isThemeCard() {
     return Boolean(
       Object.entries(this.args.fields).find(([key]) => key === 'cssVariables'),
@@ -84,6 +101,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               <FieldContainer
                 @label={{startCase key}}
                 @icon={{getFieldIcon @model key}}
+                @tag={{this.editFieldTag key}}
                 data-test-field={{key}}
               >
                 <Field class='in-isolated' />
@@ -95,6 +113,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
           <FieldContainer
             @label='Notes'
             @icon={{getFieldIcon @model.cardInfo 'notes'}}
+            @tag={{if (eq @format 'edit') 'label'}}
             data-test-field='cardInfo-notes'
           >
             <@fields.cardInfo.notes />
@@ -171,6 +190,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       .default-card-template.isolated
         :deep(.boxel-field.horizontal:not(.theme-field) > .content) {
+        --boxel-outline-width: 0;
         align-self: start;
       }
       /* below the label min-width (8rem) plus the content flex-basis (14rem)

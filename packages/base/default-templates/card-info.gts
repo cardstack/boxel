@@ -352,6 +352,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .card-info-thumbnail-popup-toggle {
         grid-area: thumbnail-toggle;
         max-width: 9.375rem;
+        margin-inline: var(--boxel-sp-xs);
         padding-inline: var(--boxel-sp-xs);
       }
       .card-info-edit-fields {
@@ -452,6 +453,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           align-self: start;
           max-width: var(--thumbnail-container-size);
           min-width: unset;
+          margin-inline: 0;
           padding-inline: 0;
           border-radius: var(--boxel-border-radius-sm);
           font-size: 0.6875rem;
