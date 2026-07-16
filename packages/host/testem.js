@@ -79,20 +79,50 @@ if (typeof module !== 'undefined') {
 
     config.reporter = multiReporter;
 
-    // Capture testem's own internal log to a file. testem only writes its
-    // server-side events (socket attach / disconnect, disconnectCount, the
-    // `socket reconnection limit has been exceeded` refusal, `Browser …
-    // finished all tests`, process exit) to `log.stream`, and that stream is
-    // a no-op sink unless `debug` names a path. Those events are the only
-    // record of the browser↔testem handshake that produces the intermittent
-    // post-suite `Browser timeout exceeded` synthetic failure — the TAP
-    // output shows the passing tests but nothing about why the browser is
-    // declared dead afterward. Persist it so the next occurrence shows which
-    // side of the handshake dropped (uploaded as a CI artifact).
-    config.debug = path.join(
-      junitDir,
-      `host-testem-debug-${process.env.HOST_TEST_PARTITION}.log`,
+    // Capture testem's own server-side log of the browser↔testem control
+    // channel — socket attach / reconnect (`tryAttach`), the `socket
+    // reconnection limit has been exceeded` refusal, `Browser … finished all
+    // tests`, and process exit. Those events are the only record of why an
+    // otherwise-healthy browser is declared dead by the intermittent
+    // post-suite `Browser timeout exceeded` failure; the TAP output shows the
+    // passing tests but nothing about the handshake afterward.
+    //
+    // A file-level `debug` option can't reach this: testem's
+    // `Api.configureLogging()` binds the log output stream from CLI/default
+    // options *before* it reads this config file, so the assignment is
+    // ignored. But testem's `log` is a singleton EventEmitter that emits a
+    // `log.<level>` event on every message regardless of that stream, so
+    // subscribe to those events directly and tee them to a file (uploaded as
+    // a CI artifact). `Browser … finished all tests` here is also the
+    // authoritative signal that the browser reported suite completion —
+    // browser-side `console.log` after the last test isn't reliably flushed
+    // into the TAP output, so it can't stand in for this.
+    const testemInternalLog = require('testem/lib/log');
+    const debugStream = fs.createWriteStream(
+      path.join(
+        junitDir,
+        `host-testem-debug-${process.env.HOST_TEST_PARTITION}.log`,
+      ),
     );
+    for (const level of [
+      'error',
+      'warn',
+      'notice',
+      'info',
+      'verbose',
+      'http',
+      'timing',
+    ]) {
+      testemInternalLog.on(`log.${level}`, (record) => {
+        try {
+          const prefix = record && record.prefix ? `${record.prefix} ` : '';
+          const message = record ? record.message : '';
+          debugStream.write(`[${level}] ${prefix}${message}\n`);
+        } catch (e) {
+          // best-effort diagnostics — never let logging break the run
+        }
+      });
+    }
   }
 
   module.exports = config;
