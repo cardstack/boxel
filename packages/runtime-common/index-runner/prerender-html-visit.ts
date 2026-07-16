@@ -239,6 +239,23 @@ export async function runPrerenderHtmlPass({
     preWarmMs = Date.now() - preWarmStart;
   }
 
+  // One batched read of every rendered URL's content hash/size so the
+  // per-visit getContentMeta lookups are served from memory rather than a DB
+  // round-trip each. Deletes aren't visited, so they're excluded; URLs outside
+  // this realm are skipped the same way the visit skips them.
+  let prefetchPaths: string[] = [];
+  for (let [href, operation] of operations) {
+    if (operation === 'delete') {
+      continue;
+    }
+    try {
+      prefetchPaths.push(realmPaths.local(new URL(href)));
+    } catch (_e) {
+      // different realm — not visited
+    }
+  }
+  await batch.prefetchFileMeta(prefetchPaths);
+
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;
   let tombstoned = 0;
