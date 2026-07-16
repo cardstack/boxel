@@ -380,17 +380,14 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current]',
       )
       .exists('the current-target tile renders for the broken preload');
-    // The label falls back to the ref (no title to show). It relativizes
-    // against the editing document's URL, so it reads as the `../`-relative
-    // path — the same form the pane serializes into the directive.
+    // The tile itself renders the compact broken visual (not a text label),
+    // so a broken preload reads as the same warning box the resolved chip would
+    // occupy.
     assert
       .dom(
-        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current] [data-test-broken-link-template]',
       )
-      .hasText(
-        '../books/ghost',
-        'a broken ref labels as its document-relative path',
-      );
+      .exists('the current-target tile shows the compact broken visual');
     assert
       .dom('[data-test-markdown-embed-chooser-remove]')
       .exists('Remove is available');
@@ -402,7 +399,7 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     await pending;
   });
 
-  test('a broken ref in a different realm than the document keeps its full URL as the label', async function (assert) {
+  test('edit-mode preload renders the current-target tile as a fitted card chip', async function (assert) {
     await render(
       <template>
         <HostContextProvider>
@@ -414,28 +411,59 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
     let svc = getService(
       'markdown-embed-chooser',
     ) as MarkdownEmbedChooserService;
-    // A broken ref in the base realm while the editing document lives in the
-    // test realm — the two are in different namespaces, so the ref can't be
-    // relativized and keeps its absolute URL.
-    let brokenUrl = `${baseRealm.url}ghost-card`;
     let pending = svc.editEmbed({
       refType: 'card',
-      url: brokenUrl,
+      url: mango,
       sizeSpec: 'embedded',
-      documentBaseUrl: `${testRealmURL}posts/my-post`,
     });
+    // The tile renders the resolved card itself, in fitted format — not a text
+    // label. The card body paints asynchronously, so wait for it. The pane
+    // preview stays on the picked format (embedded), so the fitted render of
+    // this card is unique to the tile.
     await waitFor(
-      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current] [data-test-card="${mango}"][data-test-card-format="fitted"]`,
       { timeout: 5000 },
     );
     assert
       .dom(
-        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current-label]',
+        `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-chooser-current] [data-test-card="${mango}"][data-test-card-format="fitted"]`,
       )
-      .hasText(
-        brokenUrl,
-        'a broken ref in another realm keeps its absolute URL',
+      .exists(
+        'the current-target tile renders the card itself in fitted format',
       );
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('edit-mode preload of a file renders the current-target tile as a fitted chip', async function (assert) {
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.editEmbed({
+      refType: 'file',
+      url: readme,
+      sizeSpec: 'embedded',
+    });
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-markdown-embed-chooser-current-preview]',
+      { timeout: 5000 },
+    );
+
+    // Files render through the same fitted path as cards.
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="file"] [data-test-markdown-embed-chooser-current] [data-test-markdown-embed-preview-format="fitted"]',
+      )
+      .exists('the file current-target tile renders in its fitted template');
 
     svc.resolve(undefined);
     await pending;

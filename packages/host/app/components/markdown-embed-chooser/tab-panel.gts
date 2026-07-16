@@ -23,9 +23,8 @@ import {
 import {
   cardTypeName,
   fileNameFromUrl,
+  type BfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
-
-import { maybeRelativeReference } from '@cardstack/runtime-common/url';
 
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
@@ -37,6 +36,7 @@ import type {
 import type StoreService from '@cardstack/host/services/store';
 
 import MarkdownEmbedPreviewPane from './pane';
+import MarkdownEmbedPreview from './preview';
 import TabPills from './tab-pills';
 
 import type EmbedFormatSelection from './format-selection';
@@ -128,31 +128,12 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     return dirty ? 'Accept' : 'Done';
   }
 
-  private get currentTargetLabel(): string {
-    let t = this.selectedTarget;
-    if (!t) return this.toDisplayUrl(this.selectedUrl ?? '');
-    if (this.args.refType === 'file') {
-      return fileNameFromUrl(t.id ?? this.selectedUrl ?? '');
-    }
-    return (
-      (t as CardDef).cardTitle ??
-      this.toDisplayUrl(t.id ?? this.selectedUrl ?? '')
-    );
-  }
-
-  // When the label falls back to showing a raw URL (a broken ref, or a card
-  // with no title), relativize it against the editing document's own URL —
-  // yielding the `../Type/id` form the pane serializes into the directive, so
-  // the label matches what gets inserted. Falls back to the absolute URL when
-  // there's no base or either URL can't be parsed.
-  private toDisplayUrl(url: string): string {
-    let base = this.args.documentBaseUrl;
-    if (!url || !base) return url;
-    try {
-      return maybeRelativeReference(new URL(url), new URL(base), undefined);
-    } catch {
-      return url;
-    }
+  // The current-target tile renders the placed card/file as a compact fitted
+  // chip — a fixed Double Strip (250×65), independent of the format the user
+  // picks for the actual embed in the preview pane. It's an identity marker for
+  // "what's placed here now", not the embed being configured.
+  private get currentTileSize(): BfmSizeSpec {
+    return { format: 'fitted', width: 250, height: 65 };
   }
 
   @action
@@ -271,12 +252,19 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             class='markdown-embed-chooser-tab-panel__current'
             data-test-markdown-embed-chooser-current
           >
-            <span
-              class='markdown-embed-chooser-tab-panel__current-label'
-              data-test-markdown-embed-chooser-current-label
-            >
-              {{this.currentTargetLabel}}
-            </span>
+            <MarkdownEmbedPreview
+              class='markdown-embed-chooser-tab-panel__current-preview'
+              @target={{this.selectedTarget}}
+              @format='fitted'
+              @sizeSpec={{this.currentTileSize}}
+              @kind='block'
+              @brokenUrl={{this.brokenUrl}}
+              @brokenState={{this.brokenState}}
+              @brokenDisplayName={{this.brokenDisplayName}}
+              @brokenItemType={{this.brokenItemType}}
+              @errorDoc={{this.brokenErrorDoc}}
+              data-test-markdown-embed-chooser-current-preview
+            />
             <div class='markdown-embed-chooser-tab-panel__current-actions'>
               <BoxelButton
                 {{on 'click' this.startReplace}}
@@ -415,9 +403,10 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         padding: var(--boxel-sp);
         text-align: center;
       }
-      .markdown-embed-chooser-tab-panel__current-label {
-        font: 600 var(--boxel-font);
-        word-break: break-word;
+      /* The fitted chip carries its own fixed footprint; keep it from
+         stretching to the centered column's cross axis. */
+      .markdown-embed-chooser-tab-panel__current-preview {
+        flex: 0 0 auto;
       }
       .markdown-embed-chooser-tab-panel__current-actions {
         display: flex;
