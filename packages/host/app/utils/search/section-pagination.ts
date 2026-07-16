@@ -4,7 +4,7 @@ import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
   SECTION_DISPLAY_LIMIT_UNFOCUSED,
   SECTION_SHOW_MORE_INCREMENT,
-} from '@cardstack/host/components/card-search/constants';
+} from '@cardstack/host/components/search/constants';
 
 /**
  * Manages pagination and focus state for search result sections.

@@ -26,7 +26,7 @@ import {
   type SearchEntryRendering,
 } from './search-entries';
 
-import type { HydrationMode } from '../components/card-search/hydratable-card';
+import type { HydrationMode } from '../components/search/hydratable-card';
 
 // The diagnostic/labeling attributes the prerendered HTML carries so consumers
 // (e.g. the operator-mode overlay) can label and icon a card before its

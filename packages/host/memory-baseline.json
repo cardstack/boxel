@@ -403,11 +403,11 @@
       "delta_mb": 4.1,
       "samples": [4.1, 4, 4.1, 4.1, 4.1]
     },
-    "Integration | card-search/result-tile (adorn)": {
+    "Integration | search/result-tile (adorn)": {
       "delta_mb": 4.1,
       "samples": [4.1, 4.1, 4.1, 4.1, 4.1]
     },
-    "Integration | card-search/search-result-header (selection menu)": {
+    "Integration | search/search-result-header (selection menu)": {
       "delta_mb": 4.2,
       "samples": [4.2, 4.2, 4.2, 4.2, 4.2]
     },
@@ -1319,7 +1319,7 @@
       "delta_mb": 0.1,
       "samples": [0.1, 0.1, 0.1, 0.1, 0.1]
     },
-    "Unit | card-search/query-builder": {
+    "Unit | search/query-builder": {
       "delta_mb": 0,
       "samples": [0, 0, 0, 0, 0]
     },

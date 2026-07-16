@@ -26,9 +26,9 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import SearchResults from '@cardstack/host/components/card-search/search-results';
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
+import SearchResults from '@cardstack/host/components/search/search-results';
 
 import config from '@cardstack/host/config/environment';
 

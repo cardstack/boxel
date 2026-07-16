@@ -79,7 +79,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
-import SearchResults from '../../../card-search/search-results';
+import SearchResults from '../../../search/search-results';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 

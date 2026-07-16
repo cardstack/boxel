@@ -30,17 +30,16 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import { getFilterTypeRefs } from '@cardstack/host/utils/search/type-filter';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
 
-import SearchPanel from '../card-search/panel';
-
 import ModalContainer from '../modal-container';
+import SearchPanel from '../search/panel';
 
 import { Submodes } from '../submode-switcher';
 

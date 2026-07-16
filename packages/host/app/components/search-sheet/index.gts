@@ -30,9 +30,9 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
-} from '@cardstack/host/utils/card-search/url';
+} from '@cardstack/host/utils/search/url';
 
-import SearchPanel from '../card-search/panel';
+import SearchPanel from '../search/panel';
 
 import type StoreService from '../../services/store';
 
