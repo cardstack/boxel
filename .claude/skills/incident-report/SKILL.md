@@ -21,7 +21,7 @@ Pin, with sources: the exact incident window, per-code error counts (503 vs 504 
 
 ## The deliverable
 
-Default to an **Artifact** (via the `Artifact` tool) — it is shareable with the team, private until shared, and renders the house style directly. Load the `artifact-design` skill's fundamentals if you need a refresher, but the palette and structure here are already decided; do not re-derive them.
+Default to an **Artifact** (via the `Artifact` tool) — it renders the house style directly. An incident report is meant to be read by the whole team, so its end state is **shared with the "Cardstack" organization**, not left private (see Publish & track). Load the `artifact-design` skill's fundamentals if you need a refresher, but the palette and structure here are already decided; do not re-derive them.
 
 Keep a plain-markdown copy in the scratchpad too when useful as a working draft, but the shared deliverable is the Artifact.
 
@@ -74,8 +74,9 @@ Not every incident needs all nine at full weight, but keep the order and the sec
 
 1. Write the filled HTML to the scratchpad (or the report's working dir).
 2. Publish with the `Artifact` tool: favicon `🚨`, a concise `<title>`/title (`Staging 504 Incident Report — <date>`), and a one-sentence `description`.
-3. To revise, edit the same file and republish with the **same file path** so the URL is stable.
-4. Post the Artifact link to the tracking ticket (Linear) as a comment — not a description edit — and attach it alongside any prior related report. If it's a recurrence, comment on the existing ticket rather than opening a new one, and spell out same-mode / different-trigger.
+3. **Set visibility to the "Cardstack" organization.** The report is for the whole team — it must not stay private. The `Artifact` tool publishes private-by-default and has no visibility parameter, so this is a one-time action in the page's **share menu**: choose share with the "Cardstack" organization (org members can open it). If you (Claude) can't reach the share menu, publish, then explicitly tell the user to flip visibility to the Cardstack org and hand them the URL — don't leave it silently private.
+4. To revise, edit the same file and republish with the **same file path** so the URL (and its sharing) is stable.
+5. Post the Artifact link to the tracking ticket (Linear) as a comment — not a description edit — and attach it alongside any prior related report. If it's a recurrence, comment on the existing ticket rather than opening a new one, and spell out same-mode / different-trigger.
 
 ## Files
 
