@@ -146,19 +146,37 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .default-card-template.edit > .notes-footer {
         background-color: var(--muted);
       }
-      /* stack field labels above their inputs when the template is narrow */
+      /* keep field labels beside their inputs, wrapping the label above the
+         input only when the field's content area gets too narrow */
+      :deep(.boxel-field.horizontal:not(.theme-field)) {
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: var(--boxel-sp-xs);
+        container-name: horizontal-field;
+        container-type: inline-size;
+      }
+      :deep(.boxel-field.horizontal:not(.theme-field) > .label-container) {
+        flex: 0 0 25%;
+        min-width: 8rem;
+      }
+      :deep(.boxel-field.horizontal:not(.theme-field) > .content) {
+        flex: 1 1 14rem;
+        min-width: 0;
+      }
+      /* below the label min-width (8rem) plus the content flex-basis (14rem)
+         the label has wrapped above the input, so drop the padding that
+         aligns it with the input's first line */
+      @container horizontal-field (width < 22rem) {
+        :deep(.label-container) {
+          padding-top: 0;
+        }
+      }
       @container default-template (width < 425px) {
         .default-card-template--inner {
           --boxel-default-template-padding: var(--boxel-sp);
         }
         :deep(.boxel-field.horizontal:not(.theme-field)) {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto 1fr;
-          gap: var(--boxel-sp-xs);
           min-height: unset;
-        }
-        :deep(.boxel-field.horizontal:not(.theme-field) > .label-container) {
-          padding-top: 0;
         }
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
