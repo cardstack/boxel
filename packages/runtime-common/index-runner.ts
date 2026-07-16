@@ -276,6 +276,12 @@ export class IndexRunner {
     // queueing it behind the caller.
     let filesCompleted = 0;
     let totalFiles = invalidations.length;
+    // One batched read of every visit's created-at + content hash/size, so the
+    // per-visit lookups below are served from memory rather than two DB
+    // round-trips each across the whole pass.
+    await current.batch.prefetchFileMeta(
+      current.#visitLocalPaths(invalidations),
+    );
     let loopStart = Date.now();
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
@@ -476,6 +482,12 @@ export class IndexRunner {
     let totalFiles = invalidations.length;
 
     let hrefs = urls.map((u) => u.href);
+    // One batched read of the invalidation set's created-at + content hash/size
+    // so the per-visit lookups are served from memory. Deletes and resumed URLs
+    // that get skipped below just leave unused cache entries — harmless.
+    await current.batch.prefetchFileMeta(
+      current.#visitLocalPaths(invalidations),
+    );
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     let loopStart = Date.now();
@@ -580,6 +592,23 @@ export class IndexRunner {
       generation: this.batch.currentGeneration,
       loaderEpoch: this.batch.loaderEpoch,
     });
+  }
+
+  // Local paths for the URLs this pass will visit, keyed the same way the
+  // visit's own file-meta lookups are (`realmPaths.local(url)`). URLs outside
+  // this realm are skipped — the visit skips them too. Handed to
+  // `batch.prefetchFileMeta` so the per-visit created-at / content-meta lookups
+  // are served from one batched read instead of a round-trip each.
+  #visitLocalPaths(urls: URL[]): string[] {
+    let paths: string[] = [];
+    for (let url of urls) {
+      try {
+        paths.push(this.#realmPaths.local(url));
+      } catch (_e) {
+        // different realm — not visited, so nothing to prefetch
+      }
+    }
+    return paths;
   }
 
   private async tryToVisit(url: URL) {

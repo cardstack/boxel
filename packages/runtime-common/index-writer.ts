@@ -20,6 +20,7 @@ import {
   getCreatedTime,
   ensureFileCreatedAt,
   getContentMeta,
+  getFileMetaForPaths,
 } from './file-meta.ts';
 import {
   type Expression,
@@ -305,6 +306,20 @@ export class Batch {
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
   #scannedInvalidationCount = 0;
+  // Created-at + content hash/size for files this batch will visit, loaded in
+  // one query by `prefetchFileMeta` so the per-visit `ensureFileCreatedAt` /
+  // `getContentMeta` lookups the index loop makes are served from memory rather
+  // than a DB round-trip each. Only files with a persisted `realm_file_meta`
+  // row are present; a miss falls back to the per-path read, so both lookups
+  // behave identically whether or not the batch prefetched.
+  #fileMetaCache = new Map<
+    string,
+    {
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    }
+  >();
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -535,19 +550,52 @@ export class Batch {
     return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
-  // Ensure a created_at row exists for this file in realm_file_meta and return it
+  // Load created_at + content hash/size for a set of files in one query so the
+  // per-visit `ensureFileCreatedAt` / `getContentMeta` lookups are served from
+  // memory. The visit loop knows its whole URL set up front, so one batched
+  // read replaces two DB round-trips per visit — the same shape as
+  // `getModifiedTimes` fetching mtimes up front. Rows only ever add
+  // information, so calling this more than once (or with overlapping sets) is
+  // safe.
+  async prefetchFileMeta(localPaths: string[]): Promise<void> {
+    let fetched = await getFileMetaForPaths(
+      this.#dbAdapter,
+      this.realmURL.href,
+      localPaths,
+    );
+    for (let [path, meta] of fetched) {
+      this.#fileMetaCache.set(path, meta);
+    }
+  }
+
+  // Ensure a created_at row exists for this file in realm_file_meta and return
+  // it. A prefetched hit means the row already exists, so its created_at is
+  // returned without a round-trip; a miss falls through to the per-path
+  // ensure-and-read, which also creates the row when the file has none.
   async ensureFileCreatedAt(localPath: string): Promise<number> {
+    let cached = this.#fileMetaCache.get(localPath);
+    if (cached) {
+      return cached.createdAt;
+    }
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   // Look up the content hash and size persisted at write time for a given file
-  // path, in a single row lookup. Either value is undefined when the realm has
-  // no recorded value (e.g. files written before file-meta hashing existed, or
-  // a no-op rewrite that left the columns untouched).
+  // path. Served from the prefetch cache when available; otherwise a single row
+  // lookup. Either value is undefined when the realm has no recorded value
+  // (e.g. files written before file-meta hashing existed, or a no-op rewrite
+  // that left the columns untouched).
   async getContentMeta(localPath: string): Promise<{
     contentHash: string | undefined;
     contentSize: number | undefined;
   }> {
+    let cached = this.#fileMetaCache.get(localPath);
+    if (cached) {
+      return {
+        contentHash: cached.contentHash,
+        contentSize: cached.contentSize,
+      };
+    }
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
