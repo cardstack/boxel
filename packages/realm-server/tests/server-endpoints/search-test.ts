@@ -13,13 +13,9 @@ import type {
 import {
   archiveRealm,
   baseCardRef,
-  DURING_PRERENDER_HEADER,
-  MAX_SEARCH_PAGE_SIZE,
   rri,
   query,
   param,
-  resetSearchBoundsForTests,
-  setSearchBoundsForTests,
   type Expression,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -162,10 +158,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       afterEach: async () => {
         await stopSearchRealmServer();
       },
-    });
-
-    hooks.afterEach(function () {
-      resetSearchBoundsForTests();
     });
 
     function ownerToken() {
@@ -475,100 +467,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('an item-leg search over the realms cap is a 400', async function (assert) {
-      setSearchBoundsForTests({ maxRealmsPerRequest: 1 });
-      let overCap = await postSearch({
-        filter: personFilter(),
-        fields: { entry: ['item'] },
-        realms: [testRealm.url, secondaryRealm.url],
-      });
-      assert.strictEqual(
-        overCap.status,
-        400,
-        'two realms over a cap of one → 400',
-      );
-      assert.ok(
-        String(overCap.body?.errors?.[0]?.message ?? overCap.text).includes(
-          'realms',
-        ),
-        'the error names the realms cap',
-      );
-      let atCap = await postSearch({
-        filter: personFilter(),
-        fields: { entry: ['item'] },
-        realms: [testRealm.url],
-      });
-      assert.strictEqual(atCap.status, 200, 'a single realm is within the cap');
-    });
-
-    test('an item-leg search with an explicit oversized page is a 400', async function (assert) {
-      let response = await postSearch({
-        filter: personFilter(),
-        fields: { entry: ['item'] },
-        realms: [testRealm.url],
-        page: { size: MAX_SEARCH_PAGE_SIZE + 1 },
-      });
-      assert.strictEqual(response.status, 400, 'page.size over the max → 400');
-      assert.ok(
-        String(response.body?.errors?.[0]?.message ?? response.text).includes(
-          'page.size',
-        ),
-        'the error names page.size',
-      );
-    });
-
-    test('an item-leg search with no page is clamped, not rejected', async function (assert) {
-      setSearchBoundsForTests({ maxPageSize: 1 });
-      let response = await postSearch({
-        filter: personFilter(),
-        fields: { entry: ['item'] },
-        realms: [testRealm.url],
-      });
-      assert.strictEqual(response.status, 200, 'a missing page is allowed');
-      assert.strictEqual(
-        response.body.data.length,
-        1,
-        'results are clamped to the page cap',
-      );
-      assert.strictEqual(
-        response.body.meta.page.total,
-        2,
-        'meta.page.total still reflects the full match count',
-      );
-    });
-
-    test('the prerendered-HTML leg is exempt from the item-leg caps', async function (assert) {
-      // Drop both caps below what this request asks for; the default (html) leg
-      // must still fan out to both realms with no page and succeed.
-      setSearchBoundsForTests({ maxRealmsPerRequest: 1, maxPageSize: 1 });
-      let response = await postSearch({
-        filter: personFilter(),
-        realms: [testRealm.url, secondaryRealm.url],
-      });
-      assert.strictEqual(response.status, 200, 'the html leg is not bounded');
-      assert.strictEqual(
-        response.body.meta.page.total,
-        4,
-        'all rows across both realms',
-      );
-    });
-
-    test('during-prerender item-leg traffic is exempt from the caps', async function (assert) {
-      setSearchBoundsForTests({ maxRealmsPerRequest: 1, maxPageSize: 1 });
+    test('page/realms bounds are not enforced server-side', async function (assert) {
+      // The page-size and realms caps live at the card `@context` surface, not
+      // the server — so the trusted host (and any other caller) can exceed
+      // them. An oversized item-leg page runs as asked rather than 400ing.
       let response = await postSearch({
         filter: personFilter(),
         fields: { entry: ['item'] },
         realms: [testRealm.url, secondaryRealm.url],
-      }).set(DURING_PRERENDER_HEADER, testRealm.url);
+        page: { size: 1000 },
+      });
       assert.strictEqual(
         response.status,
         200,
-        'internal prerender search is not bounded',
+        'an oversized item-leg page is not rejected server-side',
       );
       assert.strictEqual(
         response.body.meta.page.total,
         4,
-        'all rows across both realms',
+        'all matching rows are returned',
       );
     });
   });

@@ -1,7 +1,5 @@
 import type Koa from 'koa';
 import {
-  applySearchPageBound,
-  assertRealmsBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
@@ -112,27 +110,12 @@ export default function handleSearch(opts: {
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
-    // Hard resource bounds apply to the item leg only (the live serialization +
-    // `loadLinks` path), and never to the realm-server's own during-prerender
-    // traffic. The prerendered-HTML leg — the platform's grid / search sheet —
-    // stays unbounded. Realms + page are validated up front (a 400 the author
-    // can act on); the time budget wraps the actual search below.
-    let bounded = isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
-    if (bounded) {
-      try {
-        assertRealmsBound(realmList);
-        parsed.itemQuery = applySearchPageBound(parsed.itemQuery);
-      } catch (e) {
-        if (e instanceof SearchBoundError) {
-          await setContextResponse(
-            ctxt,
-            buildSearchErrorResponse(e.message, e.status),
-          );
-          return;
-        }
-        throw e;
-      }
-    }
+    // The time budget is the one bound enforced server-side — a wall-clock
+    // cutoff can't live anywhere else. Page-size and realms caps are enforced
+    // client-side at the card `@context` surface (untrusted card code), so the
+    // trusted host can legitimately exceed them. Applies to the item leg only;
+    // the prerendered-HTML leg and during-prerender traffic are exempt.
+    let timeBounded = isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
@@ -203,7 +186,7 @@ export default function handleSearch(opts: {
       };
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      return bounded ? runWithSearchTimeBudget(doRun) : doRun();
+      return timeBounded ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
     let emitTimeline = () => {

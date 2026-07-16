@@ -5,6 +5,7 @@ import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
@@ -22,6 +23,7 @@ import {
   CardContextName,
   CommandContextName,
   type getCard as GetCardType,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/card-search/search-results';
@@ -70,9 +72,31 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     return getCard as unknown as GetCardType;
   }
 
+  // The realm a card's no-realm search targets — the current realm.
+  private get currentRealm(): string | undefined {
+    return this.operatorModeStateService.realmURL;
+  }
+
+  @cached
+  private get cardStore() {
+    return this.store.cardFacingStore(() => this.currentRealm);
+  }
+
   @provide(GetCardsContextName)
   private get getCards() {
-    return this.store.getSearchResource.bind(this.store);
+    let store = this.store;
+    let getDefaultRealm = () => this.currentRealm;
+    return (
+      parent: object,
+      getQuery: () => Query | undefined,
+      getRealms?: () => string[] | undefined,
+      opts?: { isLive?: boolean; doWhileRefreshing?: () => void },
+    ) =>
+      store.getSearchResource(parent, getQuery, getRealms, {
+        ...opts,
+        cardInitiated: true,
+        getDefaultRealm,
+      });
   }
 
   @provide(GetCardCollectionContextName)
@@ -142,7 +166,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store.cardFacingStore,
+      store: this.cardStore,
       toolContext: this.toolContext,
       commandContext: this.toolContext,
       searchResultsComponent: SearchResults,

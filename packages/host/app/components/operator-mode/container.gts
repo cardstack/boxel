@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -22,6 +23,7 @@ import {
   GetCardCollectionContextName,
   CommandContextName,
   type getCard as GetCardType,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -83,10 +85,37 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getCard as unknown as GetCardType;
   }
 
+  // The realm a card's no-realm search targets — the operator-mode current
+  // realm. Read lazily by the card search surfaces below.
+  private get currentRealm(): string | undefined {
+    return this.operatorModeStateService.realmURL;
+  }
+
+  // The store handed to cards as `@context.store`: bound to the current realm
+  // and the card caps (see StoreService.cardFacingStore).
+  @cached
+  private get cardStore() {
+    return this.store.cardFacingStore(() => this.currentRealm);
+  }
+
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return this.store.getSearchResource.bind(this.store);
+    let store = this.store;
+    let getDefaultRealm = () => this.currentRealm;
+    // Card `getCards`: run under the card caps and default a no-realm search to
+    // the current realm.
+    return (
+      parent: object,
+      getQuery: () => Query | undefined,
+      getRealms?: () => string[] | undefined,
+      opts?: { isLive?: boolean; doWhileRefreshing?: () => void },
+    ) =>
+      store.getSearchResource(parent, getQuery, getRealms, {
+        ...opts,
+        cardInitiated: true,
+        getDefaultRealm,
+      });
   }
 
   @provide(GetCardCollectionContextName)
@@ -107,7 +136,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store.cardFacingStore,
+      store: this.cardStore,
       toolContext: this.toolContext,
       // populated alongside toolContext for content still reading the
       // pre-rename spelling

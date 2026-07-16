@@ -3,7 +3,6 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
-  applySearchPageBound,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -5713,16 +5712,12 @@ export class Realm {
     try {
       let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
       let duringPrerender = isDuringPrerenderRequest(request);
-      // Item-leg bounds (page size + time budget) apply to the live
-      // serialization path only, never to during-prerender traffic or the
-      // prerendered-HTML leg. No realms cap here — `_search` is single-realm.
-      let bounded =
+      // The time budget is the one bound enforced server-side (a wall-clock
+      // cutoff can't live client-side). Page-size and realms caps are enforced
+      // at the card `@context` surface. Applies to the live item leg only,
+      // never during-prerender traffic or the prerendered-HTML leg.
+      let timeBounded =
         isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
-      if (bounded) {
-        searchEntryQuery.itemQuery = applySearchPageBound(
-          searchEntryQuery.itemQuery,
-        );
-      }
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
@@ -5735,7 +5730,7 @@ export class Realm {
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      let doc = bounded
+      let doc = timeBounded
         ? await runWithSearchTimeBudget(runSearch)
         : await runSearch();
       return createResponse({

@@ -124,10 +124,13 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     isLive: boolean;
     isAutoSaved?: boolean;
     storeService?: StoreService;
-    // Route this resource's search through the store's concurrency throttle.
-    // Set only by `StoreService.getSearchResource` (the card `@context`
-    // surface); host-internal `getSearch` callers leave it unset.
-    throttle?: boolean;
+    // Run this resource's search under the card caps (page, realms,
+    // concurrency). Set only by `StoreService.getSearchResource` (the card
+    // `@context` surface); host-internal `getSearch` callers leave it unset.
+    cardInitiated?: boolean;
+    // The realm a no-realm card search targets (the realm the `@context` was
+    // provided with). Only meaningful with `cardInitiated`.
+    getDefaultRealm?: () => string | undefined;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
@@ -185,7 +188,8 @@ export class SearchResource<
   // changes, but reading this keeps the derivation self-contained).
   @tracked private activeQuery: Query | undefined;
   #isLive = false;
-  #throttle = false;
+  #cardInitiated = false;
+  #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
   #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
@@ -322,7 +326,8 @@ export class SearchResource<
       seed,
       owner,
       storeService,
-      throttle,
+      cardInitiated,
+      getDefaultRealm,
     } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
@@ -331,8 +336,11 @@ export class SearchResource<
     if (storeService !== undefined) {
       this.#storeServiceOverride = storeService;
     }
-    if (throttle !== undefined) {
-      this.#throttle = throttle;
+    if (cardInitiated !== undefined) {
+      this.#cardInitiated = cardInitiated;
+    }
+    if (getDefaultRealm !== undefined) {
+      this.#getDefaultRealm = getDefaultRealm;
     }
 
     if (query === undefined) {
@@ -352,10 +360,15 @@ export class SearchResource<
     this.activeQuery = query;
     this.#doWhileRefreshing = doWhileRefreshing;
     this.#dependencyTracking = named.dependencyTracking;
-    this.realmsToSearch =
-      realms === undefined || realms.length === 0
-        ? this.realmServer.availableRealmIdentifiers
-        : realms.map(ri);
+    let noRealms = realms === undefined || realms.length === 0;
+    // A no-realm card search targets the current realm (the realm the
+    // `@context` was provided with), never every visible realm. A host-internal
+    // search (not card-initiated) keeps the all-realms default.
+    this.realmsToSearch = !noRealms
+      ? realms.map(ri)
+      : this.#cardInitiated
+        ? this.#currentRealmList()
+        : this.realmServer.availableRealmIdentifiers;
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
@@ -716,6 +729,14 @@ export class SearchResource<
     return runtimeDependencyContextWithSource(this.#dependencyTracking, source);
   }
 
+  // The realm a no-realm card search targets: the current realm from the
+  // `@context` provider, or an empty list if none is known (which yields no
+  // results rather than fanning out to every realm).
+  #currentRealmList(): RealmIdentifier[] {
+    let current = this.#getDefaultRealm?.();
+    return current ? [ri(current)] : [];
+  }
+
   private applySeed = task(
     async (seed: NonNullable<Args<T>['named']['seed']>) => {
       let dependencyTrackingContext = this.dependencyTrackingContext(
@@ -771,16 +792,19 @@ export class SearchResource<
         'search-resource:search',
       );
       try {
-        let doSearch = () =>
-          this.runtimeStore.search<T>(query, this.realmsToSearch, {
+        // A card-`@context` search runs card-initiated — under the page,
+        // realms, and concurrency caps inside `store.search`. `realmsToSearch`
+        // has already resolved a no-realm card search to the current realm
+        // (see modify). Host-internal searches pass no flag and are unbounded.
+        let { instances, meta } = await this.runtimeStore.search<T>(
+          query,
+          this.realmsToSearch,
+          {
             includeMeta: true,
             dependencyTrackingContext,
-          });
-        // Card-`@context` searches run under the store's concurrency throttle;
-        // host-internal searches (throttle unset) run directly.
-        let { instances, meta } = this.#throttle
-          ? await this.runtimeStore.performThrottledSearch(doSearch)
-          : await doSearch();
+            cardInitiated: this.#cardInitiated,
+          },
+        );
         this.#log.info(
           `search task complete; total instances=${instances.length}; refs=${instances
             .map((r) => r.id)
@@ -839,7 +863,8 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
   opts?: {
     isLive?: boolean;
     storeService?: StoreService;
-    throttle?: boolean;
+    cardInitiated?: boolean;
+    getDefaultRealm?: () => string | undefined;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
@@ -865,7 +890,8 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       realms: getRealms ? getRealms() : undefined,
       isLive: opts?.isLive != null ? opts.isLive : false,
       storeService: opts?.storeService,
-      throttle: opts?.throttle,
+      cardInitiated: opts?.cardInitiated,
+      getDefaultRealm: opts?.getDefaultRealm,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
