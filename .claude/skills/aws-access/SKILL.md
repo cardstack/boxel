@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), and (5) tailing CloudWatch logs for the four boxel ECS services. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can now read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -464,6 +464,62 @@ aws --profile claude-staging logs filter-log-events \
 ```
 
 This is fine for one-off investigations. For anything iterative — tailing during a repro, comparing log groups, narrowing a filter — `cw` pays for itself within minutes.
+
+## Tailing Loki logs (`tail-logs.sh`) — usually sharper than CloudWatch
+
+The boxel services dual-ship logs to Loki behind the Grafana ALB. `packages/observability/scripts/tail-logs.sh` (documented by the `tail-logs` skill) is generally the better staging/prod tool than CloudWatch: it speaks LogQL, so real line-regex is available (`|~ '--> .*/base/.*: 5[0-9]{2}'`), and it collates by `service` / `realm` / `worker_id` labels.
+
+The role can read the two SSM parameters the script authenticates with — `/<env>/loki/auth_token` (SecureString, decrypted via the `aws/ssm` key) and `/<env>/loki/public_url` — so it runs directly as `boxel-claude-readonly`. The script reads credentials from the ambient AWS environment (it has no `--profile` flag), so pass the profile via `AWS_PROFILE`:
+
+```sh
+AWS_PROFILE=claude-staging \
+  packages/observability/scripts/tail-logs.sh \
+  --env staging --service realm-server --since 15m --no-follow
+```
+
+Production needs `--confirm`. Everything else — flags, label filters, retention caveats — is in the `tail-logs` skill.
+
+## Reading ALB access logs (per-request path attribution)
+
+CloudWatch ELB metrics aggregate by target group, so they can't tell you _which URL path_ a 5xx or latency spike is landing on. The realm-server ALB's **access logs** are the only per-request record of path + status. They're delivered to `boxel-alb-access-logs-<env>` and the role has read access.
+
+The account ID in the S3 key is the role's own account, so derive it rather than hardcoding it; region is `us-east-1`.
+
+```sh
+acct=$(aws --profile claude-staging sts get-caller-identity --query Account --output text)
+
+# What days/hours have logs?
+aws --profile claude-staging s3 ls \
+  "s3://boxel-alb-access-logs-staging/AWSLogs/$acct/elasticloadbalancing/us-east-1/"
+
+# Pull one day and count 5xx by URL path — "are the 502s only on /base/*?"
+day=2026/07/16
+aws --profile claude-staging s3 cp \
+  "s3://boxel-alb-access-logs-staging/AWSLogs/$acct/elasticloadbalancing/us-east-1/$day/" \
+  ./alb-logs/ --recursive
+
+# ALB logs are gzip'd and space-delimited. Field 9 is the ELB status code (what
+# the ALB returned to the client — 502 = it got no valid response from the
+# target); the quoted "request" field is "METHOD https://host:port/path?q HTTP/x".
+# Decompress before parsing.
+zcat ./alb-logs/*.log.gz \
+  | awk -F'"' '{ split($1, m, " "); if (m[9] ~ /^5/) { split($2, r, " "); print r[2] } }' \
+  | sed -E 's#https?://[^/]+##; s#\?.*##' \
+  | sort | uniq -c | sort -rn | head -20
+```
+
+Field 10 is the _target_ status code (what the app returned), useful for separating "ALB never reached the target" (502 at the ALB, empty/`-` target code) from "the app itself 5xx'd".
+
+**Athena:** no Athena table is provisioned over this bucket, so the S3 + `zcat`/`awk` path above is it. If per-path queries become routine, standing up an Athena table over the bucket (and extending the role with `athena:StartQueryExecution` + `athena:GetQueryResults` + read on the results bucket) is the natural next step.
+
+**ALB config introspection.** The role also has read-only `elasticloadbalancing:Describe*`, so ALB behavior can be audited directly — e.g. confirm access logging is on, or read timeouts / deregistration delay:
+
+```sh
+LB_ARN=$(aws --profile claude-staging elbv2 describe-load-balancers \
+  --names boxel-realm-server-staging --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+aws --profile claude-staging elbv2 describe-load-balancer-attributes \
+  --load-balancer-arn "$LB_ARN" --output table
+```
 
 ## Future skill / scripting room
 
