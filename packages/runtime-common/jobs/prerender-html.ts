@@ -67,7 +67,11 @@ export async function awaitPublishedHtmlReady(
   opts?: { timeoutMs?: number; intervalMs?: number },
 ): Promise<boolean> {
   let timeoutMs = opts?.timeoutMs ?? 60_000;
-  let intervalMs = opts?.intervalMs ?? 250;
+  // 1s cadence: readiness callers already re-poll at ~1s (Retry-After: 1) and
+  // HTML rendering takes seconds, so a tighter interval only multiplies DB
+  // queries under concurrent publish polls without meaningfully improving
+  // latency.
+  let intervalMs = opts?.intervalMs ?? 1000;
   let [genRow] = (await query(dbAdapter, [
     'SELECT current_generation FROM realm_generations WHERE realm_url =',
     param(realmURL),
