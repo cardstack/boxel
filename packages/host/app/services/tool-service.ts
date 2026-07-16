@@ -93,6 +93,18 @@ export default class ToolService extends Service {
   // round-trip is slower than consecutive drain passes. The user's manual
   // "Try Anyway" path doesn't consult this — it goes straight to `run`.
   invalidatedToolRequestIds = new TrackedSet<string>();
+  // Requests the auto-execution flow has claimed for resolution. Drain
+  // passes can overlap (each replace event queues another debounced drain,
+  // and the flush promise releases every waiter at once), and the records
+  // above are all written only after validation's slow awaits — so two
+  // overlapping passes could both get past the guards and carry the same
+  // request to contradictory terminal results (an 'invalid' from a stale
+  // tools snapshot alongside an 'applied' from a fresh one). A claim is
+  // taken synchronously before validation's first await, so exactly one
+  // pass resolves a given request. Claims are never released: whichever
+  // pass holds the claim carries the request to its terminal result, and
+  // the manual "Try Anyway" path bypasses claims entirely.
+  claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
@@ -128,6 +140,7 @@ export default class ToolService extends Service {
     this.currentlyExecutingToolRequestIds.clear();
     this.executedToolRequestIds.clear();
     this.invalidatedToolRequestIds.clear();
+    this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
@@ -455,6 +468,16 @@ export default class ToolService extends Service {
           if (!messageTool.name) {
             continue;
           }
+          // Claim before validate's first await — the guards above are
+          // checked here but recorded only after validation resolves, so
+          // without this synchronous check-and-set an overlapping drain
+          // pass could also carry this request to a terminal result.
+          if (messageTool.id) {
+            if (this.claimedToolRequestIds.has(messageTool.id)) {
+              continue;
+            }
+            this.claimedToolRequestIds.add(messageTool.id);
+          }
 
           let isValid = await this.validate(messageTool);
           if (!isValid) {
@@ -531,6 +554,11 @@ export default class ToolService extends Service {
       if (this.invalidatedToolRequestIds.has(commandRequestId)) {
         continue;
       }
+      // A drain pass that already claimed this request is carrying it to
+      // its own terminal result; don't also resolve it invalid here.
+      if (this.claimedToolRequestIds.has(commandRequestId)) {
+        continue;
+      }
       if (
         messageTool.status === 'applied' ||
         messageTool.status === 'invalid'
@@ -549,6 +577,7 @@ export default class ToolService extends Service {
       }
       // Terminal for auto-execution: a later drain pass must not execute a
       // request the model has been told was not started.
+      this.claimedToolRequestIds.add(commandRequestId);
       this.invalidatedToolRequestIds.add(commandRequestId);
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
