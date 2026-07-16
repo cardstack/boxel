@@ -78,17 +78,25 @@ interface CachedValidation {
 // background refresh. Kept below the monitor's cadence so each poll refreshes
 // the previous poll's result off the request path.
 const REFRESH_AFTER_MS = 4 * 60 * 1000;
-const validationCache = new Map<string, CachedValidation>();
-const refreshInFlight = new Map<string, Promise<CachedValidation>>();
 const log = logger('realm:skill-validation');
+
+// Per-realm result cache plus the in-flight refresh dedup map, both keyed by
+// realm URL. Held per handler instance (see below) rather than at module scope
+// so servers sharing a process — every realm-server test fixture — don't share
+// each other's cached results.
+interface ValidationCache {
+  results: Map<string, CachedValidation>;
+  refreshInFlight: Map<string, Promise<CachedValidation>>;
+}
 
 // Recompute and cache one realm's result, deduping concurrent refreshes so a
 // poll landing during an in-flight sweep joins it rather than starting another.
 function refreshValidation(
   realm: Realm,
   deps: ComputeDeps,
+  cache: ValidationCache,
 ): Promise<CachedValidation> {
-  let existing = refreshInFlight.get(realm.url);
+  let existing = cache.refreshInFlight.get(realm.url);
   if (existing) {
     return existing;
   }
@@ -96,7 +104,7 @@ function refreshValidation(
     try {
       let attributes = await computeValidation(realm, deps);
       let entry: CachedValidation = { computedAt: Date.now(), attributes };
-      validationCache.set(realm.url, entry);
+      cache.results.set(realm.url, entry);
       return entry;
     } finally {
       // Clean up inside the promise body rather than via `pending.finally(...)`:
@@ -106,10 +114,10 @@ function refreshValidation(
       // call for this realm gets the existing in-flight promise (the guard
       // above), so no other refresh can be queued while this one runs — the
       // map entry is always this one, so clear it unconditionally.
-      refreshInFlight.delete(realm.url);
+      cache.refreshInFlight.delete(realm.url);
     }
   })();
-  refreshInFlight.set(realm.url, pending);
+  cache.refreshInFlight.set(realm.url, pending);
   return pending;
 }
 
@@ -127,6 +135,10 @@ export default function handleSkillValidation({
     realmSecretSeed,
     serverURL,
   );
+  let cache: ValidationCache = {
+    results: new Map(),
+    refreshInFlight: new Map(),
+  };
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (
       !(await isAuthorizedToViewMonitoring(ctxt.request, realmServerSecretSeed))
@@ -193,11 +205,11 @@ export default function handleSkillValidation({
     // otherwise served immediately while a background refresh recomputes it for
     // the next poll.
     let forceRefresh = ctxt.URL.searchParams.get('refresh') === 'true';
-    let cached = validationCache.get(realm.url);
+    let cached = cache.results.get(realm.url);
     let entry: CachedValidation;
     if (forceRefresh || !cached) {
       try {
-        entry = await refreshValidation(realm, deps);
+        entry = await refreshValidation(realm, deps, cache);
       } catch (e: any) {
         await sendResponseForSystemError(
           ctxt,
@@ -210,7 +222,7 @@ export default function handleSkillValidation({
       if (Date.now() - entry.computedAt > REFRESH_AFTER_MS) {
         // A failure here leaves the last good result in place (logged, not
         // surfaced) rather than blocking or failing the poll.
-        refreshValidation(realm, deps).catch((e: any) => {
+        refreshValidation(realm, deps, cache).catch((e: any) => {
           log.error(
             `background skill-validation refresh for ${realm.url} failed: ${e.message}`,
           );
