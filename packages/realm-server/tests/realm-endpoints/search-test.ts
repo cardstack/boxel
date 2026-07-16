@@ -2,7 +2,12 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { rri, type Realm } from '@cardstack/runtime-common';
+import {
+  rri,
+  setSearchBoundsForTests,
+  resetSearchBoundsForTests,
+  type Realm,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupPermissionedRealmCached,
@@ -269,6 +274,67 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Accept', 'application/vnd.card+json');
       assert.strictEqual(get.status, 400);
       assert.true(get.body.errors[0].message.includes('method must be QUERY'));
+    });
+
+    test('the item-leg page size is capped server-side', async function (assert) {
+      // The server enforces a hard page ceiling on the live item leg for every
+      // caller (the card `@context` cap is a separate, lower client-side
+      // limit). Lower the ceiling for the test so the two-card realm exercises
+      // both branches.
+      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+      try {
+        // An explicit item-leg page over the ceiling is rejected.
+        let over = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          page: { size: 2 },
+        });
+        assert.strictEqual(
+          over.status,
+          400,
+          'an over-ceiling item-leg page is rejected',
+        );
+
+        // An absent page is clamped to the ceiling; the true match count still
+        // rides meta.page.total so a caller can paginate.
+        let clamped = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+        });
+        assert.strictEqual(clamped.status, 200);
+        assert.strictEqual(
+          clamped.body.data.length,
+          1,
+          'the returned page is clamped to the ceiling',
+        );
+        assert.strictEqual(
+          clamped.body.meta.page.total,
+          2,
+          'the true match count is preserved',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('the prerendered (html) leg is exempt from the page ceiling', async function (assert) {
+      // The ceiling bounds the live item leg only. The default/html fieldset is
+      // the cheap precomputed path and runs as asked even below the ceiling.
+      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+      try {
+        let response = await postSearch({
+          filter: personFilter(),
+          page: { size: 2 },
+        });
+        assert.strictEqual(
+          response.status,
+          200,
+          'an oversized html-leg page is not rejected',
+        );
+        assert.strictEqual(response.body.data.length, 2);
+      } finally {
+        resetSearchBoundsForTests();
+      }
     });
   });
 });
