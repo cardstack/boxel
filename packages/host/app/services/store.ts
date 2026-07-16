@@ -1080,17 +1080,24 @@ export default class StoreService extends Service implements StoreInterface {
         `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
       );
     }
-    let searchRealms = this.normalizeSearchRealms(realms);
+    // Host callers resolve an absent/empty realm list to every realm the user
+    // can see. Card `@context` callers arrive with the current realm already
+    // resolved into `realms` (see cardFacingStore / SearchResource); an empty
+    // list there means the card's current realm is unknown, so search nothing
+    // rather than fan out to every realm.
+    let searchRealms = opts?.cardInitiated
+      ? this.normalizeRealmPaths(realms)
+      : this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
       return opts?.includeMeta
         ? { instances: [], meta: { page: { total: 0 } } }
         : [];
     }
     if (opts?.cardInitiated) {
-      // Enforce the card-facing caps on the resolved request. The realms cap
-      // runs on the normalized list, so a card that omits realms — which
-      // defaults to every realm visible to the user — is still bounded. These
-      // throw a SearchBoundError the caller surfaces as a search error.
+      // Enforce the card-facing caps on the resolved request: the realms cap on
+      // the (already current-realm-resolved) list, and the page cap on the
+      // query. These throw a SearchBoundError the caller surfaces as a search
+      // error.
       assertRealmsBound(searchRealms);
       query = applySearchPageBound(query);
     }
@@ -1141,10 +1148,19 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  private normalizeSearchRealms(realms: string[] | undefined): string[] {
-    let normalizedRealms = (realms ?? [])
+  // Canonicalize a realm list to RealmPaths URLs, dropping unparseable entries.
+  // No fallback: an empty input yields an empty list (the card path relies on
+  // this to mean "search nothing" rather than "search everything").
+  private normalizeRealmPaths(realms: string[] | undefined): string[] {
+    return (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
       .filter(Boolean);
+  }
+
+  // The host default: an absent/empty realm list means every realm the user can
+  // see.
+  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+    let normalizedRealms = this.normalizeRealmPaths(realms);
     return normalizedRealms.length > 0
       ? normalizedRealms
       : this.realmServer.availableRealmIdentifiers;
