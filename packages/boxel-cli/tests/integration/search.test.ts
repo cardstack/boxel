@@ -56,6 +56,10 @@ beforeAll(async () => {
               },
             },
           }),
+          // A plain (non-card) file: it has only a `file` row, so it must still
+          // appear in a mixed list-all after the card `.json` file rows are
+          // deduped away.
+          'readme.txt': 'plain file contents',
         },
         permissions: {
           [ownerUserId]: ['read', 'write', 'realm-owner'],
@@ -86,17 +90,47 @@ afterAll(async () => {
 });
 
 describe('federated search (integration)', () => {
-  it('returns all results when no filter is supplied', async () => {
+  it('returns each card once (no `.json` file-row dupe) plus plain files', async () => {
     let result = await search(realmHref, {}, { profileManager });
     expect(result.ok, `search failed: ${result.error}`).toBe(true);
-    let titles = (result.data ?? []).map(
-      (entry) =>
-        (entry as { attributes?: { cardTitle?: string } }).attributes
-          ?.cardTitle,
+    let entries = (result.data ?? []) as {
+      id?: string;
+      type?: string;
+      attributes?: { cardTitle?: string };
+    }[];
+
+    // Each card `.json` is dual-indexed (an instance row + a file row); the
+    // dedup drops the file row so the card appears exactly once.
+    let cardTitles = entries
+      .filter((e) => e.type === 'card')
+      .map((e) => e.attributes?.cardTitle)
+      .sort();
+    expect(cardTitles).toEqual(['Other Card', 'Shared Card']);
+
+    // No id appears twice.
+    let ids = entries.map((e) => e.id);
+    expect(ids.length).toBe(new Set(ids).size);
+
+    // The plain (non-card) file is still listed.
+    let fileIds = entries
+      .filter((e) => e.type === 'file-meta')
+      .map((e) => e.id);
+    expect(fileIds).toContain(`${realmHref}readme.txt`);
+    // ...and neither card's `.json` file row leaked in.
+    expect(fileIds).not.toContain(`${realmHref}shared-card.json`);
+    expect(fileIds).not.toContain(`${realmHref}other-card.json`);
+  });
+
+  it('returns a single entry for a cardUrls `.json` lookup', async () => {
+    let result = await search(
+      realmHref,
+      { cardUrls: [`${realmHref}shared-card.json`] },
+      { profileManager },
     );
-    expect(titles).toEqual(
-      expect.arrayContaining(['Shared Card', 'Other Card']),
-    );
+    expect(result.ok, `search failed: ${result.error}`).toBe(true);
+    let entries = result.data ?? [];
+    expect(entries.length).toBe(1);
+    expect((entries[0] as { id?: string }).id).toBe(`${realmHref}shared-card`);
   });
 
   it('filters by cardTitle and returns only the matching card', async () => {
