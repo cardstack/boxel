@@ -472,15 +472,18 @@ export async function startServer({
     //
     // Two high-priority workers, not one: both Playwright workers
     // (fullyParallel) share this single realm server, so their createRealm
-    // provisioning enqueues into one high-priority pool. A createRealm index
-    // job (priority 10) and a preceding realm's prerender-html job (priority
-    // 9) both land there; the prerender-html for a freshly-created workspace
-    // is ~110 files and takes ~10s. With one worker those serialize — a
-    // second workspace's index job waits behind a full prerender-html sweep,
-    // and under concurrent load from both Playwright workers the wait stacks
-    // past the 30s createRealm settle budget. A second high-priority worker
-    // lets the higher-priority index job run on a free worker instead of
-    // queueing behind the render sweep, keeping provisioning inside budget.
+    // provisioning funnels into one high-priority pool. Each new workspace
+    // enqueues a from-scratch index (priority 10) plus a ~110-file, ~10s
+    // prerender-html sweep (priority 9), all eligible for this pool. Priority
+    // is a pool-reservation floor, not an ordering — within a pool the queue
+    // dequeues oldest-first (see runtime-common/queue.ts) — so a newer index
+    // job is NOT pulled ahead of an already-queued prerender-html sweep. With
+    // a single worker one in-flight ~10s sweep serializes everything behind
+    // it, and the wait stacks across both Playwright workers past the 30s
+    // createRealm settle budget. The lever is therefore drain capacity, not
+    // priority: the producers are fixed at two Playwright workers, so a
+    // second high-priority worker takes the ratio to 1:1 and keeps the queue
+    // shallow enough that index jobs settle well inside budget.
     `--highPriorityCount=2`,
 
     `--fromUrl='https://localhost:4205/test/'`,

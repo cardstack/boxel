@@ -228,11 +228,12 @@ export async function createRealm(
     // crosses the timeout and starts failing.
     let elapsedMs = Date.now() - startedAt;
     let elapsedS = (elapsedMs / 1000).toFixed(1);
-    if (elapsedMs >= settleTimeoutMs * 0.6) {
+    let warnFraction = 0.6;
+    if (elapsedMs >= settleTimeoutMs * warnFraction) {
       console.log(
-        `[createRealm] "${endpoint}" settled in ${elapsedS}s — close to the ${
-          settleTimeoutMs / 1000
-        }s budget (worker-queue pressure)`,
+        `[createRealm] "${endpoint}" settled in ${elapsedS}s — past ${
+          warnFraction * 100
+        }% of the ${settleTimeoutMs / 1000}s budget (worker-queue pressure)`,
       );
     } else {
       console.log(`[createRealm] "${endpoint}" settled in ${elapsedS}s`);
