@@ -460,16 +460,28 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
-    // Production parity for the worker tiers: a dedicated high-priority
-    // worker (floor 9) serves user-initiated jobs — a test's createRealm
+    // Production parity for the worker tiers: dedicated high-priority
+    // workers (floor 9) serve user-initiated jobs — a test's createRealm
     // indexing (priority 10) and its spawned prerender-html (9) — while the
-    // all-priority worker digests system-tier work. Without it, the lone
+    // all-priority worker digests system-tier work. Without them, the lone
     // all-priority worker claims jobs oldest-first regardless of priority,
     // so the boot realms' system prerender-html jobs (which include the
     // realm-wide module pre-warm sweep, minutes of work on a loaded runner)
     // hold the only worker while the first tests' createRealm index jobs sit
     // queued past their 30s provisioning wait.
-    `--highPriorityCount=1`,
+    //
+    // Two high-priority workers, not one: both Playwright workers
+    // (fullyParallel) share this single realm server, so their createRealm
+    // provisioning enqueues into one high-priority pool. A createRealm index
+    // job (priority 10) and a preceding realm's prerender-html job (priority
+    // 9) both land there; the prerender-html for a freshly-created workspace
+    // is ~110 files and takes ~10s. With one worker those serialize — a
+    // second workspace's index job waits behind a full prerender-html sweep,
+    // and under concurrent load from both Playwright workers the wait stacks
+    // past the 30s createRealm settle budget. A second high-priority worker
+    // lets the higher-priority index job run on a free worker instead of
+    // queueing behind the render sweep, keeping provisioning inside budget.
+    `--highPriorityCount=2`,
 
     `--fromUrl='https://localhost:4205/test/'`,
     `--toUrl='https://localhost:4205/test/'`,
