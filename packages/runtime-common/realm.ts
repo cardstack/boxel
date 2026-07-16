@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
@@ -1177,7 +1178,7 @@ export class Realm {
   }
 
   private async readinessCheck(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ) {
     await this.#startedUp.promise;
@@ -1186,10 +1187,38 @@ export class Realm {
     // resolved #startedUp, so awaiting it alone would report ready before the
     // reindex of the swapped files completes. Also await any in-flight full or
     // incremental index so a publish poll only succeeds once the just-published
-    // content is indexed and viewable.
+    // content is indexed.
     let inflight = this.indexing();
     if (inflight) {
       await inflight;
+    }
+
+    // Opt-in: also await the published HTML being live for the current
+    // generation. Indexing makes a realm searchable; prerendering makes it
+    // viewable — and for a published realm the HTML is the deliverable. That
+    // work lands on a separate (fire-and-forget) channel, so the publish flow
+    // sets `awaitPrerenderHtml` to hold readiness until the rendered HTML
+    // exists, not just the index. Left off by default so createRealm / boot
+    // readiness stay index-only and fast.
+    if (
+      new URL(request.url).searchParams.get('awaitPrerenderHtml') === 'true'
+    ) {
+      let htmlReady = await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
+      if (!htmlReady) {
+        // The current generation's HTML never became live within budget (a
+        // stuck/failed render, or a queue backlog longer than the wait). Report
+        // not-ready rather than a false 200 so a poller keeps waiting and a
+        // single-shot caller sees the failure instead of treating the publish
+        // as complete on an unrendered realm.
+        return createResponse({
+          body: null,
+          init: {
+            headers: { 'content-type': 'text/html', 'Retry-After': '1' },
+            status: 503,
+          },
+          requestContext,
+        });
+      }
     }
 
     return createResponse({
