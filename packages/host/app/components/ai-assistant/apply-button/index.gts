@@ -128,6 +128,13 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     .state-indicator.preparing .apply-button {
       --boxel-button-color: transparent;
       --boxel-button-text-color: var(--boxel-200);
+      /* The theme's disabled-button tokens are light-theme values; on this
+        always-dark pill they would paint an opaque light-gray capsule over
+        the dark background and its gradient ring, so pin the disabled look
+        to the pill's own transparent/dark styling. */
+      --boxel-button-disabled-background: transparent;
+      --boxel-button-disabled-foreground: var(--boxel-200);
+      --boxel-button-disabled-border: 0;
       border: 0;
       min-width: 74px;
     }
