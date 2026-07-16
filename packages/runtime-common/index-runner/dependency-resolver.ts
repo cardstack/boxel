@@ -121,12 +121,7 @@ export class IndexRunnerDependencyManager {
       }
       let base = new URL(row.url);
       for (let dep of row.deps ?? []) {
-        let normalized = canonicalURL(
-          dep,
-          base.href,
-          this.#virtualNetwork,
-          this.#canonicalURLMemo,
-        );
+        let normalized = this.canonicalURL(dep, base.href);
         if (!byHref.has(normalized) || normalized === row.url) {
           continue;
         }
