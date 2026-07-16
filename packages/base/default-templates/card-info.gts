@@ -235,7 +235,6 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             <FieldContainer
               class='card-info-field'
               @label='Thumbnail URL'
-              @tag='label'
               @icon={{ImageIcon}}
               data-test-field='cardInfo-thumbnailURL'
             >
@@ -330,6 +329,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         --boxel-field-content-padding: 0;
         min-height: unset;
         padding-top: unset;
+        padding-right: var(--boxel-sp-4xs);
       }
 
       .card-info-fields {
