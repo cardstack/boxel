@@ -567,56 +567,68 @@ export async function watchRealms(
     // Best effort — registry failures must never block the watch.
   }
 
-  await tickAll();
-  scheduleNextTick();
+  // Wire up the stop triggers (an abort signal, or SIGINT/SIGTERM when none is
+  // supplied) before the first poll so an interrupt during a slow initial tick
+  // still tears down cleanly - clearing the timer, shutting down watchers,
+  // releasing locks, and unregistering the process.
+  let resolveDone: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
 
-  await new Promise<void>((resolve) => {
-    let sigintHandler: (() => void) | null = null;
-    let sigtermHandler: (() => void) | null = null;
+  let sigintHandler: (() => void) | null = null;
+  let sigtermHandler: (() => void) | null = null;
 
-    const cleanup = async () => {
-      if (stopped) return;
-      stopped = true;
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      for (const w of watchers) w.shutdown();
-      if (sigintHandler) process.off('SIGINT', sigintHandler);
-      if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
-      for (const dir of lockedDirs) {
-        try {
-          await releaseWatchLock(dir);
-        } catch {
-          // Best effort \u2014 a leftover lock will be detected as stale next run.
-        }
-      }
+  const cleanup = async () => {
+    if (stopped) return;
+    stopped = true;
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    for (const w of watchers) w.shutdown();
+    if (sigintHandler) process.off('SIGINT', sigintHandler);
+    if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
+    for (const dir of lockedDirs) {
       try {
-        await unregisterCurrentProcess();
+        await releaseWatchLock(dir);
       } catch {
-        // Best effort \u2014 leftover entries are pruned on next read.
+        // Best effort - a leftover lock will be detected as stale next run.
       }
-      resolve();
-    };
+    }
+    try {
+      await unregisterCurrentProcess();
+    } catch {
+      // Best effort - leftover entries are pruned on next read.
+    }
+    resolveDone();
+  };
 
-    if (options.signal) {
-      if (options.signal.aborted) {
-        void cleanup();
-        return;
-      }
+  if (options.signal) {
+    if (options.signal.aborted) {
+      void cleanup();
+    } else {
       options.signal.addEventListener('abort', () => void cleanup(), {
         once: true,
       });
-    } else {
-      sigintHandler = () => {
-        if (!quiet) console.log(`\n${FG_CYAN}\u21c5 Watch stopped${RESET}`);
-        void cleanup();
-      };
-      sigtermHandler = sigintHandler;
-      process.on('SIGINT', sigintHandler);
-      process.on('SIGTERM', sigtermHandler);
     }
-  });
+  } else {
+    sigintHandler = () => {
+      if (!quiet) console.log(`\n${FG_CYAN}\u21c5 Watch stopped${RESET}`);
+      void cleanup();
+    };
+    sigtermHandler = sigintHandler;
+    process.on('SIGINT', sigintHandler);
+    process.on('SIGTERM', sigtermHandler);
+  }
+
+  // Skip the initial poll if a stop already arrived before we got here.
+  if (!stopped) {
+    await tickAll();
+    scheduleNextTick();
+  }
+
+  await done;
 
   return { watchers };
 }
