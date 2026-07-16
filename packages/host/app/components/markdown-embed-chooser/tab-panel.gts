@@ -62,9 +62,8 @@ interface Signature {
     // (The pane's format seed comes from the shared `@selection`, which the
     // modal seeds from this same target.)
     initialTarget?: MarkdownEmbedInitialTarget;
-    // The editing document's own URL. The label and the inserted ref are both
-    // relativized against it, so a fallback URL label reads as `../Type/id` —
-    // the same form the pane serializes into the directive.
+    // The editing document's own URL. The pane relativizes the inserted ref
+    // against it, so the directive serializes in the `../Type/id` form.
     documentBaseUrl?: string;
     // Fired when the user clicks "Remove" in `current` mode. The modal
     // resolves its deferred with `{ remove: true }`.
