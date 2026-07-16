@@ -85,19 +85,13 @@ export default class ToolService extends Service {
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   executedToolRequestIds = new TrackedSet<string>();
   // Requests the auto-execution flow has claimed for resolution. Drain
-  // passes can overlap (each replace event queues another debounced drain,
-  // and the flush promise releases every waiter at once), and the records
-  // above are written only after validation's slow awaits — so without a
-  // claim, two overlapping passes could both get past the guards and carry
-  // the same request to contradictory terminal results (an 'invalid' from
-  // a stale tools snapshot alongside an 'applied' from a fresh one), after
-  // which the model, told the call failed, re-issues it and the command
-  // runs twice. A claim is taken synchronously before validation's first
-  // await, so exactly one pass resolves a given request, and every
-  // resolution — including 'invalid' — is terminal for auto-execution:
-  // claims are never released, and whichever pass holds one carries the
-  // request to its terminal result. The user's manual "Try Anyway" path
-  // bypasses claims entirely — it goes straight to `run`.
+  // passes can overlap, and the records above are written only after
+  // validation's slow awaits — so two overlapping passes could resolve
+  // the same request twice (a stale-snapshot 'invalid' alongside an
+  // 'applied', after which the model re-issues the call). A claim is a
+  // synchronous check-and-set before validation's first await: exactly
+  // one pass carries a request to its terminal result. Claims are never
+  // released; the manual "Try Anyway" path bypasses them.
   claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
