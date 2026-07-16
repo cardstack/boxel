@@ -7,7 +7,10 @@ description: Write up a production or staging incident (outage, degradation, 5xx
 
 This skill keeps every boxel incident write-up in one recognizable house style and one honest voice, so a reader who has seen one report can read the next at a glance. It covers **how to structure, word, and publish** the report — not how to investigate. Gather the evidence first (see Step 0), then render it here.
 
-The canonical examples are the 2026-07-15 staging 503 report and the 2026-07-16 staging 504 report — both built to the structure and tone below. New reports should look and read like their siblings.
+The canonical examples — both built to the structure and tone below; new reports should look and read like these siblings (open in a browser signed in to the Cardstack org):
+
+- 2026-07-15 staging 503 — <https://claude.ai/code/artifact/97592f4d-372b-4727-8220-c3a32b96d001>
+- 2026-07-16 staging 504 — <https://claude.ai/code/artifact/02f27e4b-ddbf-485e-a1fd-319eedd2dca1>
 
 ## Step 0 — investigate first; the report renders evidence, never assumptions
 
