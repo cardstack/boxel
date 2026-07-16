@@ -24,6 +24,9 @@ export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
   @tracked toolCallStatus?: ToolCallStatus;
   @tracked toolResultFileDef?: SerializedFile;
+  // origin_server_ts of the event whose chunk last wrote toolRequest, so
+  // builder passes finishing out of order can't regress it to stale data.
+  toolRequestEventTs = 0;
 
   constructor(
     public message: Message,

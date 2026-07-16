@@ -125,4 +125,91 @@ module('Unit | matrix | message-builder', function (hooks) {
       'no MessageTool is built until the request has an id',
     );
   });
+
+  test('an id-less tool request chunk is also skipped on the initial build path', async function (assert) {
+    // A reload can make the streaming edit the first loaded event for the
+    // message, so buildMessage sees the id-less chunk directly.
+    let idlessEvent = {
+      ...streamingEvent,
+      content: {
+        ...streamingEvent.content,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [{ name: 'switch-submode_dd88' }],
+      },
+    } as unknown as CardMessageEvent;
+
+    let message = await new MessageBuilder(
+      idlessEvent,
+      this.owner,
+      builderContext(),
+    ).buildMessage();
+
+    assert.strictEqual(
+      message.tools.length,
+      0,
+      'no MessageTool is built from an id-less chunk on initial build',
+    );
+  });
+
+  test('an older pass finishing late cannot regress a tool request to stale chunk data', async function (assert) {
+    let message = await new MessageBuilder(
+      streamingEvent,
+      this.owner,
+      builderContext(),
+    ).buildMessage();
+
+    function replaceEventAt(ts: number, submode: string) {
+      return {
+        ...streamingEvent,
+        origin_server_ts: ts,
+        content: {
+          ...streamingEvent.content,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'one-request',
+              name: 'switch-submode_dd88',
+              arguments: JSON.stringify({
+                description: 'Switch submode',
+                attributes: { submode },
+              }),
+            },
+          ],
+        },
+      } as unknown as CardMessageEvent;
+    }
+
+    // The newer pass is started first, so it pushes the MessageTool while
+    // the older pass is still parked in buildMessageCommand; the older
+    // pass's re-check must not overwrite the newer chunk with stale data.
+    await Promise.all([
+      new MessageBuilder(
+        replaceEventAt(3000, 'code'),
+        this.owner,
+        builderContext(),
+      ).updateMessage(message),
+      new MessageBuilder(
+        replaceEventAt(2000, 'interact'),
+        this.owner,
+        builderContext(),
+      ).updateMessage(message),
+    ]);
+    assert.strictEqual(message.tools.length, 1, 'still a single MessageTool');
+    assert.strictEqual(
+      message.tools[0].toolRequest.arguments?.attributes?.submode,
+      'code',
+      'the newer chunk survives an older overlapping pass',
+    );
+
+    // Same for the sequential path: an older event applied after a newer
+    // one (out-of-order delivery) must not regress the request either.
+    await new MessageBuilder(
+      replaceEventAt(1500, 'interact'),
+      this.owner,
+      builderContext(),
+    ).updateMessage(message);
+    assert.strictEqual(
+      message.tools[0].toolRequest.arguments?.attributes?.submode,
+      'code',
+      'the newer chunk survives a late-delivered older event',
+    );
+  });
 });

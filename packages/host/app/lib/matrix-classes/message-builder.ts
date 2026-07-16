@@ -260,12 +260,13 @@ export default class MessageBuilder {
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeToolRequest(encodedCommandRequest);
+        this.applyToolRequestChunk(command, encodedCommandRequest);
       } else {
         let built = await this.buildMessageCommand(
           message,
           decodeToolRequest(encodedCommandRequest),
         );
+        built.toolRequestEventTs = this.event.origin_server_ts;
         // buildMessageCommand awaits network loads (resolving the tool's
         // declaring skill), so a concurrent build for a later replace of the
         // same message can land first. Re-check before pushing: a duplicate
@@ -275,7 +276,7 @@ export default class MessageBuilder {
           (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
         if (existing) {
-          existing.toolRequest = decodeToolRequest(encodedCommandRequest);
+          this.applyToolRequestChunk(existing, encodedCommandRequest);
         } else {
           message.tools.push(built);
         }
@@ -316,6 +317,21 @@ export default class MessageBuilder {
     message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
+  // Builder passes finishing out of order must not regress a MessageTool's
+  // request to an older event's chunk — validation and auto-execution would
+  // then run against stale arguments. Apply a chunk only when its event is
+  // at least as new as the one that last wrote the request.
+  private applyToolRequestChunk(
+    tool: MessageTool,
+    encodedToolRequest: Partial<EncodedToolRequest>,
+  ) {
+    if (this.event.origin_server_ts < tool.toolRequestEventTs) {
+      return;
+    }
+    tool.toolRequest = decodeToolRequest(encodedToolRequest);
+    tool.toolRequestEventTs = this.event.origin_server_ts;
+  }
+
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let toolRequests =
@@ -325,10 +341,19 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageTool>();
     for (let toolRequest of toolRequests) {
+      // Same guard as updateMessage: a request chunk without an id yet
+      // can't be matched to later chunks or to its result, so building it
+      // would strand a permanently-unresolved MessageTool. This path also
+      // sees such chunks — e.g. a reload that makes the streaming edit the
+      // first loaded event for the message.
+      if (!toolRequest.id) {
+        continue;
+      }
       let command = await this.buildMessageCommand(
         message,
         decodeToolRequest(toolRequest),
       );
+      command.toolRequestEventTs = this.event.origin_server_ts;
       commands.push(command);
     }
     return commands;
