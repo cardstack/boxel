@@ -163,6 +163,16 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         flex: 1 1 14rem;
         min-width: 0;
       }
+      /* isolated fields render text rather than form controls: align the
+         label with the top of the content instead of an input's first line */
+      .default-card-template.isolated
+        :deep(.boxel-field.horizontal:not(.theme-field) > .label-container) {
+        padding-top: 0;
+      }
+      .default-card-template.isolated
+        :deep(.boxel-field.horizontal:not(.theme-field) > .content) {
+        align-self: start;
+      }
       /* below the label min-width (8rem) plus the content flex-basis (14rem)
          the label wraps above the input: give it the full line so its text
          doesn't wrap inside the label column, and drop the padding that
