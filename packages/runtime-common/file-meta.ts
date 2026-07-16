@@ -52,6 +52,79 @@ export async function getContentMeta(
   };
 }
 
+// Reads created_at + content hash/size for many paths in a single query. Only
+// paths with a persisted row are returned; a caller treats an absent path as
+// "no persisted meta for this file" and falls back to its own per-path read.
+// The indexer uses this to prefetch a whole visit set up front so its per-visit
+// created_at / content-meta lookups are served from memory instead of a DB
+// round-trip each.
+export async function getFileMetaForPaths(
+  db: DBAdapter,
+  realmURL: string,
+  localPaths: string[],
+): Promise<
+  Map<
+    string,
+    {
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    }
+  >
+> {
+  let result = new Map<
+    string,
+    {
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    }
+  >();
+  let uniquePaths = Array.from(new Set(localPaths));
+  if (!db || uniquePaths.length === 0) return result;
+
+  // Chunk the IN-list so a large visit set (a from-scratch over a big realm)
+  // stays under the adapter's bind-parameter ceiling — SQLite's is the tight
+  // one — rather than failing the whole pass with a parameter-limit error. Each
+  // chunk is one round-trip; a set within a single chunk is a single query. The
+  // per-adapter sizes match the chunking discipline in index-query-engine /
+  // index-writer (this query uses one IN list + the realm param).
+  let chunkSize = db.kind === 'sqlite' ? 450 : 2500;
+  for (let start = 0; start < uniquePaths.length; start += chunkSize) {
+    let chunk = uniquePaths.slice(start, start + chunkSize);
+    let expr: Expression = [
+      'SELECT file_path, created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
+      param(realmURL),
+      'AND file_path IN',
+      '(',
+    ];
+    chunk.forEach((p, idx) => {
+      if (idx > 0) expr.push(',');
+      expr.push(param(p));
+    });
+    expr.push(')');
+    let rows = await query(db, expr);
+    for (let row of rows) {
+      let path = String(row['file_path']);
+      let created = row['created_at'];
+      let contentHash = row['content_hash'];
+      let contentSize = row['content_size'];
+      result.set(path, {
+        createdAt:
+          typeof created === 'string' ? parseInt(created) : Number(created),
+        contentHash: contentHash == null ? undefined : String(contentHash),
+        contentSize:
+          contentSize == null
+            ? undefined
+            : typeof contentSize === 'string'
+              ? parseInt(contentSize)
+              : Number(contentSize),
+      });
+    }
+  }
+  return result;
+}
+
 // Ensures a created_at row exists for the given path; returns epoch seconds
 export async function ensureFileCreatedAt(
   db: DBAdapter,
