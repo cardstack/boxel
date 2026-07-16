@@ -164,10 +164,12 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         min-width: 0;
       }
       /* below the label min-width (8rem) plus the content flex-basis (14rem)
-         the label has wrapped above the input, so drop the padding that
+         the label wraps above the input: give it the full line so its text
+         doesn't wrap inside the label column, and drop the padding that
          aligns it with the input's first line */
       @container horizontal-field (width < 22rem) {
-        :deep(.label-container) {
+        :deep(.boxel-field.horizontal:not(.theme-field) > .label-container) {
+          flex-basis: 100%;
           padding-top: 0;
         }
       }
