@@ -2348,6 +2348,40 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-edit-preview]').doesNotExist();
     });
 
+    test('edit format wraps only simple contained fields in a label element', async function (assert) {
+      class Pet extends CardDef {}
+      class PetPerson extends CardDef {
+        @field nickname = contains(StringField);
+        @field aliases = containsMany(StringField);
+        @field pet = linksTo(Pet);
+        @field greeting = contains(StringField, {
+          computeVia: function (this: PetPerson) {
+            return `Hi ${this.nickname}`;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { PetPerson, Pet });
+
+      let instance = new PetPerson({ nickname: 'Bee' });
+      await renderCard(loader, instance, 'edit');
+
+      // a <label> wrapper is only safe when the editor is a single form
+      // control: compound and linked editors contain buttons that an implicit
+      // label association would activate when the label text is clicked
+      assert
+        .dom('[data-test-field="nickname"]')
+        .hasTagName('label', 'primitive contains field is a label');
+      assert
+        .dom('[data-test-field="aliases"]')
+        .hasTagName('div', 'containsMany field is not a label');
+      assert
+        .dom('[data-test-field="pet"]')
+        .hasTagName('div', 'linksTo field is not a label');
+      assert
+        .dom('[data-test-field="greeting"]')
+        .hasTagName('div', 'computed field is not a label');
+    });
+
     test('render card-def instance with cardInfo overrides', async function (assert) {
       class Team extends CardDef {}
       class Person extends CardDef {
