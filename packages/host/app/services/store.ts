@@ -1162,11 +1162,11 @@ export default class StoreService extends Service implements StoreInterface {
     },
   );
 
-  // Run a card-`@context` search under the concurrency throttle. The value is,
-  // at runtime, the ember-concurrency task instance, so awaiting it inside a
-  // caller's own (restartable) task links cancellation — a superseded search
-  // frees its slot. Typed as a plain Promise because callers only ever await
-  // the result; they don't drive the task instance directly.
+  // Run `run` under the card-search concurrency throttle (`enqueue` +
+  // maxConcurrency), so no more than the cap of card-initiated searches hit the
+  // realm-server at once and the rest queue. Called from `search` when
+  // `cardInitiated`. Typed as a plain Promise since the caller only awaits the
+  // result. Public so a test can exercise the throttle with controllable work.
   performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
     return this.searchThrottle.perform(run) as unknown as Promise<R>;
   }
