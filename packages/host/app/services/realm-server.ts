@@ -1222,6 +1222,10 @@ export default class RealmServerService extends Service {
       publishedRealmURL,
       timeoutMs: opts?.timeoutMs,
       pollIntervalMs: opts?.pollIntervalMs,
+      // A published realm's rendered HTML is its deliverable, so hold the
+      // Publish UI's "Publishing…" state until the HTML is live, not just the
+      // index.
+      awaitPrerenderHtml: true,
     });
   }
 
