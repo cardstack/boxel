@@ -3,6 +3,12 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
+  applyServerSearchPageBound,
+  isItemLegSearch,
+  runWithSearchTimeBudget,
+  SearchBoundError,
+} from './search-bounds.ts';
+import {
   fieldsetFromParam,
   htmlQueryFromParams,
   parseSearchEntryQueryFromPayload,
@@ -5663,6 +5669,7 @@ export class Realm {
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
+      ...(opts?.signal ? { signal: opts.signal } : {}),
     };
     return await this.#realmIndexQueryEngine.searchEntries(
       searchEntryQuery,
@@ -5706,14 +5713,36 @@ export class Realm {
     try {
       let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
       let duringPrerender = isDuringPrerenderRequest(request);
-      let doc = await this.searchEntries(searchEntryQuery, {
-        cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender the search skips the `loadLinks`
-        // relationship-assembly pass entirely: the host re-resolves every
-        // result from its raw card+source file, so the transitive
-        // `included[]` expansion is throwaway work in this path.
-        omitIncluded: duringPrerender,
-      });
+      // Two bounds hold server-side on the live item leg (never during
+      // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
+      // and the wall-clock time budget. Both hold for every caller — a page
+      // ceiling bounds the result set even when the client card cap was
+      // skipped, and a wall-clock cutoff can't live client-side. The realms and
+      // concurrency caps stay on the card `@context` surface.
+      let itemLegBounded =
+        isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
+      // Reject an over-ceiling explicit page (400, caught below); clamp an
+      // absent page so the query carries a LIMIT.
+      if (itemLegBounded) {
+        searchEntryQuery.itemQuery = applyServerSearchPageBound(
+          searchEntryQuery.itemQuery,
+        );
+      }
+      let runSearch = (signal?: AbortSignal) =>
+        this.searchEntries(searchEntryQuery, {
+          cacheOnlyDefinitions: duringPrerender,
+          // Inside a prerender the search skips the `loadLinks`
+          // relationship-assembly pass entirely: the host re-resolves every
+          // result from its raw card+source file, so the transitive
+          // `included[]` expansion is throwaway work in this path.
+          omitIncluded: duringPrerender,
+          ...(signal ? { signal } : {}),
+        });
+      // Cut an over-budget item-leg search off (408) rather than run it to
+      // completion; the signal stops the `loadLinks` fan-out promptly.
+      let doc = itemLegBounded
+        ? await runWithSearchTimeBudget(runSearch)
+        : await runSearch();
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -5722,6 +5751,16 @@ export class Realm {
         requestContext,
       });
     } catch (e) {
+      if (e instanceof SearchBoundError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message, e.status)),
+          init: {
+            status: e.status,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
       if (e instanceof SearchRequestError) {
         return createResponse({
           body: JSON.stringify(buildSearchErrorBody(e.message)),
