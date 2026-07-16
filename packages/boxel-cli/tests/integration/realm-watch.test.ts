@@ -848,6 +848,62 @@ describe('realm watch (integration)', () => {
     expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
   });
 
+  it('returns promptly when stopped while the initial poll is still blocked', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('hungpoll'),
+      'export const x = 1;\n',
+    );
+    let originalSigint = [...process.listeners('SIGINT')];
+
+    // Gate the initial poll (2nd _mtimes: 1 = initialize, 2 = initial tickAll
+    // poll) so it never resolves on its own, simulating a wedged first poll.
+    let mtimesCallCount = 0;
+    let releaseGate: () => void = () => {};
+    let gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let gatedAuth: RealmAuthenticator = {
+      authedRealmFetch: async (input, init) => {
+        let url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('_mtimes')) {
+          mtimesCallCount++;
+          if (mtimesCallCount === 2) await gate;
+        }
+        return profileManager.authedRealmFetch(input, init);
+      },
+    };
+
+    // No `signal` → the SIGINT handler is registered before the initial poll.
+    let runPromise = watchRealms([{ realmUrl, localDir }], {
+      authenticator: gatedAuth,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+    });
+
+    await waitFor(
+      () =>
+        process.listeners('SIGINT').filter((l) => !originalSigint.includes(l))
+          .length === 1,
+      () => 'watchRealms did not register a SIGINT handler before the poll',
+    );
+    let handler = process
+      .listeners('SIGINT')
+      .filter((l) => !originalSigint.includes(l))[0];
+
+    // Stop while the initial poll is still blocked. watchRealms must return
+    // rather than staying parked on the wedged poll (the registered handler
+    // suppresses Node's default Ctrl+C exit, so a park would look like a hang).
+    (handler as () => void)();
+    let result = await runPromise;
+    releaseGate();
+    expect(result.error).toBeUndefined();
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+    expect(process.listeners('SIGINT')).toEqual(originalSigint);
+  });
+
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {
     let localDir = makeLocalDir();
     await writeRemoteFile(

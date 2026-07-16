@@ -622,10 +622,21 @@ export async function watchRealms(
     process.on('SIGTERM', sigtermHandler);
   }
 
-  // Skip the initial poll if a stop already arrived before we got here.
+  // Run the initial poll, but let a stop that arrives mid-poll win the race so
+  // an interrupt during a slow first poll returns promptly instead of blocking
+  // on the poll (a registered signal handler suppresses Node's default Ctrl+C
+  // termination, so a wedged poll would otherwise look like a hung process).
+  // When the stop wins, the still-pending poll is inert: the watcher is already
+  // shut down and scheduleNextTick is guarded by `stopped`. A stop that already
+  // arrived before we got here skips the poll entirely.
   if (!stopped) {
-    await tickAll();
-    scheduleNextTick();
+    await Promise.race([
+      (async () => {
+        await tickAll();
+        scheduleNextTick();
+      })().catch(() => {}),
+      done,
+    ]);
   }
 
   await done;
