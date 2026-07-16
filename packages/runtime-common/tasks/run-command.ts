@@ -122,13 +122,14 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       priority: jobInfo?.priority,
     });
 
+    reportStatus(jobInfo, 'finish');
+
     if (alertOnError && result.status === 'error') {
       let message = `${jobIdentity(jobInfo)} command ${command} failed in ${normalizedRealmURL}: ${result.error ?? 'unknown error'}`;
       log.error(message);
       throw new Error(message);
     }
 
-    reportStatus(jobInfo, 'finish');
     return result;
   };
 
