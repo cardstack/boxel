@@ -126,6 +126,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       border-radius: 100px;
     }
     .state-indicator.preparing .apply-button {
+      --boxel-button-font: 600 0.625rem / calc(15 / 11) var(--boxel-font-family);
       --boxel-button-color: transparent;
       --boxel-button-text-color: var(--boxel-200);
       /* The theme's disabled-button tokens are light-theme values; on this
