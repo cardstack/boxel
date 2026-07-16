@@ -18,6 +18,7 @@ import {
   type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
+import AiAssistantActionBarUsage from '@cardstack/host/components/ai-assistant/action-bar-usage';
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
 import AiAssistantAttachmentPickerUsage from '@cardstack/host/components/ai-assistant/attachment-picker/usage';
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
@@ -93,6 +94,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
 
   get usageComponents() {
     return [
+      ['AiAssistant::ActionBar', AiAssistantActionBarUsage],
       ['AiAssistant::ApplyButton', AiAssistantApplyButtonUsage],
       ['AiAssistant::CardPicker', AiAssistantAttachmentPickerUsage],
       ['AiAssistant::ChatInput', AiAssistantChatInputUsage],
