@@ -86,10 +86,12 @@ export async function getFileMetaForPaths(
   // Chunk the IN-list so a large visit set (a from-scratch over a big realm)
   // stays under the adapter's bind-parameter ceiling — SQLite's is the tight
   // one — rather than failing the whole pass with a parameter-limit error. Each
-  // chunk is one round-trip; a set within a single chunk is a single query.
-  let CHUNK_SIZE = 500;
-  for (let start = 0; start < uniquePaths.length; start += CHUNK_SIZE) {
-    let chunk = uniquePaths.slice(start, start + CHUNK_SIZE);
+  // chunk is one round-trip; a set within a single chunk is a single query. The
+  // per-adapter sizes match the chunking discipline in index-query-engine /
+  // index-writer (this query uses one IN list + the realm param).
+  let chunkSize = db.kind === 'sqlite' ? 450 : 2500;
+  for (let start = 0; start < uniquePaths.length; start += chunkSize) {
+    let chunk = uniquePaths.slice(start, start + chunkSize);
     let expr: Expression = [
       'SELECT file_path, created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
       param(realmURL),
