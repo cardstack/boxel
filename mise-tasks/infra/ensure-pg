@@ -10,7 +10,13 @@ if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
   # keeps caching it (it must match the version pinned there):
   # .github/workflows/mirror-test-images.yml and
   # .github/actions/warm-test-images/action.yml.
-  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 >/dev/null 2>&1 || true
+  #
+  # max_connections is raised above postgres's default of 100 because one
+  # boxel-pg backs every service in a test stack — realm servers plus their
+  # worker pools, and the matrix suite stacks a second isolated set on top —
+  # and each opens its own pg pool (up to PG_POOL_MAX=40), so the default
+  # ceiling is exhausted under load. Keep this in sync with start-pg.sh.
+  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 -c max_connections=300 >/dev/null 2>&1 || true
 fi
 # Ensure the container is running (handles both the race case and stopped containers)
 docker start boxel-pg >/dev/null 2>&1 || true
