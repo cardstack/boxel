@@ -13,6 +13,10 @@ const CardDefRef = {
   module: 'https://cardstack.com/base/card-api',
   name: 'CardDef',
 };
+const BaseDefRef = {
+  module: 'https://cardstack.com/base/card-api',
+  name: 'BaseDef',
+};
 
 const DEDUP = { eq: { _isCardInstanceFile: false } };
 
@@ -211,12 +215,29 @@ describe('composeMixedScopeDedup — invariant mixed-scope output', () => {
   it('leaves a narrowing positive type anchor unchanged', () => {
     let byType = { filter: { type: SkillRef } };
     expect(composeMixedScopeDedup(byType)).toBe(byType);
-    let byOn = { filter: { on: CardDefRef, eq: { cardTitle: 'x' } } };
+    let byOn = { filter: { on: SkillRef, eq: { skillTitle: 'x' } } };
     expect(composeMixedScopeDedup(byOn)).toBe(byOn);
     let nested = {
       filter: { every: [{ type: SkillRef }, { eq: { status: 'active' } }] },
     };
     expect(composeMixedScopeDedup(nested)).toBe(nested);
+  });
+
+  it('still dedups when the only anchor is a kind-spanning root ref', () => {
+    // Every file row carries BaseDef in its type chain, so a root-ref anchor
+    // matches both rows of a card `.json` — it doesn't narrow the kind.
+    expect(composeMixedScopeDedup({ filter: { type: BaseDefRef } })).toEqual({
+      filter: { every: [{ type: BaseDefRef }, DEDUP] },
+    });
+    let byOn = { filter: { on: CardDefRef, eq: { cardTitle: 'x' } } };
+    expect(composeMixedScopeDedup(byOn)).toEqual({
+      filter: { every: [byOn.filter, DEDUP] },
+    });
+    // The scoped-alias spelling of the base-realm module counts too.
+    let aliasRef = { module: '@cardstack/base/card-api', name: 'FileDef' };
+    expect(composeMixedScopeDedup({ filter: { type: aliasRef } })).toEqual({
+      filter: { every: [{ type: aliasRef }, DEDUP] },
+    });
   });
 
   it('still dedups when the type anchor is negated', () => {
