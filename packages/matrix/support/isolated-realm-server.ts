@@ -463,25 +463,17 @@ export async function startServer({
     // Worker tiers for this shared, contended stack. Both Playwright
     // workers (fullyParallel) funnel their realm provisioning into one
     // worker manager, and each new workspace enqueues a from-scratch index
-    // (priority 10) plus a ~110-file, ~10s prerender-html sweep (priority 9).
-    // Priority is a pool-reservation floor, not an ordering — within a pool
-    // the queue dequeues oldest-first (see runtime-common/queue.ts) — so a
-    // newer index job is NOT pulled ahead of an already-queued prerender-html
-    // sweep in the same pool. That is what made createRealm (and new-user
-    // provisioning, which blocks on a personal-realm index before the
-    // workspace chooser renders) time out: the index sat behind ~10s render
-    // sweeps until it blew its settle budget.
-    //
-    // A dedicated user-index worker (floor 10) is the fix: it claims only
-    // indexing jobs and never the slower prerender-html tier below it, so an
-    // index job always has a lane that a render sweep can't hold. Index jobs
-    // are short (a fresh realm indexes in a few seconds once dequeued), so
-    // one is enough for the two-Playwright-worker producer rate.
+    // plus a ~110-file, ~10s prerender-html sweep. User indexing and
+    // prerender-html are co-equal (both priority 10 — see
+    // runtime-common/queue.ts: a published realm's rendered HTML is as
+    // first-class as its search index), so these three high-tier workers all
+    // floor at 10 and serve both kinds of user work. What keeps indexing
+    // (which gates createRealm / new-user provisioning) and rendering (which
+    // gates published-realm serving) both moving is capacity, not a dedicated
+    // lane: three user-work workers absorb the two-Playwright-worker producer
+    // rate. (The split across the two count knobs is immaterial now that both
+    // floor at 10; kept separate only for symmetry with production.)
     `--userIndexCount=1`,
-    // Two high-priority workers still carry the prerender-html sweeps (and
-    // spill over onto indexing when free). Keep two, not one: republishing
-    // waits on the prerender-html job to regenerate the published HTML, so
-    // this tier must not become the new bottleneck.
     `--highPriorityCount=2`,
 
     `--fromUrl='https://localhost:4205/test/'`,

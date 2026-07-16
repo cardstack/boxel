@@ -672,16 +672,16 @@ let adapter: PgAdapter;
   eventSink.setAdapter(adapter);
 
   // Each pool's minimum priority is a dequeue floor: its workers only
-  // claim jobs at or above it, oldest-first among those. The user-index
-  // pool floors at the user-initiated indexing tier, so it claims only
-  // user indexing jobs and never the (orders-of-magnitude slower)
-  // prerender-html work one tier below — a dedicated lane that keeps
-  // index jobs (which gate createRealm and new-user provisioning) from
-  // waiting behind a prerender-html sweep already queued in the shared
-  // high-priority pool. The high-priority pool floors at the
-  // user-initiated prerender-html tier so it serves all user-initiated
-  // work — prerender-html included — and never system-tier jobs; the
-  // all-priority pool floors at the lowest tier and serves everything.
+  // claim jobs at or above it, oldest-first among those. User-initiated
+  // indexing and prerender-html are co-equal (both `userInitiatedPriority`
+  // — a published realm's rendered HTML is as first-class as its search
+  // index), so the user-index and high-priority pools both floor at that
+  // tier and serve all user-initiated work — indexing and prerender-html
+  // alike — and never system-tier jobs. The two counts stay separate knobs
+  // for deployment flexibility but land equivalent floor-10 workers; size
+  // the total to the user-work rate so neither indexing nor rendering
+  // starves the other. The all-priority pool floors at the lowest tier and
+  // serves everything, including system-initiated prerender-html.
   for (let i = 0; i < userIndexCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings);
   }
