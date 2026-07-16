@@ -1185,10 +1185,18 @@ export class RenderRunner {
             };
           }
         }
-        extractResponse.error = this.#mergeConsoleErrors(
+        // The merge always runs so the pass drains the page's console-error
+        // buffer, but only a produced error is assigned: an unconditional
+        // assignment would plant an `error: undefined` own-key, making a
+        // standalone extract deep-unequal to a fused one that carries no
+        // error key at all.
+        let mergedExtractError = this.#mergeConsoleErrors(
           pageId,
           extractResponse.error,
         );
+        if (mergedExtractError) {
+          extractResponse.error = mergedExtractError;
+        }
         response.fileExtract = extractResponse;
         if (poolInfo.evicted) {
           response.pageUnusableError =
