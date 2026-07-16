@@ -42,7 +42,7 @@ class RenderHtmlTemplate extends Component<Signature> {
   // A no-realm card search during prerender targets the realm of the card
   // being rendered.
   private get currentRealm(): string | undefined {
-    return this.args.model?.[realmURL]?.href;
+    return this.args.model?.instance?.[realmURL]?.href;
   }
 
   @cached

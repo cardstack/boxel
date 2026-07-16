@@ -360,15 +360,15 @@ export class SearchResource<
     this.activeQuery = query;
     this.#doWhileRefreshing = doWhileRefreshing;
     this.#dependencyTracking = named.dependencyTracking;
-    let noRealms = realms === undefined || realms.length === 0;
     // A no-realm card search targets the current realm (the realm the
     // `@context` was provided with), never every visible realm. A host-internal
     // search (not card-initiated) keeps the all-realms default.
-    this.realmsToSearch = !noRealms
-      ? realms.map(ri)
-      : this.#cardInitiated
-        ? this.#currentRealmList()
-        : this.realmServer.availableRealmIdentifiers;
+    this.realmsToSearch =
+      realms !== undefined && realms.length > 0
+        ? realms.map(ri)
+        : this.#cardInitiated
+          ? this.#currentRealmList()
+          : this.realmServer.availableRealmIdentifiers;
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );

@@ -1047,6 +1047,11 @@ export default class StoreService extends Service implements StoreInterface {
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
+    opts?: {
+      includeMeta?: false;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      cardInitiated?: boolean;
+    },
   ): Promise<T[]>;
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,

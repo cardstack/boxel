@@ -79,10 +79,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       onRealmSetup,
     });
 
-    hooks.afterEach(function () {
-      resetSearchBoundsForTests();
-    });
-
     function postSearch(body: Record<string, unknown>) {
       return request
         .post(searchPath)
