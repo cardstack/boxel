@@ -352,6 +352,7 @@ const ALL_TEST_FILES: string[] = [
   './superseded-search-surface-removed-test',
   './search-entry-test',
   './search-entries-engine-test',
+  './search-bounds-test',
   './coerce-error-message-test',
   './realm-operations-test',
   './resolve-published-realm-url-test',

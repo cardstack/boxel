@@ -48,7 +48,10 @@ import {
   logger,
   formattedError,
   stringifyErrorForLog,
+  applySearchPageBound,
+  assertRealmsBound,
   isJsonContentType,
+  SEARCH_CONCURRENCY_CAP,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
@@ -1044,6 +1047,11 @@ export default class StoreService extends Service implements StoreInterface {
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
+    opts?: {
+      includeMeta?: false;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      cardInitiated?: boolean;
+    },
   ): Promise<T[]>;
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
@@ -1051,6 +1059,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts: {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      cardInitiated?: boolean;
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
   async search<T extends CardDef | FileDef = CardDef>(
@@ -1059,6 +1068,11 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       includeMeta?: boolean;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      // Set only by the card `@context` surfaces (getCards + the card-facing
+      // store). Applies the caps that protect against untrusted card code —
+      // page size, realms fan-out, and the concurrency throttle — none of which
+      // constrain the host app's own direct search calls.
+      cardInitiated?: boolean;
     },
   ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
@@ -1066,17 +1080,36 @@ export default class StoreService extends Service implements StoreInterface {
         `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
       );
     }
-    let searchRealms = this.normalizeSearchRealms(realms);
+    // Host callers resolve an absent/empty realm list to every realm the user
+    // can see. Card `@context` callers arrive with the current realm already
+    // resolved into `realms` (see cardFacingStore / SearchResource); an empty
+    // list there means the card's current realm is unknown, so search nothing
+    // rather than fan out to every realm.
+    let searchRealms = opts?.cardInitiated
+      ? this.normalizeRealmPaths(realms)
+      : this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
       return opts?.includeMeta
         ? { instances: [], meta: { page: { total: 0 } } }
         : [];
     }
-    let result = await this.fetchAndHydrateSearchResults<T>(
-      query,
-      searchRealms,
-      opts?.dependencyTrackingContext,
-    );
+    if (opts?.cardInitiated) {
+      // Enforce the card-facing caps on the resolved request: the realms cap on
+      // the (already current-realm-resolved) list, and the page cap on the
+      // query. These throw a SearchBoundError the caller surfaces as a search
+      // error.
+      assertRealmsBound(searchRealms);
+      query = applySearchPageBound(query);
+    }
+    let run = () =>
+      this.fetchAndHydrateSearchResults<T>(
+        query,
+        searchRealms,
+        opts?.dependencyTrackingContext,
+      );
+    let result = opts?.cardInitiated
+      ? await this.performThrottledSearch(run)
+      : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1115,13 +1148,75 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  private normalizeSearchRealms(realms: string[] | undefined): string[] {
-    let normalizedRealms = (realms ?? [])
+  // Canonicalize a realm list to RealmPaths URLs, dropping unparseable entries.
+  // No fallback: an empty input yields an empty list (the card path relies on
+  // this to mean "search nothing" rather than "search everything").
+  private normalizeRealmPaths(realms: string[] | undefined): string[] {
+    return (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
       .filter(Boolean);
+  }
+
+  // The host default: an absent/empty realm list means every realm the user can
+  // see.
+  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+    let normalizedRealms = this.normalizeRealmPaths(realms);
     return normalizedRealms.length > 0
       ? normalizedRealms
       : this.realmServer.availableRealmIdentifiers;
+  }
+
+  // Client-side concurrency throttle for card-initiated (`@context`) item-leg
+  // searches. `getSearchResource` — the function bound as `getCards` on the
+  // card `@context` — routes its search through this task; the host app's own
+  // direct `store.search` / `getSearch` callers do not, so the trusted host is
+  // never throttled. `enqueue` + `maxConcurrency` queues (never drops) excess
+  // card searches, so a card firing many searches at once (e.g. a per-keystroke
+  // grid) can't fan a burst of concurrent `_federated-search` requests at the
+  // realm-server. The server's per-request bounds (page / realms / time) are
+  // the un-overridable backstop; this keeps well-behaved cards from tripping
+  // them in the first place.
+  private searchThrottle = task(
+    { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run `run` under the card-search concurrency throttle (`enqueue` +
+  // maxConcurrency), so no more than the cap of card-initiated searches hit the
+  // realm-server at once and the rest queue. Called from `search` when
+  // `cardInitiated`. Typed as a plain Promise since the caller only awaits the
+  // result. Public so a test can exercise the throttle with controllable work.
+  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
+    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  }
+
+  // The store handed to cards as `@context.store`, bound to the realm the
+  // `@context` was provided with (`getCurrentRealm`). It behaves exactly like
+  // the store service except `search` runs card-initiated — under the page,
+  // realms, and concurrency caps — and a search that names no realm targets the
+  // current realm instead of every realm the user can see. So a card can't
+  // dodge the caps (or fan out to all realms) by reaching for
+  // `@context.store.search` directly instead of `getCards`. Every other method
+  // delegates straight through. The host app injects the store service itself,
+  // never this view, so host search is unconstrained. `searchEntries` isn't on
+  // the card-facing `Store` interface, so the html leg needs no handling here.
+  cardFacingStore(getCurrentRealm: () => string | undefined): StoreInterface {
+    let store = this;
+    return new Proxy(store, {
+      get(target, prop) {
+        if (prop === 'search') {
+          return (query: Query, realmURLs?: string[]) => {
+            let current = getCurrentRealm();
+            let realms = realmURLs ?? (current ? [current] : ([] as string[]));
+            return target.search(query, realms, { cardInitiated: true });
+          };
+        }
+        let value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as unknown as StoreInterface;
   }
 
   private async fetchAndHydrateSearchResults<
@@ -1461,6 +1556,12 @@ export default class StoreService extends Service implements StoreInterface {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
       dependencyTracking?: RuntimeDependencyTrackingContext;
+      // Set by the `@context` providers (the card-facing `getCards`): run the
+      // search under the card caps and default a no-realm search to
+      // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
+      // support, the render-store hook), which stay unconstrained.
+      cardInitiated?: boolean;
+      getDefaultRealm?: () => string | undefined;
       seed?: {
         cards: T[];
         searchURL?: string;
@@ -1479,6 +1580,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
+    // `cardInitiated` + `getDefaultRealm` ride through `opts`: the `@context`
+    // providers pass them (card-facing `getCards`); other callers don't and stay
+    // unconstrained.
     return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
       ...opts,
       storeService: this,

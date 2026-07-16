@@ -129,6 +129,11 @@ export type SearchOpts = {
   // applies it as a SQL `i.url IN (...)` filter, so it must reach the engine
   // opts — not only the cache key — for the subset to actually narrow results.
   cardUrls?: string[];
+  // Cooperative-cancellation signal for the per-request time budget. When the
+  // search handler cuts an over-budget item-leg search off, this aborts so the
+  // engine's `loadLinks` fan-out stops promptly instead of running to
+  // completion. Threaded the same way as `timings`.
+  signal?: AbortSignal;
 };
 
 // Indirection so a host integration test can deterministically capture

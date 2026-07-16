@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
@@ -12,6 +13,8 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   CardContextName,
+  realmURL,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/card-search/search-results';
@@ -36,9 +39,32 @@ class RenderHtmlTemplate extends Component<Signature> {
     return getCard as unknown as GetCardType;
   }
 
+  // A no-realm card search during prerender targets the realm of the card
+  // being rendered.
+  private get currentRealm(): string | undefined {
+    return this.args.model?.instance?.[realmURL]?.href;
+  }
+
+  @cached
+  private get cardStore() {
+    return this.store.cardFacingStore(() => this.currentRealm);
+  }
+
   @provide(GetCardsContextName)
   private get getCards() {
-    return this.store.getSearchResource.bind(this.store);
+    let store = this.store;
+    let getDefaultRealm = () => this.currentRealm;
+    return (
+      parent: object,
+      getQuery: () => Query | undefined,
+      getRealms?: () => string[] | undefined,
+      opts?: { isLive?: boolean; doWhileRefreshing?: () => void },
+    ) =>
+      store.getSearchResource(parent, getQuery, getRealms, {
+        ...opts,
+        cardInitiated: true,
+        getDefaultRealm,
+      });
   }
 
   @provide(GetCardCollectionContextName)
@@ -53,7 +79,7 @@ class RenderHtmlTemplate extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store,
+      store: this.cardStore,
       searchResultsComponent: SearchResults,
       mode: 'host',
       submode: 'host',

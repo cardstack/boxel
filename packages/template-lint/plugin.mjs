@@ -1,4 +1,5 @@
 import requireScopedStyle from './lib/require-scoped-style.mjs';
+import noNestedScopedStyle from './lib/no-nested-scoped-style.mjs';
 import noDataTestSelector from './lib/no-data-test-selector.mjs';
 import noUnusedBlockParamsExceptUnderscore from './lib/no-unused-block-params-except-underscore.mjs';
 
@@ -7,6 +8,7 @@ export default {
 
   rules: {
     'require-scoped-style': requireScopedStyle,
+    'no-nested-scoped-style': noNestedScopedStyle,
     'no-data-test-selector': noDataTestSelector,
     'no-unused-block-params-except-underscore':
       noUnusedBlockParamsExceptUnderscore,
@@ -17,6 +19,7 @@ export default {
       extends: 'recommended',
       rules: {
         'require-scoped-style': true,
+        'no-nested-scoped-style': true,
         'no-data-test-selector': true,
 
         // Replace core `no-unused-block-params` with an underscore-aware
