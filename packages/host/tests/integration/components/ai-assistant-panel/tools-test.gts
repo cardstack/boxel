@@ -366,6 +366,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'change-cards-in-stack',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -634,6 +635,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'result-event-dispatch',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -719,6 +721,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'search-result-dispatch',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -1171,6 +1174,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'view-code-panel-status',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
