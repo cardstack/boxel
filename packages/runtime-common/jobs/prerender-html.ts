@@ -7,6 +7,7 @@ import {
 } from '../queue.ts';
 import { param, query, type PgPrimitive } from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
+import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
@@ -61,17 +62,20 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
 // on `generation` (not job status) sidesteps the fire-and-forget enqueue race
 // and never settles on a prior publish's stale (lower-generation) rows.
 // Resolves true when caught up, false on timeout.
+//
+// Woken by NOTIFY rather than tight-polling: pg-queue emits `NOTIFY
+// jobs_finished` when a job's finalize transaction commits, and the
+// prerender-html batch's swap is already durable by then, so re-checking on
+// that signal catches the current generation landing near-instantly. The
+// periodic poll is a safety net for a missed notification and for adapters
+// without pub/sub (SQLite has no LISTEN), so it stays coarse.
 export async function awaitPublishedHtmlReady(
   dbAdapter: DBAdapter,
   realmURL: string,
-  opts?: { timeoutMs?: number; intervalMs?: number },
+  opts?: { timeoutMs?: number; pollIntervalMs?: number },
 ): Promise<boolean> {
   let timeoutMs = opts?.timeoutMs ?? 60_000;
-  // Poll at 250ms so readiness returns promptly once the render batch lands.
-  // The probe is a single indexed `SELECT 1 … LIMIT 1`, so the extra query
-  // volume within one blocking request is cheap; the caller's ~1s re-poll is a
-  // coarse fallback, not the cadence readiness responsiveness should track.
-  let intervalMs = opts?.intervalMs ?? 250;
+  let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
   let [genRow] = (await query(dbAdapter, [
     'SELECT current_generation FROM realm_generations WHERE realm_url =',
     param(realmURL),
@@ -81,8 +85,8 @@ export async function awaitPublishedHtmlReady(
     // The realm has never been indexed — there is no generation to await.
     return true;
   }
-  let deadline = Date.now() + timeoutMs;
-  for (;;) {
+
+  let hasCaughtUp = async () => {
     let rows = await query(dbAdapter, [
       'SELECT 1 FROM prerendered_html WHERE realm_url =',
       param(realmURL),
@@ -90,13 +94,73 @@ export async function awaitPublishedHtmlReady(
       param(currentGeneration),
       'LIMIT 1',
     ]);
-    if (rows.length > 0) {
-      return true;
+    return rows.length > 0;
+  };
+
+  if (await hasCaughtUp()) {
+    return true;
+  }
+
+  // Feature-detected: PgAdapter exposes `subscribe`; SQLite does not and falls
+  // back to the poll below.
+  let subscribe = (
+    dbAdapter as unknown as {
+      subscribe?: (
+        channel: string,
+        handler: () => void,
+      ) => Promise<{ unsubscribe: () => Promise<void> }>;
     }
-    if (Date.now() >= deadline) {
-      return false;
+  ).subscribe;
+
+  let ready = new Deferred<boolean>();
+  let settled = false;
+  let settle = (value: boolean) => {
+    if (!settled) {
+      settled = true;
+      ready.fulfill(value);
     }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  };
+  let recheck = () => {
+    hasCaughtUp().then(
+      (caughtUp) => {
+        if (caughtUp) {
+          settle(true);
+        }
+      },
+      () => {
+        // A transient query error just waits for the next signal / poll tick.
+      },
+    );
+  };
+
+  let subscription: { unsubscribe: () => Promise<void> } | undefined;
+  let poll = setInterval(recheck, pollIntervalMs);
+  let timer = setTimeout(() => settle(false), timeoutMs);
+  // Subscribe fire-and-forget: the poll is the guarantee, so a slow or failed
+  // LISTEN must never block the result or the timeout. If it comes up after
+  // we've already settled, just tear it down; otherwise re-check once, since a
+  // row may have landed between the check above and the LISTEN establishing.
+  if (subscribe) {
+    subscribe.call(dbAdapter, 'jobs_finished', recheck).then(
+      (sub) => {
+        if (settled) {
+          void sub.unsubscribe();
+        } else {
+          subscription = sub;
+          recheck();
+        }
+      },
+      () => {
+        // LISTEN setup failed — rely on the poll.
+      },
+    );
+  }
+  try {
+    return await ready.promise;
+  } finally {
+    clearInterval(poll);
+    clearTimeout(timer);
+    await subscription?.unsubscribe();
   }
 }
 
