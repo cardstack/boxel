@@ -30,6 +30,78 @@ export function setupQUnit() {
   setup(QUnit.assert);
   QUnit.config.autostart = false;
 
+  // Post-suite teardown diagnostics.
+  //
+  // A shard intermittently fails with a synthetic `not ok N - error /
+  // Browser timeout exceeded: 60s` attributed to whichever test ran last.
+  // That error is emitted by testem when the browser's socket disconnects
+  // before the suite reports done: testem waits `browser_disconnect_timeout`
+  // (60s) for a reconnect, gets none, and reports the browser dead. Every
+  // real test in these runs passes — the failure lives entirely in the
+  // window between the last test finishing and the browser reporting the
+  // suite complete, so the ordinary TAP output tells us nothing about it.
+  //
+  // These markers narrow that window on the next failure:
+  //   - HOST_SUITE_DONE present but testem still times out  → the browser
+  //     finished; the socket/handshake dropped (environment-level).
+  //   - HOST_SUITE_DONE absent, HOST_TEARDOWN_BEFORE_SUITE_DONE present →
+  //     the page tore down (navigation/close) before finishing, with the
+  //     last test name + pending-waiter state naming what was still busy.
+  //   - both absent → the browser process died outright (crash / OS OOM
+  //     kill) before any teardown JS could run.
+  let suiteDoneFired = false;
+  let lastTestName = '(none)';
+  let lastTestEndedAt = null;
+  function pendingWaiterSummary() {
+    try {
+      if (!TestWaiters.hasPendingWaiters || !TestWaiters.hasPendingWaiters()) {
+        return 'none';
+      }
+      let state = TestWaiters.getPendingWaiterState();
+      let names = state && state.waiters ? Object.keys(state.waiters) : [];
+      return names.length ? names.join(',') : 'unknown';
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+  QUnit.testDone((details) => {
+    lastTestName = `${details.module} > ${details.name}`;
+    try {
+      lastTestEndedAt = performance ? performance.now() : null;
+    } catch (_) {
+      lastTestEndedAt = null;
+    }
+  });
+  QUnit.done((details) => {
+    suiteDoneFired = true;
+    try {
+      console.log(
+        `HOST_SUITE_DONE total=${details.total} passed=${details.passed} failed=${details.failed} runtime=${details.runtime}ms pendingWaiters=${pendingWaiterSummary()}`,
+      );
+    } catch (_) {
+      /* ignore */
+    }
+  });
+  let logTeardownBeforeDone = (reason) => {
+    if (suiteDoneFired) return;
+    suiteDoneFired = true; // fire once across pagehide/beforeunload
+    try {
+      let sinceLastTest =
+        lastTestEndedAt != null && performance
+          ? `${Math.round(performance.now() - lastTestEndedAt)}ms`
+          : 'na';
+      console.log(
+        `HOST_TEARDOWN_BEFORE_SUITE_DONE reason=${reason} lastTest=${JSON.stringify(lastTestName)} sinceLastTest=${sinceLastTest} pendingWaiters=${pendingWaiterSummary()}`,
+      );
+    } catch (_) {
+      /* ignore */
+    }
+  };
+  window.addEventListener('pagehide', () => logTeardownBeforeDone('pagehide'));
+  window.addEventListener('beforeunload', () =>
+    logTeardownBeforeDone('beforeunload'),
+  );
+
   // Per-module memory delta probe — log each test file's contribution to
   // retained memory, independent of where it falls in shard order. We GC
   // at module boundaries so the start/end snapshots compare like-for-like.

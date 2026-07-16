@@ -78,6 +78,21 @@ if (typeof module !== 'undefined') {
     const multiReporter = new MultiReporter({ reporters });
 
     config.reporter = multiReporter;
+
+    // Capture testem's own internal log to a file. testem only writes its
+    // server-side events (socket attach / disconnect, disconnectCount, the
+    // `socket reconnection limit has been exceeded` refusal, `Browser …
+    // finished all tests`, process exit) to `log.stream`, and that stream is
+    // a no-op sink unless `debug` names a path. Those events are the only
+    // record of the browser↔testem handshake that produces the intermittent
+    // post-suite `Browser timeout exceeded` synthetic failure — the TAP
+    // output shows the passing tests but nothing about why the browser is
+    // declared dead afterward. Persist it so the next occurrence shows which
+    // side of the handshake dropped (uploaded as a CI artifact).
+    config.debug = path.join(
+      junitDir,
+      `host-testem-debug-${process.env.HOST_TEST_PARTITION}.log`,
+    );
   }
 
   module.exports = config;
