@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { baseRef } from '@cardstack/runtime-common/constants';
 import {
   searchEntryRequestBody,
   itemsFromSearchEntryDoc,
@@ -218,12 +217,6 @@ describe('composeMixedScopeDedup — invariant mixed-scope output', () => {
       filter: { every: [{ type: SkillRef }, { eq: { status: 'active' } }] },
     };
     expect(composeMixedScopeDedup(nested)).toBe(nested);
-  });
-
-  it('still dedups when the only anchor is a kind-spanning root ref', () => {
-    expect(composeMixedScopeDedup({ filter: { type: baseRef } })).toEqual({
-      filter: { every: [{ type: baseRef }, DEDUP] },
-    });
   });
 
   it('still dedups when the type anchor is negated', () => {

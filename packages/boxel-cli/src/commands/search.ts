@@ -8,12 +8,6 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { resourceIdentity } from '@cardstack/runtime-common/resource-identity';
 import { CARD_INSTANCE_FILE_KEY } from '@cardstack/runtime-common/search-doc-keys';
-import {
-  baseRef,
-  baseCardRef,
-  baseFieldRef,
-  baseFileRef,
-} from '@cardstack/runtime-common/constants';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 
@@ -221,64 +215,35 @@ export function itemsFromSearchEntryDoc(
 // (which matches an absent key too) keeps every other row and drops it.
 //
 // Mirrors the host's search-sheet dedup (`excludeCardInstanceFileRows` /
-// `scopeFilters` in host `card-search/query-builder.ts`). The type-anchor
-// detection mirrors `getTypeRefsFromFilter` / `hasNarrowingPositiveTypeRef`
-// there, reimplemented locally because runtime-common's query-field-utils pulls
-// its `https://cardstack.com/base/*` imports into boxel-cli's dependency-light
-// graph (same boundary the wire-translation helpers above note).
-const ROOT_TYPE_REFS = [baseRef, baseCardRef, baseFieldRef, baseFileRef];
-
-// Root refs (BaseDef/CardDef/FieldDef/FileDef) span kinds rather than narrowing
-// to one, so an anchor on one of them must not suppress the dedup: a
-// `type: baseRef` query still matches both rows of a card `.json`.
-function isRootTypeRef(ref: unknown): boolean {
-  if (typeof ref !== 'object' || ref == null) {
+// `scopeFilters` in host `card-search/query-builder.ts`). The type-anchor check
+// is a local walk rather than an import of runtime-common's
+// `getTypeRefsFromFilter`, whose module pulls the `@cardstack/base/*` graph into
+// boxel-cli's dependency-light build (the same boundary the wire-translation
+// helpers above note).
+//
+// True when the filter carries a positive (non-negated) `type`/`on` anchor. A
+// picked type discriminates the kind by itself — a card type matches only
+// instance rows (no dupe to drop), a file type must stay free to surface a
+// `.json` file row that legitimately matches it — so the dedup is skipped.
+// Polarity flips under each enclosing `not`, so a negated anchor doesn't count.
+function hasPositiveTypeAnchor(filter: unknown, negated = false): boolean {
+  if (typeof filter !== 'object' || filter == null || Array.isArray(filter)) {
     return false;
   }
-  let { module, name } = ref as { module?: unknown; name?: unknown };
-  return ROOT_TYPE_REFS.some(
-    (root) => root.module === module && root.name === name,
-  );
-}
-
-interface TypeRefResult {
-  ref: unknown;
-  negated: boolean;
-}
-
-// Walk a card-rooted filter and collect every type/on anchor with its polarity
-// (flipped under each enclosing `not`).
-function collectTypeRefs(filter: unknown, negated = false): TypeRefResult[] {
-  if (typeof filter !== 'object' || filter == null || Array.isArray(filter)) {
-    return [];
-  }
   let f = filter as Record<string, unknown>;
-  if (f.on != null) {
-    return [{ ref: f.on, negated }];
-  }
-  if (f.type != null) {
-    return [{ ref: f.type, negated }];
+  if (f.on != null || f.type != null) {
+    return !negated;
   }
   if (f.not != null) {
-    return collectTypeRefs(f.not, !negated);
+    return hasPositiveTypeAnchor(f.not, !negated);
   }
   if (Array.isArray(f.every)) {
-    return f.every.flatMap((node) => collectTypeRefs(node, negated));
+    return f.every.some((node) => hasPositiveTypeAnchor(node, negated));
   }
   if (Array.isArray(f.any)) {
-    return f.any.flatMap((node) => collectTypeRefs(node, negated));
+    return f.any.some((node) => hasPositiveTypeAnchor(node, negated));
   }
-  return [];
-}
-
-// True when the filter carries a positive, kind-narrowing type anchor — a
-// picked card type matches only instance rows (no dupe to drop) and a picked
-// file type must stay free to surface a `.json` file row that legitimately
-// matches it. Root refs don't count (see `isRootTypeRef`).
-function hasNarrowingTypeAnchor(filter: unknown): boolean {
-  return collectTypeRefs(filter).some(
-    (r) => !r.negated && !isRootTypeRef(r.ref),
-  );
+  return false;
 }
 
 /**
@@ -287,8 +252,8 @@ function hasNarrowingTypeAnchor(filter: unknown): boolean {
  * instance row) while plain files stay listed.
  *
  * Skipped when the wire `scope` already pins a single kind (`'cards'`/`'files'`)
- * or the filter carries a narrowing positive type anchor — the same rule the
- * host applies. Exported for unit testing.
+ * or the filter carries a positive type anchor — the same rule the host applies.
+ * Exported for unit testing.
  */
 export function composeMixedScopeDedup(
   query: Record<string, unknown>,
@@ -296,7 +261,7 @@ export function composeMixedScopeDedup(
   if (query.scope === 'cards' || query.scope === 'files') {
     return query;
   }
-  if (hasNarrowingTypeAnchor(query.filter)) {
+  if (hasPositiveTypeAnchor(query.filter)) {
     return query;
   }
   let dedup = { eq: { [CARD_INSTANCE_FILE_KEY]: false } };
