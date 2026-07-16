@@ -554,9 +554,13 @@ export class Batch {
   // per-visit `ensureFileCreatedAt` / `getContentMeta` lookups are served from
   // memory. The visit loop knows its whole URL set up front, so one batched
   // read replaces two DB round-trips per visit — the same shape as
-  // `getModifiedTimes` fetching mtimes up front. Rows only ever add
-  // information, so calling this more than once (or with overlapping sets) is
-  // safe.
+  // `getModifiedTimes` fetching mtimes up front. The cached hash/size is a
+  // snapshot as of this call: a file rewritten between the prefetch and its
+  // visit (`persistFileMeta` overwrites the columns) is served the pre-rewrite
+  // values, and the concurrent write's own incremental pass re-indexes it with
+  // the current metadata — the same eventual-consistency the per-visit read had
+  // over the narrower read-file-to-lookup window. Calling this again merges
+  // fresh rows in, so overlapping sets are safe.
   async prefetchFileMeta(localPaths: string[]): Promise<void> {
     let fetched = await getFileMetaForPaths(
       this.#dbAdapter,
