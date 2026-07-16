@@ -84,26 +84,20 @@ export default class ToolService extends Service {
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   executedToolRequestIds = new TrackedSet<string>();
-  // Requests the auto-execution flow has resolved 'invalid'. An invalid
-  // result is terminal for auto-execution: without this record, a later
-  // drain pass can re-validate the same request against updated room state,
-  // execute it, and post a contradictory 'applied' result — and the model,
-  // having already seen 'invalid', re-issues the call, so the command runs
-  // twice. Local (not derived from room events) because the result event
-  // round-trip is slower than consecutive drain passes. The user's manual
-  // "Try Anyway" path doesn't consult this — it goes straight to `run`.
-  invalidatedToolRequestIds = new TrackedSet<string>();
   // Requests the auto-execution flow has claimed for resolution. Drain
   // passes can overlap (each replace event queues another debounced drain,
   // and the flush promise releases every waiter at once), and the records
-  // above are all written only after validation's slow awaits — so two
-  // overlapping passes could both get past the guards and carry the same
-  // request to contradictory terminal results (an 'invalid' from a stale
-  // tools snapshot alongside an 'applied' from a fresh one). A claim is
-  // taken synchronously before validation's first await, so exactly one
-  // pass resolves a given request. Claims are never released: whichever
-  // pass holds the claim carries the request to its terminal result, and
-  // the manual "Try Anyway" path bypasses claims entirely.
+  // above are written only after validation's slow awaits — so without a
+  // claim, two overlapping passes could both get past the guards and carry
+  // the same request to contradictory terminal results (an 'invalid' from
+  // a stale tools snapshot alongside an 'applied' from a fresh one), after
+  // which the model, told the call failed, re-issues it and the command
+  // runs twice. A claim is taken synchronously before validation's first
+  // await, so exactly one pass resolves a given request, and every
+  // resolution — including 'invalid' — is terminal for auto-execution:
+  // claims are never released, and whichever pass holds one carries the
+  // request to its terminal result. The user's manual "Try Anyway" path
+  // bypasses claims entirely — it goes straight to `run`.
   claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
@@ -139,7 +133,6 @@ export default class ToolService extends Service {
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
     this.executedToolRequestIds.clear();
-    this.invalidatedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
@@ -453,12 +446,6 @@ export default class ToolService extends Service {
           if (this.executedToolRequestIds.has(messageTool.id!)) {
             continue;
           }
-          // The status check below covers this too, but only once the
-          // invalid result event has round-tripped into the room resource;
-          // this local record closes the window in between.
-          if (this.invalidatedToolRequestIds.has(messageTool.id!)) {
-            continue;
-          }
           if (
             messageTool.status === 'applied' ||
             messageTool.status === 'invalid'
@@ -551,9 +538,6 @@ export default class ToolService extends Service {
       if (this.executedToolRequestIds.has(commandRequestId)) {
         continue;
       }
-      if (this.invalidatedToolRequestIds.has(commandRequestId)) {
-        continue;
-      }
       // A drain pass that already claimed this request is carrying it to
       // its own terminal result; don't also resolve it invalid here.
       if (this.claimedToolRequestIds.has(commandRequestId)) {
@@ -578,7 +562,6 @@ export default class ToolService extends Service {
       // Terminal for auto-execution: a later drain pass must not execute a
       // request the model has been told was not started.
       this.claimedToolRequestIds.add(commandRequestId);
-      this.invalidatedToolRequestIds.add(commandRequestId);
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
         messageTool.eventId;
@@ -943,13 +926,10 @@ export default class ToolService extends Service {
       }
     }
     if (error) {
-      // An invalid result is terminal for auto-execution: record it before
-      // publishing so no concurrent drain pass re-validates and executes
-      // this request after the model has been told it failed. (The user can
-      // still run it manually — "Try Anyway" bypasses the drain.)
-      if (command.toolRequest.id) {
-        this.invalidatedToolRequestIds.add(command.toolRequest.id);
-      }
+      // The caller claimed this request before validating, so this invalid
+      // result is already terminal for auto-execution. (The user can still
+      // run it manually — "Try Anyway" bypasses the drain.)
+      //
       // CS-11045: Same canonical-event-id resolution as the run task — emit
       // the invalid commandResult linked to the bot-message event currently
       // owning the toolRequest in room state, so ai-bot's /messages view

@@ -2118,7 +2118,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         'validation resolves the request invalid exactly once',
       );
       assert.true(
-        toolService.invalidatedToolRequestIds.has('cs-12103-invalid-terminal'),
+        toolService.claimedToolRequestIds.has('cs-12103-invalid-terminal'),
         'the terminal resolution is recorded locally, not just in the (still in-flight) result event',
       );
 
