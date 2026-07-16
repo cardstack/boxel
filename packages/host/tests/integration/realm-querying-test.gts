@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseCardRef, baseRealm, baseRRI } from '@cardstack/runtime-common';
+import { baseCardRef, baseRRI } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -39,7 +39,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   const sampleCards: CardDocFiles = {
@@ -1202,7 +1202,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by card display name (card type shown in the interface)', async function (assert) {
+    // Anchor to card instances: search is mixed cards + files by default, and
+    // this test asserts the card ordering, so exclude file rows via the type.
     let { data: matching } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
       sort: [
         {
           on: baseCardRef,

@@ -8,23 +8,23 @@ import type { Deferred } from './deferred.ts';
 //
 // The tiers:
 //
-//   | priority | job                                |
-//   | -------- | ---------------------------------- |
-//   | 10       | any user-initiated job             |
-//   | 9        | user-initiated prerender-html      |
-//   | 1        | any system-initiated job           |
-//   | 0        | system-initiated prerender-html    |
+//   | priority | job                                          |
+//   | -------- | -------------------------------------------- |
+//   | 10       | any user-initiated job, incl. prerender-html |
+//   | 1        | system-initiated job (non-prerender-html)    |
+//   | 0        | system-initiated prerender-html              |
 //
-// The prerender-html tiers sit one notch below their initiator tier so
-// a pool's floor can take in an initiator's plain jobs with or without
-// its (orders-of-magnitude slower) HTML rendering work. Two pools
-// exist: the high-priority pool floors at
-// `userInitiatedPrerenderHtmlPriority`, serving all user-initiated
-// work — prerender-html included — and never system-tier jobs; the
-// all-priority pool floors at `systemInitiatedPrerenderHtmlPriority`
-// and serves everything.
+// User-initiated prerender-html is co-equal with user indexing (both 10):
+// for a published realm the rendered HTML is the deliverable served to
+// visitors — as important as the search index — so it is NOT deprioritized
+// below its initiator tier. System-initiated prerender-html stays one notch
+// below system work (background); boot rendering is gated separately and must
+// not crowd out user-tier jobs. The high-priority pool floors at
+// `userInitiatedPrerenderHtmlPriority` (serving all user-initiated work and
+// never system-tier jobs); the all-priority pool floors at
+// `systemInitiatedPrerenderHtmlPriority` and serves everything.
 export const userInitiatedPriority = 10;
-export const userInitiatedPrerenderHtmlPriority = 9;
+export const userInitiatedPrerenderHtmlPriority = 10;
 export const systemInitiatedPriority = 1;
 export const systemInitiatedPrerenderHtmlPriority = 0;
 

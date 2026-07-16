@@ -26,7 +26,7 @@ export default class SortDropdown extends Component<Signature> {
     <div class='sort-options-group' ...attributes>
       <span class='sort-options-label'>Sort by</span>
       <div>
-        <BoxelDropdown>
+        <BoxelDropdown @contentClass='boxel-sort-dropdown-menu-container'>
           <:trigger as |bindings|>
             <BoxelButton
               @kind='secondary-light'
@@ -45,7 +45,13 @@ export default class SortDropdown extends Component<Signature> {
         </BoxelDropdown>
       </div>
     </div>
-
+    {{! template-lint-disable require-scoped-style  }}
+    <style>
+      .boxel-sort-dropdown-menu-container.ember-basic-dropdown-content {
+        background: none;
+      }
+    </style>
+    {{! template-lint-enable require-scoped-style  }}
     <style scoped>
       @layer boxelComponentL2 {
         .sort-options-group {

@@ -320,7 +320,16 @@ export default class HostModeService extends Service {
       body: JSON.stringify({
         realms: [realmRoot],
         cardUrls: [cardJsonURL],
-        filter: { eq: { htmlQuery: { eq: { format: 'head' } } } },
+        // `scope: 'cards'` pins the instance row, dropping the card `.json`'s
+        // dual-indexed file row that shares the `cardUrls` URL — a by-URL card
+        // lookup, so it's exactly the scope's purpose (and immune to the
+        // un-restamped-rows window a stamp-based dedup depends on).
+        scope: 'cards',
+        filter: {
+          eq: {
+            htmlQuery: { eq: { format: 'head' } },
+          },
+        },
         fields: { entry: ['html'] },
       }),
     });

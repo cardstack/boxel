@@ -14,7 +14,9 @@ import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
+  baseRef,
   CardError,
+  internalKeysFor,
   SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -713,8 +715,19 @@ export default class CardPrerender extends Component {
       types: string[],
       renderOptions?: RenderRouteOptions,
     ) => {
+      // BaseDef is part of the searchable `types` chain (so `{ type: baseRef }`
+      // spans cards and files) but it is abstract — a card coerced to BaseDef
+      // has no meaningful fitted/embedded template, so rendering that level is
+      // pure index bloat. Skip it; the ancestor renderings cover the concrete
+      // card types through CardDef.
+      let baseDefKeys = new Set(
+        internalKeysFor(baseRef, undefined, this.network.virtualNetwork),
+      );
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
+        if (baseDefKeys.has(types[i])) {
+          continue;
+        }
         let res = await this.renderHTML.perform(url, format, i, renderOptions);
         ancestors[types[i]] = res as string;
       }

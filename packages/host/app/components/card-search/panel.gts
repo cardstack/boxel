@@ -28,6 +28,9 @@ interface Signature {
      * and the realm picker is disabled.
      */
     lockSelectedRealms?: boolean;
+    // A cards-only chooser: the type picker offers card types only (file types
+    // are hidden so one can't be selected against the card scope).
+    cardsOnly?: boolean;
     onRealmChange?: (selectedRealms: URL[]) => void;
     onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
   };
@@ -59,6 +62,7 @@ export default class SearchPanel extends Component<Signature> {
     realmURLs: this.selectedRealmURLs,
     baseFilter: this.args.baseFilter,
     initialSelectedTypes: this.args.initialSelectedTypes,
+    cardsOnly: this.args.cardsOnly,
   }));
 
   private get initialFocusedSectionId(): string | null {

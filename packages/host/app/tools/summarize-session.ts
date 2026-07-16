@@ -49,7 +49,7 @@ export default class SummarizeSessionTool extends HostBaseTool<
         },
       ];
       const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',

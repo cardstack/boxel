@@ -174,7 +174,7 @@ export default class PatchCodeTool extends HostBaseTool<
     patchedCode: string;
     results: { status: 'applied' | 'failed'; failureReason?: string }[];
   }> {
-    let applyCommand = new ApplySearchReplaceBlockTool(this.commandContext);
+    let applyCommand = new ApplySearchReplaceBlockTool(this.toolContext);
     let content = initialContent;
     let results: { status: 'applied' | 'failed'; failureReason?: string }[] =
       [];
@@ -202,7 +202,7 @@ export default class PatchCodeTool extends HostBaseTool<
     fileUrl: string,
     content: string,
   ): Promise<BaseToolModule.LintAndFixResult> {
-    let lintCommand = new LintAndFixTool(this.commandContext);
+    let lintCommand = new LintAndFixTool(this.toolContext);
     let realmURL = this.realm.url(fileUrl);
     let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
 

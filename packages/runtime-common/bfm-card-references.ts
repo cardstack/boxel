@@ -375,45 +375,20 @@ export interface MarkdownEmbedInitialTarget {
   // from `sizeSpec` so a size-less block directive seeds block placement
   // instead of collapsing to an inline atom.
   kind?: 'inline' | 'block';
+  // The editing document's own URL. The chooser relativizes the picked ref
+  // against it so the inserted directive is `../`-relative, matching the
+  // format-picker insertion path.
+  documentBaseUrl?: string;
 }
 
 export interface MarkdownEmbedChooser {
   chooseCardOrFile(opts: {
     defaultTab?: 'card' | 'file';
+    documentBaseUrl?: string;
   }): Promise<MarkdownEmbedResolution>;
   editEmbed(
     target: MarkdownEmbedInitialTarget,
   ): Promise<MarkdownEmbedResolution>;
-}
-
-const MARKDOWN_EMBED_CHOOSER_KEY = '_CARDSTACK_MARKDOWN_EMBED_CHOOSER';
-
-export async function chooseMarkdownEmbed(
-  opts: { defaultTab?: 'card' | 'file' } = {},
-): Promise<MarkdownEmbedResolution> {
-  let here = globalThis as any;
-  let chooser: MarkdownEmbedChooser | undefined =
-    here[MARKDOWN_EMBED_CHOOSER_KEY];
-  if (!chooser) {
-    throw new Error(
-      `no cardstack markdown-embed chooser is available in this environment`,
-    );
-  }
-  return chooser.chooseCardOrFile(opts);
-}
-
-export async function editMarkdownEmbed(
-  target: MarkdownEmbedInitialTarget,
-): Promise<MarkdownEmbedResolution> {
-  let here = globalThis as any;
-  let chooser: MarkdownEmbedChooser | undefined =
-    here[MARKDOWN_EMBED_CHOOSER_KEY];
-  if (!chooser) {
-    throw new Error(
-      `no cardstack markdown-embed chooser is available in this environment`,
-    );
-  }
-  return chooser.editEmbed(target);
 }
 
 export interface BfmRefRange {

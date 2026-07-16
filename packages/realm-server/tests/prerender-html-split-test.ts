@@ -6,6 +6,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  type DefinitionLookup,
   type Diagnostics,
   type IndexingProgressEvent,
   type Prerenderer,
@@ -25,6 +26,21 @@ import {
   testRealm,
 } from './helpers/index.ts';
 
+// These tests exercise the pass's visit / tombstone / resume logic, not the
+// from-scratch module pre-warm sweep, so they run with `preWarm: false`. The
+// pre-warm deps are consumed only on the sweep path, so they can be stubbed —
+// spread into each `runPrerenderHtmlPass` call.
+const noPreWarmDeps = {
+  preWarm: false as const,
+  definitionLookup: {} as unknown as DefinitionLookup,
+  fetch: (() => {
+    throw new Error(
+      'fetch is not used by the prerender-html pass when preWarm is false',
+    );
+  }) as unknown as typeof globalThis.fetch,
+  realmOwnerUserId: 'test_realm',
+};
+
 function prerenderHtmlArgs(
   overrides: Partial<PrerenderHtmlArgs> = {},
 ): PrerenderHtmlArgs {
@@ -36,6 +52,7 @@ function prerenderHtmlArgs(
     loaderEpoch: 'epoch-a',
     spawningJobId: 100,
     coalescedPublishes: null,
+    preWarm: false,
     ...overrides,
   };
 }
@@ -224,6 +241,54 @@ module(basename(import.meta.filename), function () {
         mergedArgs.generation,
         4,
         'generation is still the max across publishes',
+      );
+    });
+
+    test('a pending merge preserves the pre-warm bit with OR semantics', function (assert) {
+      // A from-scratch-spawned publish (preWarm) merged with incremental-
+      // spawned work must keep the sweep; direction must not matter.
+      for (let [existingPreWarm, incomingPreWarm] of [
+        [true, false],
+        [false, true],
+        [true, true],
+      ] as const) {
+        let existing = prerenderHtmlArgs({ preWarm: existingPreWarm });
+        let incoming = prerenderHtmlArgs({ preWarm: incomingPreWarm });
+        let decision = coalesce(
+          context({
+            incoming: spec(incoming),
+            candidates: [candidate(42, existing)],
+          }),
+        );
+        assert.strictEqual(decision.type, 'join');
+        if (decision.type !== 'join') {
+          throw new Error('expected a join decision');
+        }
+        let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+        assert.true(
+          mergedArgs.preWarm,
+          `pre-warm survives merging preWarm=${existingPreWarm} with preWarm=${incomingPreWarm}`,
+        );
+      }
+    });
+
+    test('a pending merge of two incremental-spawned publishes stays pre-warm-free', function (assert) {
+      let existing = prerenderHtmlArgs({ preWarm: false });
+      let incoming = prerenderHtmlArgs({ preWarm: false });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming),
+          candidates: [candidate(42, existing)],
+        }),
+      );
+      assert.strictEqual(decision.type, 'join');
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.false(
+        mergedArgs.preWarm,
+        'merging two incremental spawns never conjures a realm-wide sweep',
       );
     });
 
@@ -752,6 +817,7 @@ module(basename(import.meta.filename), function () {
         changes: [{ url: cardURL, operation: 'update' }],
         generation: 1,
         loaderEpoch: 'epoch-a',
+        ...noPreWarmDeps,
         indexWriter,
         virtualNetwork,
         reader: stubReader(new Map([[cardURL, cardJSON]])),
@@ -1023,6 +1089,7 @@ module(basename(import.meta.filename), function () {
           auth: 'test-auth',
           jobInfo: info,
           onProgress: (event) => events.push(event),
+          ...noPreWarmDeps,
         });
 
         assert.deepEqual(
@@ -1084,6 +1151,7 @@ module(basename(import.meta.filename), function () {
             auth: 'test-auth',
             jobInfo: jobInfo(),
             onProgress: (event) => events.push(event),
+            ...noPreWarmDeps,
           }),
           /renderer died/,
         );

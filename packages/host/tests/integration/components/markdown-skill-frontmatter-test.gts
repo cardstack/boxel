@@ -16,7 +16,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
 } from '@cardstack/runtime-common';
@@ -70,16 +69,16 @@ module('Integration | markdown skill frontmatter', function (hooks) {
 
   async function loadBase() {
     let { MarkdownDef } = await loader.import<any>(
-      `${baseRealm.url}markdown-file-def`,
+      '@cardstack/base/markdown-file-def',
     );
     let { SkillFrontmatterField } = await loader.import<any>(
-      `${baseRealm.url}skill-frontmatter-field`,
+      '@cardstack/base/skill-frontmatter-field',
     );
     let { FrontmatterField } = await loader.import<any>(
-      `${baseRealm.url}frontmatter-field`,
+      '@cardstack/base/frontmatter-field',
     );
     let { parseFrontmatter } = await loader.import<any>(
-      `${baseRealm.url}frontmatter-parse`,
+      '@cardstack/base/frontmatter-parse',
     );
     return {
       MarkdownDef,

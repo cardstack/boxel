@@ -306,10 +306,10 @@ export interface DefinitionLookupOptions {
 }
 
 // Explicit cache context for a read-through populate. Callers that
-// already know the realm context (the IndexRunner pre-warm, which runs
-// in the worker against a bare lookup that has no registered realm and
-// thus cannot self-resolve a context) supply it directly instead of
-// relying on `buildLookupContext`'s `#realms` / remote-probe resolution.
+// already know the realm context (the worker's module pre-warm, which runs
+// against a bare lookup that has no registered realm and thus cannot
+// self-resolve a context) supply it directly instead of relying on
+// `buildLookupContext`'s `#realms` / remote-probe resolution.
 export interface PopulateDefinitionCacheEntryArgs {
   moduleURL: string;
   realmURL: string;
@@ -344,7 +344,7 @@ export interface DefinitionLookup {
   // Like getCachedDefinitions, but the caller supplies the cache context
   // explicitly rather than letting `buildLookupContext` self-resolve it.
   // Required by callers running against a lookup with no registered realm
-  // (the worker's IndexRunner pre-warm), where self-resolution returns
+  // (the worker's module pre-warm), where self-resolution returns
   // null and the populate silently no-ops.
   populateDefinitionCacheEntry(
     args: PopulateDefinitionCacheEntryArgs,
@@ -508,7 +508,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.loadDefinitionCacheEntry({
       ...args,
       moduleURL: canonicalURL(args.moduleURL, undefined, this.#virtualNetwork),
-      // Pre-warm is speculative and best-effort: the IndexRunner sweeps
+      // Pre-warm is speculative and best-effort: the module pre-warm sweeps
       // every realm `.gts`/`.gjs` to prime sibling card modules, so it
       // also touches modules that aren't cards and fail to prerender
       // (e.g. a non-card `realm.gts`). Persisting those errors would

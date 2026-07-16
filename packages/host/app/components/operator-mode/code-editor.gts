@@ -587,7 +587,7 @@ export default class CodeEditor extends Component<Signature> {
     this.updateFormatActionAvailability();
 
     try {
-      let lintCommand = new LintAndFixTool(this.toolService.commandContext);
+      let lintCommand = new LintAndFixTool(this.toolService.toolContext);
       await applyBoxelFormatting({
         lintAndFix: (input) => lintCommand.execute(input),
         realm: readyFile.realmURL,

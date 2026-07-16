@@ -61,7 +61,7 @@ import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import consumeContext from '../../helpers/consume-context';
 
-import { removeFileExtension } from '../../utils/card-search/types';
+import { removeCardJsonExtension } from '../../utils/card-search/types';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -499,7 +499,7 @@ export default class InteractSubmode extends Component {
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
           ({ newCardId } = await new CopyCardToStackTool(
-            this.toolService.commandContext,
+            this.toolService.toolContext,
           ).execute({
             sourceCard: card,
             targetStackIndex,
@@ -580,7 +580,7 @@ export default class InteractSubmode extends Component {
           .map((cardDefOrId) => {
             let raw =
               typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-            return raw ? removeFileExtension(raw) : undefined;
+            return raw ? removeCardJsonExtension(raw) : undefined;
           })
           .filter(Boolean) as string[];
 
@@ -921,7 +921,7 @@ export default class InteractSubmode extends Component {
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
                 @deleteCard={{this.requestDeleteCard}}
-                @commandContext={{this.toolService.commandContext}}
+                @toolContext={{this.toolService.toolContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}

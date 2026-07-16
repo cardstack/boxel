@@ -133,7 +133,7 @@ module('Unit | loader', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can dynamically load modules with cycles', async function (assert) {

@@ -112,6 +112,27 @@
   --shadow-xl:
     0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  /* status */
+  --success: var(--boxel-success);
+  --warning: var(--boxel-warning);
+
+  /* other */
+  --boxel-switch-background: var(--boxel-400);
+  --boxel-button-default-border: var(--boxel-button-border-color);
+  --boxel-button-default-active-background: var(--background);
+  --boxel-button-default-active-foreground: var(--foreground);
+  --boxel-button-default-active-border: var(--foreground);
+  --boxel-button-primary-active-background: var(--boxel-highlight-hover);
+  --boxel-button-secondary-background: transparent;
+  --boxel-button-secondary-border: var(--boxel-button-border-color);
+  --boxel-button-secondary-active-border: var(--foreground);
+  --boxel-button-destructive-active-background: var(--boxel-danger-hover);
+  --boxel-button-link-primary-foreground: var(--boxel-highlight-hover);
+  --button-button-disabled-opacity: 1;
+  --boxel-button-disabled-background: var(--boxel-border-color);
+  --boxel-button-disabled-border: 1px solid var(--boxel-border-color);
+  --boxel-button-disabled-foreground: var(--boxel-450);
 }
 
 /* Themed-card boundary reset for the --theme-* knobs (typography roles, base
@@ -145,6 +166,23 @@
   --theme-caption-font-size: initial;
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
+  --boxel-switch-background: initial;
+  --boxel-button-default-border: initial;
+  --boxel-button-default-active-background: initial;
+  --boxel-button-default-active-foreground: initial;
+  --boxel-button-default-active-border: initial;
+  --boxel-button-primary-active-background: initial;
+  --boxel-button-secondary-background: initial;
+  --boxel-button-secondary-border: initial;
+  --boxel-button-secondary-active-border: initial;
+  --boxel-button-link-primary-foreground: initial;
+  --boxel-button-destructive-active-background: initial;
+  --button-button-disabled-opacity: initial;
+  --boxel-button-disabled-background: initial;
+  --boxel-button-disabled-border: initial;
+  --boxel-button-disabled-foreground: initial;
+  --success: initial;
+  --warning: initial;
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────
@@ -187,4 +225,17 @@
   --sidebar-accent-foreground: var(--boxel-light);
   --sidebar-border: var(--boxel-550);
   --sidebar-ring: var(--boxel-highlight);
+  --boxel-button-default-border: var(--border);
+  --boxel-button-default-active-background: var(--background);
+  --boxel-button-default-active-foreground: var(--foreground);
+  --boxel-button-default-active-border: var(--foreground);
+  --boxel-button-primary-active-background: var(--boxel-highlight-hover);
+  --boxel-button-secondary-background: transparent;
+  --boxel-button-secondary-border: var(--border);
+  --boxel-button-secondary-active-border: var(--foreground);
+  --boxel-button-destructive-active-background: var(--boxel-danger-hover);
+  --button-button-disabled-opacity: 1;
+  --boxel-button-disabled-background: #444051;
+  --boxel-button-disabled-foreground: #817c93;
+  --boxel-button-disabled-border: 1px solid#444051;
 }

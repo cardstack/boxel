@@ -7,6 +7,7 @@ import type {
 import {
   baseCardRef,
   baseFieldRef,
+  baseFileRef,
   baseRef,
   getTypeRefsFromFilter,
   identifyCard,
@@ -18,7 +19,7 @@ import {
 import type { CardDef } from '@cardstack/base/card-api';
 
 /**
- * Internal key strings for root types (CardDef, FieldDef, BaseDef).
+ * Internal key strings for root types (CardDef, FieldDef, FileDef, BaseDef).
  * These represent the base of the type hierarchy and are excluded
  * from type picker options and type-constraint checks. Pass the
  * caller's VirtualNetwork so the keys produced here match those
@@ -28,6 +29,7 @@ export function getRootTypeKeys(virtualNetwork: VirtualNetwork): Set<string> {
   return new Set([
     internalKeyFor(baseCardRef, undefined, virtualNetwork),
     internalKeyFor(baseFieldRef, undefined, virtualNetwork),
+    internalKeyFor(baseFileRef, undefined, virtualNetwork),
     internalKeyFor(baseRef, undefined, virtualNetwork),
   ]);
 }

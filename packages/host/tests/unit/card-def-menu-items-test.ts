@@ -3,12 +3,7 @@ import { module, test } from 'qunit';
 
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-import {
-  baseRealm,
-  realmURL,
-  testRealmURL,
-  type Loader,
-} from '@cardstack/runtime-common';
+import { realmURL, testRealmURL, type Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -39,7 +34,7 @@ module('Unit | CardDef menu items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}menu-items`);
+    let mod: any = await loader.import('@cardstack/base/menu-items');
     getDefaultCardMenuItems = mod.getDefaultCardMenuItems;
   });
 
@@ -52,7 +47,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -74,7 +69,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'edit',
     });
 
@@ -97,7 +92,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'edit',
     });
 
@@ -117,7 +112,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'edit',
     });
 
@@ -137,7 +132,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 
@@ -160,7 +155,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
       useBaseTemplate: true,
     });
@@ -184,7 +179,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 
@@ -208,7 +203,7 @@ module('Unit | CardDef menu items', function (hooks) {
         canEditActiveRealm: true,
         activeRealmURL: testRealmURL,
       },
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -231,7 +226,7 @@ module('Unit | CardDef menu items', function (hooks) {
         canEditActiveRealm: false,
         activeRealmURL: testRealmURL,
       },
-      commandContext: {} as any,
+      toolContext: {} as any,
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
@@ -250,7 +245,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-playground',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 
@@ -279,7 +274,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-playground',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 
@@ -298,7 +293,7 @@ module('Unit | CardDef menu items', function (hooks) {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-preview',
-      commandContext: {} as any,
+      toolContext: {} as any,
       format: 'isolated',
     });
 

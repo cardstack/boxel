@@ -29,7 +29,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked imageDefUrl: string | null = null;
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get hasLinkedCard() {
@@ -47,9 +47,9 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
   @action
   async takeScreenshot() {
-    let commandContext = this.args.context?.commandContext;
+    let toolContext = this.args.context?.toolContext;
     let card = (this.args.model as any)?.card;
-    if (!commandContext) {
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     this.errorMessage = null;
     this.imageDefUrl = null;
     try {
-      let result = await new ScreenshotCardTool(commandContext).execute({
+      let result = await new ScreenshotCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });

@@ -49,7 +49,7 @@ async function seedRow(
   { url, markdown }: { url: string; markdown: string | null },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, markdown)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -74,22 +74,29 @@ async function seedRow(
     param(false),
     `,`,
     param(Date.now()),
-    `,`,
-    param(markdown),
     `)`,
   ]);
-  // The full-text `matches` predicate reads `prerendered_html.markdown` (the
-  // `boxel_index.markdown` fallback disappears once the dual paths are dropped).
-  // Project the just-seeded row's markdown onto `prerendered_html` — mirroring
-  // the production backfill + dual-write — so these tests exercise the real
-  // read path. `indexed_at` seeds `rendered_at`.
+  // The full-text `matches` predicate reads `prerendered_html.markdown`, so
+  // the rendering half of the row — the markdown — is seeded there.
   await query(dbAdapter, [
-    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, rendered_at)`,
-    `SELECT url, file_alias, realm_url, type, markdown, deps, last_known_good_deps, generation, is_deleted, error_doc, indexed_at`,
-    `FROM boxel_index WHERE url =`,
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at)`,
+    `VALUES (`,
     param(url),
-    `AND realm_url =`,
+    `,`,
+    param(url),
+    `,`,
     param(testRealmURL),
+    `,`,
+    param('instance'),
+    `,`,
+    param(markdown),
+    `,`,
+    param(1),
+    `,`,
+    param(false),
+    `,`,
+    param(Date.now()),
+    `)`,
   ]);
 }
 
@@ -350,8 +357,8 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('planner uses boxel_index_markdown_fts_idx for matches queries', async function (assert) {
-      // The filter emits `to_tsvector('english', markdown_search_text(i.markdown))`
+    test('planner uses prerendered_html_markdown_fts_idx for matches queries', async function (assert) {
+      // The filter emits `to_tsvector('english', markdown_search_text(ph.markdown))`
       // which must match the GIN index expression exactly. With only a handful
       // of seeded rows PG will ordinarily prefer a seqscan; disabling seqscan
       // forces the planner to reveal whether the GIN index is a viable
@@ -365,7 +372,7 @@ module(basename(import.meta.filename), function () {
         await run(['SET LOCAL enable_seqscan = OFF']);
         let rows = await run([
           `EXPLAIN (FORMAT JSON)
-           SELECT url FROM boxel_index
+           SELECT url FROM prerendered_html
            WHERE to_tsvector('english', markdown_search_text(markdown))
                  @@ websearch_to_tsquery('english', 'mango')`,
         ]);
@@ -375,7 +382,7 @@ module(basename(import.meta.filename), function () {
 
       let planText = JSON.stringify(plan);
       assert.ok(
-        planText.includes('boxel_index_markdown_fts_idx'),
+        planText.includes('prerendered_html_markdown_fts_idx'),
         `plan should reference the GIN index; got: ${planText}`,
       );
     });

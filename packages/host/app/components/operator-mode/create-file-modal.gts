@@ -29,26 +29,27 @@ import {
   CardInstance,
   File,
   Field,
+  Sparkle,
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  specRef,
-  chooseCard,
-  baseRealm,
   baseRealmRRI,
-  RealmPaths,
+  baseRRI,
+  chooseCard,
   Deferred,
-  SupportedMimeType,
-  maybeRelativeReference,
   GetCardContextName,
   isCardInstance,
+  maybeRelativeReference,
+  RealmPaths,
+  specRef,
+  SupportedMimeType,
+  type CardErrorJSONAPI,
   type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
-  type ResolvedCodeRef,
-  type CardErrorJSONAPI,
   type RealmIdentifier,
   type RealmResourceIdentifier,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
@@ -82,6 +83,7 @@ export type NewFileType =
   | 'field-definition'
   | 'file-definition'
   | 'text-file'
+  | 'skill'
   | 'spec-instance';
 
 export const newFileTypes: {
@@ -123,6 +125,12 @@ export const newFileTypes: {
     icon: File,
     description: 'For plain text or markdown',
     extension: '.txt/.md',
+  },
+  {
+    id: 'skill',
+    icon: Sparkle,
+    description: 'For teaching the AI assistant',
+    extension: '.md',
   },
   { id: 'spec-instance', extension: '.json' },
 ];
@@ -188,6 +196,7 @@ export default class CreateFileModal extends Component<Signature> {
                   (and
                     (not (eq this.fileType.id 'duplicate-instance'))
                     (not (eq this.fileType.id 'text-file'))
+                    (not (eq this.fileType.id 'skill'))
                   )
                 }}
                   <FieldContainer
@@ -220,6 +229,29 @@ export default class CreateFileModal extends Component<Signature> {
                       {{/if}}
                     </div>
                   </FieldContainer>
+                {{/if}}
+                {{#if (eq this.fileType.id 'skill')}}
+                  <FieldContainer
+                    @label='Skill Name'
+                    @tag='label'
+                    class='field'
+                  >
+                    <BoxelInput
+                      data-skill-name-field
+                      data-test-skill-name-field
+                      placeholder='Trip Planner'
+                      @value={{this.displayName}}
+                      @state={{this.fileNameInputState}}
+                      @errorMessage={{this.fileNameError}}
+                      @onInput={{this.setDisplayName}}
+                    />
+                  </FieldContainer>
+                  {{#if this.skillFilePath}}
+                    <p class='skill-file-path' data-test-skill-file-path>
+                      Will be created as
+                      <code>{{this.skillFilePath}}</code>
+                    </p>
+                  {{/if}}
                 {{/if}}
                 {{#if (eq this.fileType.id 'text-file')}}
                   <FieldContainer @label='File Name' @tag='label' class='field'>
@@ -378,6 +410,18 @@ export default class CreateFileModal extends Component<Signature> {
                     >
                       Create
                     </Button>
+                  {{else if (eq this.fileType.id 'skill')}}
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.createSkillFile.isRunning}}
+                      @disabled={{this.isCreateSkillFileButtonDisabled}}
+                      {{on 'click' (perform this.createSkillFile)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-create-skill-file
+                    >
+                      Create
+                    </Button>
                   {{/if}}
                 </div>
               {{/if}}
@@ -454,6 +498,14 @@ export default class CreateFileModal extends Component<Signature> {
       }
       .create-file-error-detail {
         margin-top: var(--boxel-sp);
+      }
+      .skill-file-path {
+        margin: var(--boxel-sp-xs) 0 0;
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+      }
+      .skill-file-path code {
+        color: var(--boxel-600);
       }
     </style>
   </template>
@@ -539,12 +591,13 @@ export default class CreateFileModal extends Component<Signature> {
   private getDefaultSpecId(): string | undefined {
     switch (this.fileType.id) {
       case 'text-file':
+      case 'skill':
       case 'file-definition':
         return undefined;
       case 'field-definition':
         return config.defaultFieldSpecId;
       default:
-        return `${baseRealm.url}types/card`;
+        return baseRRI('types/card');
     }
   }
 
@@ -628,6 +681,10 @@ export default class CreateFileModal extends Component<Signature> {
     this.clearSaveError();
     this.displayName = name;
     if (!this.hasUserEditedFileName) {
+      // the file name still derives from the display name (always true for
+      // skills, which have no separate filename field), so a filename error
+      // no longer applies once the name changes
+      this.fileNameError = undefined;
       // if the user starts typing in the filename field, then stop helping them
       this.fileName = cleanseString(name);
     }
@@ -664,6 +721,8 @@ export default class CreateFileModal extends Component<Signature> {
         return '[data-create-file-modal] [data-realm-dropdown-trigger]';
       case 'text-file':
         return '[data-create-file-modal] [data-text-file-name-field]';
+      case 'skill':
+        return '[data-create-file-modal] [data-skill-name-field]';
       default:
         return false;
     }
@@ -730,11 +789,30 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
+  // The slug the skill name cleanses down to — the directory segment of the
+  // conventional `skills/<slug>/SKILL.md` path.
+  private get skillSlug() {
+    return cleanseString(this.displayName);
+  }
+
+  private get skillFilePath() {
+    return this.skillSlug ? `skills/${this.skillSlug}/SKILL.md` : undefined;
+  }
+
+  private get isCreateSkillFileButtonDisabled() {
+    return (
+      !this.selectedRealmURL ||
+      !this.skillSlug ||
+      this.createSkillFile.isRunning
+    );
+  }
+
   private get isCreateRunning() {
     return (
       this.createCardInstance.isRunning ||
       this.createDefinition.isRunning ||
       this.createTextFile.isRunning ||
+      this.createSkillFile.isRunning ||
       this.duplicateCardInstance.isRunning
     );
   }
@@ -929,7 +1007,7 @@ export class ${className} extends ${exportName} {
       );
     }
     let { newCardId } = await new CopyCardToRealmTool(
-      this.toolService.commandContext,
+      this.toolService.toolContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,
@@ -1040,6 +1118,64 @@ export class ${className} extends ${exportName} {
       this.currentRequest.newFileDeferred.fulfill(url);
     } catch (e: any) {
       console.log('Error saving text file', e);
+      this.saveError = e;
+    }
+  });
+
+  // Creates `skills/<slug>/SKILL.md` with starter frontmatter. The
+  // `boxel.kind: skill` key is what makes the file a skill the AI assistant
+  // can load — the path is only a convention (discovery is by the indexed
+  // `kind` field), but following it keeps workspaces legible.
+  private createSkillFile = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot createSkillFile when there is no this.currentRequest`,
+      );
+    }
+    if (!this.selectedRealmURL) {
+      throw new Error(
+        `bug: cannot call createSkillFile without a selected realm URL`,
+      );
+    }
+    let slug = this.skillSlug;
+    if (!slug) {
+      return;
+    }
+
+    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let url = realmPath.fileURL(`skills/${slug}/SKILL.md` as LocalPath);
+
+    try {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      if (response.ok) {
+        this.fileNameError = `This skill already exists`;
+        return;
+      }
+    } catch (_err: any) {
+      // we expect a 404 here
+    }
+
+    let name = this.displayName.trim();
+    let content = [
+      '---',
+      `name: ${slug}`,
+      'description: Describe when the assistant should use this skill.',
+      'boxel:',
+      '  kind: skill',
+      '---',
+      `# ${name}`,
+      '',
+      'Write the instructions the assistant should follow when this skill is active.',
+      '',
+    ].join('\n');
+
+    try {
+      await this.cardService.saveSource(url, content, 'create-file');
+      this.currentRequest.newFileDeferred.fulfill(url);
+    } catch (e: any) {
+      console.log('Error saving skill file', e);
       this.saveError = e;
     }
   });

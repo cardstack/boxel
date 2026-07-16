@@ -36,7 +36,6 @@ import {
   isSpecCard,
   isCardErrorJSONAPI,
   internalKeyFor,
-  GetCardsContextName,
   GetCardContextName,
   loadCardDef,
   rri,
@@ -137,7 +136,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
-  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
@@ -462,8 +460,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
   };
 
+  // Host code-submode UI searches the store directly (uncapped); the card caps
+  // live on the `@context` surfaces this component does not consume.
   private findSpecsForSelectedDefinition = () => {
-    this.specSearch = this.getCards(
+    this.specSearch = this.store.getSearchResource(
       this,
       () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmIdentifiers,
@@ -517,7 +517,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   private createSpecTask = task(async (ref: ResolvedCodeRef) => {
     try {
       const createSpecCommand = new CreateSpecTool(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
       );
       let currentRealm = this.operatorModeStateService.realmURL;
       const result = await createSpecCommand.execute({

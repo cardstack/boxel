@@ -1,12 +1,37 @@
 {
-  "version": "v0.0.22",
+  "version": "v0.0.28",
   "skills": [
+    "boxel",
+    "boxel-create-edit-cards",
     "boxel-design",
-    "boxel-development",
+    "boxel-environment",
+    "boxel-file-def",
+    "boxel-flavored-markdown",
+    "boxel-markdown-format",
+    "boxel-patterns",
+    "boxel-theme-development",
     "boxel-ui-guidelines",
     "catalog-listing",
-    "dev-bfm-syntax",
-    "dev-file-def",
-    "dev-markdown-format"
+    "glossary.md",
+    "source-code-editing"
+  ],
+  "commands": [
+    "boxel-add-field.md",
+    "boxel-add-file-field.md",
+    "boxel-build-from-pattern.md",
+    "boxel-create-card.md",
+    "boxel-create-instance.md",
+    "boxel-debug-runtime.md",
+    "boxel-design-card.md",
+    "boxel-develop-theme.md",
+    "boxel-edit-template.md",
+    "boxel-install-listing.md",
+    "boxel-migrate-schema.md",
+    "boxel-preview-card.md",
+    "boxel-search-cards.md",
+    "boxel-submit-listing.md",
+    "boxel-sync-workspace.md",
+    "distill-from-boxel-skills.md",
+    "distill-learnings.md"
   ]
 }

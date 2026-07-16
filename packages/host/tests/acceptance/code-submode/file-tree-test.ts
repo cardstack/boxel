@@ -1085,9 +1085,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let newFileName = 'new-file.gts';
 
     let toolService = getService('tool-service');
-    let writeTextFileCommand = new WriteTextFileTool(
-      toolService.commandContext,
-    );
+    let writeTextFileCommand = new WriteTextFileTool(toolService.toolContext);
     await writeTextFileCommand.execute({
       path: `${newDirName}/${newFileName}`,
       content:

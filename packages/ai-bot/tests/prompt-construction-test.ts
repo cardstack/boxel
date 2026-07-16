@@ -44,6 +44,7 @@ import {
 import {
   absolutizeSkillLinks,
   buildPromptForModel,
+  constructHistory,
   getPromptParts,
   getRelevantCards,
   getTools,
@@ -7343,7 +7344,7 @@ module('markdown skills', () => {
   });
 });
 
-module('markdown skill commands', (hooks) => {
+module('markdown skill tools', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
@@ -7562,6 +7563,232 @@ module('markdown skill commands', (hooks) => {
     );
     assert.strictEqual(tools.length, 1);
     assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+
+  const DISCOVERED_SKILL_URL = 'https://realm/skills/trip-planner/SKILL.md';
+
+  // A definition as the fulfillment layer embeds it: the skill's indexed
+  // frontmatter entry tagged with the skill file it came from.
+  function discoveredDef(
+    name: string,
+    {
+      skillUrl = DISCOVERED_SKILL_URL,
+      description = 'Plans a trip',
+    }: { skillUrl?: string; description?: string } = {},
+  ) {
+    return {
+      sourceSkillUrl: skillUrl,
+      codeRef: { module: 'https://realm/commands/plan-trip', name: 'default' },
+      functionName: name,
+      requiresApproval: true,
+      definition: {
+        type: 'function',
+        function: {
+          name,
+          description,
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    };
+  }
+
+  function readResultEvent(
+    eventId: string,
+    ts: number,
+    discoveredTools: unknown[],
+  ): DiscreteMatrixEvent {
+    return {
+      type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+      event_id: eventId,
+      origin_server_ts: ts,
+      sender: '@aibot:localhost',
+      room_id: 'room1',
+      content: {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: `req-${eventId}`,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: '$bot-message',
+        },
+        data: { attachedFiles: [], discoveredTools },
+      },
+      unsigned: { age: 100, transaction_id: 't' },
+      status: EventStatus.SENT,
+    } as unknown as DiscreteMatrixEvent;
+  }
+
+  test('getTools offers tools discovered by a readRealmFile result event', async () => {
+    const tools = await getTools(
+      [readResultEvent('read-1', 2000, [discoveredDef('plan-trip_ab12')])],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
+    assert.strictEqual(tools[0].function.description, 'Plans a trip');
+  });
+
+  test('the latest read of a skill replaces its earlier definitions wholesale', async () => {
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 1000, [
+          discoveredDef('plan-trip_ab12', { description: 'stale' }),
+          discoveredDef('book-hotel_cd34'),
+        ]),
+        readResultEvent('read-2', 2000, [
+          discoveredDef('plan-trip_ab12', { description: 'fresh' }),
+        ]),
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'a tool the skill no longer declares disappears with the newer read',
+    );
+    assert.strictEqual(tools[0].function.description, 'fresh');
+  });
+
+  test('discovered tools on a non-bot result event are ignored', async () => {
+    let forged = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    forged.sender = '@someone-else:localhost';
+    const tools = await getTools(
+      [forged],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only the bot publishes readRealmFile results',
+    );
+  });
+
+  test('an entry whose definition is not a function tool is skipped', async () => {
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 2000, [
+          {
+            ...discoveredDef('plan-trip_ab12'),
+            definition: { function: { name: 'plan-trip_ab12' } },
+          },
+          discoveredDef('book-hotel_cd34'),
+        ]),
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1, 'the malformed entry is dropped');
+    assert.strictEqual(tools[0].function.name, 'book-hotel_cd34');
+  });
+
+  test('discoveries on a non-applied result are ignored', async () => {
+    let failed = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    failed.content['m.relates_to'].key = 'invalid';
+    const tools = await getTools(
+      [failed],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only an applied read is evidence the skill was actually fetched',
+    );
+  });
+
+  test('a skill disabled in room state contributes no discovered tools', async () => {
+    const skillsEvent = {
+      type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      event_id: 'skills-1',
+      origin_server_ts: 3000,
+      state_key: '',
+      content: {
+        enabledSkillCards: [],
+        disabledSkillCards: [
+          {
+            sourceUrl: DISCOVERED_SKILL_URL,
+            url: 'mxc://mock-server/trip-planner',
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+          },
+        ],
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: { age: 1000 },
+      status: EventStatus.SENT,
+    } as unknown as DiscreteMatrixEvent;
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 2000, [discoveredDef('plan-trip_ab12')]),
+        skillsEvent,
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 0);
+  });
+
+  test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    eventList.push(
+      readResultEvent('read-1', 2000, [
+        discoveredDef('switch-submode_dd88', {
+          skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+          description: 'discovered copy that must lose to the upload',
+        }),
+      ]),
+    );
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'one definition for the shared functionName',
+    );
+    assert.strictEqual(
+      tools[0].function.description,
+      'Switch between interact and code submodes',
+      'the enabled skill uploaded definition wins the conflict',
+    );
+  });
+
+  test('discovered definitions round-trip the event encode/decode path', async () => {
+    // sendMatrixEvent JSON-stringifies `data` on the way out; constructHistory
+    // parses it back. Feed getTools a history built from the wire shape.
+    let rawEvent = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    rawEvent.content = {
+      ...rawEvent.content,
+      data: JSON.stringify(rawEvent.content.data),
+    };
+    const history = await constructHistory([rawEvent], fakeMatrixClient);
+    const tools = await getTools(
+      history,
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
   });
 });
 

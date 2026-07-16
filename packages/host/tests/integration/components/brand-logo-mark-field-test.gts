@@ -4,11 +4,7 @@ import { click, fillIn } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  PermissionsContextName,
-  type Loader,
-} from '@cardstack/runtime-common';
+import { PermissionsContextName, type Loader } from '@cardstack/runtime-common';
 
 import { provideConsumeContext } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -29,10 +25,10 @@ module('Integration | brand-logo | MarkField edit', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     let brandLogoModule = await loader.import<typeof BrandLogoModule>(
-      `${baseRealm.url}brand-logo`,
+      '@cardstack/base/brand-logo',
     );
     let cardApiModule = await loader.import<typeof CardApiModule>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     BrandLogo = brandLogoModule.default;
     ImageDef = cardApiModule.ImageDef;

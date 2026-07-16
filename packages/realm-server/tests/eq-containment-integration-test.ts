@@ -331,6 +331,14 @@ module(basename(import.meta.filename), function () {
       return executedSql.filter((sql) => !/^\s*INSERT\b/i.test(sql)).join('\n');
     }
 
+    // The `on:` type anchor compiles to its own `COALESCE(i.types, …) @> …`
+    // containment predicate, so a bare `@>` search no longer isolates the field
+    // eq. "Did the field eq use containment" is specifically containment on the
+    // `search_doc` column.
+    function usesFieldContainment(): boolean {
+      return /search_doc\s*@>/.test(lastFilterSql());
+    }
+
     test('singular string eq is served by `@>` containment', async function (assert) {
       let { cards, meta } = await engine.searchCards(new URL(testRealmURL), {
         filter: { on: policyRef, eq: { policyId: 'P1' } },
@@ -338,7 +346,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(meta.page.total, 1, 'one row matches');
       assert.deepEqual(ids(cards), [`${testRealmURL}Policy/p1`]);
       assert.ok(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'a `@>` containment predicate was emitted',
       );
     });
@@ -353,7 +361,7 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p3`,
       ]);
       assert.ok(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'the linksTo `.id` path uses `@>` from the root',
       );
     });
@@ -367,7 +375,7 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p1`,
         `${testRealmURL}Policy/p3`,
       ]);
-      assert.ok(lastFilterSql().includes('@>'), 'nested object path uses `@>`');
+      assert.ok(usesFieldContainment(), 'nested object path uses `@>`');
     });
 
     test('numeric eq keeps the `->>` extraction form', async function (assert) {
@@ -381,7 +389,7 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p4`,
       ]);
       assert.notOk(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'numeric leaf is excluded from containment',
       );
     });
@@ -392,7 +400,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(meta.page.total, 3);
       assert.notOk(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'boolean leaf is excluded from containment',
       );
       assert.deepEqual(ids(cards), [
@@ -412,7 +420,7 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p3`,
       ]);
       assert.notOk(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'plural path stays on json_tree, never `@>`',
       );
     });
@@ -434,7 +442,7 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p3`,
       ]);
       assert.notOk(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'an interior plural segment forces json_tree, never `@>`',
       );
       assert.ok(
@@ -456,7 +464,7 @@ module(basename(import.meta.filename), function () {
       ]);
       assert.strictEqual(meta.page.total, 2);
       assert.notOk(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'negated eq must not use `@>` (FALSE vs NULL diverges under NOT)',
       );
     });
@@ -468,7 +476,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(meta.page.total, 1);
       assert.deepEqual(ids(cards), [`${testRealmURL}Policy/p1`]);
       assert.ok(
-        lastFilterSql().includes('@>'),
+        usesFieldContainment(),
         'two NOTs cancel: positive polarity uses `@>`',
       );
     });

@@ -71,7 +71,11 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
     @layer boxelComponentL1 {
       .text-accessory {
         align-items: center;
-        color: var(--muted-foreground, var(--boxel-700));
+        color: color-mix(
+          in oklch,
+          var(--muted-foreground) 55%,
+          var(--foreground)
+        );
         display: flex;
         font-size: var(--boxel-font-size-sm);
         padding: var(--boxel-input-group-padding-y)

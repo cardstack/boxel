@@ -6,6 +6,21 @@ import type {
 
 import { getField } from '../code-ref.ts';
 
+// The card type's friendly display name as stamped into a row's `search_doc`
+// `_cardType` key by the prerender meta route (routes/render/meta.ts): a class
+// whose displayName is exactly 'Card' (i.e. `CardDef` itself) falls back to its
+// class name. Kept here as the single source of truth so the index stamp and
+// the client-side matcher shim (instance-filter-matcher.ts) agree byte-for-byte.
+// NOTE: this is deliberately NOT `cardTypeDisplayName` below — that one calls
+// `getDisplayName` and lacks the 'Card' → class-name fallback, so it would
+// diverge from the stamped value.
+export function friendlyCardType(klass: {
+  displayName: string;
+  name: string;
+}): string {
+  return klass.displayName === 'Card' ? klass.name : klass.displayName;
+}
+
 export function cardTypeDisplayName(cardOrField: BaseDef): string {
   // A not-yet-loaded or broken relationship link can surface an undefined
   // model to a card's own template (the linksTo component only renders the

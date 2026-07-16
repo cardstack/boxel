@@ -42,7 +42,7 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
     if (input.type) {
       filter.type = input.type;
     }
-    return new SearchCardsByQueryTool(this.commandContext).execute({
+    return new SearchCardsByQueryTool(this.toolContext).execute({
       query: {
         filter: filter as Filter,
       },
@@ -77,6 +77,8 @@ export class SearchCardsByQueryTool extends HostBaseTool<
     let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
     try {
+      // store.search pins `scope: 'cards'`, so the raw query already resolves
+      // to card instances only.
       instances = await this.store.search(input.query, realmUrls);
     } catch (e) {
       console.error(`Error searching in realms:`, e, input.query);

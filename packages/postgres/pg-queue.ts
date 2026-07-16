@@ -642,7 +642,11 @@ export class PgQueueRunner implements QueueRunner {
           await acquireConcurrencyGroupLock(query, jobToRun.concurrency_group);
 
           let jobIsStillEligible = (await query([
-            `SELECT j.id
+            // queue_wait_ms is computed against the database clock — the same
+            // clock that stamped created_at — so it needs no client-side
+            // timestamp parsing (created_at arrives as a timezone-less string
+            // on some adapters).
+            `SELECT j.id, (EXTRACT(EPOCH FROM (NOW() - j.created_at)) * 1000)::bigint AS queue_wait_ms
              FROM jobs j
              WHERE j.id =`,
             param(jobToRun.id),
@@ -654,7 +658,7 @@ export class PgQueueRunner implements QueueRunner {
                  AND r.completed_at IS NULL
              )
              FOR UPDATE`,
-          ])) as { id: number }[];
+          ])) as { id: number; queue_wait_ms: number | string }[];
           if (jobIsStillEligible.length === 0) {
             await query(['ROLLBACK']);
             continue;
@@ -719,6 +723,23 @@ export class PgQueueRunner implements QueueRunner {
 
           await query(['COMMIT']); // this should fail in the case of a concurrency conflict
 
+          // Queue-wait rides at info so CI logs surface worker starvation:
+          // with few (or one) workers, a long-running job serializes everything
+          // behind it, and a large wait on a user-initiated job is the direct
+          // signal of that — without it a stalled dequeue is indistinguishable
+          // from slow job execution.
+          let queueWaitMs = Number(jobIsStillEligible[0].queue_wait_ms);
+          log.info(
+            `%s: starting job %s (type=%s priority=%s group=%s) after %s in queue`,
+            this.#workerId,
+            jobToRun.id,
+            jobToRun.job_type,
+            jobToRun.priority,
+            jobToRun.concurrency_group,
+            Number.isFinite(queueWaitMs)
+              ? `${queueWaitMs}ms`
+              : 'an unknown wait',
+          );
           log.debug(
             `%s: claimed job %s, reservation %s`,
             this.#workerId,

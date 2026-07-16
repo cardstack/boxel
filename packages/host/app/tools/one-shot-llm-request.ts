@@ -64,7 +64,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
       let fileContent = '';
       if (input.codeRef?.module) {
         const readSourceCommand = new ReadSourceTool(
-          this.toolService.commandContext,
+          this.toolService.toolContext,
         );
         const fileContents = await readSourceCommand.execute({
           path: input.codeRef.module,
@@ -79,7 +79,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
         input.attachedFileIdentifiers.length > 0
       ) {
         const readTextFileCommand = new ReadTextFileTool(
-          this.toolService.commandContext,
+          this.toolService.toolContext,
         );
 
         const attachedFilePromises = input.attachedFileIdentifiers.map(
@@ -163,7 +163,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
       });
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyTool(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
       );
       const result = await sendRequestViaProxyCommand.execute({
         url: 'https://openrouter.ai/api/v1/chat/completions',

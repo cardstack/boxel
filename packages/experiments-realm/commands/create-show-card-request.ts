@@ -38,7 +38,7 @@ export default class CreateShowCardRequestCommand extends Command<
     }
 
     let createRoomResult = await new UseAiAssistantTool(
-      this.commandContext,
+      this.toolContext,
     ).execute({
       roomId: 'new',
       roomName: `Show Card: ${cardId}`,
@@ -46,9 +46,9 @@ export default class CreateShowCardRequestCommand extends Command<
     });
     let roomId = createRoomResult.roomId;
 
-    await ensureSubmissionBotIsInRoom(this.commandContext, roomId);
+    await ensureSubmissionBotIsInRoom(this.toolContext, roomId);
 
-    await new SendBotTriggerEventTool(this.commandContext).execute({
+    await new SendBotTriggerEventTool(this.toolContext).execute({
       roomId,
       realm,
       type: 'show-card',

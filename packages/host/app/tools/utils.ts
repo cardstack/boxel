@@ -4,7 +4,7 @@ import {
   getToolRequests,
   isToolResultEventType,
   isToolResultRelType,
-  decodeCommandRequest,
+  decodeToolRequest,
   type ToolContext,
   type ToolRequest,
 } from '@cardstack/runtime-common';
@@ -31,13 +31,13 @@ import type {
 } from '@cardstack/base/matrix-event';
 
 export async function waitForMatrixEvent(
-  commandContext: ToolContext,
+  toolContext: ToolContext,
   roomId: string,
   callback: (matrixEvents: MatrixEvent[]) => boolean,
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
   let timeoutMs = options.timeoutMs ?? 1000 * 60 * 20; // default to 20 minutes
-  let getEventsFromRoomCommand = new GetEventsFromRoomTool(commandContext);
+  let getEventsFromRoomCommand = new GetEventsFromRoomTool(toolContext);
   let done = false;
   let allMatrixEvents: MatrixEvent[] = [];
   let lastEventId: string | undefined = undefined;
@@ -63,14 +63,14 @@ export async function waitForMatrixEvent(
 }
 
 export async function waitForCompletedCommandRequest(
-  commandContext: ToolContext,
+  toolContext: ToolContext,
   roomId: string,
   commandRequestPredicate: (toolRequest: Partial<ToolRequest>) => boolean,
   options: { timeoutMs?: number; afterEventId?: string } = {},
 ): Promise<ToolResultEvent | undefined> {
   let result: ToolResultEvent | undefined = undefined;
   await waitForMatrixEvent(
-    commandContext,
+    toolContext,
     roomId,
     (matrixEvents: MatrixEvent[]) => {
       let events = options.afterEventId
@@ -105,7 +105,7 @@ export async function waitForCompletedCommandRequest(
         );
         if (
           toolRequest &&
-          commandRequestPredicate(decodeCommandRequest(toolRequest))
+          commandRequestPredicate(decodeToolRequest(toolRequest))
         ) {
           result = toolResultEvent;
           return true;
@@ -119,13 +119,13 @@ export async function waitForCompletedCommandRequest(
 }
 
 export async function addPatchTools(
-  commandContext: ToolContext,
+  toolContext: ToolContext,
   patchableCards: CardDef[],
   cardAPI: typeof CardAPI,
 ): Promise<Tool[]> {
   let results: Tool[] = [];
   let loader = (
-    getOwner(commandContext)!.lookup('service:loader-service') as LoaderService
+    getOwner(toolContext)!.lookup('service:loader-service') as LoaderService
   ).loader;
   let mappings = await basicMappings(loader);
   for (const patchableCard of patchableCards) {
@@ -140,7 +140,7 @@ export async function addPatchTools(
 }
 
 export async function waitForRealmState(
-  commandContext: ToolContext,
+  toolContext: ToolContext,
   realmId: string,
   predicate: (ev: RealmEventContent | undefined) => boolean,
   options: { timeoutMs?: number; keepRealmSubscription?: boolean } = {},
@@ -156,7 +156,7 @@ export async function waitForRealmState(
     }, timeoutMs);
   });
 
-  const messageService = getOwner(commandContext)?.lookup(
+  const messageService = getOwner(toolContext)?.lookup(
     'service:message-service',
   ) as MessageService | undefined;
   if (!messageService) {

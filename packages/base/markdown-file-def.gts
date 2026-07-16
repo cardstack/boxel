@@ -2,9 +2,12 @@ import {
   byteStreamToUint8Array,
   extractCardReferenceUrls,
   extractFileReferenceUrls,
+  FRONTMATTER_DIAGNOSTICS_SYMBOL,
+  FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   type FrontmatterParseError,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import {
@@ -246,14 +249,28 @@ class Embedded extends Component<typeof MarkdownDef> {
         font-weight: 600;
       }
 
+      /*
+        Embedded markdown is a bounded preview by default: a max-height clip
+        plus a bottom fade hinting that there is more to open and read. The
+        embedding context can retune this across the embed boundary via two
+        custom properties (the only lever it has, since it cannot pass args
+        into a framework-driven embedded render):
+          - a taller bounded preview:
+              --markdown-embedded-max-height: 500px;
+          - full, unbounded content (drop the clip AND the fade together):
+              --markdown-embedded-max-height: none;
+              --markdown-embedded-mask: none;
+      */
       .markdown-embedded__content {
-        max-height: 200px;
+        max-height: var(--markdown-embedded-max-height, 200px);
         overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
+        mask-image: var(
+          --markdown-embedded-mask,
+          linear-gradient(to bottom, black 60%, transparent 100%)
+        );
+        -webkit-mask-image: var(
+          --markdown-embedded-mask,
+          linear-gradient(to bottom, black 60%, transparent 100%)
         );
       }
 
@@ -548,7 +565,10 @@ export class MarkdownDef extends FileDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
+    // `toolContext` is the owner-carrying context index-time tool schema
+    // generation constructs tool classes with; only the indexing path
+    // provides one (see `FromFrontmatterContext`).
+    options: { contentHash?: string; toolContext?: ToolContext } = {},
   ): Promise<
     SerializedFile<{
       title: string;
@@ -640,17 +660,32 @@ export class MarkdownDef extends FileDef {
     }
 
     // `boxel.kind` selects the FrontmatterField subclass; the subclass maps the
-    // parsed frontmatter into its own field value (the base keeps the raw copy).
-    // MarkdownDef stays ignorant of any kind's schema. A recognized kind is
-    // recorded so the field rehydrates as that subclass on read.
+    // parsed frontmatter into its own field value (the base keeps the raw copy)
+    // and produces any index-time enrichment of it (e.g. a skill's generated
+    // tool definitions). MarkdownDef stays ignorant of any kind's schema. A
+    // recognized kind is recorded so the field rehydrates as that subclass on
+    // read; the enriched copy and any diagnostics findings ride out-of-band on
+    // the same symbol channels the parse error uses, so neither leaks into the
+    // flat `search_doc`.
     if (Object.keys(frontmatterData).length > 0) {
       let frontmatterFieldClass = frontmatterFieldForKind(kind);
-      attributes.frontmatter =
-        frontmatterFieldClass.fromFrontmatter(frontmatterData);
+      let frontmatterResult = await frontmatterFieldClass.fromFrontmatter(
+        frontmatterData,
+        { fileURL: url, toolContext: options.toolContext },
+      );
+      attributes.frontmatter = frontmatterResult.attributes;
+      let bag = attributes as Record<PropertyKey, unknown>;
+      if (frontmatterResult.fileMetaAttributes) {
+        bag[FRONTMATTER_FILE_META_VALUE_SYMBOL] =
+          frontmatterResult.fileMetaAttributes;
+      }
+      if (frontmatterResult.diagnostics) {
+        bag[FRONTMATTER_DIAGNOSTICS_SYMBOL] = frontmatterResult.diagnostics;
+      }
       if (isKnownFrontmatterKind(kind)) {
         let adoptsFrom = identifyCard(frontmatterFieldClass);
         if (adoptsFrom) {
-          (attributes as Record<PropertyKey, unknown>)[fileFieldMetaSymbol] = {
+          bag[fileFieldMetaSymbol] = {
             frontmatter: { adoptsFrom },
           };
         }

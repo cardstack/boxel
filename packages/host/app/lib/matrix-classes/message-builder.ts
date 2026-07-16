@@ -11,7 +11,7 @@ import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
-  decodeCommandRequest,
+  decodeToolRequest,
 } from '@cardstack/runtime-common/commands';
 import {
   getToolRequests,
@@ -32,6 +32,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
+  findDiscoveredToolSkillUrl,
   getSkillSourceTools,
   loadSkillSource,
 } from '@cardstack/host/lib/skill-tools';
@@ -253,12 +254,12 @@ export default class MessageBuilder {
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        command.toolRequest = decodeToolRequest(encodedCommandRequest);
       } else {
         message.tools.push(
           await this.buildMessageCommand(
             message,
-            decodeCommandRequest(encodedCommandRequest),
+            decodeToolRequest(encodedCommandRequest),
           ),
         );
       }
@@ -277,18 +278,18 @@ export default class MessageBuilder {
         isToolResultWithNoOutputMsgtype(event.content.msgtype)
       ) {
         let commandRequestId = event.content.commandRequestId;
-        let messageCommand = message.tools.find(
+        let messageTool = message.tools.find(
           (c) => c.toolRequest.id === commandRequestId,
         );
-        if (messageCommand) {
-          messageCommand.toolCallStatus = event.content['m.relates_to']
+        if (messageTool) {
+          messageTool.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
-          messageCommand.toolResultFileDef = isToolResultWithOutputContent(
+          messageTool.toolResultFileDef = isToolResultWithOutputContent(
             event.content,
           )
             ? event.content.data.card
             : undefined;
-          messageCommand.failureReason = event.content.failureReason;
+          messageTool.failureReason = event.content.failureReason;
         }
       }
     }
@@ -309,7 +310,7 @@ export default class MessageBuilder {
     for (let toolRequest of toolRequests) {
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(toolRequest),
+        decodeToolRequest(toolRequest),
       );
       commands.push(command);
     }
@@ -363,7 +364,7 @@ export default class MessageBuilder {
 
     // Find command in skills. loadSkillSource handles both legacy Skill
     // cards and markdown skills (tools in boxel.tools frontmatter).
-    let skillCommand:
+    let skillTool:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
@@ -371,18 +372,54 @@ export default class MessageBuilder {
       if (!source) {
         continue;
       }
-      for (let candidateSkillCommand of getSkillSourceTools(source)) {
-        if (toolRequest.name === candidateSkillCommand.functionName) {
-          skillCommand = candidateSkillCommand;
+      for (let candidateSkillTool of getSkillSourceTools(source)) {
+        if (toolRequest.name === candidateSkillTool.functionName) {
+          skillTool = candidateSkillTool;
           break findCommand;
         }
       }
     }
 
+    // Tool from a read (not enabled) skill: the model may call a tool it
+    // discovered by reading a skill file via readRealmFile. The bot's result
+    // event names the declaring skill, but that annotation is strictly a
+    // lookup hint, never an authorization — the codeRef the host executes is
+    // re-derived here from the skill's realm-indexed frontmatter, loaded
+    // through the store with the user's own permissions. A forged annotation
+    // can't execute anything the named skill doesn't declare, and a skill the
+    // user can't read resolves nothing; either way the tool stays unresolved
+    // and surfaces through the existing unrecognized-command failure path.
+    // `requiresApproval` likewise comes from the verified declaration (absent
+    // means approval required), exactly as for enabled skills.
+    if (!skillTool && toolRequest.name) {
+      let sourceSkillUrl = findDiscoveredToolSkillUrl(
+        this.builderContext.events,
+        toolRequest.name,
+      );
+      if (sourceSkillUrl) {
+        // The URL comes from a bot event, so a load blowing up on a
+        // malformed or unreadable id must degrade to "unresolved tool", not
+        // break message building for the whole timeline.
+        try {
+          let source = await loadSkillSource(this.store, sourceSkillUrl);
+          if (source) {
+            skillTool = getSkillSourceTools(source).find(
+              (candidate) => candidate.functionName === toolRequest.name,
+            );
+          }
+        } catch (e) {
+          console.warn(
+            `could not load skill ${sourceSkillUrl} to resolve tool "${toolRequest.name}":`,
+            e,
+          );
+        }
+      }
+    }
+
     let actionVerb = 'Apply';
-    if (skillCommand?.codeRef) {
+    if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
-        skillCommand?.codeRef,
+        skillTool?.codeRef,
         this.loaderService.loader,
       )) as { actionVerb: string };
       if (CommandKlass?.actionVerb) {
@@ -390,16 +427,16 @@ export default class MessageBuilder {
       }
     }
 
-    let requiresApproval = skillCommand?.requiresApproval ?? true;
+    let requiresApproval = skillTool?.requiresApproval ?? true;
 
     let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
       'm.relates_to'
     ]?.key || 'ready') as ToolCallStatus;
 
-    let messageCommand = new MessageTool(
+    let messageTool = new MessageTool(
       message,
       toolRequest,
-      skillCommand?.codeRef,
+      skillTool?.codeRef,
       this.builderContext.effectiveEventId,
       requiresApproval,
       actionVerb,
@@ -410,7 +447,7 @@ export default class MessageBuilder {
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
     );
-    return messageCommand;
+    return messageTool;
   }
 
   private buildMessageCodePatchResults(message: Message) {

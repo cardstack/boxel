@@ -82,6 +82,7 @@ import TriangleLeft from './icons/triangle-left.gts';
 import TriangleRight from './icons/triangle-right.gts';
 import Upload from './icons/upload.gts';
 import Warning from './icons/warning.gts';
+import WarningTriangleFilled from './icons/warning-triangle-filled.gts';
 
 export const ALL_ICON_COMPONENTS = [
   AiBw,
@@ -163,6 +164,7 @@ export const ALL_ICON_COMPONENTS = [
   TriangleRight,
   Upload,
   Warning,
+  WarningTriangleFilled,
 ];
 export {
   type Icon,
@@ -246,4 +248,5 @@ export {
   TriangleRight,
   Upload,
   Warning,
+  WarningTriangleFilled,
 };

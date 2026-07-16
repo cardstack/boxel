@@ -5,12 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
-import {
-  baseRealm,
-  loadCardDef,
-  rri,
-  visitModuleDeps,
-} from '@cardstack/runtime-common';
+import { loadCardDef, rri, visitModuleDeps } from '@cardstack/runtime-common';
 import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
 
 import {
@@ -71,7 +66,7 @@ module('code-ref', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can dynamically load a card definition', async function (assert) {
@@ -86,9 +81,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom: ref },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let person = await api.createFromSerialized<any>(doc.data, doc, undefined);
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
@@ -109,9 +102,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let testCard = await api.createFromSerialized<any>(
       doc.data,
       doc,

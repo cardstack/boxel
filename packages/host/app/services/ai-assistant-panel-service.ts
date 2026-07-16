@@ -399,7 +399,7 @@ export default class AiAssistantPanelService extends Service {
           roomId = await this.createFallbackRoom(name);
         } else {
           let createRoomCommand = new CreateAiAssistantRoomTool(
-            this.toolService.commandContext,
+            this.toolService.toolContext,
           );
 
           let input: any = { name };
@@ -524,7 +524,7 @@ export default class AiAssistantPanelService extends Service {
       // skill file or a legacy `Skill` card, uploads it, and populates the
       // room's skills config + command definitions.
       let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-        this.toolService.commandContext,
+        this.toolService.toolContext,
       );
       await updateRoomSkillsCommand.execute({
         roomId,
@@ -540,7 +540,7 @@ export default class AiAssistantPanelService extends Service {
     async (oldRoomId: string, newRoomId: string) => {
       try {
         const summarizeCommand = new SummarizeSessionTool(
-          this.toolService.commandContext,
+          this.toolService.toolContext,
         );
         const result = await summarizeCommand.execute({
           roomId: oldRoomId,

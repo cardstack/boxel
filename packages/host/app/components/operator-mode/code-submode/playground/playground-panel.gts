@@ -40,7 +40,6 @@ import {
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
-  GetCardsContextName,
   type getCard,
   type getCards,
   chooseCard,
@@ -124,7 +123,6 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
-  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private toolService: ToolService;
@@ -223,7 +221,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
-        commandContext: this.toolService.commandContext,
+        toolContext: this.toolService.toolContext,
         format: this.format,
       }) || [],
     );
@@ -366,7 +364,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.args.isFileDef) {
       return;
     }
-    this.fileSearchResults = this.getCards(
+    // Host code-submode UI searches the store directly (uncapped); the card
+    // caps live on the `@context` surfaces this component does not consume.
+    this.fileSearchResults = this.store.getSearchResource(
       this,
       () => this.fileMetaQuery,
       () => this.realmServer.availableRealmIdentifiers,

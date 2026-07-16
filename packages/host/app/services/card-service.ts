@@ -92,7 +92,7 @@ export default class CardService extends Service {
     let loader = this.loaderService.loader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;
@@ -104,7 +104,7 @@ export default class CardService extends Service {
     let loader = this.loaderService.loader;
     if (!this.loaderToSearchableLoadingCache.has(loader)) {
       let searchablePromise = loader.import<typeof Searchable>(
-        'https://cardstack.com/base/searchable',
+        '@cardstack/base/searchable',
       );
       this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
       return searchablePromise;

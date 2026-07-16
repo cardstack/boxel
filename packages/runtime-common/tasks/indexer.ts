@@ -18,7 +18,7 @@ import {
 import { IndexRunner } from '../index-runner.ts';
 import { INCREMENTAL_INDEX_JOB_TIMEOUT_SEC } from '../jobs/indexing.ts';
 import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
-import type { Stats } from '../worker.ts';
+import type { Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -57,6 +57,9 @@ export interface IncrementalResult {
   // The realm generation this pass committed. Optional so a result produced
   // by an older worker mid-deploy still parses.
   generation?: number;
+  // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
+  // Optional so a result from a worker predating the instrumentation parses.
+  phaseTimings?: IndexPhaseTimings;
 }
 
 export interface IncrementalDoneResult extends IncrementalResult {
@@ -82,6 +85,8 @@ export interface FromScratchResult {
   stats: Stats;
   // See IncrementalResult.generation.
   generation?: number;
+  // See IncrementalResult.phaseTimings.
+  phaseTimings?: IndexPhaseTimings;
 }
 
 export function isObjectLike(value: unknown): value is JSONTypes.Object {
@@ -378,6 +383,9 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+          // From-scratch: the prerender job runs the realm-wide module
+          // pre-warm sweep before its format renders.
+          preWarm: true,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -389,7 +397,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations, generation } =
+    let { stats, ignoreData, invalidations, generation, phaseTimings } =
       await IndexRunner.fromScratch(currentRun);
 
     log.debug(
@@ -426,6 +434,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       ignoreData: { ...ignoreData },
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
 
@@ -489,6 +498,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          // Incremental: no realm-wide sweep — its cost is O(realm module
+          // count), deliberately not paid on incrementals.
+          preWarm: false,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -501,7 +513,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
-    let { stats, invalidations, ignoreData, generation } =
+    let { stats, invalidations, ignoreData, generation, phaseTimings } =
       await IndexRunner.incremental(currentRun, {
         changes: changes.map(({ operation, url }) => ({
           operation,
@@ -520,6 +532,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       invalidations,
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
 

@@ -29,11 +29,17 @@ export interface MarkdownEmbedInitialTarget {
   // from `sizeSpec` so a size-less block directive (`::card[url]`) seeds block
   // placement instead of collapsing to an inline atom.
   kind?: 'inline' | 'block';
+  // The editing document's own URL. The chooser relativizes the picked ref
+  // against it so the inserted directive is `../`-relative, matching the
+  // format-picker insertion path.
+  documentBaseUrl?: string;
 }
 
 export interface MarkdownEmbedChooserRequest {
   defaultTab: MarkdownEmbedRefType;
   initialTarget?: MarkdownEmbedInitialTarget;
+  // The editing document's own URL, used to relativize the inserted ref.
+  documentBaseUrl?: string;
   deferred: Deferred<MarkdownEmbedResolution>;
 }
 
@@ -45,9 +51,12 @@ export default class MarkdownEmbedChooserService extends Service {
   @tracked currentRequest: MarkdownEmbedChooserRequest | undefined;
 
   chooseCardOrFile(
-    opts: { defaultTab?: MarkdownEmbedRefType } = {},
+    opts: { defaultTab?: MarkdownEmbedRefType; documentBaseUrl?: string } = {},
   ): Promise<MarkdownEmbedResolution> {
-    return this.open({ defaultTab: opts.defaultTab ?? 'card' });
+    return this.open({
+      defaultTab: opts.defaultTab ?? 'card',
+      documentBaseUrl: opts.documentBaseUrl,
+    });
   }
 
   editEmbed(
@@ -56,6 +65,7 @@ export default class MarkdownEmbedChooserService extends Service {
     return this.open({
       defaultTab: target.refType,
       initialTarget: target,
+      documentBaseUrl: target.documentBaseUrl,
     });
   }
 
@@ -68,6 +78,7 @@ export default class MarkdownEmbedChooserService extends Service {
   private async open(opts: {
     defaultTab: MarkdownEmbedRefType;
     initialTarget?: MarkdownEmbedInitialTarget;
+    documentBaseUrl?: string;
   }): Promise<MarkdownEmbedResolution> {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(undefined);

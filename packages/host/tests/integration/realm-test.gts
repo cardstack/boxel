@@ -7,7 +7,7 @@ import { validate as uuidValidate } from 'uuid';
 
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseCardRef,
   baseRealmRRI,
   rri,
   searchEntryWireQueryFromQuery,
@@ -68,7 +68,7 @@ module('Integration | realm', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function handle(realm: Realm, ...args: Parameters<Realm['handle']>) {
@@ -463,7 +463,12 @@ module('Integration | realm', function (hooks) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(
-            searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+            // anchored to cards — an unanchored entry query also returns the
+            // card `.json` file rows
+            searchEntryWireQueryFromQuery(
+              { filter: { type: baseCardRef } },
+              { fields: ['item'] },
+            ),
           ),
         }),
       );
@@ -2721,7 +2726,9 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await searchCardsForTest(queryEngine, {});
+    let { data: cards } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
+    });
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2772,7 +2779,11 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await searchCardsForTest(queryEngine, {})).data;
+    cards = (
+      await searchCardsForTest(queryEngine, {
+        filter: { type: baseCardRef },
+      })
+    ).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -2881,10 +2892,10 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
+      '@cardstack/base/card-api',
     );
     let { default: StringField } = await loader.import<typeof StringFieldMod>(
-      'https://cardstack.com/base/string',
+      '@cardstack/base/string',
     );
 
     class Person extends CardDef {
@@ -3027,7 +3038,12 @@ module('Integration | realm', function (hooks) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(
-          searchEntryWireQueryFromQuery({}, { fields: ['item'] }),
+          // anchored to cards — an unanchored entry query also returns the
+          // card `.json` file rows
+          searchEntryWireQueryFromQuery(
+            { filter: { type: baseCardRef } },
+            { fields: ['item'] },
+          ),
         ),
       }),
     );
@@ -3121,6 +3137,9 @@ module('Integration | realm', function (hooks) {
         body: JSON.stringify(
           searchEntryWireQueryFromQuery(
             {
+              // anchored to cards — an unanchored entry query also returns
+              // the card `.json` file rows
+              filter: { type: baseCardRef },
               sort: [
                 {
                   by: 'id',

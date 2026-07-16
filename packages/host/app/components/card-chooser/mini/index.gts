@@ -6,7 +6,7 @@ import type { Filter } from '@cardstack/runtime-common';
 
 import SearchPanel from '@cardstack/host/components/card-search/panel';
 import {
-  removeFileExtension,
+  removeCardJsonExtension,
   type NewCardArgs,
 } from '@cardstack/host/utils/card-search/types';
 
@@ -43,7 +43,7 @@ export default class MiniCardChooser extends Component<Signature> {
     if (typeof selection !== 'string') {
       return;
     }
-    let normalized = removeFileExtension(selection);
+    let normalized = removeCardJsonExtension(selection);
     if (normalized) {
       this.args.onSelect(normalized);
     }
@@ -54,6 +54,7 @@ export default class MiniCardChooser extends Component<Signature> {
       <SearchPanel
         @searchKey={{this.searchKey}}
         @baseFilter={{@baseFilter}}
+        @cardsOnly={{true}}
         as |Bar Content|
       >
         <header class='mini-card-chooser__header'>
@@ -66,6 +67,7 @@ export default class MiniCardChooser extends Component<Signature> {
         <div class='mini-card-chooser__results'>
           <Content
             @isCompact={{false}}
+            @cardsOnly={{true}}
             @handleSelect={{this.handleSelect}}
             @showHeader={{true}}
             @variant='mini'

@@ -103,6 +103,77 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-parse-error',
 );
 
+// Same symbol-channel pattern for a frontmatter value that must differ
+// between the search doc and the file-meta resource: when a
+// `FrontmatterField` subclass produces index-only enrichment (e.g. a skill's
+// generated tool definitions, which are multi-KB and must never land in
+// `search_doc`), `extractAttributes` routes the enriched copy under this key
+// and the host file extractor stamps it onto the resource, leaving the
+// search doc's `frontmatter` as authored.
+export const FRONTMATTER_FILE_META_VALUE_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-file-meta-value',
+);
+
+// Same symbol-channel pattern for the `Partial<Diagnostics>` a
+// `FrontmatterField` subclass contributes to the indexed row (e.g. a skill's
+// `toolSchemaErrors`); the host file extractor lifts it into the extract
+// result so the indexer can merge it onto the row's `diagnostics`. Which
+// keys the bag carries is the subclass's own knowledge.
+export const FRONTMATTER_DIAGNOSTICS_SYMBOL = Symbol.for(
+  'boxel:file-frontmatter-diagnostics',
+);
+
+// One tool a skill's frontmatter declared whose schema generation failed
+// during file extraction — the module wouldn't load, the export was missing,
+// or the tool's input-schema generation threw. The skill still indexes
+// (instructions plus whichever tools did enrich), so this diagnostics entry
+// is the only indexed signal that the tool won't be callable. Surfaced on
+// `diagnostics.toolSchemaErrors`, alongside `frontmatterParseError`, via
+// `/_indexing-errors`.
+export interface ToolSchemaError {
+  // The tool's code ref as resolved at extract time (absolute module URL, or
+  // the package specifier verbatim when the module isn't realm-hosted).
+  module: string;
+  name: string;
+  message: string;
+}
+
+// One performed load of a link target during search-doc production. `path`
+// is the dotted field path (from the indexed card's root) of the `linksTo` /
+// `linksToMany` field that owns the link; `target` is the resolved
+// (absolute) URL that was loaded. A `linksToMany` field produces one entry
+// per loaded slot, all sharing the field's `path` and distinguished by
+// `target`. A load fired through a field getter — a computed reading a link
+// loads via the getter's lazy path, not the generator's targeted loading —
+// carries an empty `path`, since the store observing it can't name the
+// owning field. Only actual loads are represented — a target already
+// resident in the store (or served from the job-scoped document cache)
+// records a near-zero entry that the persistence floor drops. Independent
+// branches of the walk load concurrently, so entries overlap in time: each
+// `ms` is that load's own wall-clock span, and the entries don't sum to the
+// walk's elapsed time.
+export interface SearchDocLinkLoad {
+  path: string;
+  target: string;
+  ms: number;
+}
+
+// Mutable out-param collector `searchDocFromFields` fills in place while it
+// walks the card. Each sub-collector is opt-in: the generator only spends
+// timer calls on the channels the caller supplies. Values are raw
+// (unbounded, unrounded) — the render.meta route prunes to the slowest
+// entries before persisting onto `boxel_index.diagnostics`.
+export interface SearchDocTimings {
+  // Dotted field path → inclusive evaluation wall-clock. A parent field's
+  // time includes its nested fields' (and its link loads'), so a slow leaf
+  // surfaces alongside every ancestor on its path — the drill-down reads
+  // directly from the keys. Plural fields accumulate across their items
+  // under one key.
+  fieldsMs?: Record<string, number>;
+  // One entry per link-target load the walk performed.
+  linkLoads?: SearchDocLinkLoad[];
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -121,8 +192,44 @@ export interface PrerenderMetaDiagnostics {
   computedCacheHits?: number;
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
-  // Wall-clock of the host-side searchDoc call.
+  // Wall-clock of the searchable walk that produced the doc — the first
+  // walk against a stable load generation. It never waits on getter-fired
+  // loads (those mark a walk unstable and it is discarded), but it can
+  // include targeted `searchable`-route loads it consumed inline — the
+  // first walk to reach a target performs its load, and a first-walk-stable
+  // card performs them all here. Each such load is itemized in
+  // `searchDocLinkLoads`; because loads run concurrently their entries
+  // overlap, so read a load-entry-bearing `searchDocMs` as an upper bound
+  // on evaluation time rather than subtracting the entries out.
   searchDocMs?: number;
+  // Wall-clock spent driving the card's getter-fired link loads to
+  // quiescence before the walk that produced the doc: the discarded walk
+  // passes and their load drains. Read `searchDocLinkLoads` for the
+  // per-target load breakdown (its entries span both this and the
+  // doc-producing walk). Near-zero when the first walk settled.
+  searchDocSettleMs?: number;
+  // How many walk passes were discarded before one ran against a stable
+  // load generation. Each pass loads one more dependency-depth wave, so a
+  // high count means a deep searchable/computed link chain (capped
+  // host-side; the cap logs a warning). Zero when the first walk settled —
+  // the card fired no lazy getter loads.
+  searchDocSettlePasses?: number;
+  // Per-field inclusive evaluation timings from the timed searchDoc walk,
+  // keyed by dotted field path from the indexed card's root (a parent's
+  // time includes its children's, so a slow leaf appears alongside its
+  // ancestors). Bounded: only the slowest fields at/over a floor are
+  // persisted, so a typical ~1 ms search doc records nothing and a slow one
+  // records its hot paths — the retained entries' (top-level) sum accounts
+  // for `searchDocMs`. A large `searchDocMs` with NO entries means death by
+  // a thousand cheap fields rather than one hot path. Omitted when empty.
+  searchDocFieldsMs?: Record<string, number>;
+  // The slowest searchable link-target loads performed while producing this
+  // row's search doc — the settle passes' loads plus any the timed walk
+  // still performed — same bounding as `searchDocFieldsMs`. Separates "the
+  // linked instance was slow to load" (an entry here) from "the field was
+  // expensive to compute" (a hot `searchDocFieldsMs` path with no matching
+  // load). Omitted when empty.
+  searchDocLinkLoads?: SearchDocLinkLoad[];
   // Broken `linksTo` / `linksToMany` targets found on the rendered
   // instance after the store settled. Captured by the render.meta scan
   // and persisted to `boxel_index.diagnostics.brokenLinks` so
@@ -236,6 +343,23 @@ export interface RenderTimeoutDiagnostics {
   // it tells you which format dominated `renderElapsedMs` — e.g. a slow
   // isolated template vs. a fitted render fanning out across many ancestors.
   renderFormatsMs?: {
+    card?: Record<string, number>;
+    file?: Record<string, number>;
+  };
+  // Per-route wall-clock of the index-visit route steps in this visit, split
+  // by the card indexing and the FileDef file indexing — the index-half
+  // sibling of `renderFormatsMs`. Keys are the route steps an index visit
+  // runs: `meta` and `icon` for a card, `fileExtract` and `icon` for a file.
+  // The `meta` number covers the whole `render.meta` route, so the
+  // types / displayNames chain that route builds is inside that bucket, not a
+  // step of its own — the standalone `types` route is html-half work driving
+  // the fitted/embedded renders, and never runs on an index visit. Only
+  // populated where the index-half step actually runs, so it decomposes the
+  // per-visit floor into measured route buckets rather than leaving it
+  // inferred from `renderElapsedMs`: on an index visit it rides
+  // `boxel_index.diagnostics`; the `fileExtract` leg can also appear on a
+  // prerender-html visit that resolves its own file resource.
+  indexRoutesMs?: {
     card?: Record<string, number>;
     file?: Record<string, number>;
   };
@@ -404,6 +528,12 @@ export interface FileExtractResponse {
   // the file indexer merges this onto `diagnostics.frontmatterParseError` so
   // the failure surfaces via `/_indexing-errors` instead of vanishing.
   frontmatterParseError?: FrontmatterParseError;
+  // Diagnostics findings the file's frontmatter contributed during the
+  // extract (e.g. a skill's `toolSchemaErrors`). The extract still succeeds;
+  // the file indexer merges the bag onto the row's `diagnostics` so each
+  // finding surfaces via `/_indexing-errors`. Which keys the bag carries is
+  // the producing `FrontmatterField` subclass's own knowledge.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 }
 
 export interface FileRenderResponse {
@@ -441,6 +571,12 @@ export interface ModulePrerenderModel {
   createdAt: number;
   deps: string[];
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
+  // Every export name of the module, not just the card/field definitions
+  // that `definitions` records. Lets callers validate a codeRef whose export
+  // is not a BaseDef (e.g. a skill command class) without importing the
+  // module themselves. Absent on error responses and on responses from hosts
+  // that predate this field.
+  exports?: string[];
   error?: ErrorEntry;
 }
 
@@ -470,6 +606,32 @@ export interface PrerenderResponseMeta {
   // Lets operators join client → manager → prerender-server logs for
   // a single request. Absent for in-process (non-HTTP) callers.
   requestId?: string;
+}
+
+// Per-visit client-side overhead the indexer spent producing a row, measured
+// outside the server-observed render timings (`totalElapsedMs` /
+// `renderElapsedMs`). The index job runs its file visits serially, so this
+// overhead serializes with the render and is otherwise invisible next to it;
+// summed across a job's rows it accounts for most of the wall the job spends
+// between server renders. The once-per-job phases (discovery, dependency
+// ordering, module pre-warm, the final swap) and the aggregate row-write time
+// are not attributable to a single row and live on the job result's
+// `phaseTimings` (`jobs.result.phaseTimings`) instead.
+export interface IndexVisitClientTimings {
+  // Wall before the render request: reading the file bytes and the
+  // file-metadata lookups (created-at, content hash/size).
+  read?: number;
+  // Render round-trip transport: the client-observed wall of the prerender
+  // visit(s) minus the server-observed `totalElapsedMs` — the request/response
+  // plumbing between the indexer and the prerender server (serialization,
+  // network/IPC, waits not counted server-side). ~0 for the in-process (fused
+  // / in-browser) prerenderer, where there is no wire hop.
+  renderRpc?: number;
+  // Post-render bookkeeping: dependency resolution and index-entry construction
+  // between the render completing and the row write. Excludes the write itself
+  // (a row cannot time its own INSERT); the job's aggregate write time lives on
+  // the job result's `phaseTimings.writeMs` (`jobs.result.phaseTimings.writeMs`).
+  bookkeeping?: number;
 }
 
 // The shape persisted to the `diagnostics` columns — `boxel_index` for the
@@ -518,6 +680,18 @@ export interface Diagnostics
   // by the file indexer from the extract response. Absent when the
   // frontmatter parsed (or there was none).
   frontmatterParseError?: FrontmatterParseError;
+  // Skill frontmatter tools whose index-time schema generation failed. The
+  // row still indexes (instructions plus the tools that did enrich); this is
+  // the only indexed signal that a declared tool won't be callable. Merged
+  // in by the file indexer from the extract response. Absent when every
+  // declared tool enriched (or the file declared none).
+  toolSchemaErrors?: ToolSchemaError[];
+  // Per-visit client-side overhead of producing this row (file read, render
+  // round-trip transport, post-render bookkeeping) — the index-job wall spent
+  // on this row outside the server render. See `IndexVisitClientTimings`.
+  // Omitted when nothing was measured (e.g. a resumed row promoted without a
+  // fresh visit).
+  indexVisitClientMs?: IndexVisitClientTimings;
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
@@ -866,6 +1040,7 @@ export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
+export * from './search-bounds.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';

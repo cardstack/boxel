@@ -38,7 +38,7 @@ interface Signature {
     editCard: EditCardFn;
     saveCard: SaveCardFn;
     deleteCard: DeleteCardFn;
-    commandContext: ToolContext;
+    toolContext: ToolContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
@@ -120,7 +120,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
-            @commandContext={{@commandContext}}
+            @toolContext={{@toolContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @requestDeleteCard={{@deleteCard}}
             @close={{@close}}

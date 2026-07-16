@@ -34,10 +34,10 @@ export default class PatchFieldsTool extends HostBaseTool<
   requireInputFields = ['cardId', 'fieldUpdates'];
 
   constructor(
-    commandContext: ToolContext,
+    toolContext: ToolContext,
     private readonly configuration?: Configuration,
   ) {
-    super(commandContext);
+    super(toolContext);
   }
 
   async getInputType() {
@@ -76,7 +76,7 @@ export default class PatchFieldsTool extends HostBaseTool<
     // Load card-api dynamically to get getFields function
     const cardApi = await this.loaderService.loader.import<
       typeof import('@cardstack/base/card-api')
-    >('https://cardstack.com/base/card-api');
+    >('@cardstack/base/card-api');
 
     return FieldPathParser.validatedFieldPath(
       fieldPath,
@@ -218,7 +218,7 @@ export default class PatchFieldsTool extends HostBaseTool<
     if (configuredCardType) {
       const cardApi = await loaderForSchema.import<
         typeof import('@cardstack/base/card-api')
-      >('https://cardstack.com/base/card-api');
+      >('@cardstack/base/card-api');
       const cardFields = cardApi.getFields(configuredCardType, {
         usedLinksToFieldsOnly: false,
       });

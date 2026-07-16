@@ -357,7 +357,7 @@ export default class BoxelInput extends Component<Signature> {
         .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid):not(
             .search
           ) {
-          border-color: var(--border, currentColor);
+          border-color: currentColor;
         }
 
         .invalid:not(:disabled) {
@@ -585,7 +585,7 @@ export default class BoxelInput extends Component<Signature> {
         }
 
         .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
-          border-color: var(--boxel-dark);
+          border-color: currentColor;
         }
 
         .boxel-input[type='checkbox']:hover:not(:disabled):checked {

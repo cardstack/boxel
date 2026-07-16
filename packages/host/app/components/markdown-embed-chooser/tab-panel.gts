@@ -8,11 +8,24 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkItemType,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { isCardErrorJSONAPI } from '@cardstack/runtime-common';
+import {
+  isCardErrorJSONAPI,
+  type CardErrorJSONAPI,
+} from '@cardstack/runtime-common';
 
-import { fileNameFromUrl } from '@cardstack/runtime-common/bfm-card-references';
+import {
+  cardTypeName,
+  fileNameFromUrl,
+} from '@cardstack/runtime-common/bfm-card-references';
+
+import { maybeRelativeReference } from '@cardstack/runtime-common/url';
 
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
@@ -49,6 +62,10 @@ interface Signature {
     // (The pane's format seed comes from the shared `@selection`, which the
     // modal seeds from this same target.)
     initialTarget?: MarkdownEmbedInitialTarget;
+    // The editing document's own URL. The label and the inserted ref are both
+    // relativized against it, so a fallback URL label reads as `../Type/id` —
+    // the same form the pane serializes into the directive.
+    documentBaseUrl?: string;
     // Fired when the user clicks "Remove" in `current` mode. The modal
     // resolves its deferred with `{ remove: true }`.
     onRemove?: () => void;
@@ -67,6 +84,11 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
+  // Set when the picked/preloaded ref fails to resolve (deleted, moved, no
+  // permission). Distinguishes "resolution failed" from "still loading /
+  // nothing picked" so the pane can render the broken-ref visual instead of
+  // the empty placeholder.
+  @tracked private selectedError: CardErrorJSONAPI | undefined;
   @tracked private mode: 'choose' | 'current' = 'choose';
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -97,22 +119,40 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     return this.currentUrl !== initial;
   }
 
-  // 'DONE' until the user diverges from the initial preload, 'ACCEPT' once
+  // 'Done' until the user diverges from the initial preload, 'Accept' once
   // they do — matches Zeplin 08B. Non-edit (choose) tabs keep the dynamic
   // "Insert as …" label.
   private get ctaLabelOverride(): string | undefined {
     if (!this.isEditMode) return undefined;
     let dirty = this.args.selection.isDirty || this.targetChanged;
-    return dirty ? 'ACCEPT' : 'DONE';
+    return dirty ? 'Accept' : 'Done';
   }
 
   private get currentTargetLabel(): string {
     let t = this.selectedTarget;
-    if (!t) return this.selectedUrl ?? '';
+    if (!t) return this.toDisplayUrl(this.selectedUrl ?? '');
     if (this.args.refType === 'file') {
       return fileNameFromUrl(t.id ?? this.selectedUrl ?? '');
     }
-    return (t as CardDef).cardTitle ?? t.id ?? this.selectedUrl ?? '';
+    return (
+      (t as CardDef).cardTitle ??
+      this.toDisplayUrl(t.id ?? this.selectedUrl ?? '')
+    );
+  }
+
+  // When the label falls back to showing a raw URL (a broken ref, or a card
+  // with no title), relativize it against the editing document's own URL —
+  // yielding the `../Type/id` form the pane serializes into the directive, so
+  // the label matches what gets inserted. Falls back to the absolute URL when
+  // there's no base or either URL can't be parsed.
+  private toDisplayUrl(url: string): string {
+    let base = this.args.documentBaseUrl;
+    if (!url || !base) return url;
+    try {
+      return maybeRelativeReference(new URL(url), new URL(base), undefined);
+    } catch {
+      return url;
+    }
   }
 
   @action
@@ -133,17 +173,67 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     async (url: string, refType: MarkdownEmbedRefType) => {
       this.selectedUrl = url;
       this.selectedTarget = undefined;
+      this.selectedError = undefined;
       let result =
         refType === 'card'
           ? await this.store.get(url)
           : await this.store.get<FileDef>(url, { type: 'file-meta' });
       if (isCardErrorJSONAPI(result)) {
-        this.selectedTarget = undefined;
+        // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
+        // renders the broken-ref visual from `selectedError` instead of the
+        // resolved embed.
+        this.selectedError = result;
         return;
       }
       this.selectedTarget = result as CardDef | FileDef;
     },
   );
+
+  // The pane mounts once a row is picked and either resolves (selectedTarget)
+  // or fails (selectedError); the empty placeholder shows only before then.
+  private get hasPreview(): boolean {
+    return !!this.selectedTarget || !!this.selectedError;
+  }
+
+  // Broken-ref state threaded to the pane. Each is undefined unless the load
+  // failed, so the pane renders the resolved embed on the happy path and the
+  // broken visual only when `selectedError` is set.
+  private get brokenUrl(): string | undefined {
+    return this.selectedError ? this.selectedUrl : undefined;
+  }
+
+  private get brokenState(): BrokenLinkState | undefined {
+    if (!this.selectedError) return undefined;
+    return this.selectedError.status === 404 ? 'not-found' : 'error';
+  }
+
+  private get brokenErrorDoc(): BrokenLinkErrorDoc | undefined {
+    let e = this.selectedError;
+    if (!e) return undefined;
+    return {
+      status: e.status,
+      title: e.title,
+      message: e.message,
+      stack: e.meta?.stack ?? undefined,
+      additionalErrors: e.additionalErrors ?? null,
+    };
+  }
+
+  // Card refs label by type name; file refs label by filename — matching the
+  // label the base `linksTo` broken visual derives for cards.
+  private get brokenDisplayName(): string | undefined {
+    if (!this.selectedError || !this.selectedUrl) return undefined;
+    return this.args.refType === 'file'
+      ? fileNameFromUrl(this.selectedUrl)
+      : cardTypeName(this.selectedUrl);
+  }
+
+  // Drives the broken-ref overlay headline ("Linked file not found" vs the
+  // card wording) so a broken `:file[...]` ref doesn't read as a card.
+  private get brokenItemType(): BrokenLinkItemType | undefined {
+    if (!this.selectedError) return undefined;
+    return this.args.refType === 'file' ? 'file' : 'card';
+  }
 
   @action
   private handleInsert(bfm: string) {
@@ -225,13 +315,19 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        {{#if this.selectedTarget}}
+        {{#if this.hasPreview}}
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
             @refType={{@refType}}
             @selection={{@selection}}
+            @documentBaseUrl={{@documentBaseUrl}}
             @onInsert={{this.handleInsert}}
             @ctaLabelOverride={{this.ctaLabelOverride}}
+            @brokenUrl={{this.brokenUrl}}
+            @brokenState={{this.brokenState}}
+            @brokenDisplayName={{this.brokenDisplayName}}
+            @brokenItemType={{this.brokenItemType}}
+            @errorDoc={{this.brokenErrorDoc}}
           />
         {{else}}
           <p

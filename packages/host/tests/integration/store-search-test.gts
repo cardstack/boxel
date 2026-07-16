@@ -6,8 +6,8 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
-  baseRealm,
   baseFileRef,
+  baseRef,
   isCardResource,
   isFileMetaResource,
   type Loader,
@@ -48,7 +48,7 @@ module('Integration | store search public API', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -96,6 +96,25 @@ module('Integration | store search public API', function (hooks) {
         'the instance is resident in the store',
       );
     }
+    assert.deepEqual(
+      instances.map((instance) => (instance as any).title).sort(),
+      ['Mango', 'Van Gogh'],
+    );
+  });
+
+  test('search with a BaseDef type filter stays pinned to card instances', async function (assert) {
+    // BaseDef terminates both kinds' type chains, so as a filter it matches
+    // file rows too — but it selects no kind, so `search` pins the 'cards'
+    // scope for it just like an untyped query.
+    let instances = await storeService.search<CardDefType>(
+      { filter: { type: baseRef } },
+      [testRealmURL],
+    );
+
+    assert.true(
+      instances.every((instance) => isCardInstance(instance)),
+      'every result is a card instance — no plain files, no dual-indexed `.json` file rows',
+    );
     assert.deepEqual(
       instances.map((instance) => (instance as any).title).sort(),
       ['Mango', 'Van Gogh'],

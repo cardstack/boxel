@@ -33,7 +33,7 @@ export default class CopyAndEditTool extends HostBaseTool<
   private async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;
@@ -57,7 +57,7 @@ export default class CopyAndEditTool extends HostBaseTool<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let copyCardCommand = new CopyCardToRealmTool(this.commandContext);
+    let copyCardCommand = new CopyCardToRealmTool(this.toolContext);
     let { newCardId } = await copyCardCommand.execute({
       sourceCard: input.card,
       targetRealm,

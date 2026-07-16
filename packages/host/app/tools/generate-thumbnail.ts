@@ -146,9 +146,7 @@ export default class GenerateThumbnailTool extends HostBaseTool<
 
     const model = input.llmModel?.trim() || DEFAULT_IMAGE_GENERATION_LLM;
 
-    const result = await new SendRequestViaProxyTool(
-      this.commandContext,
-    ).execute({
+    const result = await new SendRequestViaProxyTool(this.toolContext).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
       method: 'POST',
       requestBody: JSON.stringify({
@@ -205,15 +203,15 @@ export default class GenerateThumbnailTool extends HostBaseTool<
       : filename;
 
     // Write binary to realm → realm indexes as PngDef/ImageDef automatically
-    const writeResult = await new WriteBinaryFileTool(
-      this.commandContext,
-    ).execute({
-      path: filePath,
-      realm: targetRealmIdentifier,
-      base64Content,
-      contentType: mimeType,
-      useNonConflictingFilename: true,
-    });
+    const writeResult = await new WriteBinaryFileTool(this.toolContext).execute(
+      {
+        path: filePath,
+        realm: targetRealmIdentifier,
+        base64Content,
+        contentType: mimeType,
+        useNonConflictingFilename: true,
+      },
+    );
 
     if (!writeResult?.fileIdentifier) {
       throw new Error('Failed to write binary file to realm.');
@@ -224,9 +222,9 @@ export default class GenerateThumbnailTool extends HostBaseTool<
     if (targetCardId?.trim()) {
       const cardApiModule = await this.loaderService.loader.import<
         typeof CardAPI
-      >('https://cardstack.com/base/card-api');
+      >('@cardstack/base/card-api');
 
-      await new PatchCardInstanceTool(this.commandContext, {
+      await new PatchCardInstanceTool(this.toolContext, {
         cardType: cardApiModule.CardDef as unknown as typeof CardDef,
       }).execute({
         cardId: targetCardId,

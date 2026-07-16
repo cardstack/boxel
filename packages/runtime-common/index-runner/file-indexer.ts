@@ -24,6 +24,8 @@ import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
 } from '../file-def-code-ref.ts';
+import { baseRef } from '../constants.ts';
+import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
 export interface FileIndexerOptions {
@@ -74,6 +76,21 @@ export async function performFileIndexing({
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
+  // See the card indexer: bookkeeping is the post-render, pre-write window for
+  // this file's row, stamped onto the diagnostics blob just before each write.
+  let bookkeepingStart = Date.now();
+  let withBookkeeping = (
+    d: Diagnostics | undefined,
+  ): Diagnostics | undefined =>
+    d
+      ? {
+          ...d,
+          indexVisitClientMs: {
+            ...(d.indexVisitClientMs ?? {}),
+            bookkeeping: Date.now() - bookkeepingStart,
+          },
+        }
+      : d;
   let entryURL = new URL(fileURL);
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
@@ -86,6 +103,12 @@ export async function performFileIndexing({
   ) {
     fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
   }
+  // Terminate the chain at BaseDef (the common ancestor of FileDef and CardDef)
+  // so a `{ type: baseRef }` filter matches both file and card-instance rows —
+  // e.g. `scope: 'all'` searches wanting one type ref for "everything". The
+  // instance chain (render/meta.ts `getTypes`) and the extractor chain
+  // (file-def-attributes-extractor.ts `getTypes`) append it too.
+  fileTypeRefs.push(baseRef);
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
@@ -152,7 +175,10 @@ export async function performFileIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(entryURL, { ...renderError, diagnostics });
+    await updateEntry(entryURL, {
+      ...renderError,
+      diagnostics: withBookkeeping(diagnostics),
+    });
     return 'error';
   }
 
@@ -171,11 +197,13 @@ export async function performFileIndexing({
   // Shared by the success entry and the dependency-error entry below, so the
   // two rows carry the same search keys. Two of them are synthetic (stamped
   // after the extractor's searchDoc so they win deterministically):
-  // - `_isCardInstance` marks the `file` row of a dual-indexed card-instance
+  // - `_isCardInstanceFile` marks the `file` row of a dual-indexed card-instance
   //   .json so mixed cards+files search can exclude it (the card already
   //   appears via its `instance` row). It rides on the dependency-error entry
   //   too, so a card .json whose card is in an error state stays out of file
-  //   search. Stamped only when true; plain file docs don't carry the key.
+  //   search. Stamped only when true; plain file docs don't carry the key — so
+  //   `eq: { _isCardInstanceFile: false }` (absent-as-false) keeps cards + plain
+  //   files and drops this row.
   // - `_title` is the row's display title (a file's is its name) under a
   //   neutral key that card docs also carry (stamped alongside `_cardType`
   //   during card render), so one mixed query can substring-match
@@ -187,9 +215,26 @@ export async function performFileIndexing({
     name,
     contentType,
     ...(extractResult.searchDoc ?? {}),
-    ...(isCardInstance ? { _isCardInstance: true } : {}),
+    ...(isCardInstance ? { [CARD_INSTANCE_FILE_KEY]: true } : {}),
     _title: name,
   };
+
+  // A frontmatter parse failure — or any diagnostics bag the frontmatter
+  // contributed (e.g. a skill's tool schema failures) — doesn't fail the
+  // file (it still indexes), so each rides on the row's diagnostics —
+  // mirroring brokenLinks — where `/_indexing-errors` surfaces it for the
+  // author. Merge them onto whatever render-side diagnostics the visit
+  // already produced. Computed before the dependency-error branch below so
+  // those findings persist on dependency-error rows too.
+  let { frontmatterParseError, frontmatterDiagnostics } = extractResult;
+  let fileDiagnostics: Diagnostics | undefined =
+    frontmatterParseError || frontmatterDiagnostics
+      ? {
+          ...(diagnostics ?? {}),
+          ...(frontmatterDiagnostics ?? {}),
+          ...(frontmatterParseError ? { frontmatterParseError } : {}),
+        }
+      : diagnostics;
 
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
@@ -208,7 +253,7 @@ export async function performFileIndexing({
       error: normalizedDependencyError,
       searchData,
       types: fileTypes,
-      diagnostics,
+      diagnostics: withBookkeeping(fileDiagnostics),
     });
     return 'error';
   }
@@ -226,18 +271,6 @@ export async function performFileIndexing({
   // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
 
-  // A frontmatter parse failure doesn't fail the file (it still indexes
-  // body-only), so it rides on the row's diagnostics — mirroring brokenLinks —
-  // where `/_indexing-errors` surfaces it for the author. Merge it onto
-  // whatever render-side diagnostics the visit already produced.
-  let fileDiagnostics: Diagnostics | undefined =
-    extractResult.frontmatterParseError
-      ? {
-          ...(diagnostics ?? {}),
-          frontmatterParseError: extractResult.frontmatterParseError,
-        }
-      : diagnostics;
-
   await updateEntry(entryURL, {
     type: 'file',
     lastModified,
@@ -254,7 +287,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    diagnostics: fileDiagnostics,
+    diagnostics: withBookkeeping(fileDiagnostics),
   });
 
   return 'indexed';

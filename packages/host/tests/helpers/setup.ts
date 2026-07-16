@@ -375,6 +375,7 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
         : 'recent failed fetches this test: <none>',
       summarizeSettledState(),
       summarizeRealmAuth(),
+      summarizeLoginReadiness(),
       summarizeEventLoopLag(),
       summarizeDomSnapshot(),
     ]
@@ -399,6 +400,15 @@ let eventLoopLagSamplerStarted = false;
 // is torn down and the live container is empty — so this preserves what the
 // hung test was actually rendering ~during the stall.
 let lastMountedDomSnapshot = '';
+// Last matrix login-readiness + `postLoginCompleted` transition provenance
+// captured while a test was still mounted. Sampled here (rather than read at
+// QUnit.testDone) for the same reason as the DOM snapshot — the owner is torn
+// down by then — and because the CI console output is a rolling buffer that
+// evicts the causal reset before the post-timeout diagnostic runs. Preserving
+// which caller last flipped `postLoginCompleted` turns an opaque cold-boot
+// login-screen timeout (DOM shows the login form, `postLoginCompleted:false`)
+// into one that names the reset.
+let lastLoginReadinessSnapshot = '';
 function startEventLoopLagSampler() {
   if (eventLoopLagSamplerStarted) return;
   eventLoopLagSamplerStarted = true;
@@ -425,7 +435,88 @@ function startEventLoopLagSampler() {
     } catch {
       // never let diagnostics sampling throw
     }
+    try {
+      let snapshot = captureLoginReadinessSnapshot();
+      // Only overwrite with a real reading so a between-tests / post-teardown
+      // tick (owner gone) doesn't clobber the last mounted snapshot.
+      if (snapshot) {
+        lastLoginReadinessSnapshot = snapshot;
+      }
+    } catch {
+      // never let diagnostics sampling throw
+    }
   }, EVENT_LOOP_LAG_INTERVAL_MS);
+}
+
+interface PostLoginTransitionDebug {
+  to: boolean;
+  reason: string;
+  msAgo: number;
+  stack: string;
+}
+
+// Read the current test's matrix login-readiness from the container cache
+// (never `lookup`, so sampling can't instantiate the service for a test that
+// doesn't use it) and format it, including a compact tail of each recent
+// `postLoginCompleted` transition's stack. Returns undefined when there is no
+// active owner or the service was never instantiated.
+function captureLoginReadinessSnapshot(): string | undefined {
+  let owner = (
+    getContext() as
+      | { owner?: { __container__?: { cache?: Record<string, unknown> } } }
+      | undefined
+  )?.owner;
+  let service = owner?.__container__?.cache?.['service:matrix-service'] as
+    | {
+        loginReadinessDebug?: unknown;
+        postLoginTransitionsDebug?: PostLoginTransitionDebug[];
+      }
+    | undefined;
+  if (!service) {
+    return undefined;
+  }
+  let readiness = service.loginReadinessDebug;
+  let transitions = service.postLoginTransitionsDebug ?? [];
+  let transitionLines = transitions.length
+    ? transitions
+        .map((t) => {
+          // Skip the Error header + the setter frame; keep the caller chain
+          // that identifies who flipped the flag (start-success / logout /
+          // resetState → afterEach, etc.).
+          let frames = (t.stack ?? '')
+            .split('\n')
+            .slice(2, 6)
+            .map((f) => f.trim())
+            .filter(Boolean);
+          return `${t.to ? '→true' : '→false'} via ${t.reason} (${t.msAgo}ms ago)${
+            frames.length ? `\n      ${frames.join('\n      ')}` : ''
+          }`;
+        })
+        .join('\n    ')
+    : '<none recorded>';
+  return [
+    `flags: ${JSON.stringify(readiness)}`,
+    `postLoginCompleted transitions (most recent last):\n    ${transitionLines}`,
+  ].join('\n  ');
+}
+
+// Matrix login-readiness at failure time — the missing half of a cold-boot
+// login-screen timeout. The DOM snapshot shows the login form rendered; this
+// shows WHY (`postLoginCompleted:false` despite `clientLoggedIn:true`) and
+// which caller reset it. Prefers a live read when the owner is still around
+// (during-test rejection paths); on QUnit's post-teardown timeout path the
+// owner is gone, so it falls back to the last value sampled while mounted.
+function summarizeLoginReadiness(): string {
+  try {
+    let snapshot =
+      captureLoginReadinessSnapshot() ?? lastLoginReadinessSnapshot;
+    if (!snapshot) {
+      return 'matrix login readiness: <unavailable>';
+    }
+    return `matrix login readiness:\n  ${snapshot}`;
+  } catch (error) {
+    return `matrix login readiness: <unavailable: ${formatErrorForLog(error)}>`;
+  }
 }
 
 function summarizeEventLoopLag(): string {

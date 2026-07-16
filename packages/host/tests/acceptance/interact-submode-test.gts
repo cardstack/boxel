@@ -1318,24 +1318,27 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       const messageService = getService('message-service');
       const receivedEventDeferred = new Deferred<void>();
-      messageService.listenerCallbacks
-        .get(testRealmURL)!
-        .push((ev: RealmEventContent) => {
-          if (ev.eventName === 'update') {
+      const unsubscribe = messageService.subscribe(
+        testRealmURL,
+        (ev: RealmEventContent) => {
+          // React only to the incremental index event produced by this
+          // edit. File "update" events, the "incremental-index-initiation"
+          // event that precedes indexing, and any from-scratch ("full") or
+          // "copy" re-index of this realm all reach this listener too — the
+          // re-index events carry no clientRequestId and would fail the
+          // assertions below — so ignore everything that is not the single
+          // incremental event under test.
+          if (ev.eventName !== 'index' || ev.indexType !== 'incremental') {
             // eslint-disable-next-line qunit/no-early-return
-            return; // ignore file update events
+            return;
           }
-          if (
-            ev.eventName === 'index' &&
-            ev.indexType === 'incremental-index-initiation'
-          ) {
-            // eslint-disable-next-line qunit/no-early-return
-            return; // ignore the index initiation event
-          }
+          // Stop listening once the incremental event is handled so a later
+          // event can't re-run these assertions and overrun assert.expect(6).
+          unsubscribe();
           ev = ev as IncrementalIndexEventContent;
           assert.ok(
             ev.clientRequestId,
-            'client request ID is included in event',
+            `client request ID is included in event: ${JSON.stringify(ev)}`,
           );
           assert.strictEqual(
             ev.eventName,
@@ -1353,7 +1356,8 @@ module('Acceptance | interact submode tests', function (hooks) {
             'invalidations are correct',
           ); // the card that was edited
           receivedEventDeferred.fulfill();
-        });
+        },
+      );
       await click('[data-test-edit-button]');
       fillIn('[data-test-field="firstName"] input', 'FadhlanXXX');
       let inputElement = find(

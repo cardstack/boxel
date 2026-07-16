@@ -136,7 +136,7 @@ export default class PublishRealmModal extends Component<Signature> {
   private async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;
@@ -803,7 +803,7 @@ export default class PublishRealmModal extends Component<Signature> {
         // Check availability through the same command exposed to boxel-cli so
         // the UI and headless callers share one path.
         let command = new CheckDomainAvailabilityTool(
-          this.toolService.commandContext,
+          this.toolService.toolContext,
         );
         let result = await command.execute({ type: 'custom', name: subdomain });
         this.customSubdomainAvailability = {

@@ -9,6 +9,7 @@ import {
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
+  fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
   CardResourceType,
@@ -84,7 +85,8 @@ import {
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
-import { getImmediateFieldDef, type FieldDefinition } from './definitions.ts';
+import type { FieldDefinition } from './definitions.ts';
+import { urlNamesFile } from './file-def-code-ref.ts';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
@@ -144,6 +146,12 @@ type Options = {
   // across stages. Absent (and so a no-op) for everything except
   // instrumented `_federated-search` calls.
   timings?: RequestTimings;
+  // Cooperative-cancellation signal for the search handler's per-request time
+  // budget. When present, `loadLinks` checks it between BFS layers so an
+  // over-budget item-leg search stops its relationship-assembly fan-out
+  // promptly instead of running every layer to completion. Threaded like
+  // `timings`; absent for everything except a bounded live search.
+  signal?: AbortSignal;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -271,15 +279,33 @@ export class RealmIndexQueryEngine {
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
+    // Internal override for the single-URL GET path, which pins 'instance' so a
+    // bare file URL never resolves as a card entry. When omitted, the scope
+    // comes from the wire `searchEntryQuery.scope` (mapped below): 'cards' ->
+    // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
+    entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
-    let { itemQuery: query, htmlQuery, fieldset, cardUrls } = searchEntryQuery;
+    let {
+      itemQuery: query,
+      htmlQuery,
+      fieldset,
+      cardUrls,
+      scope,
+    } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
     };
-    if (await this.queryTargetsFileMeta(query.filter, engineOpts)) {
-      return await this.searchEntriesFileMeta(searchEntryQuery, engineOpts);
-    }
+
+    // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
+    // query — a card row and a file row carry non-overlapping `types`, so the
+    // caller's filter also discriminates by kind. A mixed 'all' query returns
+    // both a card's `instance` row and its dual-indexed `.json` `file` row; a
+    // consumer that wants the file row dropped does so through its own filter
+    // (`eq: { item._isCardInstanceFile: false }`).
+    let entryTypeScope: 'instance' | 'file' | 'all' =
+      entryTypeScopeOverride ??
+      (scope === 'cards' ? 'instance' : scope === 'files' ? 'file' : 'all');
 
     let itemOnEveryRow = fieldset.item.kind !== 'none';
     let projection: SearchProjection = fieldset.html
@@ -287,16 +313,26 @@ export class RealmIndexQueryEngine {
       : { kind: 'dataOnly' };
     // Error rows surface only through the `html` branch (their renderings
     // carry `isError`); the item-only projection matches the live search
-    // path, which excludes them.
-    let sqlOpts: QueryOptions = fieldset.html
-      ? { ...engineOpts, includeErrors: true }
-      : engineOpts;
+    // path, which excludes them. The 'files' scope never includes errors —
+    // files are only ever surfaced healthy (the mixed 'all' scope forces the
+    // same for its file branch in `_search`) — so it strips includeErrors even
+    // when an html fieldset would otherwise set it.
+    let sqlOpts: QueryOptions;
+    if (entryTypeScope === 'file') {
+      let { includeErrors: _drop, ...rest } = engineOpts;
+      sqlOpts = rest;
+    } else if (fieldset.html) {
+      sqlOpts = { ...engineOpts, includeErrors: true };
+    } else {
+      sqlOpts = engineOpts;
+    }
     let runSql = () =>
       this.#indexQueryEngine.search(
         new URL(this.#realm.url),
         query,
         sqlOpts,
         projection,
+        entryTypeScope,
       );
     let { results, meta } = opts?.timings
       ? await opts.timings.time('sql', runSql)
@@ -317,6 +353,82 @@ export class RealmIndexQueryEngine {
     let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
 
     for (let row of results) {
+      // A `file` row (mixed 'all' scope) renders natively and carries no
+      // ancestor coercion — its renderings hang off its own type's entry with
+      // no renderTypeKey, and its resource is the synthesized `file-meta`. This
+      // is the file counterpart of the instance branch below; kind is decided
+      // per row on `row.type`.
+      if (row.type === 'file') {
+        let file = fileEntryFromResult(row);
+        let url = file.canonicalURL;
+        if (!url) {
+          continue;
+        }
+        let fileHtmlIds: string[] | undefined;
+        let fileIconId = collectIconId(
+          fieldset.html ? file.types?.[0] : undefined,
+          fieldset.html ? (file.iconHtml ?? undefined) : undefined,
+          file.displayNames?.[0] ?? '',
+          iconById,
+        );
+        if (fieldset.html) {
+          let matched = enumerateFileRenderings(file).filter((candidate) =>
+            htmlQueryMatches(resolvedHtmlQuery, candidate),
+          );
+          let cssIds: string[] = [];
+          if (matched.length > 0) {
+            for (let href of scopedCssHrefsFromDeps(file.deps)) {
+              let css = buildCssResource(href);
+              if (!cssById.has(css.id)) {
+                cssById.set(css.id, css);
+              }
+              cssIds.push(css.id);
+            }
+          }
+          let ids: string[] = [];
+          for (let candidate of matched) {
+            let htmlResource = buildHtmlResource({
+              url,
+              format: candidate.format,
+              html: candidate.html,
+              cardType: file.displayNames?.[0] ?? '',
+              cssIds,
+              generation: file.htmlGeneration ?? file.generation,
+            });
+            htmlResources.push(htmlResource);
+            ids.push(htmlResource.id);
+          }
+          fileHtmlIds =
+            fieldset.itemAsFallback && ids.length === 0 ? undefined : ids;
+        }
+        let emitFileItem =
+          itemOnEveryRow ||
+          (fieldset.itemAsFallback && fileHtmlIds === undefined);
+        let fileItemEmitted = false;
+        if (emitFileItem) {
+          let item: FileMetaResource = fileResourceFromIndex(
+            new URL(url),
+            file,
+          );
+          if (fieldset.item.kind === 'sparse') {
+            item = buildSparseItemResource(item, fieldset.item.fields);
+          } else {
+            fullItemRoots.push(item);
+          }
+          itemResources.push(item);
+          fileItemEmitted = true;
+        }
+        data.push(
+          buildEntryResource({
+            url,
+            htmlIds: fileHtmlIds,
+            itemType: fileItemEmitted ? FileMetaResourceType : undefined,
+            iconId: fileIconId,
+            generation: file.generation,
+          }),
+        );
+        continue;
+      }
       let fileUrl = row.url;
       if (!fileUrl) {
         continue;
@@ -328,8 +440,8 @@ export class RealmIndexQueryEngine {
       let hasError = Boolean(row.has_error);
       // The entry carries its index-data generation (`boxel_index.generation`);
       // each `html` rendering carries the generation it was produced at
-      // (`prerendered_html.generation`, dual-read with a boxel_index fallback).
-      // The two channels advance independently, so they can differ per row.
+      // (`prerendered_html.generation`). The two channels advance
+      // independently, so they can differ per row.
       let generation = (row.generation as number | null | undefined) ?? 0;
       let htmlGeneration =
         (row.html_generation as number | null | undefined) ?? generation;
@@ -426,9 +538,17 @@ export class RealmIndexQueryEngine {
         emitItem = false;
       }
       if (emitItem && pristine) {
+        // `pristine_doc` is stored with its id unresolved to the realm's
+        // registered alias prefix (e.g. `@cardstack/catalog/...`) for
+        // storage portability. The search-entry's `item` relationship
+        // always points at `cardUrl` (the row's resolved absolute URL,
+        // shared with the entry's own id) — the included resource's id
+        // must match that exactly or a JSON:API consumer's relationship
+        // lookup silently finds nothing.
         let item: CardResource<Saved> = {
           ...pristine,
-          links: { self: pristine.id },
+          id: cardUrl as RealmResourceIdentifier,
+          links: { self: cardUrl },
         };
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
@@ -485,18 +605,17 @@ export class RealmIndexQueryEngine {
       fieldset,
       cardUrls: [url.href],
     };
-    let collection =
-      kind === 'file'
-        ? // The file path is reached only through this explicit `kind` — an
-          // empty membership query never routes to file-meta on its own (see
-          // `queryTargetsFileMeta`), so a file's entry must be requested by
-          // accept header. `cardUrls` rides in `opts` for the file path (it's
-          // read there, not off the SearchEntryQuery).
-          await this.searchEntriesFileMeta(searchEntryQuery, {
-            ...opts,
-            cardUrls: [url.href],
-          })
-        : await this.searchEntries(searchEntryQuery, opts);
+    // Pin the scope by kind: a membership query resolves a card `.json`'s URL
+    // to its `instance` entry, so a file's entry must be requested explicitly by
+    // accept header ('file'), and a by-URL card lookup pins 'instance' so a bare
+    // file URL 404s rather than resolving as a file-meta entry. Both scopes run
+    // through the one `searchEntries` assembly loop (the file rows via its
+    // `row.type === 'file'` branch).
+    let collection = await this.searchEntries(
+      searchEntryQuery,
+      opts,
+      kind === 'file' ? 'file' : 'instance',
+    );
     let [entry] = collection.data;
     if (!entry) {
       return undefined;
@@ -506,125 +625,6 @@ export class RealmIndexQueryEngine {
       doc.included = collection.included;
     }
     return doc;
-  }
-
-  // The file-meta counterpart of `searchEntries`. Files are indexed as
-  // `type: 'file'` rows, which the instance-only projections skip, so they
-  // resolve through `searchFiles` (per-format HTML + the full `file-meta`
-  // resource), with the same fieldset semantics. A file renders natively —
-  // there is no ancestor coercion — so a file rendering carries no
-  // renderType, its composite id is just `<fileURL>#<format>`, and a
-  // renderType predicate in the htmlQuery never matches a file rendering.
-  private async searchEntriesFileMeta(
-    searchEntryQuery: SearchEntryQuery,
-    opts?: Options,
-  ): Promise<EntryCollectionDocument> {
-    let { itemQuery: query, htmlQuery, fieldset } = searchEntryQuery;
-    let { includeErrors: _includeErrors, ...fileOpts } = opts ?? {};
-    let runSql = () =>
-      this.#indexQueryEngine.searchFiles(
-        new URL(this.#realm.url),
-        query,
-        fileOpts,
-      );
-    let { files, meta } = opts?.timings
-      ? await opts.timings.time('sql', runSql)
-      : await runSql();
-
-    let resolvedHtmlQuery = resolveHtmlQuery(htmlQuery, (ref) =>
-      internalKeyFor(ref, undefined, this.#realm.virtualNetwork),
-    );
-
-    let itemOnEveryRow = fieldset.item.kind !== 'none';
-    let data: EntryResource[] = [];
-    let htmlResources: EntryIncludedResource[] = [];
-    let itemResources: (CardResource<Saved> | FileMetaResource)[] = [];
-    let cssById = new Map<string, CssResource>();
-    let iconById = new Map<string, IconResource>();
-    let fullItemRoots: (CardResource<Saved> | FileMetaResource)[] = [];
-
-    for (let file of files) {
-      let url = file.canonicalURL;
-      if (!url) {
-        continue;
-      }
-
-      let htmlIds: string[] | undefined;
-      // A file's type icon, deduped by its native-type internal key — carried
-      // on the `entry` so a no-HTML file row (e.g. a `.gts`/`.ts`
-      // FileDef with no fitted rendering) still resolves its icon.
-      let iconId = collectIconId(
-        fieldset.html ? file.types?.[0] : undefined,
-        fieldset.html ? (file.iconHtml ?? undefined) : undefined,
-        file.displayNames?.[0] ?? '',
-        iconById,
-      );
-      if (fieldset.html) {
-        let matched = enumerateFileRenderings(file).filter((candidate) =>
-          htmlQueryMatches(resolvedHtmlQuery, candidate),
-        );
-        let cssIds: string[] = [];
-        if (matched.length > 0) {
-          for (let href of scopedCssHrefsFromDeps(file.deps)) {
-            let css = buildCssResource(href);
-            if (!cssById.has(css.id)) {
-              cssById.set(css.id, css);
-            }
-            cssIds.push(css.id);
-          }
-        }
-        let ids: string[] = [];
-        for (let candidate of matched) {
-          let htmlResource = buildHtmlResource({
-            url,
-            format: candidate.format,
-            html: candidate.html,
-            cardType: file.displayNames?.[0] ?? '',
-            cssIds,
-            generation: file.htmlGeneration ?? file.generation,
-          });
-          htmlResources.push(htmlResource);
-          ids.push(htmlResource.id);
-        }
-        htmlIds = fieldset.itemAsFallback && ids.length === 0 ? undefined : ids;
-      }
-
-      let emitItem =
-        itemOnEveryRow || (fieldset.itemAsFallback && htmlIds === undefined);
-      let itemEmitted = false;
-      if (emitItem) {
-        // The file's live serialization — the same synthesized resource the
-        // live search path serves (raw pristine rows can lag the synthesized
-        // attributes, e.g. inferred contentType / searchDoc extras).
-        let item: FileMetaResource = fileResourceFromIndex(new URL(url), file);
-        if (fieldset.item.kind === 'sparse') {
-          item = buildSparseItemResource(item, fieldset.item.fields);
-        } else {
-          fullItemRoots.push(item);
-        }
-        itemResources.push(item);
-        itemEmitted = true;
-      }
-
-      data.push(
-        buildEntryResource({
-          url,
-          htmlIds,
-          itemType: itemEmitted ? FileMetaResourceType : undefined,
-          iconId,
-          generation: file.generation,
-        }),
-      );
-    }
-
-    let metaWithEcho: EntryCollectionDocument['meta'] = fieldset.html
-      ? { ...meta, htmlQuery }
-      : meta;
-    return await this.assembleSearchEntryDoc(
-      { data, meta: metaWithEcho },
-      { htmlResources, cssById, iconById, itemResources, fullItemRoots },
-      opts,
-    );
   }
 
   // Shared tail of the two searchEntries paths: stitch `included` together
@@ -695,71 +695,6 @@ export class RealmIndexQueryEngine {
       }
     }
     return fileMatch && !instanceMatch;
-  }
-
-  // When a relationship in the pristine_doc is missing data.type (stale
-  // index data from before the fix that added data to NotLoadedValue
-  // serialization), we need to consult the field definition to determine
-  // whether the relationship targets a FileDef or a CardDef.
-  private async fieldExpectsFileMeta(
-    resource: LooseCardResource | FileMetaResource,
-    fieldKey: string,
-    opts?: Options,
-  ): Promise<boolean> {
-    if (!resource.meta?.adoptsFrom) {
-      return false;
-    }
-    let relativeTo = resource.id
-      ? this.#realm.virtualNetwork.toURL(resource.id)
-      : this.realmURL;
-    let codeRef = codeRefWithAbsoluteIdentifier(
-      resource.meta.adoptsFrom,
-      relativeTo,
-      undefined,
-      this.#realm.virtualNetwork,
-    );
-    if (!isResolvedCodeRef(codeRef)) {
-      return false;
-    }
-    try {
-      let definition: import('./definitions.ts').Definition | undefined;
-      if (opts?.cacheOnlyDefinitions) {
-        definition =
-          await this.#definitionLookup.lookupCachedDefinition(codeRef);
-        if (!definition) {
-          return false;
-        }
-      } else {
-        definition = await this.#definitionLookup.lookupDefinition(codeRef, {
-          ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-        });
-      }
-      if (!definition) {
-        return false;
-      }
-      // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
-      let fieldName = fieldKey.includes('.')
-        ? fieldKey.slice(0, fieldKey.indexOf('.'))
-        : fieldKey;
-      let fieldDefinition = getImmediateFieldDef(definition, fieldName);
-      if (!fieldDefinition) {
-        return false;
-      }
-      let fieldCardRef = fieldDefinition.fieldOrCard;
-      let isFileType = await this.#indexQueryEngine.hasFileType(
-        this.realmURL,
-        fieldCardRef,
-        opts,
-      );
-      let isInstanceType = await this.#indexQueryEngine.hasInstanceType(
-        this.realmURL,
-        fieldCardRef,
-        opts,
-      );
-      return isFileType && !isInstanceType;
-    } catch {
-      return false;
-    }
   }
 
   async fetchCardTypeSummary() {
@@ -1377,9 +1312,17 @@ export class RealmIndexQueryEngine {
     let entries = await Promise.all(
       urls.map(async (url) => {
         let response: Response;
+        // A file link (the URL ends in a known FileDef extension; card ids
+        // never do) is requested with the file-meta mime so the serving
+        // realm returns the index-enriched document — consumers rely on
+        // index-derived attributes like a markdown skill's `kind`, which
+        // the card-mime fallback for file paths omits.
+        let accept = urlNamesFile(new URL(url))
+          ? SupportedMimeType.FileMeta
+          : SupportedMimeType.CardJson;
         try {
           response = await this.#fetch(url, {
-            headers: { Accept: SupportedMimeType.CardJson },
+            headers: { Accept: accept },
           });
         } catch (err: unknown) {
           let message =
@@ -1461,9 +1404,32 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    let realmPath = new RealmPaths(realmURL, this.#realm.virtualNetwork);
-    let omitSet = new Set(omit);
+    let vnForIdentity = this.#realm.virtualNetwork;
+    let realmPath = new RealmPaths(realmURL, vnForIdentity);
+    // `omit`/root ids may arrive in either resolved-URL or registered-alias
+    // form (the entry's item resource id is always resolved, while a
+    // fetched linked resource's own pristine_doc-derived id — and the
+    // relationship pointing at it, `relationshipIdStr` below — stays in
+    // alias form for storage portability). `equivalentURLForms` only
+    // enumerates spellings of a *resolved* URL, so an alias-form input needs
+    // `toURLHref` first to reach the resolved form it can expand from;
+    // `toURLHref` is a no-op on an input that's already a resolved URL.
+    // Index every spelling under one key so a root recognized via one form
+    // still matches when the same card is reached again via another.
+    let allIdForms = (id: string) =>
+      vnForIdentity.equivalentURLForms(vnForIdentity.toURLHref(id));
+    let omitSet = new Set(omit.flatMap((id) => allIdForms(id)));
     let visited = new Set<string>();
+    // Mirror the id of every resource in included[] so dedup is O(1): the
+    // relationship-target check (per entry) and the pre-push check (per
+    // resource) are Set lookups rather than linear scans of an array that
+    // grows to the full transitive-closure size.
+    let includedIds = new Set<string>();
+    for (let existing of included) {
+      if (existing.id != null) {
+        includedIds.add(existing.id);
+      }
+    }
 
     type LayerItem = {
       resource: LooseCardResource | FileMetaResource;
@@ -1482,7 +1448,9 @@ export class RealmIndexQueryEngine {
         if (visited.has(resource.id)) {
           continue;
         }
-        visited.add(resource.id);
+        for (let form of allIdForms(resource.id)) {
+          visited.add(form);
+        }
       }
       layer.push({
         resource,
@@ -1498,6 +1466,12 @@ export class RealmIndexQueryEngine {
 
     let layerIndex = 0;
     while (layer.length > 0) {
+      // Bail before each layer's batched DB queries + cross-realm fetches if
+      // the search's time budget has fired, so an over-budget item-leg search
+      // stops here rather than expanding the full transitive closure. The
+      // federated fan-out treats the resulting rejection as a failed realm; the
+      // handler's time-budget race is what actually returns the 408.
+      opts?.signal?.throwIfAborted();
       let currentLayerIndex = layerIndex++;
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
@@ -1654,35 +1628,25 @@ export class RealmIndexQueryEngine {
           }
           processed.add(key);
 
-          let relationshipType = relationship.data?.type as
-            | typeof CardResourceType
-            | typeof FileMetaResourceType
-            | undefined;
-          let expectsFileMeta = relationshipType === FileMetaResourceType;
-          let expectsCard = relationshipType === CardResourceType;
-          // Stale index payloads can incorrectly record file relationships
-          // as type "card" (or omit type entirely) when linked files were
-          // indexed after instances. Trust the field declaration in that
-          // case.
-          if (
-            !expectsFileMeta &&
-            (relationshipType === CardResourceType || !relationshipType)
-          ) {
-            expectsFileMeta = await this.fieldExpectsFileMeta(
-              resource,
-              key,
-              activeOpts,
-            );
-            if (expectsFileMeta) {
-              expectsCard = false;
-            }
-          }
-
           let vn = this.#realm.virtualNetwork;
           let linkURL = vn.resolveURL(
             relationship.links.self,
             resource.id ? vn.toURL(resource.id) : realmURL,
           );
+
+          let relationshipType = relationship.data?.type as
+            | typeof CardResourceType
+            | typeof FileMetaResourceType
+            | undefined;
+          // Card ids never end in a known FileDef extension, so the URL
+          // itself says whether the link targets a file. That also corrects
+          // stale index payloads which record file relationships as type
+          // "card" (or omit the type) when linked files were indexed after
+          // instances.
+          let expectsFileMeta =
+            relationshipType === FileMetaResourceType || urlNamesFile(linkURL);
+          let expectsCard =
+            relationshipType === CardResourceType && !expectsFileMeta;
           let resolvedSelf: string;
           try {
             resolvedSelf = vn.resolveURL(
@@ -1858,7 +1822,7 @@ export class RealmIndexQueryEngine {
         if (
           foundLinks ||
           omitSet.has(entry.relationshipIdStr) ||
-          included.find((i) => i.id === entry.relationshipIdStr)
+          includedIds.has(entry.relationshipIdStr)
         ) {
           entry.relationship.data = {
             type: linkResource?.type ?? CardResourceType,
@@ -1906,7 +1870,7 @@ export class RealmIndexQueryEngine {
         if (omitSet.has(resource.id)) {
           continue;
         }
-        if (included.find((r) => r.id === resource.id)) {
+        if (includedIds.has(resource.id)) {
           continue;
         }
         let rewritten = cloneDeep({
@@ -1930,6 +1894,7 @@ export class RealmIndexQueryEngine {
           ),
         );
         included.push(rewritten);
+        includedIds.add(resource.id);
       }
 
       layer = nextLayer;

@@ -60,8 +60,9 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
     return this.cardResource?.card;
   }
 
-  // Title for either skill source: `cardTitle` for a Skill card, the
-  // frontmatter name / title for a skill markdown file.
+  // Title for either skill source: `cardTitle` for a Skill card; for a skill
+  // markdown file, the title indexed from its first heading, falling back to
+  // the frontmatter name slug only when the file has no heading.
   private get displayTitle(): string | undefined {
     let card = this.card as
       | {
@@ -74,7 +75,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
     if (!card) {
       return undefined;
     }
-    return card.cardTitle ?? card.frontmatter?.name ?? card.title ?? card.name;
+    return card.cardTitle ?? card.title ?? card.frontmatter?.name ?? card.name;
   }
 
   private get isCreating() {
@@ -100,7 +101,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   }
 
   private async openSkillCard() {
-    let showCardCommand = new ShowCardTool(this.toolService.commandContext);
+    let showCardCommand = new ShowCardTool(this.toolService.toolContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });

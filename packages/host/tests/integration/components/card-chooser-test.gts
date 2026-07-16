@@ -50,11 +50,11 @@ module('Integration | card-chooser', function (hooks) {
     let textArea: typeof import('@cardstack/base/text-area');
     let cardsGrid: typeof import('@cardstack/base/cards-grid');
     let spec: typeof import('@cardstack/base/spec');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    textArea = await loader.import('@cardstack/base/text-area');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
+    spec = await loader.import('@cardstack/base/spec');
 
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
@@ -276,7 +276,7 @@ module('Integration | card-chooser', function (hooks) {
         .exists('show pagination button for test realm');
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
-        .containsText('Show 1 more card (1 not shown)');
+        .containsText('Show 1 more result (1 not shown)');
 
       await click(
         `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,

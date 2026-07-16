@@ -38,6 +38,45 @@ export interface Stats extends JSONTypes.Object {
   totalIndexEntries: number;
 }
 
+// Wall-clock of each phase of an index job outside the per-row server render.
+// Populated by the IndexRunner and returned alongside `stats` on the job
+// result (persisted to `jobs.result.phaseTimings`), so the ~one-in-four of the
+// job wall that falls between server renders decomposes into measured buckets.
+// The per-row server render and per-visit client overhead
+// (`boxel_index.diagnostics`) account for the rest. Kept off `Stats` — which is
+// a `JSONTypes.Object` embedded in other job results and deep-compared in
+// tests — so it carries no non-deterministic timing there. All fields
+// optional: incremental jobs skip the from-scratch-only phases (mtimes read,
+// module pre-warm), and any phase that didn't run stays absent.
+export interface IndexPhaseTimings {
+  // Whole-job wall, kickoff to return.
+  totalMs?: number;
+  // Batch setup before any phase below: `IndexWriter.createBatch` (generation
+  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // slowness, so it's bucketed rather than left as residue in `totalMs`.
+  setupMs?: number;
+  // Reading the index's per-file modified times up front (from-scratch only).
+  mtimesMs?: number;
+  // Invalidation discovery: the from-scratch filesystem walk, or the
+  // incremental invalidation fan-out.
+  discoverMs?: number;
+  // Ordering the invalidation set by dependency so files precede the cards
+  // that consume them.
+  orderMs?: number;
+  // The whole serial visit loop wall. Equals Σ server render
+  // (`boxel_index.diagnostics.totalElapsedMs`) + Σ per-visit
+  // `indexVisitClientMs` + `writeMs`.
+  visitLoopMs?: number;
+  // Aggregate row-write time across the loop — the Σ of every
+  // `batch.updateEntry` INSERT. Tracked here rather than per row because a row
+  // cannot time its own write. This is the I/O the visit's tab does not need,
+  // so it is the primary candidate to overlap with the next visit.
+  writeMs?: number;
+  // The final atomic swap: `batch.done()` (realm-meta update, working → main
+  // promotion, obsolete-row prune) in one transaction.
+  swapMs?: number;
+}
+
 export interface StreamFileRef {
   stream: ByteStream;
   lastModified: number;
