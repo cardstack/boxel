@@ -17,7 +17,11 @@ import {
   parseAgentFlag,
   type FactoryAgentProvider,
 } from './factory-agent/index.ts';
-import { loadFactoryBrief, type FactoryBrief } from './factory-brief.ts';
+import {
+  loadFactoryBrief,
+  loadGitHubBrief,
+  type FactoryBrief,
+} from './factory-brief.ts';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 import {
   assertAgentProviderImplemented,
@@ -54,7 +58,18 @@ let log = logger('factory-entrypoint');
 const BOOTSTRAP_LINK_SEARCH_RETRIES = 5;
 
 export interface FactoryEntrypointOptions {
-  briefUrl: string;
+  /**
+   * A Boxel brief card URL — OUR authored content describing what to
+   * build. Exactly one of `briefUrl` / `repoUrl` is required.
+   */
+  briefUrl?: string;
+  /**
+   * A GitHub repository URL for an inspired-by port (v3). The factory
+   * synthesizes the brief from the repo and seeds a PORT-ANALYSIS issue
+   * that digs into the repo's code — dependencies, specialized logic,
+   * tests and fixtures — before bootstrap plans anything.
+   */
+  repoUrl?: string;
   targetRealm: string | null;
   /**
    * Control realm (v3 split): issues, tracker cards, validations, and the
@@ -235,9 +250,15 @@ export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
     '  pnpm factory:go --brief-url <url> --target-realm <realm> [options]',
+    '  pnpm factory:go --repo-url <github url> --target-realm <realm> [options]',
     '',
-    'Required:',
-    '  --brief-url <url>           Absolute URL for the source brief card',
+    'Required (exactly one of --brief-url / --repo-url, plus --target-realm):',
+    '  --brief-url <url>           Absolute URL for the source brief card (your authored content)',
+    '  --repo-url <url>            GitHub repository URL for an inspired-by port. Seeds a',
+    '                              PORT-ANALYSIS issue ahead of bootstrap that clones the repo,',
+    '                              reads its media AND code (dependencies, specialized logic,',
+    '                              tests + fixtures), and writes the port background + code',
+    '                              analysis Knowledge Articles bootstrap plans from.',
     '  --target-realm <realm>      Target realm (URL form, e.g. http://localhost:4201/me/realm/)',
     '',
     'Options:',
@@ -302,6 +323,9 @@ export function parseFactoryEntrypointArgs(
       strict: true,
       options: {
         'brief-url': {
+          type: 'string',
+        },
+        'repo-url': {
           type: 'string',
         },
         'target-realm': {
@@ -374,7 +398,26 @@ export function parseFactoryEntrypointArgs(
     );
   }
 
-  let briefUrl = requireStringValue(parsed.values['brief-url'], '--brief-url');
+  let rawBriefUrl =
+    typeof parsed.values['brief-url'] === 'string' &&
+    parsed.values['brief-url'].trim() !== ''
+      ? parsed.values['brief-url']
+      : undefined;
+  let rawRepoUrl =
+    typeof parsed.values['repo-url'] === 'string' &&
+    parsed.values['repo-url'].trim() !== ''
+      ? parsed.values['repo-url']
+      : undefined;
+  if (!rawBriefUrl && !rawRepoUrl) {
+    throw new FactoryEntrypointUsageError(
+      'Missing required input: pass --brief-url <brief card> (your authored content) or --repo-url <github repo> (inspired-by port).',
+    );
+  }
+  if (rawBriefUrl && rawRepoUrl) {
+    throw new FactoryEntrypointUsageError(
+      '--brief-url and --repo-url are mutually exclusive — a run has one source.',
+    );
+  }
   let targetRealm = requireStringValue(
     parsed.values['target-realm'],
     '--target-realm',
@@ -405,7 +448,8 @@ export function parseFactoryEntrypointArgs(
   }
 
   return {
-    briefUrl: normalizeUrl(briefUrl, '--brief-url'),
+    briefUrl: rawBriefUrl ? normalizeUrl(rawBriefUrl, '--brief-url') : undefined,
+    repoUrl: rawRepoUrl ? normalizeUrl(rawRepoUrl, '--repo-url') : undefined,
     targetRealm: normalizeUrl(targetRealm, '--target-realm'),
     controlRealm:
       typeof parsed.values['control-realm'] === 'string'
@@ -586,10 +630,17 @@ export async function runFactoryEntrypoint(
 
   let client = new BoxelCLIClient();
 
-  let brief = await loadFactoryBrief(options.briefUrl, {
-    client,
-    fetch: dependencies?.fetch,
-  });
+  // One source per run: a brief card (our authored content) or a GitHub
+  // repo (inspired-by port — the analysis issue does the deep reading).
+  let brief = options.repoUrl
+    ? await loadGitHubBrief(options.repoUrl, { fetch: dependencies?.fetch })
+    : await loadFactoryBrief(requireBriefSource(options), {
+        client,
+        fetch: dependencies?.fetch,
+      });
+  // Downstream (run slug, loop config, bootstrap prompt) keys off one
+  // source URL regardless of which flag provided it.
+  let briefSourceUrl = brief.sourceUrl;
 
   let targetRealm = await (
     dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
@@ -754,7 +805,7 @@ export async function runFactoryEntrypoint(
   // Run the issue-driven loop
   let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
   let loopResult = await loopFn({
-    briefUrl: options.briefUrl,
+    briefUrl: briefSourceUrl,
     targetRealm: targetRealm.url,
     controlRealm: controlRealmUrl,
     controlSync,
@@ -939,6 +990,15 @@ async function defaultSyncWorkspaceToRealm(
         'which would cause the issue loop to exit immediately with zero issues.',
     );
   }
+}
+
+function requireBriefSource(options: FactoryEntrypointOptions): string {
+  if (options.briefUrl) {
+    return options.briefUrl;
+  }
+  throw new FactoryEntrypointUsageError(
+    'Missing required input: pass --brief-url <brief card> or --repo-url <github repo>.',
+  );
 }
 
 function requireStringValue(

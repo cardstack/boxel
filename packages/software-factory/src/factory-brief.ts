@@ -173,9 +173,15 @@ export async function loadFactoryBrief(
   sourceUrl: string,
   options?: FactoryBriefLoadOptions,
 ): Promise<FactoryBrief> {
-  // v3 port flow: a GitHub repo URL is a valid brief source.
+  // Briefs are OUR authored content (Boxel wiki cards). A GitHub repo is
+  // source material for an inspired-by port — a different input with its
+  // own flag. Catch the mix-up here with a pointer instead of a JSON
+  // parse error.
   if (parseGitHubRepoUrl(sourceUrl)) {
-    return loadGitHubBrief(sourceUrl, options);
+    throw new FactoryBriefError(
+      `${sourceUrl} is a GitHub repository, not a brief card. ` +
+        `Use --repo-url for inspired-by ports of a GitHub project.`,
+    );
   }
 
   let headers = { accept: SupportedMimeType.CardSource };

@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  FactoryBriefError,
   loadFactoryBrief,
+  loadGitHubBrief,
   parseGitHubRepoUrl,
 } from '../src/factory-brief.ts';
 import { createSeedIssue } from '../src/factory-seed.ts';
@@ -51,8 +53,18 @@ test('parseGitHubRepoUrl accepts repo URLs and rejects everything else', () => {
   assert.equal(parseGitHubRepoUrl('not a url'), undefined);
 });
 
-test('loadFactoryBrief synthesizes a port brief from a GitHub URL', async () => {
-  let brief = await loadFactoryBrief('https://github.com/acme/closet-app', {
+test('loadFactoryBrief rejects GitHub URLs with a --repo-url pointer', async () => {
+  await assert.rejects(
+    loadFactoryBrief('https://github.com/acme/closet-app', {
+      fetch: githubFetchStub(),
+    }),
+    (err: unknown) =>
+      err instanceof FactoryBriefError && /--repo-url/.test(err.message),
+  );
+});
+
+test('loadGitHubBrief synthesizes a port brief from a repo URL', async () => {
+  let brief = await loadGitHubBrief('https://github.com/acme/closet-app', {
     fetch: githubFetchStub(),
   });
   assert.equal(brief.title, 'Port: Closet App');
@@ -65,7 +77,7 @@ test('loadFactoryBrief synthesizes a port brief from a GitHub URL', async () => 
 test('createSeedIssue seeds a port-analysis issue that blocks bootstrap', async () => {
   let workspaceDir = await mkdtemp(join(tmpdir(), 'github-port-seed-'));
   try {
-    let brief = await loadFactoryBrief('https://github.com/acme/closet-app', {
+    let brief = await loadGitHubBrief('https://github.com/acme/closet-app', {
       fetch: githubFetchStub(),
     });
     let result = await createSeedIssue(brief, {
@@ -89,7 +101,7 @@ test('createSeedIssue seeds a port-analysis issue that blocks bootstrap', async 
     );
     assert.match(
       analysis.data.attributes.acceptanceCriteria,
-      /Better than the original/,
+      /Ported test contract/,
     );
 
     let bootstrap = JSON.parse(
