@@ -81,6 +81,14 @@ export interface FactoryEntrypointOptions {
   v2?: boolean;
   /** Context forking: prime once per brief, fork every implementation turn. */
   forkContext?: boolean;
+  /**
+   * Model for fix iterations (inner iterations ≥ 2 — mechanical lint/parse
+   * fix-ups). Defaults to `claude-sonnet-5` under --v2; pass `inherit` to
+   * keep the session model for every turn.
+   */
+  fixModel?: string;
+  /** Effort for fix iterations (low|medium|high|xhigh|max). Default `medium` under --v2. */
+  fixEffort?: string;
 }
 
 export interface FactoryEntrypointAction {
@@ -273,6 +281,12 @@ export function parseFactoryEntrypointArgs(
         'fork-context': {
           type: 'boolean',
         },
+        'fix-model': {
+          type: 'string',
+        },
+        'fix-effort': {
+          type: 'string',
+        },
       },
     });
   } catch (error) {
@@ -334,7 +348,47 @@ export function parseFactoryEntrypointArgs(
         : undefined,
     v2: parsed.values.v2 === true ? true : undefined,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
+    fixModel:
+      typeof parsed.values['fix-model'] === 'string'
+        ? parsed.values['fix-model']
+        : undefined,
+    fixEffort:
+      typeof parsed.values['fix-effort'] === 'string'
+        ? parsed.values['fix-effort']
+        : undefined,
   };
+}
+
+/**
+ * Turn the CLI's budget flags into the loop's model policy. Orchestrator-
+ * owned: budgets key off turn TYPE (prime/bootstrap/build/fix), never off
+ * issue content. v2 default: fix iterations (mechanical lint/parse
+ * fix-ups) run on claude-sonnet-5 at medium effort; `--fix-model inherit`
+ * keeps the session model everywhere.
+ */
+export function buildModelPolicy(options: {
+  v2?: boolean;
+  fixModel?: string;
+  fixEffort?: string;
+}):
+  | {
+      fix?: {
+        model?: string;
+        effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+      };
+    }
+  | undefined {
+  if (options.v2 !== true) return undefined;
+  let model =
+    options.fixModel === 'inherit'
+      ? undefined
+      : (options.fixModel ?? 'claude-sonnet-5');
+  let effortRaw = options.fixEffort ?? 'medium';
+  let effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(effortRaw)
+    ? (effortRaw as 'low' | 'medium' | 'high' | 'xhigh' | 'max')
+    : 'medium';
+  if (!model && options.fixEffort === undefined) return undefined;
+  return { fix: { ...(model ? { model } : {}), effort } };
 }
 
 export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
@@ -482,6 +536,7 @@ export async function runFactoryEntrypoint(
     v2: options.v2,
     runTitle: brief.title,
     forkContext: options.forkContext,
+    modelPolicy: buildModelPolicy(options),
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

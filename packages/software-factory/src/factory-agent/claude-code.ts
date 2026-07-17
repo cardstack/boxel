@@ -185,6 +185,15 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let options: Options = {
       systemPrompt,
       mcpServers: { [MCP_SERVER_NAME]: mcpServer },
+      // Per-turn model/thinking budget from the orchestrator's policy
+      // (fix iterations don't need the flagship model at full effort).
+      // Absent fields inherit the session default.
+      ...(context.modelBudget?.model
+        ? { model: context.modelBudget.model }
+        : {}),
+      ...(context.modelBudget?.effort
+        ? { effort: context.modelBudget.effort }
+        : {}),
       // When `workspaceDir` is configured, expose the SDK's native fs /
       // shell tools so the model can work on workspace files directly
       // (`Read` / `Write` / `Edit`) and run inspection helpers (`Bash`,

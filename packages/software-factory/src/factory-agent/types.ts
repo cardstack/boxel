@@ -280,6 +280,18 @@ export interface AgentContext {
     result?: unknown;
     durationMs?: number;
   }) => void;
+  /**
+   * Model/thinking budget for THIS turn, chosen by the orchestrator's
+   * policy (turn type — prime / bootstrap / build / fix), not by the
+   * issue. Undefined fields inherit the session default. Note: provider
+   * prompt cache is per-model, so a budget that switches model re-ingests
+   * a forked prime prefix uncached (usually still cheaper on a smaller
+   * model).
+   */
+  modelBudget?: {
+    model?: string;
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  };
 }
 
 export interface AgentAction {

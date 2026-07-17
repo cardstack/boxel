@@ -139,6 +139,19 @@ export interface IssueLoopConfig {
   /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
   runLog?: RunLogWriter;
   /**
+   * Per-turn model/thinking budget policy, keyed by turn type. The
+   * ORCHESTRATOR owns this (turn type is deterministic here); issues
+   * don't carry budgets. `fix` applies to inner iterations ≥ 2 —
+   * mechanical lint/parse fix-ups that don't need the flagship model at
+   * full effort. Absent keys inherit the session default.
+   */
+  modelPolicy?: {
+    prime?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    bootstrap?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    build?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    fix?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+  };
+  /**
    * Context forking (v2): before the first implementation issue, run one
    * priming turn (read skills/design-language/precedent, write
    * design/DESIGN-NOTES.md) and fork every implementation issue's session
@@ -310,6 +323,7 @@ export async function runIssueLoop(
     syncWorkspace,
     briefUrl,
     runLog,
+    modelPolicy,
     forkContext = false,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
@@ -423,6 +437,9 @@ export async function runIssueLoop(
           darkfactoryModuleUrl,
         });
         primeContext.primeTurn = true;
+        if (modelPolicy?.prime) {
+          primeContext.modelBudget = modelPolicy.prime;
+        }
         let primeResult = await agent.run(primeContext, tools);
         if (primeResult.sessionId) {
           primeSessionId = primeResult.sessionId;
@@ -575,6 +592,22 @@ export async function runIssueLoop(
       // leave the run log silent.
       if (streamHandler) {
         context.onToolCall = streamHandler.handler;
+      }
+
+      // Model/thinking budget by turn type: bootstrap and first
+      // implementation iterations do design-taste work; iterations ≥ 2
+      // are mechanical fix-ups and run on the cheaper budget.
+      let turnBudget =
+        issue.issueType === 'bootstrap'
+          ? modelPolicy?.bootstrap
+          : iteration >= 2
+            ? modelPolicy?.fix
+            : modelPolicy?.build;
+      if (turnBudget) {
+        context.modelBudget = turnBudget;
+        log.info(
+          `  Turn budget: model=${turnBudget.model ?? 'inherit'}, effort=${turnBudget.effort ?? 'inherit'}`,
+        );
       }
 
       // Run the agent — it calls tools during its turn. Realm-touching `run_*`
