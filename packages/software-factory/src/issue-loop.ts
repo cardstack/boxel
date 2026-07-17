@@ -691,6 +691,14 @@ export async function runIssueLoop(
       );
 
       if (runLog && validationResults) {
+        // Link the most informative step's Validation card: the first
+        // failing step, else the last step that ran. Step cards are written
+        // by the pipeline at Validations/<step>_<issueId>-<iteration>
+        // ('evaluate' files as 'eval_').
+        let focusStep = validationResults.steps.find((s) => !s.passed)
+          ?? validationResults.steps[validationResults.steps.length - 1];
+        let stepFile =
+          focusStep?.step === 'evaluate' ? 'eval' : focusStep?.step;
         await runLog.append([
           {
             kind: 'validation',
@@ -698,6 +706,9 @@ export async function runIssueLoop(
               ? 'Validation passed'
               : 'Validation failed — revising',
             body: formatValidation(validationResults),
+            ...(focusStep
+              ? { cardPath: `Validations/${stepFile}_${issue.id}-${iteration}` }
+              : {}),
           },
         ]);
       }

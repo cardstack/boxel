@@ -451,10 +451,16 @@ export function assembleBootstrapPrompt(
 ): string {
   let { context, loader } = options;
 
-  return loader.load('bootstrap-implement', {
-    briefUrl: context.briefUrl,
-    issue: context.issue,
-  });
+  // v2's bootstrap variant strips the QUnit/test requirements — the v2
+  // pipeline runs no tests, and baking them into issue descriptions made
+  // agents write .test.gts despite the skill's no-tests hard rule.
+  return loader.load(
+    context.v2 === true ? 'bootstrap-implement-v2' : 'bootstrap-implement',
+    {
+      briefUrl: context.briefUrl,
+      issue: context.issue,
+    },
+  );
 }
 
 /**

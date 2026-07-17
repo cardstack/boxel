@@ -625,6 +625,10 @@ class RunLogEntry extends FieldDef {
     get isShipMoment() {
       return this.args.model.kind === 'card-ready';
     }
+    get isCompactLink() {
+      let kind = this.args.model.kind ?? '';
+      return kind === 'validation' || kind === 'status' || kind === 'iteration';
+    }
     <template>
       <div class='entry' data-kind={{@model.kind}}>
         <span class='t'>{{this.timeLabel}}
@@ -652,6 +656,11 @@ class RunLogEntry extends FieldDef {
               <div class='cardwrap'>
                 <@fields.card @format='embedded' />
               </div>
+            </div>
+          {{else if this.isCompactLink}}
+            <div class='showme showme-inline'>
+              <span class='showme-label'>details</span>
+              <span class='atom-chip'><@fields.card @format='atom' /></span>
             </div>
           {{else}}
             <div class='showme'>
@@ -731,6 +740,20 @@ class RunLogEntry extends FieldDef {
           text-transform: uppercase;
           color: var(--rl-ink-meta, #a2a2ab);
           margin-bottom: 6px;
+        }
+        .showme-inline {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .showme-inline .showme-label {
+          display: inline;
+          margin-bottom: 0;
+        }
+        .atom-chip :deep(.boxel-card-container) {
+          border-radius: 5px;
+          box-shadow: 0 0 0 1px var(--rl-border, #e2e8f0);
+          cursor: pointer;
         }
         /* Linked issue/wiki cards render as a real fitted view — a sized,
            parent-owned box (not an atom chip). */
