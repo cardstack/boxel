@@ -33,6 +33,12 @@ import {
   type RunParseInMemoryOptions,
   type RunParseResult,
 } from './parse-execution.ts';
+import {
+  captureHtmlScreenshot,
+  type ScreenshotHtmlOptions,
+  type ScreenshotHtmlResult,
+} from './screenshot-execution.ts';
+import { catalogSkills, readSkillOnDemand } from './skill-catalog.ts';
 import { runTestsInMemory } from './test-run-execution.ts';
 import type {
   RunTestsInMemoryOptions,
@@ -113,6 +119,10 @@ export interface ToolBuilderConfig {
   runInstantiateInMemory?: (
     options: RunInstantiateInMemoryOptions,
   ) => Promise<RunInstantiateResult>;
+  /** Injected for testing — defaults to captureHtmlScreenshot. */
+  captureHtmlScreenshot?: (
+    options: ScreenshotHtmlOptions,
+  ) => Promise<ScreenshotHtmlResult>;
 }
 
 export interface ToolCallEntry {
@@ -168,6 +178,9 @@ export function buildFactoryTools(
     buildRunEvaluateTool(config),
     buildRunParseTool(config),
     buildRunInstantiateTool(config),
+    buildListSkillsTool(),
+    buildReadSkillTool(),
+    buildScreenshotHtmlTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -657,6 +670,147 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
             'run_instantiate',
             'Spec-linked instances',
           ),
+        };
+      }
+      return result;
+    },
+  };
+}
+
+function buildListSkillsTool(): FactoryTool {
+  return {
+    name: 'list_skills',
+    description:
+      'List every skill available to load on demand — name, one-line ' +
+      'description, and the reference files each one carries. Your system ' +
+      'prompt front-loads only a core skill set; when the task at hand ' +
+      'touches a topic that core does not cover (theming, fitted formats, ' +
+      'file-backed fields, commands, catalog specs, queries, …), call this ' +
+      'to find the right skill, then load it with read_skill. Cheap to ' +
+      'call; results are stable for the whole run.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      let skills = await catalogSkills();
+      return { ok: true, skills };
+    },
+  };
+}
+
+function buildReadSkillTool(): FactoryTool {
+  return {
+    name: 'read_skill',
+    description:
+      'Read a skill on demand by name. Without "reference", returns the ' +
+      "skill's SKILL.md body plus the list of its reference file names; " +
+      'pass "reference" to fetch one reference file. Load skills ' +
+      'progressively: SKILL.md first, then only the reference files the ' +
+      'current work actually needs. Do NOT re-read skills whose full text ' +
+      'is already in your system prompt. Use list_skills to discover ' +
+      'available names.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Skill name exactly as returned by list_skills.',
+        },
+        reference: {
+          type: 'string',
+          description:
+            'Optional reference file name (e.g. `dev-fitted-formats.md`) ' +
+            'from the skill\'s "references" list.',
+        },
+      },
+      required: ['name'],
+    },
+    execute: async (args) => {
+      let name = requireStringArg(args, 'name', 'read_skill');
+      let rawReference = args.reference;
+      let reference =
+        typeof rawReference === 'string' && rawReference.trim() !== ''
+          ? rawReference.trim()
+          : undefined;
+      try {
+        let result = await readSkillOnDemand(name, reference);
+        return { ok: true, ...result };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  };
+}
+
+function buildScreenshotHtmlTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.captureHtmlScreenshot ?? captureHtmlScreenshot;
+  return {
+    name: 'screenshot_html',
+    description:
+      'Render a workspace HTML file in headless Chromium and write a PNG ' +
+      'screenshot into the workspace. Returns the PNG\'s workspace-relative ' +
+      'path — then use your native Read tool on that path to SEE the image ' +
+      'and critique it. This powers the HTML-first design loop: write a ' +
+      'plain HTML+CSS mockup of the card (mobile isolated view, fitted ' +
+      'badge/strip/card tiles, embedded row) with REAL sample copy, ' +
+      'screenshot it, look at it, name the defects, revise, and repeat — ' +
+      'seconds per iteration, no lint or realm round-trip. Iterate on the ' +
+      'mockup until it is right BEFORE writing any .gts template; then ' +
+      'translate the accepted mockup into the card templates. Mockups and ' +
+      'screenshots are design artifacts — keep them under a `design/` ' +
+      'folder in the workspace.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Workspace-relative path to the .html file to render.',
+        },
+        output_path: {
+          type: 'string',
+          description:
+            'Optional workspace-relative .png output path. Defaults to the ' +
+            'HTML path with the extension replaced by .png.',
+        },
+        width: {
+          type: 'number',
+          description: 'Viewport width in px (default 390 — mobile).',
+        },
+        height: {
+          type: 'number',
+          description: 'Viewport height in px (default 844 — mobile).',
+        },
+        full_page: {
+          type: 'boolean',
+          description:
+            'Capture the full scrollable page (default true) or just the viewport.',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'screenshot_html');
+      let outputPath =
+        typeof args.output_path === 'string' && args.output_path.trim() !== ''
+          ? args.output_path.trim()
+          : undefined;
+      let result = await execute({
+        workspaceDir: config.workspaceDir,
+        path,
+        ...(outputPath ? { outputPath } : {}),
+        ...(typeof args.width === 'number' ? { width: args.width } : {}),
+        ...(typeof args.height === 'number' ? { height: args.height } : {}),
+        ...(typeof args.full_page === 'boolean'
+          ? { fullPage: args.full_page }
+          : {}),
+      });
+      if (result.ok) {
+        return {
+          ...result,
+          note:
+            `Screenshot written to ${result.outputPath}. Use the native ` +
+            'Read tool on that path to view the image and critique it.',
         };
       }
       return result;

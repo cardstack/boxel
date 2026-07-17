@@ -51,6 +51,15 @@ const DEFAULT_FALLBACK_DIRS = [
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
+/**
+ * All skill search directories in precedence order (primary first). Exposed
+ * for the on-demand skill tools (`list_skills` / `read_skill`) so their
+ * catalog matches exactly what the loader can resolve.
+ */
+export function skillSearchDirs(): string[] {
+  return [DEFAULT_SKILLS_DIR, ...DEFAULT_FALLBACK_DIRS];
+}
+
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
 
