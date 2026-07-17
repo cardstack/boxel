@@ -90,7 +90,8 @@ not by ceremony. Work design-first, in this order:
   data as the mockup.
 - Write a Catalog Spec card (`Spec/<card-slug>.json`, adoptsFrom
   `https://cardstack.com/base/spec#Spec`) linking the sample instances via
-  `linkedExamples`.
+  `linkedExamples`, with its catalog-facing `title` and one-sentence
+  `description` attributes populated (never left empty).
 
 ## 4. VERIFY
 

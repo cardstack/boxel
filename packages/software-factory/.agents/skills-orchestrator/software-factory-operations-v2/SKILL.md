@@ -43,8 +43,11 @@ file. Load what the current work touches, nothing more.
    embedded + fitted templates), sample instances (same data as the
    mockup), and a Catalog Spec (`Spec/<slug>.json`, adoptsFrom
    `https://cardstack.com/base/spec#Spec`, `linkedExamples` →
-   instances). Call `get_card_schema` before writing any card JSON whose
-   shape you don't know (Spec, tracker cards).
+   instances). The Spec MUST populate its catalog-facing `title` (display
+   name) and `description` (one sentence) attributes in addition to the
+   readMe — a Spec with empty title/description renders as an unnamed
+   card in the catalog UI. Call `get_card_schema` before writing any
+   card JSON whose shape you don't know (Spec, tracker cards).
 4. **VERIFY**: `run_lint({ path })` per file, then `run_parse()`,
    `run_evaluate()`, `run_instantiate()`. Fix what they report. These
    return in-memory results; each one syncs your workspace to the realm
