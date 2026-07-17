@@ -430,12 +430,15 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('issue-implement', {
-    project: context.project,
-    issue: context.issue,
-    knowledge: context.knowledge,
-    toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
-  });
+  return loader.load(
+    context.v2 === true ? 'issue-implement-v2' : 'issue-implement',
+    {
+      project: context.project,
+      issue: context.issue,
+      knowledge: context.knowledge,
+      toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
+    },
+  );
 }
 
 /**

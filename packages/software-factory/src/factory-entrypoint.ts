@@ -77,6 +77,8 @@ export interface FactoryEntrypointOptions {
    * Set via `--enable-boxel-ui-discovery` on the CLI.
    */
   enableBoxelUiDiscovery?: boolean;
+  /** V2 lean/design-first mode (see factory-issue-loop-wiring). */
+  v2?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -263,6 +265,9 @@ export function parseFactoryEntrypointArgs(
         'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
+        v2: {
+          type: 'boolean',
+        },
       },
     });
   } catch (error) {
@@ -315,8 +320,14 @@ export function parseFactoryEntrypointArgs(
     openRouterApiKey,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
+    // V2 turns boxel-ui discovery on by default — the design-first loop
+    // must search the catalog before hand-rolling UI.
     enableBoxelUiDiscovery:
-      parsed.values['enable-boxel-ui-discovery'] === true ? true : undefined,
+      parsed.values['enable-boxel-ui-discovery'] === true ||
+      parsed.values.v2 === true
+        ? true
+        : undefined,
+    v2: parsed.values.v2 === true ? true : undefined,
   };
 }
 
@@ -462,6 +473,7 @@ export async function runFactoryEntrypoint(
     debug: options.debug,
     retryBlocked: options.retryBlocked,
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
+    v2: options.v2,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

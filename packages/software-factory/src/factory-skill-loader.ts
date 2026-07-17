@@ -160,13 +160,22 @@ export interface DefaultSkillResolverOptions {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * V2 lean mode — front-load only a small core (the design-first V2
+   * operations skill + file structure + cardinal rules); every other
+   * skill is discoverable at runtime via the `list_skills` / `read_skill`
+   * tools. Bootstrap issues are unaffected.
+   */
+  v2?: boolean;
 }
 
 export class DefaultSkillResolver implements SkillResolver {
   private enableBoxelUiDiscovery: boolean;
+  private v2: boolean;
 
   constructor(options: DefaultSkillResolverOptions = {}) {
     this.enableBoxelUiDiscovery = options.enableBoxelUiDiscovery === true;
+    this.v2 = options.v2 === true;
   }
 
   /**
@@ -189,6 +198,27 @@ export class DefaultSkillResolver implements SkillResolver {
     // Bootstrap issues get the bootstrap skill instead of implementation skills
     if (issueType === 'bootstrap') {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
+    }
+
+    // V2 lean mode: small always-on core; everything else on demand via
+    // the list_skills / read_skill tools. The design-first workflow and
+    // the "when you need X, read Y" pointer table live in the V2
+    // operations skill itself.
+    if (this.v2) {
+      let leanSkills = [
+        'software-factory-operations-v2',
+        'boxel-file-structure',
+        'boxel-workspace-cardinal-rules',
+      ];
+      for (let skillName of extractKnowledgeSkillTags(project, issue)) {
+        if (!leanSkills.includes(skillName)) {
+          leanSkills.push(skillName);
+        }
+      }
+      log.info(
+        `Resolved skills (v2 lean) for issue "${issue.id}": ${leanSkills.join(', ')}`,
+      );
+      return leanSkills;
     }
 
     let skills: string[] = [

@@ -249,6 +249,12 @@ export interface AgentContext {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * V2 lean/design-first mode — implementation issues use the
+   * `issue-implement-v2` prompt (HTML-mockup design phase, no tests) and
+   * the lean skill core with on-demand `read_skill` loading.
+   */
+  v2?: boolean;
 }
 
 export interface AgentAction {

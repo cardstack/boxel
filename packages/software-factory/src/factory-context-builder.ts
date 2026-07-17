@@ -50,6 +50,8 @@ export interface ContextBuilderConfig {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /** V2 lean/design-first mode — carried onto every AgentContext. */
+  v2?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ export class ContextBuilder {
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
   private enableBoxelUiDiscovery: boolean;
+  private v2: boolean;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
@@ -69,6 +72,7 @@ export class ContextBuilder {
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
     this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
+    this.v2 = config.v2 === true;
   }
 
   /**
@@ -112,6 +116,7 @@ export class ContextBuilder {
       skills,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      v2: this.v2,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -188,6 +193,7 @@ export class ContextBuilder {
       skills,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      v2: this.v2,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 

@@ -104,6 +104,13 @@ export interface IssueLoopWiringConfig {
    */
   enableBoxelUiDiscovery?: boolean;
   /**
+   * V2 lean/design-first mode: lean skill core + on-demand read_skill,
+   * HTML-mockup design phase in the implement prompt, and no QUnit step
+   * in the validation pipeline (tests move to a later hardening phase).
+   * Also turns boxel-ui discovery on unless explicitly disabled upstream.
+   */
+  v2?: boolean;
+  /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
    * IssueTracker exists, instead of waiting for the entire loop to return.
@@ -146,10 +153,12 @@ export async function runFactoryIssueLoop(
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
       enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+      v2: config.v2 === true,
     }),
     skillLoader: new SkillLoader(),
     issueLoader,
     enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+    v2: config.v2 === true,
   });
 
   // 3. Tool infrastructure
@@ -263,6 +272,7 @@ export async function runFactoryIssueLoop(
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
       cache: validationCache,
+      includeTestStep: config.v2 !== true,
     });
 
   // 6. Run issue loop

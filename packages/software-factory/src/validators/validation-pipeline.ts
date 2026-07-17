@@ -179,6 +179,12 @@ export interface ValidationPipelineConfig {
   searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
   /** Injected for testing — passed through to ParseValidationStep. */
   parseSearchSpecsFn?: ParseValidationStepConfig['searchSpecsFn'];
+  /**
+   * Include the QUnit test step (default true). The V2 lean loop sets this
+   * to false — tests belong to a separate hardening phase, so the per-issue
+   * pipeline is parse/lint/eval/instantiate only.
+   */
+  includeTestStep?: boolean;
 }
 
 /**
@@ -240,11 +246,14 @@ export function createDefaultPipeline(
     fetchFilenames: config.fetchFilenames,
   };
 
-  return new ValidationPipeline([
+  let steps: ValidationStep[] = [
     new ParseValidationStep(parseConfig),
     new LintValidationStep(lintConfig),
     new EvalValidationStep(evalConfig),
     new InstantiateValidationStep(instantiateConfig),
-    new TestValidationStep(testConfig),
-  ]);
+  ];
+  if (config.includeTestStep !== false) {
+    steps.push(new TestValidationStep(testConfig));
+  }
+  return new ValidationPipeline(steps);
 }
