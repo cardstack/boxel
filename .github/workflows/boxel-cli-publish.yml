@@ -66,6 +66,11 @@ jobs:
         || (inputs.confirm == '' && github.ref == 'refs/heads/main')
       )
     runs-on: ubuntu-latest
+    outputs:
+      # Whether this run actually published a new version to npm, so the
+      # downstream verify job can skip when the push path no-op'd (no PR,
+      # or no npm-affecting bump) instead of re-testing a stale `unstable`.
+      published: ${{ steps.publish.outputs.published }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -277,6 +282,7 @@ jobs:
           '
 
       - name: Publish to npm
+        id: publish
         if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none')
         working-directory: packages/boxel-cli
         env:
@@ -313,6 +319,7 @@ jobs:
           # Use --no-git-checks because the workflow's commit + tag is already
           # pushed; pnpm's pre-publish git-state check would otherwise complain.
           pnpm publish --tag unstable --access public --provenance --no-git-checks
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release (prerelease)
         if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
@@ -511,3 +518,48 @@ jobs:
               --title "@cardstack/boxel-cli v${VERSION}" \
               --notes "Promoted from unstable. Published to npm under dist-tag \`latest\`: ${NPM_URL}"
           fi
+
+  # ---------------------------------------------------------------------------
+  # Post-publish verification: install the just-published artifact from the
+  # registry (as an end user would, with npm's hoisted node_modules) and run
+  # the server-less CLI smoke — `boxel parse` over card-code fixtures plus the
+  # help/version/arg-validation checks. This is the exact layout where `boxel
+  # parse`'s glint type-check silently resolves nothing; the in-process tests
+  # never installed the package, so they couldn't catch it.
+  #
+  # Deliberately server-less: the full realm-touching suite already ran
+  # pre-merge against the identical bits (the `pnpm pack` tarball in ci.yaml's
+  # "Boxel CLI Tests"), so standing up Matrix + Postgres again on every publish
+  # would re-test the same behavior. What's genuinely new post-publish is the
+  # registry artifact + packaging + propagation — which parse (workspace mode,
+  # no realm) exercises directly.
+  verify-unstable:
+    name: Verify published unstable install
+    needs: unstable
+    if: needs.unstable.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Smoke-test the published `unstable` artifact from npm
+        working-directory: packages/boxel-cli
+        run: NODE_NO_WARNINGS=1 node scripts/run-cli-suite.ts --source published --version unstable -- pnpm run test:cli:smoke
+
+  verify-stable:
+    name: Verify published stable install
+    needs: stable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Smoke-test the published `latest` artifact from npm
+        working-directory: packages/boxel-cli
+        run: NODE_NO_WARNINGS=1 node scripts/run-cli-suite.ts --source published --version latest -- pnpm run test:cli:smoke

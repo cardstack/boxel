@@ -223,6 +223,43 @@ export function createTestProfileDir(): {
 }
 
 /**
+ * A throwaway HOME for driving the CLI as a subprocess. The returned
+ * `profileManager` is scoped to `<home>/.boxel-cli` — the exact path the
+ * subprocess reads when spawned with `HOME=<home>` (`ProfileManager`'s
+ * default config dir is `os.homedir()/.boxel-cli`, and `os.homedir()`
+ * honors `$HOME`). Seed it test-side with `setupTestProfile` /
+ * `setupJwtTestProfile` (both persist to disk via `saveConfig`), then
+ * pass `home` to `runBoxel` so the CLI authenticates without a Matrix
+ * round-trip. After a command mutates the profile on disk (e.g. `realm
+ * create` stores a realm token), call `reloadProfile(home)` to read the
+ * fresh state back — the seeded `profileManager`'s in-memory copy is
+ * stale once the subprocess has written.
+ */
+export function createTestHome(): {
+  home: string;
+  cleanup: () => void;
+  profileManager: ProfileManager;
+} {
+  let home = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-cli-home-'));
+  let profileManager = new ProfileManager(path.join(home, '.boxel-cli'));
+  return {
+    home,
+    cleanup: () => fs.rmSync(home, { recursive: true, force: true }),
+    profileManager,
+  };
+}
+
+/**
+ * Read the profile a subprocess left on disk under `<home>/.boxel-cli`.
+ * Returns a fresh `ProfileManager` whose in-memory config reflects the
+ * current file, for inspecting state the CLI wrote (realm tokens,
+ * active profile, …).
+ */
+export function reloadProfile(home: string): ProfileManager {
+  return new ProfileManager(path.join(home, '.boxel-cli'));
+}
+
+/**
  * Register the cli-test user in Synapse. Re-registering an existing user
  * produces a benign 4xx that callers can ignore. Most tests get this via
  * `startTestRealmServer` (default `registerMatrixUser: true`); tests that

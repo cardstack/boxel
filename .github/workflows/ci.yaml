@@ -980,8 +980,17 @@ jobs:
           # would race the tests ahead of the base realm finishing its
           # initial index.
           timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
-      - name: Run integration tests
-        run: pnpm test:integration
+      # Run the integration suite against the CLI as an end user installs
+      # it: `pnpm pack` the build from the step above, `npm install` the
+      # tarball into a throwaway dir outside the monorepo (npm hoisting,
+      # not pnpm's nested layout), and drive that binary via BOXEL_CLI_BIN.
+      # This is the layout where `boxel parse`'s glint type-check silently
+      # resolves nothing — which the in-process, function-call tests could
+      # never exercise because they import command functions from src. The
+      # `test:cli:tarball` script execs `pnpm test:integration` under the
+      # installed binary, so the test-PG provisioning is unchanged.
+      - name: Run integration tests against the packed npm install
+        run: pnpm test:cli:tarball
         working-directory: packages/boxel-cli
       - name: Print server logs
         if: ${{ !cancelled() }}
