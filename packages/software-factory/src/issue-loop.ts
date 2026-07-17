@@ -137,6 +137,14 @@ export interface IssueLoopConfig {
   briefUrl?: string;
   /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
   runLog?: RunLogWriter;
+  /**
+   * Context forking (v2): before the first implementation issue, run one
+   * priming turn (read skills/design-language/precedent, write
+   * design/DESIGN-NOTES.md) and fork every implementation issue's session
+   * from it — shared provider-cached prefix instead of per-issue context
+   * rebuilds.
+   */
+  forkContext?: boolean;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
@@ -290,6 +298,7 @@ export async function runIssueLoop(
     syncWorkspace,
     briefUrl,
     runLog,
+    forkContext = false,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
     debug = false,
@@ -349,6 +358,10 @@ export async function runIssueLoop(
     await runLog.start();
   }
 
+  // fork-context mode: undefined = not yet primed; null = priming failed
+  // (run without forking); string = fork seed session id.
+  let primeSessionId: string | null | undefined;
+
   while (
     scheduler.hasUnblockedIssues(exhaustedIssues) &&
     outerCycles < maxOuterCycles
@@ -369,6 +382,48 @@ export async function runIssueLoop(
         [{ kind: 'issue-picked', headline: `Started: ${issueTitle}` }],
         { nowWorkingOn: issueTitle },
       );
+    }
+
+    // Context forking (v2): one priming turn before the first
+    // implementation issue. The prime reads skills + design language +
+    // precedent and writes design/DESIGN-NOTES.md; its session id seeds a
+    // fork for every implementation turn that follows.
+    if (
+      forkContext &&
+      primeSessionId === undefined &&
+      issue.issueType !== 'bootstrap'
+    ) {
+      try {
+        log.info('Priming shared context session (fork-context mode)...');
+        let primeContext = await contextBuilder.buildForIssue({
+          issue,
+          targetRealm,
+          darkfactoryModuleUrl,
+        });
+        primeContext.primeTurn = true;
+        let primeResult = await agent.run(primeContext, tools);
+        if (primeResult.sessionId) {
+          primeSessionId = primeResult.sessionId;
+          log.info(
+            `Prime session captured: ${primeSessionId} (${primeResult.toolCalls.length} tool calls)`,
+          );
+          if (runLog) {
+            await runLog.append([
+              {
+                kind: 'phase',
+                headline: 'Shared design context primed',
+                body: 'Skills, design language, and precedent loaded once — every card build forks from here.',
+              },
+            ]);
+          }
+        } else {
+          log.warn('Prime turn returned no session id — forking disabled');
+          primeSessionId = null;
+        }
+      } catch (error) {
+        log.warn(`Prime turn failed (${String(error)}) — forking disabled`);
+        primeSessionId = null;
+      }
     }
 
     // Reset per-issue timing accumulators; `cycleStartMs` anchors this
@@ -457,6 +512,16 @@ export async function runIssueLoop(
         validationContext,
         briefUrl,
       });
+
+      // fork-context mode: every implementation turn forks the primed
+      // session — inheriting skills/design-language/precedent as a shared
+      // provider-cached prefix.
+      if (
+        typeof primeSessionId === 'string' &&
+        issue.issueType !== 'bootstrap'
+      ) {
+        context.resumeSession = { sessionId: primeSessionId, fork: true };
+      }
 
       // Run the agent — it calls tools during its turn. Realm-touching `run_*`
       // tools sync the workspace before executing, so subtract that tool-sync

@@ -255,6 +255,19 @@ export interface AgentContext {
    * the lean skill core with on-demand `read_skill` loading.
    */
   v2?: boolean;
+  /**
+   * Context forking (v2): when set, the backend resumes this session —
+   * branching to a new session id when `fork` is true (the default) — so
+   * the turn inherits the primed conversation as a shared, provider-cached
+   * prefix instead of rebuilding context.
+   */
+  resumeSession?: { sessionId: string; fork?: boolean };
+  /**
+   * Prime turn (v2 context forking): use the `prime` prompt template —
+   * read the design language, skills, and precedent once; the session id
+   * captured from this turn seeds every subsequent fork.
+   */
+  primeTurn?: boolean;
 }
 
 export interface AgentAction {
@@ -302,6 +315,8 @@ export interface AgentRunResult {
   toolCalls: LoopToolCallEntry[];
   /** Clarification message when status is 'blocked'. */
   message?: string;
+  /** Backend session id for this turn (claude backend) — fork seed for v2 context forking. */
+  sessionId?: string;
 }
 
 /**

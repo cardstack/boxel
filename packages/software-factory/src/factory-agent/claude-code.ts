@@ -130,6 +130,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let userPrompt = this.buildUserPrompt(context);
 
     let toolCallLog: ToolCallEntry[] = [];
+    let sessionId: string | undefined;
     let captured: CapturedSignal | undefined;
     let abortController = new AbortController();
 
@@ -221,6 +222,15 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // deterministic agent behavior regardless of whose machine this
       // runs on.
       settingSources: [],
+      // Context forking (v2): resume a primed session, branching to a new
+      // session id so every fork inherits the primed conversation as a
+      // shared (provider-cached) prefix without mutating the original.
+      ...(context.resumeSession
+        ? {
+            resume: context.resumeSession.sessionId,
+            forkSession: context.resumeSession.fork !== false,
+          }
+        : {}),
       abortController,
       debug: this.config.debug === true,
     };
@@ -237,14 +247,19 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         // the openrouter path's `Agent backend: openrouter (model=…)`
         // format for a single consistent log line across backends.
         if (
-          !this.modelLogged &&
           message.type === 'system' &&
           (message as { subtype?: string }).subtype === 'init'
         ) {
-          let modelName = (message as { model?: string }).model;
-          if (modelName) {
-            log.info(`Agent backend: claude (model=${modelName})`);
-            this.modelLogged = true;
+          let initSessionId = (message as { session_id?: string }).session_id;
+          if (initSessionId) {
+            sessionId = initSessionId;
+          }
+          if (!this.modelLogged) {
+            let modelName = (message as { model?: string }).model;
+            if (modelName) {
+              log.info(`Agent backend: claude (model=${modelName})`);
+              this.modelLogged = true;
+            }
           }
         }
         if (this.config.debug) {
@@ -260,12 +275,13 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     }
 
     if (captured?.kind === 'done') {
-      return { status: 'done', toolCalls: toolCallLog };
+      return { status: 'done', toolCalls: toolCallLog, sessionId };
     }
     if (captured?.kind === 'clarification') {
       return {
         status: 'blocked',
         toolCalls: toolCallLog,
+        sessionId,
         message: captured.message,
       };
     }
@@ -276,6 +292,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
       toolCalls: toolCallLog,
+      sessionId,
     };
   }
 
@@ -382,6 +399,12 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
   private buildUserPrompt(context: AgentContext): string {
     let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (context.primeTurn === true) {
+      return this.promptLoader.load('prime', {
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({
         context,

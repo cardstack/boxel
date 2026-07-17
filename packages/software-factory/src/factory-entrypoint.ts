@@ -79,6 +79,8 @@ export interface FactoryEntrypointOptions {
   enableBoxelUiDiscovery?: boolean;
   /** V2 lean/design-first mode (see factory-issue-loop-wiring). */
   v2?: boolean;
+  /** Context forking: prime once per brief, fork every implementation turn. */
+  forkContext?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -268,6 +270,9 @@ export function parseFactoryEntrypointArgs(
         v2: {
           type: 'boolean',
         },
+        'fork-context': {
+          type: 'boolean',
+        },
       },
     });
   } catch (error) {
@@ -328,6 +333,7 @@ export function parseFactoryEntrypointArgs(
         ? true
         : undefined,
     v2: parsed.values.v2 === true ? true : undefined,
+    forkContext: parsed.values['fork-context'] === true ? true : undefined,
   };
 }
 
@@ -475,6 +481,7 @@ export async function runFactoryEntrypoint(
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
     v2: options.v2,
     runTitle: brief.title,
+    forkContext: options.forkContext,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

@@ -113,6 +113,8 @@ export interface IssueLoopWiringConfig {
   v2?: boolean;
   /** Brief title — names the live-blog RunLog card (v2). */
   runTitle?: string;
+  /** Context forking (v2): prime once, fork every implementation turn. */
+  forkContext?: boolean;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -307,6 +309,7 @@ export async function runFactoryIssueLoop(
     syncWorkspace,
     briefUrl: config.briefUrl,
     runLog,
+    forkContext: config.forkContext === true,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,
