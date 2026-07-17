@@ -362,9 +362,25 @@ export function parseFactoryEntrypointArgs(
 /**
  * Turn the CLI's budget flags into the loop's model policy. Orchestrator-
  * owned: budgets key off turn TYPE (prime/bootstrap/build/fix), never off
- * issue content. v2 default: fix iterations (mechanical lint/parse
- * fix-ups) run on claude-sonnet-5 at medium effort; `--fix-model inherit`
- * keeps the session model everywhere.
+ * issue content.
+ *
+ * Cache-family heuristic (why the default tunes EFFORT, not model):
+ * provider prompt cache is per-model. Switching a fork turn to another
+ * model re-ingests the whole primed prefix uncached — roughly
+ *   cost_switch ≈ prefix_tokens × input_price(new)
+ *   savings     ≈ turn_tokens × (price(old) − price(new))
+ * Fix turns are short (small turn_tokens) against a large primed prefix,
+ * so in-family effort reduction wins: same model keeps the cache hit AND
+ * effort='medium'/'low' cuts the thinking that dominated profiled turns.
+ * Cross-family switching only pays when the turn's output is large
+ * relative to the prefix (e.g. bulk BUILD emission) — that's an explicit
+ * `--fix-model <model>` opt-in, never the default.
+ *
+ * v2 default: fix iterations (mechanical lint/parse fix-ups) inherit the
+ * session model at effort='medium'. `--fix-effort low|...` tunes it;
+ * `--fix-model claude-sonnet-5` (or an OpenRouter id under the opencode
+ * backend) opts into a family switch; `--fix-model inherit --fix-effort
+ * high` effectively disables the policy.
  */
 export function buildModelPolicy(options: {
   v2?: boolean;
@@ -380,14 +396,13 @@ export function buildModelPolicy(options: {
   | undefined {
   if (options.v2 !== true) return undefined;
   let model =
-    options.fixModel === 'inherit'
+    options.fixModel === 'inherit' || options.fixModel === undefined
       ? undefined
-      : (options.fixModel ?? 'claude-sonnet-5');
+      : options.fixModel;
   let effortRaw = options.fixEffort ?? 'medium';
   let effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(effortRaw)
     ? (effortRaw as 'low' | 'medium' | 'high' | 'xhigh' | 'max')
     : 'medium';
-  if (!model && options.fixEffort === undefined) return undefined;
   return { fix: { ...(model ? { model } : {}), effort } };
 }
 
