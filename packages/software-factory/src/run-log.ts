@@ -35,6 +35,10 @@ export interface RunLogEntryInput {
     | 'card-ready'
     | 'issue-done'
     | 'run-done'
+    | 'status'
+    | 'iteration'
+    | 'comment'
+    | 'blocked'
     | 'note';
   headline: string;
   body?: string;
@@ -294,7 +298,9 @@ export function cardPathsFromToolCalls(
 // pulse, arrival wash) is gated on status=running.
 // ---------------------------------------------------------------------------
 
-const RUN_LOG_GTS = `import {
+const RUN_LOG_GTS = `import { registerDestructor } from '@ember/destroyable';
+import { tracked } from '@glimmer/tracking';
+import {
   CardDef,
   FieldDef,
   field,
@@ -334,6 +340,9 @@ class RunLogEntry extends FieldDef {
     get timeLabel() {
       return clock(this.args.model.at);
     }
+    get isShipMoment() {
+      return this.args.model.kind === 'card-ready';
+    }
     <template>
       <div class='entry' data-kind={{@model.kind}}>
         <span class='t'>{{this.timeLabel}}</span>
@@ -352,12 +361,19 @@ class RunLogEntry extends FieldDef {
           </div>
         {{/if}}
         {{#if @model.card}}
-          <div class='livecard'>
-            <div class='shipped'>&#9679; shipped &mdash; live card</div>
-            <div class='cardwrap'>
-              <@fields.card @format='embedded' />
+          {{#if this.isShipMoment}}
+            <div class='livecard'>
+              <div class='shipped'>&#9679; shipped &mdash; live card</div>
+              <div class='cardwrap'>
+                <@fields.card @format='embedded' />
+              </div>
             </div>
-          </div>
+          {{else}}
+            <div class='showme'>
+              <span class='showme-label'>show me</span>
+              <@fields.card @format='atom' />
+            </div>
+          {{/if}}
         {{/if}}
       </div>
       <style scoped>
@@ -386,8 +402,34 @@ class RunLogEntry extends FieldDef {
           color: var(--rl-attention, #d97706);
         }
         .entry[data-kind='card-ready'] .chip,
-        .entry[data-kind='run-done'] .chip {
+        .entry[data-kind='run-done'] .chip,
+        .entry[data-kind='status'] .chip {
           color: var(--rl-interactive, #0c9d7c);
+        }
+        .entry[data-kind='blocked'] .chip {
+          color: #ff5050;
+        }
+        .entry[data-kind='iteration'] .chip,
+        .entry[data-kind='comment'] .chip {
+          color: var(--rl-ink-quiet, #5c5967);
+        }
+        .showme {
+          grid-column: 3;
+          margin-top: 8px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .showme-label {
+          font: 700 9px var(--rl-mono, monospace);
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--rl-ink-meta, #a2a2ab);
+        }
+        .showme :deep(.boxel-card-container) {
+          border-radius: 5px;
+          box-shadow: 0 0 0 1px var(--rl-border, #e2e8f0);
+          cursor: pointer;
         }
         .h {
           font: 600 14px/1.35 var(--rl-sans, sans-serif);
@@ -453,14 +495,37 @@ export class RunLog extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
+    @tracked nowMs = Date.now();
+    #ticker: ReturnType<typeof setInterval>;
+
+    constructor(owner: unknown, args: any) {
+      super(owner, args);
+      this.#ticker = setInterval(() => {
+        this.nowMs = Date.now();
+      }, 1000);
+      registerDestructor(this, () => clearInterval(this.#ticker));
+    }
+
     get running() {
       return this.args.model.status === 'running';
     }
     get statusWord() {
       return this.running ? 'LIVE' : (this.args.model.status ?? '');
     }
-    get startedLabel() {
-      return clock(this.args.model.startedAt);
+    get elapsedLabel() {
+      let started = this.args.model.startedAt;
+      if (!started) return '';
+      let end = this.running
+        ? this.nowMs
+        : new Date(
+            this.args.model.entries?.[this.args.model.entries.length - 1]
+              ?.at ?? started,
+          ).getTime();
+      let secs = Math.max(0, Math.floor((end - new Date(started).getTime()) / 1000));
+      let h = String(Math.floor(secs / 3600)).padStart(2, '0');
+      let m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+      let sec = String(secs % 60).padStart(2, '0');
+      return h + ':' + m + ':' + sec;
     }
     get cardsReady() {
       return (this.args.model.entries ?? []).filter(
@@ -490,11 +555,14 @@ export class RunLog extends CardDef {
           <div class='live-block'>
             {{#if this.running}}<span class='live-dot'></span>{{/if}}
             <span class='live-word'>{{this.statusWord}}</span>
-            <span class='started'>from {{this.startedLabel}}</span>
+            <span class='started'>{{this.elapsedLabel}}</span>
           </div>
         </header>
         <div class='nowband'>
           <span class='k'>Now</span>
+          {{#if this.running}}
+            <span class='throbber'><i></i><i></i><i></i></span>
+          {{/if}}
           <span class='now-item'>{{@model.nowWorkingOn}}</span>
           <span class='next-wrap'>
             <span class='k'>Next</span>
@@ -639,6 +707,27 @@ export class RunLog extends CardDef {
           text-transform: uppercase;
           color: var(--rl-ink-meta);
           flex: none;
+        }
+        .throbber {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2.5px;
+          height: 16px;
+          align-self: center;
+          flex: none;
+        }
+        .throbber i {
+          width: 3px;
+          border-radius: 1.5px;
+          background: var(--rl-live);
+          animation: eq 1.1s ease-in-out infinite;
+        }
+        .throbber i:nth-child(1) { height: 8px; }
+        .throbber i:nth-child(2) { height: 14px; animation-delay: 0.18s; }
+        .throbber i:nth-child(3) { height: 10px; animation-delay: 0.36s; }
+        @keyframes eq {
+          0%, 100% { transform: scaleY(0.55); }
+          50% { transform: scaleY(1); }
         }
         .now-item {
           font: 400 24px/1.15 var(--rl-sans);

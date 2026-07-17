@@ -234,6 +234,17 @@ function issueSummaryLabel(issue: SchedulableIssue): string {
   return summary ? `"${issue.id}" — "${summary}"` : `"${issue.id}"`;
 }
 
+/** Realm-relative card path for an issue (for run-log show-me links). */
+function issueCardPath(
+  issue: SchedulableIssue,
+  targetRealm: string,
+): string | undefined {
+  if (typeof issue.id === 'string' && issue.id.startsWith(targetRealm)) {
+    return issue.id.slice(targetRealm.length).replace(/\.json$/, '');
+  }
+  return undefined;
+}
+
 /** Human-facing issue title for the run log (no quoting/id noise). */
 function issueDisplayTitle(issue: SchedulableIssue): string {
   let summary = issue.summary ?? (issue as Record<string, unknown>).title;
@@ -379,7 +390,17 @@ export async function runIssueLoop(
     if (runLog) {
       let issueTitle = issueDisplayTitle(issue);
       await runLog.append(
-        [{ kind: 'issue-picked', headline: `Started: ${issueTitle}` }],
+        [
+          {
+            kind: 'issue-picked',
+            headline: `Started: ${issueTitle}`,
+            body:
+              issue.status !== 'in_progress'
+                ? 'Issue status: backlog → in progress'
+                : undefined,
+            cardPath: issueCardPath(issue, targetRealm),
+          },
+        ],
         { nowWorkingOn: issueTitle },
       );
     }
@@ -503,6 +524,15 @@ export async function runIssueLoop(
         `  Inner iteration ${iteration}/${maxIterationsPerIssue} for issue ${issueSummaryLabel(issue)}`,
       );
 
+      if (runLog && iteration > 1) {
+        await runLog.append([
+          {
+            kind: 'iteration',
+            headline: `Iteration ${iteration} of ${maxIterationsPerIssue} — revising after validation feedback`,
+          },
+        ]);
+      }
+
       // Build context — includes pre-formatted validation context from prior iteration
       let context = await contextBuilder.buildForIssue({
         issue,
@@ -560,6 +590,16 @@ export async function runIssueLoop(
         let blockMessage =
           result.message?.trim() || 'agent reported it could not proceed';
         log.info(`  Agent reported blocked: ${blockMessage}`);
+        if (runLog) {
+          await runLog.append([
+            {
+              kind: 'blocked',
+              headline: `Blocked: ${issueDisplayTitle(issue)}`,
+              body: blockMessage,
+              cardPath: issueCardPath(issue, targetRealm),
+            },
+          ]);
+        }
         try {
           await issueStore.updateIssue(issue.id, { status: 'blocked' });
           await syncWorkspace();
@@ -649,6 +689,15 @@ export async function runIssueLoop(
       if (agentSignaledDone && validationResults?.passed && !syncFailed) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
+          if (runLog) {
+            await runLog.append([
+              {
+                kind: 'status',
+                headline: `Issue status: in progress → done`,
+                cardPath: issueCardPath(issue, targetRealm),
+              },
+            ]);
+          }
           // updateIssue writes the status flip to the local workspace.
           // refreshIssueState below queries the realm's search index, so
           // the flip has to reach the realm before the refresh — otherwise
@@ -748,6 +797,16 @@ export async function runIssueLoop(
             status: 'blocked',
           });
           exitReason = 'blocked';
+          if (runLog) {
+            await runLog.append([
+              {
+                kind: 'blocked',
+                headline: `Issue status: in progress → blocked (max iterations)`,
+                body: `Validation still failing after ${maxIterationsPerIssue} iterations — orchestrator comment added to the issue with the failure context.`,
+                cardPath: issueCardPath(issue, targetRealm),
+              },
+            ]);
+          }
         } catch (err) {
           log.warn(
             `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
