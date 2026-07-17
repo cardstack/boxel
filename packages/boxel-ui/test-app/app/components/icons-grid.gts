@@ -3,6 +3,7 @@ import { ALL_ICON_COMPONENTS } from '@cardstack/boxel-icons/boxel-icons-meta';
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -51,8 +52,28 @@ export default class IconsGridComponent extends Component {
   }
   @tracked iconFilterString = '';
   @tracked showAll = false;
+  @tracked isHeaderStuck = false;
+  sentinelElement: Element | undefined;
+  // The sentinel sits at the container top, exactly where the sticky header
+  // rests before it pins. Once it leaves the viewport the header is stuck.
+  detectHeaderStuck = modifier((element: Element) => {
+    this.sentinelElement = element;
+    let observer = new IntersectionObserver(([entry]) => {
+      this.isHeaderStuck = !entry.isIntersecting;
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      this.sentinelElement = undefined;
+    };
+  });
   toggleShowAll = () => {
     this.showAll = !this.showAll;
+    // Collapsing the expanded grid can leave the page scrolled deep into
+    // content that no longer exists; return to the top of the icons section.
+    if (!this.showAll && this.isHeaderStuck) {
+      this.sentinelElement?.scrollIntoView({ block: 'start' });
+    }
   };
   get boxelIconsComponents() {
     return this.allBoxelIconsComponents.filter((c) => {
@@ -65,7 +86,8 @@ export default class IconsGridComponent extends Component {
 
   <template>
     <div class='boxel-lucide-icons'>
-      <div class='boxel-icons-header'>
+      <div class='boxel-icons-header-sentinel' {{this.detectHeaderStuck}} />
+      <div class={{cn 'boxel-icons-header' is-stuck=this.isHeaderStuck}}>
         <FieldContainer
           class='boxel-icon-search'
           @tag='label'
@@ -129,14 +151,31 @@ export default class IconsGridComponent extends Component {
     <style scoped>
       .boxel-lucide-icons {
         --bli-item-size: 50px;
+        position: relative;
+      }
+      .boxel-icons-header-sentinel {
+        position: absolute;
+        top: 0;
+        height: 1px;
+        width: 1px;
       }
       .boxel-icons-header {
-        padding: 0 1rem 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: var(--background);
+        margin-top: -1rem;
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
         display: flex;
         flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
         gap: var(--boxel-sp-2xs);
+        transition: box-shadow 200ms ease;
+      }
+      .boxel-icons-header.is-stuck {
+        box-shadow: 0 4px 8px -4px
+          color-mix(in oklab, var(--foreground) 30%, transparent);
       }
       .boxel-icon-search {
         --boxel-input-height: var(--boxel-button-sm);
@@ -179,11 +218,19 @@ export default class IconsGridComponent extends Component {
       }
 
       @media (max-width: 599px) {
+        .boxel-icons-header {
+          --boxel-label-font-size: var(--boxel-font-size-xs);
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+        }
+        .boxel-icons-count {
+          font-size: var(--boxel-font-size-xs);
+        }
         .boxel-icons-grid {
           margin-inline: var(--boxel-sp);
           margin-bottom: var(--boxel-sp);
           border: 1px solid var(--border);
-          height: 200px;
+          max-height: 200px;
           border-radius: var(--radius);
         }
       }

@@ -5,6 +5,7 @@ import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import type EmberFreestyle from 'ember-freestyle/services/ember-freestyle';
 
 import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown';
 
@@ -68,6 +69,9 @@ const EXPORT_NAME_OVERRIDES: Record<string, string> = {
   EntityThumbnailDisplay: 'EntityDisplayWithThumbnail',
   Kanban: 'DndKanbanBoard',
 };
+
+// Must match the mobile breakpoint used by the media queries below.
+const SMALL_SCREEN = '(max-width: 599px)';
 
 function importStatementFor(title: string): string {
   let exportName = EXPORT_NAME_OVERRIDES[title] ?? title;
@@ -179,6 +183,7 @@ class IndexComponent extends Component {
     <style scoped>
       .boxel-freestyle-guide input:not(.boxel-input):not([type='checkbox']),
       .boxel-freestyle-guide select:not(.boxel-select) {
+        max-width: 100%;
         background-color: var(--background);
         color: var(--foreground);
         border: 1px solid var(--border);
@@ -211,7 +216,7 @@ class IndexComponent extends Component {
         --boxel-container-padding: var(--boxel-sp-xs) var(--boxel-sp);
       }
       .boxel-freestyle-theme-selector {
-        min-width: 10rem;
+        min-width: 12.5rem;
       }
       .subsection-import {
         display: flex;
@@ -273,8 +278,24 @@ class IndexComponent extends Component {
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
         border-right-color: var(--sidebar-border);
+        z-index: 1;
+      }
+      .FreestyleGuide-content {
+        /* As a flex: 1 child its default min-width: auto lets wide content
+           (tables, code blocks) push the column past the space the row
+           gives it; never let it grow beyond that. */
+        min-width: 0;
+        max-width: 100%;
+        /* ember-freestyle's overflow: auto makes the content column the
+           containing scroll box for sticky descendants (e.g. the icons-grid
+           header), but the page body is what actually scrolls at every
+           width — the column is never height-constrained — so they never
+           stick. */
+        overflow: visible;
       }
       @media (max-width: 599px) {
+        /* Standard modal-drawer scroll lock: only bites while the drawer is
+           open, since the nav is removed from the DOM when closed. */
         body:has(.FreestyleGuide-nav) {
           overflow: hidden;
         }
@@ -290,13 +311,33 @@ class IndexComponent extends Component {
         .theme-field {
           --boxel-label-font-size: var(--boxel-font-size-xs);
         }
+        /* Backdrop behind the drawer. It lives on the nav's own parent so
+           both share a stacking context — a body-level pseudo could end up
+           on the wrong side of the themed container's stacking context.
+           Taps land on .FreestyleGuide-body, outside the nav, which the
+           delegated click handler treats as dismissal. */
+        .FreestyleGuide-body:has(.FreestyleGuide-nav)::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          z-index: 2;
+          background-color: color-mix(
+            in oklab,
+            var(--foreground) 40%,
+            transparent
+          );
+          animation: freestyle-backdrop-fade-in 200ms ease;
+        }
         .FreestyleGuide-nav {
           position: fixed;
+          inset: 0 auto 0 0;
           width: var(--boxel-xs-container);
-          height: calc(100vh - 60px);
-          top: 70px;
+          max-width: 85vw;
+          height: auto;
           background: var(--muted);
-          overscroll-behavior: none;
+          overscroll-behavior: contain;
+          z-index: 3;
+          animation: freestyle-nav-slide-in 200ms ease;
         }
         .FreestyleGuide-content {
           flex: 1;
@@ -307,6 +348,16 @@ class IndexComponent extends Component {
         .FreestyleUsage-cssVarsTable {
           display: block;
           overflow-x: auto;
+        }
+      }
+      @keyframes freestyle-nav-slide-in {
+        from {
+          transform: translateX(-100%);
+        }
+      }
+      @keyframes freestyle-backdrop-fade-in {
+        from {
+          opacity: 0;
         }
       }
       .FreestyleMenu-itemLink,
@@ -354,6 +405,7 @@ class IndexComponent extends Component {
         font-weight: 600;
       }
       .FreestyleSection-name {
+        max-width: 100%;
         margin-bottom: var(--boxel-sp);
         padding-bottom: var(--boxel-sp-xs);
         font-size: 1.375rem;
@@ -417,9 +469,15 @@ class IndexComponent extends Component {
       .FreestyleGuide-ctaIcon {
         fill: var(--foreground);
       }
+      .FreestyleGuide-aside {
+        z-index: 3;
+      }
       .FreestyleUsageControls {
         background: var(--popover);
         color: var(--popover-foreground);
+      }
+      .FreestyleUsageControls-itemControl {
+        max-width: 100%;
       }
     </style>
   </template>
@@ -435,6 +493,7 @@ class IndexComponent extends Component {
   }) as UsageComponent[];
 
   @service declare private router: RouterService;
+  @service('ember-freestyle') declare private emberFreestyle: EmberFreestyle;
 
   @tracked private theme?: Theme;
   @tracked private mode: 'light' | 'dark' = 'light';
@@ -446,6 +505,16 @@ class IndexComponent extends Component {
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+
+    // On small screens the nav is a modal drawer: closed by default so the
+    // page lands on scrollable content, opened via the hamburger, dismissed
+    // by tapping the backdrop or choosing a menu entry.
+    if (window.matchMedia(SMALL_SCREEN).matches) {
+      this.emberFreestyle.set('showMenu', false);
+    }
+    document.addEventListener('click', this.handleNavClick);
+    this.syncNavToggleAria();
+
     let queryParams = this.router?.currentRoute?.queryParams;
     if (!queryParams) {
       return;
@@ -464,6 +533,49 @@ class IndexComponent extends Component {
       this.maybeCycleThemes();
     }
   }
+
+  override willDestroy() {
+    super.willDestroy();
+    document.removeEventListener('click', this.handleNavClick);
+    clearInterval(this.intervalId);
+  }
+
+  // The hamburger, nav links, and backdrop all live in ember-freestyle's or
+  // the browser's markup, so drawer dismissal is handled with one delegated
+  // listener rather than per-element modifiers.
+  private handleNavClick = (ev: Event) => {
+    let target = ev.target as Element | null;
+    if (target?.closest?.('.FreestyleGuide-cta--nav')) {
+      // the hamburger already toggles showMenu; just reflect the new state
+      this.syncNavToggleAria();
+      return;
+    }
+    if (!window.matchMedia(SMALL_SCREEN).matches) {
+      return;
+    }
+    if (!this.emberFreestyle.showMenu) {
+      return;
+    }
+    let insideNav = target?.closest?.('.FreestyleGuide-nav');
+    let onMenuLink = target?.closest?.(
+      '.FreestyleMenu-itemLink, .FreestyleMenu-submenuItemLink',
+    );
+    // Close on any tap outside the drawer (the backdrop covers the rest of
+    // the viewport) or on a menu selection, so the chosen section is
+    // revealed immediately.
+    if (!insideNav || onMenuLink) {
+      this.emberFreestyle.set('showMenu', false);
+      this.syncNavToggleAria();
+    }
+  };
+
+  private syncNavToggleAria = () => {
+    requestAnimationFrame(() => {
+      document
+        .querySelector('.FreestyleGuide-cta--nav')
+        ?.setAttribute('aria-expanded', String(this.emberFreestyle.showMenu));
+    });
+  };
 
   @action private selectTheme(theme?: Theme) {
     this.theme = theme;
