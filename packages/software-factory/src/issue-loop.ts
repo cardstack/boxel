@@ -34,6 +34,11 @@ import {
   cardPathsFromToolCalls,
 } from './run-log.ts';
 import type { RunMonitor } from './run-monitor.ts';
+import {
+  type RenderGate,
+  type CardScreenshotResult,
+  summarizeRenderResults,
+} from './render-gate.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
@@ -155,6 +160,20 @@ export interface IssueLoopConfig {
    */
   monitor?: RunMonitor;
   /**
+   * Render gate (v3 P0): after each non-bootstrap issue completes,
+   * screenshot the cards it shipped via the realm server's
+   * `_screenshot-card`, attach the renders to the run log, and — unless
+   * `acceptanceWalkthrough` is false — run a verifier turn that reads the
+   * PNGs and verdicts each acceptance criterion, filing defect issues for
+   * gaps. Both are best-effort: a gate failure never un-does the issue.
+   */
+  renderGate?: RenderGate;
+  /**
+   * Run the acceptance-walkthrough verifier turn after the render gate.
+   * Default true when `renderGate` is set.
+   */
+  acceptanceWalkthrough?: boolean;
+  /**
    * Per-turn model/thinking budget policy, keyed by turn type. The
    * ORCHESTRATOR owns this (turn type is deterministic here); issues
    * don't carry budgets. `fix` applies to inner iterations ≥ 2 —
@@ -179,6 +198,10 @@ export interface IssueLoopConfig {
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
     fix?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    acceptance?: {
       model?: string;
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
@@ -365,6 +388,8 @@ export async function runIssueLoop(
     briefUrl,
     runLog,
     monitor,
+    renderGate,
+    acceptanceWalkthrough = true,
     modelPolicy,
     phaseSplit = false,
     forkContext = false,
@@ -1093,6 +1118,108 @@ export async function runIssueLoop(
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
     );
+
+    // -----------------------------------------------------------------------
+    // Render gate + acceptance walkthrough (v3 P0). Runs after the issue is
+    // done: capture real host renders of the shipped cards, attach them to
+    // the run log, then hand the PNGs to a fresh verifier turn that judges
+    // each acceptance criterion (visible affordance required) and files
+    // defect issues for gaps — the scheduler picks those up next cycle.
+    // Entirely best-effort: the issue is already done; a gate failure logs.
+    // -----------------------------------------------------------------------
+    if (
+      renderGate &&
+      exitReason === 'done' &&
+      issue.issueType !== 'bootstrap'
+    ) {
+      try {
+        let gateCardPaths = streamHandler?.instanceCardPaths() ?? [];
+        if (gateCardPaths.length === 0) {
+          gateCardPaths = cardPathsFromToolCalls(allToolCalls);
+        }
+        let renderResults: CardScreenshotResult[] = [];
+        if (gateCardPaths.length > 0) {
+          log.info(
+            `  Render gate: capturing ${Math.min(gateCardPaths.length, 4)} card(s)`,
+          );
+          renderResults = await renderGate.captureCards(gateCardPaths);
+          // Push the PNGs (design/render/ rides the product sync) so the
+          // run-log image links resolve.
+          await syncWorkspace();
+        }
+        if (runLog && renderResults.length > 0) {
+          let summary = summarizeRenderResults(renderResults);
+          let shotEntries = renderResults
+            .filter((r) => r.ok && r.format === 'isolated' && r.outputPath)
+            .slice(0, 3)
+            .map((r) => ({
+              kind: 'design' as const,
+              headline: `Render check: ${r.cardPath}${r.suspectBlank ? ' — SUSPECTED BLANK' : ''}`,
+              imageCardPath: r.outputPath,
+            }));
+          await runLog.append([
+            ...shotEntries,
+            {
+              kind: 'validation' as const,
+              headline: 'Render gate',
+              body: summary,
+            },
+          ]);
+          monitor?.noteScheduler(`Render gate: ${summary}`);
+        }
+
+        if (acceptanceWalkthrough) {
+          log.info('  Acceptance walkthrough turn starting');
+          let walkthroughContext = await contextBuilder.buildForIssue({
+            issue,
+            targetRealm,
+            darkfactoryModuleUrl,
+          });
+          walkthroughContext.acceptanceTurn = {
+            renderSummary:
+              renderResults.length > 0
+                ? summarizeRenderResults(renderResults)
+                : 'no card surfaces were captured',
+            screenshots: renderResults
+              .filter(
+                (r): r is CardScreenshotResult & { outputPath: string } =>
+                  r.ok && r.outputPath !== undefined,
+              )
+              .map((r) => ({
+                cardPath: r.cardPath,
+                format: r.format,
+                outputPath: r.outputPath,
+                ...(r.suspectBlank ? { suspectBlank: true } : {}),
+              })),
+            failedCaptures: renderResults
+              .filter((r) => !r.ok)
+              .map((r) => ({
+                cardPath: r.cardPath,
+                format: r.format,
+                error: r.error ?? 'unknown',
+              })),
+          };
+          if (modelPolicy?.acceptance) {
+            walkthroughContext.modelBudget = modelPolicy.acceptance;
+          }
+          if (streamHandler) {
+            walkthroughContext.onToolCall = streamHandler.handler;
+          }
+          let walkthroughResult = await runTurn(walkthroughContext, {
+            issueTitle: issueDisplayTitle(issue),
+            turnType: 'acceptance',
+          });
+          allToolCalls.push(...walkthroughResult.toolCalls);
+          // Defect issues the verifier filed are control-plane files —
+          // sync so the reload below (and the scheduler) can see them.
+          await syncWorkspace();
+        }
+      } catch (error) {
+        log.warn(
+          `  Render gate / walkthrough failed (issue stays done): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     if (runLog && exitReason === 'done') {
       // Native Writes never reach allToolCalls (only MCP tool results do) —

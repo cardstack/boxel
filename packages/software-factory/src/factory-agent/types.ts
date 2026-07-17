@@ -297,6 +297,27 @@ export interface AgentContext {
    */
   phase?: 'design' | 'build';
   /**
+   * Acceptance walkthrough (v3): when set, this turn is a post-completion
+   * VERIFIER pass, not an implementation turn — the agent reads the render
+   * gate's screenshots, verdicts each acceptance criterion (visible
+   * affordance required), files defect issues for gaps, and posts
+   * needs-human-verify items. Selects the `acceptance-walkthrough` prompt.
+   */
+  acceptanceTurn?: {
+    renderSummary: string;
+    screenshots: {
+      cardPath: string;
+      format: string;
+      outputPath: string;
+      suspectBlank?: boolean;
+    }[];
+    failedCaptures: {
+      cardPath: string;
+      format: string;
+      error: string;
+    }[];
+  };
+  /**
    * Model/thinking budget for THIS turn, chosen by the orchestrator's
    * policy (turn type — prime / bootstrap / build / fix), not by the
    * issue. Undefined fields inherit the session default. Note: provider

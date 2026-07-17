@@ -42,6 +42,7 @@ import {
   deriveHostToolImports,
 } from './host-import-manifest.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
+import { RenderGate } from './render-gate.ts';
 import { RunLogWriter } from './run-log.ts';
 import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
 import {
@@ -147,6 +148,10 @@ export interface IssueLoopWiringConfig {
       model?: string;
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
+    acceptance?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
   };
   /** Phase-split (v2): design turn + build turn per issue (see IssueLoopConfig). */
   phaseSplit?: boolean;
@@ -173,6 +178,12 @@ export interface IssueLoopWiringConfig {
    * file at loop start. Only meaningful when `controlRealm` is set.
    */
   controlSync?: ControlPlaneSync;
+  /**
+   * Render gate + acceptance walkthrough (v3 P0). On by default under
+   * `v2`; pass false to skip the post-issue screenshot capture and the
+   * verifier turn (e.g. deployments without a prerenderer).
+   */
+  renderGate?: boolean;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -457,6 +468,18 @@ export async function runFactoryIssueLoop(
     });
   }
 
+  // Render gate (v3 P0): on by default under v2 — the runtime feedback
+  // loop is the point of v3, so skipping it is the explicit opt-out.
+  let renderGate: RenderGate | undefined;
+  if (config.v2 === true && config.renderGate !== false) {
+    renderGate = new RenderGate({
+      client,
+      realmServerUrl,
+      targetRealm,
+      workspaceDir,
+    });
+  }
+
   let issueLoopConfig: IssueLoopConfig = {
     agent,
     contextBuilder,
@@ -471,6 +494,7 @@ export async function runFactoryIssueLoop(
     briefUrl: config.briefUrl,
     runLog,
     monitor,
+    renderGate,
     modelPolicy: config.modelPolicy,
     phaseSplit: config.phaseSplit === true,
     forkContext: config.forkContext === true,

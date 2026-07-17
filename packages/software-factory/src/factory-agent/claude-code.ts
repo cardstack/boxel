@@ -481,6 +481,18 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         knowledge: context.knowledge,
       });
     }
+    if (context.acceptanceTurn) {
+      return this.promptLoader.load('acceptance-walkthrough', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+        renderSummary: context.acceptanceTurn.renderSummary,
+        screenshots: context.acceptanceTurn.screenshots,
+        failedCaptures:
+          context.acceptanceTurn.failedCaptures.length > 0
+            ? context.acceptanceTurn.failedCaptures
+            : undefined,
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({
         context,

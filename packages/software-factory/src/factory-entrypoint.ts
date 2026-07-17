@@ -101,11 +101,19 @@ export interface FactoryEntrypointOptions {
   /** Effort for fix iterations (low|medium|high|xhigh|max). Default `medium` under --v2. */
   fixEffort?: string;
   /**
-   * Phase-split (v2): run each implementation issue as a DESIGN turn
+   * Phase-split: run each implementation issue as a DESIGN turn
    * (flagship budget) + a BUILD turn (cheap budget) forked from the
-   * design session.
+   * design session. DEFAULT ON under --v2 (v3); `--no-phase-split`
+   * opts out. Explicit `--phase-split` forces it on.
    */
   phaseSplit?: boolean;
+  /**
+   * Render gate + acceptance walkthrough (v3 P0): post-issue screenshot
+   * capture via `_screenshot-card` and a verifier turn that reads the
+   * PNGs, verdicts acceptance criteria, and files defect issues. Default
+   * on under --v2; `--no-render-gate` opts out.
+   */
+  renderGate?: boolean;
   /** Model for phase-split build turns. Default `claude-sonnet-5`; `inherit` keeps the session model. */
   buildModel?: string;
   /** Effort for phase-split build turns. Default `medium`. */
@@ -253,6 +261,12 @@ export function getFactoryEntrypointUsage(): string {
     '                              backend falls back to the realm server passthrough at',
     '                              `/_openrouter/chat/completions` — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
+    '  --no-phase-split            Disable the v3 default phase-split (DESIGN turn on the',
+    '                              flagship model + BUILD turn on claude-sonnet-5, forked).',
+    '                              Only meaningful with --v2, where phase-split is on by default.',
+    '  --no-render-gate            Skip the v3 render gate + acceptance walkthrough (post-issue',
+    '                              _screenshot-card captures and the verifier turn that reads',
+    '                              them, verdicts acceptance criteria, and files defect issues).',
     '  --monitor-level <level>     Orchestrator monitor verbosity on the run log (requires --v2):',
     '                              "quiet" (stalls + failures only), "normal" (default — adds',
     '                              per-turn telemetry and scheduler notes), "verbose" (adds turn',
@@ -329,6 +343,12 @@ export function parseFactoryEntrypointArgs(
           type: 'string',
         },
         'phase-split': {
+          type: 'boolean',
+        },
+        'no-phase-split': {
+          type: 'boolean',
+        },
+        'no-render-gate': {
           type: 'boolean',
         },
         'build-model': {
@@ -413,7 +433,15 @@ export function parseFactoryEntrypointArgs(
       typeof parsed.values['fix-effort'] === 'string'
         ? parsed.values['fix-effort']
         : undefined,
-    phaseSplit: parsed.values['phase-split'] === true ? true : undefined,
+    // Tri-state: --no-phase-split wins; explicit --phase-split forces on;
+    // otherwise undefined lets the v2 default (on) apply downstream.
+    phaseSplit:
+      parsed.values['no-phase-split'] === true
+        ? false
+        : parsed.values['phase-split'] === true
+          ? true
+          : undefined,
+    renderGate: parsed.values['no-render-gate'] === true ? false : undefined,
     buildModel:
       typeof parsed.values['build-model'] === 'string'
         ? parsed.values['build-model']
@@ -482,7 +510,14 @@ export function buildModelPolicy(options: {
   phaseSplit?: boolean;
   buildModel?: string;
   buildEffort?: string;
-}): { design?: TurnBudget; build?: TurnBudget; fix?: TurnBudget } | undefined {
+}): // eslint-disable-next-line prettier/prettier
+| {
+      design?: TurnBudget;
+      build?: TurnBudget;
+      fix?: TurnBudget;
+      acceptance?: TurnBudget;
+    }
+  | undefined {
   if (options.v2 !== true) return undefined;
 
   // Fix turns: short output vs a big primed prefix — in-family effort
@@ -491,11 +526,20 @@ export function buildModelPolicy(options: {
     options.fixModel === 'inherit' || options.fixModel === undefined
       ? undefined
       : options.fixModel;
-  let policy: { design?: TurnBudget; build?: TurnBudget; fix?: TurnBudget } = {
+  let policy: {
+    design?: TurnBudget;
+    build?: TurnBudget;
+    fix?: TurnBudget;
+    acceptance?: TurnBudget;
+  } = {
     fix: {
       ...(fixModel ? { model: fixModel } : {}),
       effort: normalizeEffort(options.fixEffort, 'medium'),
     },
+    // Acceptance walkthrough (v3): a fresh, unforked verifier context —
+    // no cache-family concern — so the cheap image-capable model is the
+    // default outright.
+    acceptance: { model: 'claude-sonnet-5', effort: 'medium' },
   };
 
   // Phase-split build turns: LARGE output (the .gts emissions) — the one
@@ -698,6 +742,10 @@ export async function runFactoryEntrypoint(
     seedResult,
   );
 
+  // v3: phase-split is the default economics under --v2 (design on the
+  // flagship, build on the cheap model, forked). --no-phase-split opts out.
+  let phaseSplit = options.phaseSplit ?? options.v2 === true;
+
   // Run the issue-driven loop
   let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
   let loopResult = await loopFn({
@@ -718,8 +766,9 @@ export async function runFactoryEntrypoint(
     v2: options.v2,
     runTitle: brief.title,
     forkContext: options.forkContext,
-    modelPolicy: buildModelPolicy(options),
-    phaseSplit: options.phaseSplit,
+    modelPolicy: buildModelPolicy({ ...options, phaseSplit }),
+    phaseSplit,
+    renderGate: options.renderGate,
     monitorLevel: options.monitorLevel,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
