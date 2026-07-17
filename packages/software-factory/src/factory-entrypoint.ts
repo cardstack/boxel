@@ -89,6 +89,16 @@ export interface FactoryEntrypointOptions {
   fixModel?: string;
   /** Effort for fix iterations (low|medium|high|xhigh|max). Default `medium` under --v2. */
   fixEffort?: string;
+  /**
+   * Phase-split (v2): run each implementation issue as a DESIGN turn
+   * (flagship budget) + a BUILD turn (cheap budget) forked from the
+   * design session.
+   */
+  phaseSplit?: boolean;
+  /** Model for phase-split build turns. Default `claude-sonnet-5`; `inherit` keeps the session model. */
+  buildModel?: string;
+  /** Effort for phase-split build turns. Default `medium`. */
+  buildEffort?: string;
 }
 
 export interface FactoryEntrypointAction {
@@ -287,6 +297,15 @@ export function parseFactoryEntrypointArgs(
         'fix-effort': {
           type: 'string',
         },
+        'phase-split': {
+          type: 'boolean',
+        },
+        'build-model': {
+          type: 'string',
+        },
+        'build-effort': {
+          type: 'string',
+        },
       },
     });
   } catch (error) {
@@ -356,6 +375,15 @@ export function parseFactoryEntrypointArgs(
       typeof parsed.values['fix-effort'] === 'string'
         ? parsed.values['fix-effort']
         : undefined,
+    phaseSplit: parsed.values['phase-split'] === true ? true : undefined,
+    buildModel:
+      typeof parsed.values['build-model'] === 'string'
+        ? parsed.values['build-model']
+        : undefined,
+    buildEffort:
+      typeof parsed.values['build-effort'] === 'string'
+        ? parsed.values['build-effort']
+        : undefined,
   };
 }
 
@@ -382,28 +410,60 @@ export function parseFactoryEntrypointArgs(
  * backend) opts into a family switch; `--fix-model inherit --fix-effort
  * high` effectively disables the policy.
  */
+type TurnBudget = {
+  model?: string;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+};
+
+function normalizeEffort(
+  value: string | undefined,
+  fallback: 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+): 'low' | 'medium' | 'high' | 'xhigh' | 'max' {
+  return value && ['low', 'medium', 'high', 'xhigh', 'max'].includes(value)
+    ? (value as 'low' | 'medium' | 'high' | 'xhigh' | 'max')
+    : fallback;
+}
+
 export function buildModelPolicy(options: {
   v2?: boolean;
   fixModel?: string;
   fixEffort?: string;
-}):
-  | {
-      fix?: {
-        model?: string;
-        effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-      };
-    }
-  | undefined {
+  phaseSplit?: boolean;
+  buildModel?: string;
+  buildEffort?: string;
+}): { design?: TurnBudget; build?: TurnBudget; fix?: TurnBudget } | undefined {
   if (options.v2 !== true) return undefined;
-  let model =
+
+  // Fix turns: short output vs a big primed prefix — in-family effort
+  // reduction wins (cache preserved); family switch is explicit opt-in.
+  let fixModel =
     options.fixModel === 'inherit' || options.fixModel === undefined
       ? undefined
       : options.fixModel;
-  let effortRaw = options.fixEffort ?? 'medium';
-  let effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(effortRaw)
-    ? (effortRaw as 'low' | 'medium' | 'high' | 'xhigh' | 'max')
-    : 'medium';
-  return { fix: { ...(model ? { model } : {}), effort } };
+  let policy: { design?: TurnBudget; build?: TurnBudget; fix?: TurnBudget } = {
+    fix: {
+      ...(fixModel ? { model: fixModel } : {}),
+      effort: normalizeEffort(options.fixEffort, 'medium'),
+    },
+  };
+
+  // Phase-split build turns: LARGE output (the .gts emissions) — the one
+  // turn type where a family switch beats the cache re-ingest cost, so
+  // the default IS a switch (claude-sonnet-5 @ medium). DESIGN keeps the
+  // session flagship (taste turn) unless a future --design-* flag says
+  // otherwise.
+  if (options.phaseSplit === true) {
+    let buildModel =
+      options.buildModel === 'inherit'
+        ? undefined
+        : (options.buildModel ?? 'claude-sonnet-5');
+    policy.build = {
+      ...(buildModel ? { model: buildModel } : {}),
+      effort: normalizeEffort(options.buildEffort, 'medium'),
+    };
+  }
+
+  return policy;
 }
 
 export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
@@ -552,6 +612,7 @@ export async function runFactoryEntrypoint(
     runTitle: brief.title,
     forkContext: options.forkContext,
     modelPolicy: buildModelPolicy(options),
+    phaseSplit: options.phaseSplit,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

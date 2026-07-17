@@ -14,6 +14,7 @@
 
 import type {
   AgentContext,
+  AgentRunResult,
   IssueData,
   SchedulableIssue,
   ValidationResults,
@@ -148,9 +149,19 @@ export interface IssueLoopConfig {
   modelPolicy?: {
     prime?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
     bootstrap?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    design?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
     build?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
     fix?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   };
+  /**
+   * Phase-split (v2): run each implementation issue's first iteration as
+   * TWO turns — a design turn (mockups + notes, flagship budget) and a
+   * build turn (translation, cheap budget) forked from the design
+   * session. The economics: BUILD emits the big files, so that's where a
+   * cheaper model pays for its cache re-ingest; DESIGN is where taste
+   * lives, so it keeps the strong model.
+   */
+  phaseSplit?: boolean;
   /**
    * Context forking (v2): before the first implementation issue, run one
    * priming turn (read skills/design-language/precedent, write
@@ -324,6 +335,7 @@ export async function runIssueLoop(
     briefUrl,
     runLog,
     modelPolicy,
+    phaseSplit = false,
     forkContext = false,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
@@ -616,7 +628,59 @@ export async function runIssueLoop(
       // shared counter), not to the model.
       let agentStartMs = Date.now();
       let agentSyncStartMs = getSyncElapsedMs();
-      let result = await agent.run(context, tools);
+      let result: AgentRunResult;
+      if (
+        phaseSplit &&
+        issue.issueType !== 'bootstrap' &&
+        iteration === 1 &&
+        context.v2 === true
+      ) {
+        // Phase-split: DESIGN turn (taste — strong budget) then BUILD turn
+        // (translation — cheap budget) forked from the design session so
+        // the accepted design context carries over without re-reading.
+        context.phase = 'design';
+        if (modelPolicy?.design) {
+          context.modelBudget = modelPolicy.design;
+        }
+        log.info('  Phase-split: DESIGN turn starting');
+        let designResult = await agent.run(context, tools);
+        allToolCalls.push(...designResult.toolCalls);
+        if (designResult.status === 'blocked') {
+          result = designResult;
+        } else {
+          let buildContext: AgentContext = { ...context };
+          buildContext.phase = 'build';
+          buildContext.modelBudget = modelPolicy?.build;
+          if (designResult.sessionId) {
+            buildContext.resumeSession = {
+              sessionId: designResult.sessionId,
+              fork: true,
+            };
+          }
+          let buildBudgetLabel = modelPolicy?.build
+            ? `${modelPolicy.build.model ?? 'inherit'}/${modelPolicy.build.effort ?? 'inherit'}`
+            : 'inherit';
+          log.info(
+            `  Phase-split: BUILD turn starting (budget ${buildBudgetLabel})`,
+          );
+          if (runLog) {
+            await runLog.append(
+              [
+                {
+                  kind: 'phase',
+                  headline: 'Design accepted — handing off to the build turn',
+                  body: `Mockups + design notes locked; translation runs on the ${buildBudgetLabel} budget, forked from the design session.`,
+                },
+              ],
+              undefined,
+              { stream: true },
+            );
+          }
+          result = await agent.run(buildContext, tools);
+        }
+      } else {
+        result = await agent.run(context, tools);
+      }
       let toolSyncMs = getSyncElapsedMs() - agentSyncStartMs;
       let agentMs = Math.max(0, Date.now() - agentStartMs - toolSyncMs);
       cur.agentMs += agentMs;

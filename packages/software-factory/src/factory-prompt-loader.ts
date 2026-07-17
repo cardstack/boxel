@@ -430,15 +430,22 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load(
-    context.v2 === true ? 'issue-implement-v2' : 'issue-implement',
-    {
-      project: context.project,
-      issue: context.issue,
-      knowledge: context.knowledge,
-      toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
-    },
-  );
+  // Phase-split (v2): the design turn and the build turn get dedicated
+  // prompts; an unsplit v2 turn keeps the combined design-first prompt.
+  let template =
+    context.v2 === true
+      ? context.phase === 'design'
+        ? 'issue-design-v2'
+        : context.phase === 'build'
+          ? 'issue-build-v2'
+          : 'issue-implement-v2'
+      : 'issue-implement';
+  return loader.load(template, {
+    project: context.project,
+    issue: context.issue,
+    knowledge: context.knowledge,
+    toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
+  });
 }
 
 /**

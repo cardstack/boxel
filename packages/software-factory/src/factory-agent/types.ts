@@ -281,6 +281,13 @@ export interface AgentContext {
     durationMs?: number;
   }) => void;
   /**
+   * Phase-split (v2): which half of a split issue this turn is. 'design'
+   * turns produce accepted mockups + design notes only; 'build' turns
+   * translate them into card code, forked from the design session.
+   * Unset = the combined single-turn v2 flow.
+   */
+  phase?: 'design' | 'build';
+  /**
    * Model/thinking budget for THIS turn, chosen by the orchestrator's
    * policy (turn type — prime / bootstrap / build / fix), not by the
    * issue. Undefined fields inherit the session default. Note: provider
