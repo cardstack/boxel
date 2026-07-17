@@ -26,7 +26,7 @@ import { logger } from '../logger.ts';
 const log = logger('imports-step');
 
 // Workspace dirs that never contain agent-authored .gts modules.
-const SKIP_DIRS = new Set(['node_modules', '.git', 'design']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'design', '.factory-scratch']);
 
 export interface ImportsValidationStepConfig {
   workspaceDir: string;

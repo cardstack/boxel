@@ -58,6 +58,8 @@ export interface SeedIssueOptions {
 
 const SEED_ISSUE_PATH = 'Issues/bootstrap-seed';
 const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
+const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
+const ANALYSIS_ISSUE_FILE = `${ANALYSIS_ISSUE_PATH}.json`;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -96,6 +98,28 @@ export async function createSeedIssue(
   }
 
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
+
+  // GitHub-port flow (v3): a PORT-ANALYSIS issue runs before bootstrap —
+  // it studies the source repo (README, screenshots, demo media, code
+  // layout) and writes the port-background Knowledge Article that
+  // bootstrap plans the card family from. Bootstrap is blockedBy it.
+  if (brief.githubRepoUrl) {
+    let analysisDocument = buildAnalysisSeedIssueDocument(
+      brief,
+      darkfactoryModuleUrl,
+    );
+    let analysisWrite = await writeCard(
+      workspaceDir,
+      ANALYSIS_ISSUE_FILE,
+      JSON.stringify(analysisDocument, null, 2),
+    );
+    if (!analysisWrite.ok) {
+      throw new Error(
+        `Failed to create port-analysis seed issue: ${analysisWrite.error ?? 'unknown error'}`,
+      );
+    }
+    log.info(`Port-analysis seed issue created: ${ANALYSIS_ISSUE_PATH}`);
+  }
 
   log.info(
     existing.ok
@@ -219,7 +243,24 @@ function buildSeedIssueDocument(
     ? adjustSeedInstructions(brief)
     : greenfieldSeedInstructions();
 
-  let description = [...briefHeader, ...instructions].join('\n');
+  let port = Boolean(brief.githubRepoUrl);
+  let portNote = port
+    ? [
+        `## Port background (read first)`,
+        ``,
+        `A PORT-ANALYSIS issue ran before this one. Its output — the`,
+        `port-background Knowledge Article linked on this issue via`,
+        `\`relatedKnowledge\` — is the AUTHORITATIVE background for this`,
+        `port: feature inventory, screen catalogue, inferred data model,`,
+        `UX flows, and the "better than the original" rubric. Plan the`,
+        `card family from THAT article, not just the README excerpt above.`,
+        `Carry the rubric into the Project's success criteria and each`,
+        `implementation issue's acceptance criteria.`,
+        ``,
+      ]
+    : [];
+
+  let description = [...briefHeader, ...portNote, ...instructions].join('\n');
 
   return {
     data: {
@@ -229,6 +270,79 @@ function buildSeedIssueDocument(
         summary,
         description,
         issueType: 'bootstrap',
+        status: 'backlog',
+        priority: 'critical',
+        order: port ? 1 : 0,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      // Under the port flow, bootstrap waits for the analysis issue.
+      ...(port
+        ? {
+            relationships: {
+              'blockedBy.0': {
+                links: { self: `../${ANALYSIS_ISSUE_PATH}` },
+              },
+            },
+          }
+        : {}),
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+/**
+ * The PORT-ANALYSIS seed issue (v3 GitHub-port flow). The prompt template
+ * `issue-analysis.md` carries the full research protocol; the issue
+ * description carries the repo pointer and the acceptance contract.
+ */
+function buildAnalysisSeedIssueDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  let now = new Date().toISOString();
+  let description = [
+    `## Source application to analyze`,
+    ``,
+    `**Repository:** ${brief.githubRepoUrl}`,
+    `**Working title:** ${brief.title}`,
+    `**One-liner:** ${brief.contentSummary}`,
+    ``,
+    `Fully analyze this GitHub repository — README, screenshots, demo`,
+    `GIFs/videos, and source layout — and write the PORT BACKGROUND:`,
+    `the document a team would need to build a Boxel-native version that`,
+    `is BETTER than the original. Deliverables: a`,
+    `\`Knowledge Articles/port-background.json\` Knowledge Article, linked`,
+    `onto the bootstrap seed issue via \`relatedKnowledge\`.`,
+    ``,
+    `The full research protocol is in your turn instructions.`,
+  ].join('\n');
+
+  let acceptanceCriteria = [
+    '- [ ] README and repository file tree analyzed (not just skimmed)',
+    '- [ ] Every screenshot/GIF/video referenced by the README downloaded and READ (or explicitly listed as unviewable with why)',
+    '- [ ] Feature inventory: every user-facing capability, named and described',
+    '- [ ] Screen catalogue: each view/screen with what it shows and its key affordances',
+    '- [ ] Inferred data model: entities, fields, relationships',
+    '- [ ] "Better than the original" rubric: measurable criteria the Boxel port must beat',
+    '- [ ] Boxel port mapping: proposed card family (CardDefs + links) with per-card format notes',
+    '- [ ] Knowledge Article written and linked to the bootstrap issue via relatedKnowledge',
+  ].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'PORT-0',
+        summary: `Analyze ${brief.githubRepoUrl} and write the port background`,
+        description,
+        issueType: 'analysis',
         status: 'backlog',
         priority: 'critical',
         order: 0,

@@ -23,6 +23,17 @@ export interface FactoryBrief {
    * `sourceCardUrl` attribute (see `realm/wiki.gts`).
    */
   sourceCardUrl?: string;
+  /**
+   * Set when `--brief-url` pointed at a GitHub repository instead of a
+   * Boxel brief card (v3 port flow). The brief is synthesized from the
+   * repo's metadata + README, and the seed step adds a PORT-ANALYSIS
+   * issue ahead of bootstrap: a research turn that pulls the repo's
+   * README, screenshots, and demo media, reads them, and writes the
+   * "port background" Knowledge Article (feature inventory, screen
+   * catalogue, data model, better-than-the-original rubric) that
+   * bootstrap then plans the card family from.
+   */
+  githubRepoUrl?: string;
 }
 
 interface BoxelBriefCardInfo {
@@ -55,10 +66,118 @@ export class FactoryBriefError extends Error {
   }
 }
 
+/**
+ * Parse a GitHub repository URL (`https://github.com/<owner>/<repo>[/...]`).
+ * Returns undefined for anything else — including GitHub URLs that aren't
+ * repo roots we can analyze (gists keep their own flow via a normal brief).
+ */
+export function parseGitHubRepoUrl(
+  sourceUrl: string,
+): { owner: string; repo: string } | undefined {
+  let url: URL;
+  try {
+    url = new URL(sourceUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') {
+    return undefined;
+  }
+  let [owner, repo] = url.pathname.split('/').filter(Boolean);
+  if (!owner || !repo) {
+    return undefined;
+  }
+  return { owner, repo: repo.replace(/\.git$/, '') };
+}
+
+/** Keep synthesized briefs bounded — a monster README isn't a better brief. */
+const GITHUB_README_MAX_CHARS = 30_000;
+
+/**
+ * Synthesize a FactoryBrief from a GitHub repository: repo metadata (name,
+ * description) via the GitHub API plus the README raw content. Anonymous
+ * fetches — public repos only; a private repo surfaces as a brief error.
+ */
+export async function loadGitHubBrief(
+  sourceUrl: string,
+  options?: FactoryBriefLoadOptions,
+): Promise<FactoryBrief> {
+  let parsed = parseGitHubRepoUrl(sourceUrl);
+  if (!parsed) {
+    throw new FactoryBriefError(`Not a GitHub repository URL: ${sourceUrl}`);
+  }
+  let { owner, repo } = parsed;
+  let fetchFn = options?.fetch ?? globalThis.fetch;
+  let repoUrl = `https://github.com/${owner}/${repo}`;
+
+  let description: string | undefined;
+  let repoName = repo;
+  try {
+    let metaResponse = await fetchFn(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: { accept: 'application/vnd.github+json' } },
+    );
+    if (metaResponse.ok) {
+      let meta = (await metaResponse.json()) as {
+        name?: string;
+        description?: string | null;
+      };
+      if (meta.name) repoName = meta.name;
+      if (meta.description) description = meta.description;
+    }
+  } catch {
+    // Metadata is best-effort; the README and the analysis issue carry the run.
+  }
+
+  let readme = '';
+  try {
+    let readmeResponse = await fetchFn(
+      `https://api.github.com/repos/${owner}/${repo}/readme`,
+      { headers: { accept: 'application/vnd.github.raw+json' } },
+    );
+    if (readmeResponse.ok) {
+      readme = (await readmeResponse.text()).slice(0, GITHUB_README_MAX_CHARS);
+    }
+  } catch {
+    // A repo with no reachable README still ports — the analysis issue digs.
+  }
+
+  let title = repoName
+    .split(/[-_]+/g)
+    .filter(Boolean)
+    .map((segment) => segment[0].toUpperCase() + segment.slice(1))
+    .join(' ');
+  let contentSummary =
+    description ?? `Port of the ${repoUrl} application to Boxel.`;
+  let content = [
+    `# Port ${title} to Boxel`,
+    '',
+    `Source repository: ${repoUrl}`,
+    description ? `\n${description}\n` : '',
+    '## Repository README',
+    '',
+    readme || '(README could not be fetched — the port-analysis issue must recover it.)',
+  ].join('\n');
+
+  return {
+    title: `Port: ${title}`,
+    sourceUrl,
+    content,
+    contentSummary,
+    tags: ['github-port'],
+    githubRepoUrl: repoUrl,
+  };
+}
+
 export async function loadFactoryBrief(
   sourceUrl: string,
   options?: FactoryBriefLoadOptions,
 ): Promise<FactoryBrief> {
+  // v3 port flow: a GitHub repo URL is a valid brief source.
+  if (parseGitHubRepoUrl(sourceUrl)) {
+    return loadGitHubBrief(sourceUrl, options);
+  }
+
   let headers = { accept: SupportedMimeType.CardSource };
   let response: Response;
 

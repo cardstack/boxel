@@ -110,6 +110,36 @@ export async function ensureControlPlaneIgnoreFile(
   );
 }
 
+const SCRATCH_MARKER = '# software-factory local scratch';
+
+/**
+ * Keep `.factory-scratch/` (the analysis turn's download area — repo
+ * files, media, extracted video frames) out of EVERY sync. Written for
+ * all v2+ runs, split or not; same marker-block mechanics as the
+ * control-plane ignore.
+ */
+export async function ensureScratchIgnoreFile(
+  workspaceDir: string,
+): Promise<void> {
+  let ignorePath = join(workspaceDir, '.boxelignore');
+  let block = [SCRATCH_MARKER, '/.factory-scratch/', '/.boxelignore', ''].join(
+    '\n',
+  );
+  let existing = '';
+  try {
+    existing = await readFile(ignorePath, 'utf8');
+  } catch {
+    // No ignore file yet.
+  }
+  if (existing.includes(SCRATCH_MARKER)) {
+    return;
+  }
+  let content = existing
+    ? `${existing.replace(/\n?$/, '\n')}\n${block}`
+    : block;
+  await writeFile(ignorePath, content, 'utf8');
+}
+
 // ---------------------------------------------------------------------------
 // The syncer
 // ---------------------------------------------------------------------------

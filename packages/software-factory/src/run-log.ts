@@ -385,7 +385,7 @@ export function createRunLogStreamHandler(opts: {
   instanceCardPaths: () => string[];
 } {
   const EXCLUDED_INSTANCE_DIRS =
-    /^(Issues|Projects|Boards|Knowledge[ %]20?Articles|Spec|Validations|Runs|design)\//;
+    /^(Issues|Projects|Boards|Knowledge[ %]20?Articles|Spec|Validations|Runs|design|\.factory-scratch)\//;
   let sawDesign = false;
   let seenGtsWrites = new Set<string>();
   let lastCheckFailAt = new Map<string, number>();
@@ -560,7 +560,7 @@ export function cardPathsFromToolCalls(
   limit = 3,
 ): string[] {
   const EXCLUDED =
-    /^(Issues|Projects|Boards|Knowledge[ %]20?Articles|Spec|Validations|Runs|design)\//;
+    /^(Issues|Projects|Boards|Knowledge[ %]20?Articles|Spec|Validations|Runs|design|\.factory-scratch)\//;
   let paths: string[] = [];
   for (let call of toolCalls) {
     if (call.tool !== 'Write') continue;

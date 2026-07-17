@@ -5,6 +5,7 @@ import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import {
   ControlPlaneSync,
   ensureControlPlaneIgnoreFile,
+  ensureScratchIgnoreFile,
 } from './control-plane-sync.ts';
 import {
   linkBoardToRealmIndex,
@@ -636,6 +637,10 @@ export async function runFactoryEntrypoint(
 
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
+
+  // `.factory-scratch/` (the port-analysis turn's download area) never
+  // syncs anywhere — always ignored, split or not.
+  await ensureScratchIgnoreFile(workspaceDir);
 
   // Under the split: exclude control-plane paths from the product atomic
   // sync (BEFORE the first sync below), then pull the control realm's

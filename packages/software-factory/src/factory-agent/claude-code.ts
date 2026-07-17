@@ -493,6 +493,14 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
             : undefined,
       });
     }
+    if (issueType === 'analysis') {
+      // Port-analysis research turn (v3 GitHub-port flow): study the
+      // source repo + media, write the port-background Knowledge Article.
+      return this.promptLoader.load('issue-analysis', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({
         context,

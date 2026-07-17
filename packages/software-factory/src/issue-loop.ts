@@ -323,6 +323,14 @@ function issueCardPath(
   return undefined;
 }
 
+/**
+ * Bootstrap and analysis issues are meta-work: no product code, no
+ * validation pipeline, no design/build phase split, no render gate.
+ */
+function isMetaIssue(issue: SchedulableIssue): boolean {
+  return issue.issueType === 'bootstrap' || issue.issueType === 'analysis';
+}
+
 /** Human-facing issue title for the run log (no quoting/id noise). */
 function issueDisplayTitle(issue: SchedulableIssue): string {
   let summary = issue.summary ?? (issue as Record<string, unknown>).title;
@@ -553,11 +561,7 @@ export async function runIssueLoop(
     // implementation issue. The prime reads skills + design language +
     // precedent and writes design/DESIGN-NOTES.md; its session id seeds a
     // fork for every implementation turn that follows.
-    if (
-      forkContext &&
-      primeSessionId === undefined &&
-      issue.issueType !== 'bootstrap'
-    ) {
+    if (forkContext && primeSessionId === undefined && !isMetaIssue(issue)) {
       try {
         log.info('Priming shared context session (fork-context mode)...');
         let primeContext = await contextBuilder.buildForIssue({
@@ -652,10 +656,9 @@ export async function runIssueLoop(
     // for them (see CS-12185). Skip straight to NoOpValidator (already
     // built for exactly this per its own docstring) instead of burning
     // maxIterationsPerIssue on an unwinnable validation.
-    let validator =
-      issue.issueType === 'bootstrap'
-        ? new NoOpValidator()
-        : createValidator(issue.id);
+    let validator = isMetaIssue(issue)
+      ? new NoOpValidator()
+      : createValidator(issue.id);
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation
@@ -714,10 +717,7 @@ export async function runIssueLoop(
       // fork-context mode: every implementation turn forks the primed
       // session — inheriting skills/design-language/precedent as a shared
       // provider-cached prefix.
-      if (
-        typeof primeSessionId === 'string' &&
-        issue.issueType !== 'bootstrap'
-      ) {
+      if (typeof primeSessionId === 'string' && !isMetaIssue(issue)) {
         context.resumeSession = { sessionId: primeSessionId, fork: true };
       }
 
@@ -735,9 +735,11 @@ export async function runIssueLoop(
       let turnBudget =
         issue.issueType === 'bootstrap'
           ? modelPolicy?.bootstrap
-          : iteration >= 2
-            ? modelPolicy?.fix
-            : modelPolicy?.build;
+          : issue.issueType === 'analysis'
+            ? undefined
+            : iteration >= 2
+              ? modelPolicy?.fix
+              : modelPolicy?.build;
       if (turnBudget) {
         context.modelBudget = turnBudget;
         log.info(
@@ -754,7 +756,7 @@ export async function runIssueLoop(
       let result: AgentRunResult;
       if (
         phaseSplit &&
-        issue.issueType !== 'bootstrap' &&
+        !isMetaIssue(issue) &&
         iteration === 1 &&
         context.v2 === true
       ) {
@@ -817,9 +819,11 @@ export async function runIssueLoop(
           turnType:
             issue.issueType === 'bootstrap'
               ? 'bootstrap'
-              : iteration >= 2
-                ? 'fix'
-                : 'implement',
+              : issue.issueType === 'analysis'
+                ? 'analysis'
+                : iteration >= 2
+                  ? 'fix'
+                  : 'implement',
           iteration,
           maxIterations: maxIterationsPerIssue,
         });
@@ -1127,11 +1131,7 @@ export async function runIssueLoop(
     // defect issues for gaps — the scheduler picks those up next cycle.
     // Entirely best-effort: the issue is already done; a gate failure logs.
     // -----------------------------------------------------------------------
-    if (
-      renderGate &&
-      exitReason === 'done' &&
-      issue.issueType !== 'bootstrap'
-    ) {
+    if (renderGate && exitReason === 'done' && !isMetaIssue(issue)) {
       try {
         let gateCardPaths = streamHandler?.instanceCardPaths() ?? [];
         if (gateCardPaths.length === 0) {
