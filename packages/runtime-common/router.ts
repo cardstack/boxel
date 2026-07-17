@@ -210,6 +210,15 @@ export class Router {
       return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
+        // Without this line a thrown CardError is indistinguishable in the
+        // request log from a handler that returned the same status
+        // deliberately (e.g. a 404 from a routed endpoint that can't
+        // otherwise produce one), which makes such failures undiagnosable
+        // from CI logs alone.
+        this.log.warn(
+          `handler for ${request.method} ${request.url} threw CardError ` +
+            `(status ${err.status}): ${err.message}`,
+        );
         return responseWithError(err, requestContext);
       }
 

@@ -377,6 +377,7 @@ const ALL_TEST_FILES: string[] = [
   './worker-request-signature-test',
   './worker-request-forwarder-test',
   './worker-reader-test',
+  './worker-job-registration-test',
   './realm-index-updater-test',
 ];
 
