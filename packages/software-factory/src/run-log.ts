@@ -329,10 +329,19 @@ export function createRunLogStreamHandler(opts: {
     durationMs?: number;
   }) => void;
   sawDesign: () => boolean;
+  /**
+   * Card paths (`<Type>/<id>`, infra dirs excluded) of instance JSONs the
+   * agent wrote this issue — native Writes never reach `result.toolCalls`,
+   * so this is the loop's source for ship-moment card links.
+   */
+  instanceCardPaths: () => string[];
 } {
+  const EXCLUDED_INSTANCE_DIRS =
+    /^(Issues|Projects|Boards|Knowledge[ %]20?Articles|Spec|Validations|Runs|design)\//;
   let sawDesign = false;
   let seenGtsWrites = new Set<string>();
   let lastCheckFailAt = new Map<string, number>();
+  let instancePaths: string[] = [];
 
   let handler = (entry: {
     tool: string;
@@ -389,6 +398,22 @@ export function createRunLogStreamHandler(opts: {
 
       if (tool === 'Write' || tool === 'Edit') {
         let filePath = String(entry.args.file_path ?? entry.args.path ?? '');
+        let normalized = filePath.replace(
+          /^.*boxel-factory-workspaces\/[^/]+\//,
+          '',
+        );
+        if (
+          tool === 'Write' &&
+          normalized.endsWith('.json') &&
+          normalized.includes('/') &&
+          !EXCLUDED_INSTANCE_DIRS.test(normalized)
+        ) {
+          let cardPath = normalized.replace(/\.json$/, '');
+          if (!instancePaths.includes(cardPath)) {
+            instancePaths.push(cardPath);
+          }
+          return;
+        }
         if (!filePath.endsWith('.gts') || filePath.endsWith('.test.gts')) {
           return;
         }
@@ -435,7 +460,11 @@ export function createRunLogStreamHandler(opts: {
     }
   };
 
-  return { handler, sawDesign: () => sawDesign };
+  return {
+    handler,
+    sawDesign: () => sawDesign,
+    instanceCardPaths: () => [...instancePaths],
+  };
 }
 
 // ---------------------------------------------------------------------------

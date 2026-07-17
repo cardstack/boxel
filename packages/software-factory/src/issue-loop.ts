@@ -518,6 +518,21 @@ export async function runIssueLoop(
     let exitReason: IssueIterationResult['exitReason'] = 'max_iterations';
     let innerIterations = 0;
 
+    // Live blog: one stream handler per issue (state — seen writes, design
+    // rounds, instance paths — accumulates across iterations). Each
+    // iteration's context points at the same handler.
+    let streamHandler: ReturnType<typeof createRunLogStreamHandler> | undefined;
+    if (runLog) {
+      streamHandler = createRunLogStreamHandler({
+        runLog,
+        addIssueComment: (body: string) =>
+          issueStore.addComment(issue.id, {
+            body,
+            author: 'factory-agent',
+          }),
+      });
+    }
+
     for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
       innerIterations = iteration;
 
@@ -558,18 +573,7 @@ export async function runIssueLoop(
       // and the agent's own post_update commentary onto the run-log card
       // (and issue comments) AS THEY HAPPEN — a long agent turn must never
       // leave the run log silent.
-      let streamHandler:
-        | ReturnType<typeof createRunLogStreamHandler>
-        | undefined;
-      if (runLog) {
-        streamHandler = createRunLogStreamHandler({
-          runLog,
-          addIssueComment: (body: string) =>
-            issueStore.addComment(issue.id, {
-              body,
-              author: 'factory-agent',
-            }),
-        });
+      if (streamHandler) {
         context.onToolCall = streamHandler.handler;
       }
 
@@ -854,13 +858,20 @@ export async function runIssueLoop(
     );
 
     if (runLog && exitReason === 'done') {
-      let cardEntries = cardPathsFromToolCalls(allToolCalls).map(
-        (cardPath) => ({
-          kind: 'card-ready' as const,
-          headline: `Card ready: ${cardPath}`,
-          cardPath,
-        }),
-      );
+      // Native Writes never reach allToolCalls (only MCP tool results do) —
+      // the stream handler's sightings are the real source of instance
+      // paths; cardPathsFromToolCalls stays as a fallback for wirings
+      // without streaming.
+      let cardPaths = streamHandler?.instanceCardPaths() ?? [];
+      if (cardPaths.length === 0) {
+        cardPaths = cardPathsFromToolCalls(allToolCalls);
+      }
+      let cardEntries = cardPaths.slice(0, 3).map((cardPath) => ({
+        kind: 'card-ready' as const,
+        headline: `Card ready: ${cardPath.split('/').pop()?.replace(/-/g, ' ') ?? cardPath}`,
+        body: 'This is the live card — click through to open it.',
+        cardPath,
+      }));
       await runLog.append([
         ...cardEntries,
         {
