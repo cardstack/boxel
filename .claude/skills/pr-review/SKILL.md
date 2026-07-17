@@ -1,7 +1,7 @@
 ---
 name: pr-review
 description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, classifies each finding (regression / pre-existing / follow-up / confirmation), and writes comments with enough mechanism and background that an author unfamiliar with that part of the codebase can act on them without a follow-up question. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the code-review skill; for a local guided tour without posting anything, use review-branch.
-allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *)
+allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
 ---
 
 # PR Review
