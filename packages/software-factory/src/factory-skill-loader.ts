@@ -5,6 +5,7 @@ import type {
   IssueData,
   ProjectData,
   ResolvedSkill,
+  SkillIndexEntry,
 } from './factory-agent/index.ts';
 import { logger } from './logger.ts';
 
@@ -16,61 +17,68 @@ const log = logger('factory-skill-loader');
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
+
 /**
- * The SDK orchestrator and the new interactive Claude Code path each get
- * their own copies of `software-factory-bootstrap` / `software-factory-operations`.
- * The orchestrator loads from `.agents/skills-orchestrator/`; its skills still describe
- * the factory-MCP-tool surface (`signal_done`, `get_card_schema`, `run_lint`, …)
- * that the orchestrator's `ToolUseFactoryAgent` actually provides. Interactive
- * Claude Code reads from `.agents/skills/` via the `.claude/skills` symlink;
- * those skills describe the `boxel` CLI surface and the agent-owned status
- * lifecycle. The two diverged during CS-11149 and need to stay separated
- * until the orchestrator is retired.
+ * The factory's own workflow skills (`software-factory-bootstrap`,
+ * `software-factory-operations`). These describe the factory-MCP-tool
+ * surface (`signal_done`, `get_card_schema`, `run_lint`, …) that the
+ * orchestrator's agent actually provides, so they are front-loaded in
+ * full — the agent must follow the delivery workflow, not discover it.
+ *
+ * (The sibling `.agents/skills/` directory holds the interactive Claude
+ * Code variants of these skills — a different tool surface — and is
+ * deliberately NOT on this loader's search path.)
  */
 const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
 
 /**
- * Additional skill search directories, checked in order when a skill is not
- * found in the primary directory.
+ * The domain-skill library: `packages/boxel-cli/plugin/skills/`.
  *
- * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
- *   plugin skills (`boxel-api`, `boxel-command`, etc.) — boxel-cli owns the
- *   entire Boxel API surface, so its skills describe the platform. Same
- *   directory the plugin distributes to end users.
- * - The monorepo root `.agents/skills/` hosts shared domain skills
- *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
+ * This is the factory's single source of truth for everything that isn't
+ * the factory workflow itself. It contains two populations, both consumed
+ * on demand via the skill index + `read_skill` tool:
+ *
+ * - skills bundled from the `cardstack/boxel-skills` repo at a pinned tag
+ *   by boxel-cli's `build:skills` script (`boxel`, `boxel-patterns`,
+ *   `boxel-design`, …);
+ * - CLI-native skills authored in place (`boxel-api`, `boxel-command`,
+ *   `boxel-file-structure`, …) documenting the `boxel` CLI surface.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
-  join(MONOREPO_ROOT, '.agents', 'skills'),
-  // Package-local interactive skills (`packages/software-factory/.agents/skills`)
-  // are the primary skill set for the runbook (interactive Claude Code) loop and
-  // also where the optional `boxel-ui-component-discovery` skill lives. Listing
-  // them here lets the orchestrator's resolver pick them up too when the
-  // matching flag (`--enable-boxel-ui-discovery`) is on.
-  join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
+
+/**
+ * Skills excluded from the factory's on-demand index. Their entire subject
+ * is workspace/realm lifecycle the orchestrator owns — an agent following
+ * them (e.g. `boxel realm push`, `boxel file write`) would mutate the realm
+ * behind the orchestrator's workspace→realm sync and corrupt the loop's
+ * view of what changed.
+ */
+const FACTORY_EXCLUDED_SKILLS: ReadonlySet<string> = new Set([
+  'file-ops',
+  'realm-sync',
+  'realm-history',
+  'profile',
+  'boxel-environment',
+]);
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
 
 /**
- * Priority order for skills. Lower index = higher priority.
+ * Priority order for front-loaded skills. Lower index = higher priority.
  * Skills not in this list get appended at the end (lowest priority).
+ * Only the factory workflow skills are front-loaded, so this list is
+ * short; knowledge-tag opt-ins land behind them.
  */
 const SKILL_PRIORITY: readonly string[] = [
   'software-factory-bootstrap',
-  'boxel-development',
-  'boxel-file-structure',
-  'boxel-api',
-  'boxel-command',
-  'boxel-ui-component-discovery',
-  'ember-best-practices',
   'software-factory-operations',
 ];
 
 // ---------------------------------------------------------------------------
-// Keyword matchers for skill resolution
+// Keyword matchers for skill suggestion
 // ---------------------------------------------------------------------------
 
 /** Keywords in issue content that indicate .gts component work. */
@@ -82,39 +90,6 @@ const GTS_KEYWORDS = [
   'ember',
   'CardDef',
   'FieldDef',
-];
-
-/**
- * Reference files in `boxel-development/references/` and the keywords that
- * trigger their inclusion. When an issue doesn't match any keyword, only the
- * "always load" references from SKILL.md are included.
- */
-const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
-  'dev-core-patterns.md': ['pattern', 'card', 'structure', 'safe'],
-  'dev-template-patterns.md': ['template', 'component', 'render'],
-  'dev-delegated-rendering.md': ['delegat', 'render', 'template'],
-  'dev-styling-design.md': ['style', 'css', 'design', 'layout', 'visual'],
-  'dev-theme-design-system.md': ['theme', 'design system', 'token', 'style'],
-  'dev-fitted-formats.md': ['fitted', 'format', 'grid', 'dashboard'],
-  'dev-query-systems.md': ['query', 'search', 'filter', 'find'],
-  'dev-data-management.md': ['data', 'manage', 'relationship', 'link'],
-  'dev-file-def.md': ['file', 'asset', 'FileDef', 'upload'],
-  'dev-enumerations.md': ['enum', 'select', 'option', 'choice'],
-  'dev-defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
-  'dev-external-libraries.md': ['library', 'external', 'third-party', 'npm'],
-  'dev-command-development.md': ['command', 'action', 'invoke'],
-  'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
-  'dev-qunit-testing.md': ['test', 'qunit', 'test.gts', 'verify'],
-  'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
-};
-
-/** References that are always loaded for boxel-development (per SKILL.md). */
-const ALWAYS_LOAD_REFERENCES: readonly string[] = [
-  'dev-core-concept.md',
-  'dev-technical-rules.md',
-  'dev-quick-reference.md',
-  'dev-qunit-testing.md',
-  'dev-spec-usage.md',
 ];
 
 // ---------------------------------------------------------------------------
@@ -136,16 +111,28 @@ interface RawSkillData {
 // SkillResolver
 // ---------------------------------------------------------------------------
 
+/**
+ * The resolver's split decision for one issue: which skills go into the
+ * system prompt in full, and which merely get a "suggested" marker in the
+ * on-demand skill index. The agent can load ANY indexed skill via
+ * `read_skill` regardless of the suggestions — they are a hint, not a gate.
+ */
+export interface SkillResolution {
+  /** Skill names front-loaded in full into the system prompt. */
+  load: string[];
+  /** Skill names highlighted as suggested in the on-demand skill index. */
+  suggested: string[];
+}
+
 export interface SkillResolver {
-  resolve(issue: IssueData, project: ProjectData): string[];
+  resolve(issue: IssueData, project: ProjectData): SkillResolution;
 }
 
 export interface DefaultSkillResolverOptions {
   /**
    * Feature flag — when true, `boxel-ui-component-discovery` is added to the
-   * always-loaded skill set so the agent searches the catalog for boxel-ui
-   * Specs before writing UI in `.gts` files. When false (default), the skill
-   * is omitted and the agent has no awareness of it. Pair with the
+   * front-loaded skill set so the agent searches the catalog for boxel-ui
+   * Specs before writing UI in `.gts` files. Pair with the
    * `enableBoxelUiDiscovery` flag passed to the system-prompt template so
    * the catalog-search exception in `prompts/system.md` is also enabled.
    * See CS-10527.
@@ -161,69 +148,69 @@ export class DefaultSkillResolver implements SkillResolver {
   }
 
   /**
-   * Determine which skills to load based on issue and project context.
+   * Decide which skills to front-load and which to suggest for this issue.
    *
-   * Resolution rules:
-   * 1. boxel-development + boxel-file-structure — always loaded
-   * 2. ember-best-practices — when issue involves .gts component code
-   * 3. software-factory-operations — for factory delivery workflow issues
-   * 4. boxel-api + boxel-command — always loaded so the agent has the realm
-   *    search query syntax and host-command failure modes inline.
-   * 5. boxel-ui-component-discovery — always loaded when the
-   *    `enableBoxelUiDiscovery` flag was passed at construction time.
-   * 6. KnowledgeArticle tags can specify additional skills.
+   * Front-loaded (full text in the system prompt):
+   * 1. The factory workflow skill — `software-factory-bootstrap` for
+   *    bootstrap issues, `software-factory-operations` for everything else.
+   * 2. `boxel-ui-component-discovery` under its feature flag.
+   * 3. Any skills opted in via KnowledgeArticle `skill:` tags — a deliberate
+   *    per-project/per-issue authoring decision.
+   *
+   * Suggested (marked in the on-demand index, loaded only when the agent
+   * calls `read_skill`):
+   * - The core domain skills every implementation issue plausibly needs
+   *   (`boxel`, `boxel-file-structure`, `boxel-api`, `boxel-command`).
+   * - UI-flavored skills when the issue text indicates .gts component work.
    */
-  resolve(issue: IssueData, project: ProjectData): string[] {
+  resolve(issue: IssueData, project: ProjectData): SkillResolution {
     let issueText = extractIssueText(issue);
     let issueType = (issue as Record<string, unknown>).issueType;
 
-    // Bootstrap issues get the bootstrap skill instead of implementation skills
-    if (issueType === 'bootstrap') {
-      return ['software-factory-bootstrap', 'boxel-file-structure'];
-    }
+    let load: string[];
+    let suggested: string[];
 
-    let skills: string[] = [
-      'boxel-development',
-      'boxel-file-structure',
-      'boxel-api',
-      'boxel-command',
-    ];
+    if (issueType === 'bootstrap') {
+      load = ['software-factory-bootstrap'];
+      suggested = ['boxel-file-structure'];
+    } else {
+      load = ['software-factory-operations'];
+      suggested = [
+        'boxel',
+        'boxel-file-structure',
+        'boxel-api',
+        'boxel-command',
+      ];
+
+      if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
+        suggested.push('boxel-ui-guidelines', 'boxel-design', 'boxel-patterns');
+      }
+    }
 
     if (this.enableBoxelUiDiscovery) {
-      // Always loaded under the feature flag. The directive must apply even
-      // when the issue text doesn't contain `component` / `.gts` / `template`
-      // literally — briefs that just describe a form, view, or "isolated
-      // render" would otherwise miss the discovery skill and the agent would
-      // hand-roll UI. See CS-10527 for the test run where that happened.
-      skills.push('boxel-ui-component-discovery');
+      // Always front-loaded under the feature flag. The directive must apply
+      // even when the issue text doesn't contain `component` / `.gts` /
+      // `template` literally — briefs that just describe a form, view, or
+      // "isolated render" would otherwise miss the discovery skill and the
+      // agent would hand-roll UI. See CS-10527.
+      load.push('boxel-ui-component-discovery');
     }
 
-    if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
-      skills.push('ember-best-practices');
-    }
-
-    // Every non-bootstrap issue is a factory delivery issue (write/edit
-    // cards, run the validators, record progress), so always load the
-    // operations skill. It used to be gated on keywords in the issue text,
-    // which silently dropped the edit-in-place / guard-the-baseline guidance
-    // for sparse, human-authored issues (e.g. a one-line "Modernize the
-    // look" adjustment added via the board UI).
-    skills.push('software-factory-operations');
-
-    // Check for additional skills from knowledge articles on the project
-    // and from related knowledge on the issue itself.
+    // KnowledgeArticle skill tags are the deliberate opt-in for a
+    // must-have skill, so they stay front-loaded rather than suggested.
     let additionalSkills = extractKnowledgeSkillTags(project, issue);
     for (let skillName of additionalSkills) {
-      if (!skills.includes(skillName)) {
-        skills.push(skillName);
+      if (!load.includes(skillName)) {
+        load.push(skillName);
       }
     }
 
     log.info(
-      `Resolved skills for issue "${issue.id}" (issueType=${issueType ?? '(none)'}): ${skills.join(', ')}`,
+      `Resolved skills for issue "${issue.id}" (issueType=${issueType ?? '(none)'}): ` +
+        `load=[${load.join(', ')}], suggested=[${suggested.join(', ')}]`,
     );
 
-    return skills;
+    return { load, suggested };
   }
 }
 
@@ -232,52 +219,94 @@ export class DefaultSkillResolver implements SkillResolver {
 // ---------------------------------------------------------------------------
 
 export interface SkillLoaderInterface {
-  load(skillName: string, issue?: IssueData): Promise<ResolvedSkill>;
-  loadAll(skillNames: string[], issue?: IssueData): Promise<ResolvedSkill[]>;
+  load(skillName: string): Promise<ResolvedSkill>;
+  loadAll(skillNames: string[]): Promise<ResolvedSkill[]>;
+  buildIndex(): Promise<SkillIndexEntry[]>;
 }
 
-export class SkillLoader implements SkillLoaderInterface {
-  private skillsDirs: string[];
+/**
+ * The read surface the `read_skill` factory tool needs. Kept separate from
+ * `SkillLoaderInterface` so the tool builder can depend on exactly the
+ * on-demand operations.
+ */
+export interface SkillReaderInterface {
+  buildIndex(): Promise<SkillIndexEntry[]>;
+  readSkill(skillName: string): Promise<ReadSkillResult>;
+  readReference(skillName: string, fileName: string): Promise<string>;
+}
+
+export interface ReadSkillResult {
+  name: string;
+  content: string;
+  /** Filenames of this skill's reference documents, fetchable individually. */
+  referenceFiles: string[];
+}
+
+export class SkillLoader implements SkillLoaderInterface, SkillReaderInterface {
+  /** Bundled sources — always serve `load()`/`loadAll()` (front-loaded skills). */
+  private defaultDirs: string[];
+  /**
+   * When set (`--skills-dir`), the on-demand library — `buildIndex()`,
+   * `readSkill()`, `readReference()` — comes EXCLUSIVELY from these
+   * directories, with no exclusion filtering (the operator curates them).
+   * Front-loaded skills still resolve from the bundled sources.
+   */
+  private libraryDirs: string[] | undefined;
   private rawCache: Map<string, RawSkillData> = new Map();
+  private indexCache: SkillIndexEntry[] | undefined;
 
   /**
    * @param skillsDir      Primary directory to search for skills.
    * @param fallbackDirs   Additional directories checked (in order) when a
    *                        skill is not found in the primary directory. Defaults
-   *                        to the monorepo root `.agents/skills/`.
+   *                        to boxel-cli's `plugin/skills/`.
+   * @param options.libraryDirs  Optional operator-supplied skill directories
+   *                        (`--skills-dir`). When present, they fully replace
+   *                        the on-demand skill library — nothing outside them
+   *                        is indexed or readable via `read_skill`, and the
+   *                        exclusion list does not apply.
    */
   constructor(
     skillsDir: string = DEFAULT_SKILLS_DIR,
     fallbackDirs: string[] = DEFAULT_FALLBACK_DIRS,
+    options: { libraryDirs?: string[] } = {},
   ) {
-    this.skillsDirs = [skillsDir, ...fallbackDirs];
+    this.defaultDirs = [skillsDir, ...fallbackDirs];
+    this.libraryDirs =
+      options.libraryDirs && options.libraryDirs.length > 0
+        ? options.libraryDirs
+        : undefined;
   }
 
   /**
-   * Load a single skill by name.
+   * Load a single skill by name from the bundled sources (front-load path;
+   * unaffected by `--skills-dir`).
    * Searches the primary skills directory first, then each fallback directory.
-   * When an issue is provided, `boxel-development` references are filtered to
-   * only include issue-relevant files (always applied, not just with a budget).
    * Results are cached for the duration of the factory run.
    */
-  async load(skillName: string, issue?: IssueData): Promise<ResolvedSkill> {
-    let raw = await this.loadRaw(skillName);
-    return toResolvedSkill(raw, issue);
+  async load(skillName: string): Promise<ResolvedSkill> {
+    let raw = await this.loadRaw(skillName, this.defaultDirs, 'default');
+    let refContents =
+      raw.references && raw.references.length > 0
+        ? raw.references.map((r) => r.content)
+        : undefined;
+    return {
+      name: raw.name,
+      content: raw.content,
+      ...(refContents ? { references: refContents } : {}),
+    };
   }
 
   /**
    * Load all skills matching the resolved names.
    * Missing skills log a warning but do not fail the batch.
    */
-  async loadAll(
-    skillNames: string[],
-    issue?: IssueData,
-  ): Promise<ResolvedSkill[]> {
+  async loadAll(skillNames: string[]): Promise<ResolvedSkill[]> {
     let results: ResolvedSkill[] = [];
 
     for (let name of skillNames) {
       try {
-        let skill = await this.load(name, issue);
+        let skill = await this.load(name);
         results.push(skill);
       } catch (error) {
         console.warn(
@@ -291,24 +320,143 @@ export class SkillLoader implements SkillLoaderInterface {
     return results;
   }
 
-  /** Clear the cache so skills are re-read from disk on next load. */
+  /**
+   * Build the on-demand skill index: one `{ name, description }` entry per
+   * skill directory across the library, keyed by directory name (first
+   * directory wins on name collisions). Descriptions come from the
+   * `description:` field of each SKILL.md's frontmatter — skills without one
+   * are skipped with a warning, since an undescribed entry gives the agent
+   * nothing to decide relevance by. Cached for the run duration.
+   *
+   * Library scope: the bundled sources minus FACTORY_EXCLUDED_SKILLS — or,
+   * when `libraryDirs` was configured, exactly those directories with no
+   * exclusions. An override library that yields zero skills is a
+   * configuration error and throws rather than silently degrading the
+   * agent to no on-demand skills.
+   */
+  async buildIndex(): Promise<SkillIndexEntry[]> {
+    if (this.indexCache) {
+      return this.indexCache;
+    }
+
+    let scanDirs = this.libraryDirs ?? this.defaultDirs;
+    let applyExclusions = this.libraryDirs === undefined;
+    let entries = new Map<string, SkillIndexEntry>();
+
+    for (let baseDir of scanDirs) {
+      let dirNames: string[];
+      try {
+        dirNames = await readdir(baseDir);
+      } catch {
+        continue;
+      }
+
+      for (let name of dirNames.sort()) {
+        if (
+          entries.has(name) ||
+          (applyExclusions && FACTORY_EXCLUDED_SKILLS.has(name))
+        ) {
+          continue;
+        }
+        let skillMdPath = join(baseDir, name, 'SKILL.md');
+        let content: string;
+        try {
+          content = await readFile(skillMdPath, 'utf8');
+        } catch {
+          // Not a skill directory (plain file, or missing SKILL.md) — skip.
+          continue;
+        }
+        let description = parseFrontmatterDescription(content);
+        if (!description) {
+          log.warn(
+            `Skill "${name}" has no frontmatter description — omitting from the skill index`,
+          );
+          continue;
+        }
+        entries.set(name, { name, description });
+      }
+    }
+
+    if (this.libraryDirs && entries.size === 0) {
+      throw new SkillLoadError(
+        `--skills-dir provided but no skills found in: ${this.libraryDirs.join(', ')}. ` +
+          'Each skill must be a directory containing a SKILL.md with a frontmatter description.',
+      );
+    }
+
+    this.indexCache = [...entries.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    return this.indexCache;
+  }
+
+  /**
+   * Read one skill's SKILL.md for on-demand consumption, along with the
+   * filenames of its reference documents (fetchable via `readReference`).
+   * Served from the library scope (see `buildIndex`).
+   */
+  async readSkill(skillName: string): Promise<ReadSkillResult> {
+    let raw = await this.loadRawFromLibrary(skillName);
+    return {
+      name: raw.name,
+      content: raw.content,
+      referenceFiles: (raw.references ?? []).map((r) => r.fileName),
+    };
+  }
+
+  /**
+   * Read a single named reference document of a skill, from the library
+   * scope. `fileName` must be one of the names returned by
+   * `readSkill().referenceFiles` — arbitrary paths are rejected.
+   */
+  async readReference(skillName: string, fileName: string): Promise<string> {
+    let raw = await this.loadRawFromLibrary(skillName);
+    let ref = (raw.references ?? []).find((r) => r.fileName === fileName);
+    if (!ref) {
+      let available = (raw.references ?? []).map((r) => r.fileName);
+      throw new SkillLoadError(
+        `Skill "${skillName}" has no reference "${fileName}". ` +
+          (available.length > 0
+            ? `Available references: ${available.join(', ')}`
+            : 'This skill has no reference files.'),
+      );
+    }
+    return ref.content;
+  }
+
+  /** Clear the caches so skills are re-read from disk on next load. */
   clearCache(): void {
     this.rawCache.clear();
+    this.indexCache = undefined;
+  }
+
+  /** Load raw skill data from the on-demand library scope. */
+  private async loadRawFromLibrary(skillName: string): Promise<RawSkillData> {
+    return this.libraryDirs
+      ? this.loadRaw(skillName, this.libraryDirs, 'library')
+      : this.loadRaw(skillName, this.defaultDirs, 'default');
   }
 
   /**
    * Load raw skill data (with reference filenames preserved) from disk.
-   * Cached for the factory run duration.
+   * Cached for the factory run duration. `cacheScope` keeps the bundled
+   * and override-library caches apart — the same skill name can resolve
+   * to different directories in each.
    */
-  private async loadRaw(skillName: string): Promise<RawSkillData> {
-    let cached = this.rawCache.get(skillName);
+  private async loadRaw(
+    skillName: string,
+    searchDirs: string[],
+    cacheScope: 'default' | 'library',
+  ): Promise<RawSkillData> {
+    let cacheKey = `${cacheScope}:${skillName}`;
+    let cached = this.rawCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
-    let skillDir = await this.findSkillDir(skillName);
+    let skillDir = await this.findSkillDir(skillName, searchDirs);
     if (!skillDir) {
-      let searched = this.skillsDirs.map((d) => join(d, skillName)).join(', ');
+      let searched = searchDirs.map((d) => join(d, skillName)).join(', ');
       throw new SkillLoadError(
         `Skill "${skillName}" not found. Searched: ${searched}`,
       );
@@ -327,8 +475,8 @@ export class SkillLoader implements SkillLoaderInterface {
 
     let references: NamedReference[] | undefined;
 
-    // Check for rules/ directory first (e.g., ember-best-practices).
-    // Load compiled AGENTS.md instead of individual rule files.
+    // Check for rules/ directory first. Load compiled AGENTS.md instead of
+    // individual rule files.
     let rulesDir = join(skillDir, 'rules');
     if (await directoryExists(rulesDir)) {
       let agentsMdPath = join(skillDir, 'AGENTS.md');
@@ -340,8 +488,8 @@ export class SkillLoader implements SkillLoaderInterface {
       }
     }
 
-    // Check for references/ directory (e.g., boxel-development).
-    // Load all reference files with their filenames preserved.
+    // Check for references/ directory. Load all reference files with their
+    // filenames preserved.
     if (!references) {
       let refsDir = join(skillDir, 'references');
       if (await directoryExists(refsDir)) {
@@ -362,16 +510,19 @@ export class SkillLoader implements SkillLoaderInterface {
       ...(references && references.length > 0 ? { references } : {}),
     };
 
-    this.rawCache.set(skillName, raw);
+    this.rawCache.set(cacheKey, raw);
     return raw;
   }
 
   /**
-   * Search all configured skill directories for a skill by name.
+   * Search the given skill directories for a skill by name.
    * Returns the full path to the skill directory, or undefined if not found.
    */
-  private async findSkillDir(skillName: string): Promise<string | undefined> {
-    for (let baseDir of this.skillsDirs) {
+  private async findSkillDir(
+    skillName: string,
+    searchDirs: string[],
+  ): Promise<string | undefined> {
+    for (let baseDir of searchDirs) {
       let candidate = join(baseDir, skillName);
       let skillMd = join(candidate, 'SKILL.md');
       try {
@@ -386,6 +537,41 @@ export class SkillLoader implements SkillLoaderInterface {
 }
 
 // ---------------------------------------------------------------------------
+// Frontmatter parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the `description:` value from a SKILL.md's YAML frontmatter.
+ * Handles the single-line scalar form every skill in the search path uses
+ * (optionally quoted); returns undefined when there is no frontmatter block
+ * or no description field.
+ */
+export function parseFrontmatterDescription(
+  content: string,
+): string | undefined {
+  if (!content.startsWith('---')) {
+    return undefined;
+  }
+  let end = content.indexOf('\n---', 3);
+  if (end === -1) {
+    return undefined;
+  }
+  let block = content.slice(3, end);
+  let match = block.match(/^description:[ \t]*(.+)$/m);
+  if (!match) {
+    return undefined;
+  }
+  let value = match[1].trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  return value === '' ? undefined : value;
+}
+
+// ---------------------------------------------------------------------------
 // Context budget enforcement
 // ---------------------------------------------------------------------------
 
@@ -396,9 +582,9 @@ export class SkillLoader implements SkillLoaderInterface {
  * skipped, and later (lower-priority) skills may still be included if they
  * fit within the remaining budget.
  *
- * Reference filtering for `boxel-development` is handled at load time by the
- * SkillLoader when an issue is provided — it is always applied regardless of
- * whether a budget is set.
+ * Only front-loaded skills pass through here (the workflow skill plus
+ * knowledge-tag opt-ins) — on-demand skills are never budgeted, they are
+ * fetched as tool results.
  */
 export function enforceSkillBudget(
   skills: ResolvedSkill[],
@@ -453,66 +639,6 @@ export function estimateTokens(skill: ResolvedSkill): number {
   }
 
   return Math.ceil(total / CHARS_PER_TOKEN);
-}
-
-// ---------------------------------------------------------------------------
-// Internal: convert raw data to public ResolvedSkill
-// ---------------------------------------------------------------------------
-
-/**
- * Convert RawSkillData (with named references) to the public ResolvedSkill
- * interface. For `boxel-development`, filters references by issue relevance
- * using actual filenames — this happens on every load, not just when a
- * budget is enforced.
- */
-function toResolvedSkill(raw: RawSkillData, issue?: IssueData): ResolvedSkill {
-  let refs = raw.references;
-
-  if (refs && raw.name === 'boxel-development' && issue) {
-    refs = filterBoxelDevelopmentRefs(refs, issue);
-  }
-
-  let refContents =
-    refs && refs.length > 0 ? refs.map((r) => r.content) : undefined;
-
-  return {
-    name: raw.name,
-    content: raw.content,
-    ...(refContents ? { references: refContents } : {}),
-  };
-}
-
-/**
- * Filter boxel-development references to include only the "always load"
- * references plus those whose keywords match the issue text.
- * Uses actual filenames from disk — no index-based reconstruction.
- */
-function filterBoxelDevelopmentRefs(
-  refs: NamedReference[],
-  issue: IssueData,
-): NamedReference[] {
-  let issueText = extractIssueText(issue);
-
-  return refs.filter((ref) => {
-    // Always-load refs are always included
-    if (
-      ALWAYS_LOAD_REFERENCES.includes(
-        ref.fileName as (typeof ALWAYS_LOAD_REFERENCES)[number],
-      )
-    ) {
-      return true;
-    }
-
-    // Check if issue text matches any keywords for this reference
-    let keywords = REFERENCE_KEYWORD_MAP[ref.fileName];
-    if (keywords && matchesAnyKeyword(issueText, keywords)) {
-      return true;
-    }
-
-    // References not in the keyword map (e.g., dev-file-editing.md) are only
-    // loaded when no issue context is available (handled by the caller).
-    return false;
-  });
 }
 
 // ---------------------------------------------------------------------------

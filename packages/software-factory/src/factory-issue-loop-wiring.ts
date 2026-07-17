@@ -104,6 +104,15 @@ export interface IssueLoopWiringConfig {
    */
   enableBoxelUiDiscovery?: boolean;
   /**
+   * Override skill-library directories (`--skills-dir`). When set, the
+   * on-demand skill library (index + read_skill) comes EXCLUSIVELY from
+   * these directories — nothing bundled is indexed or readable, and no
+   * exclusion filtering applies. Front-loaded workflow skills still come
+   * from the bundled sources. A library that yields zero skills fails the
+   * run at startup.
+   */
+  skillLibraryDirs?: string[];
+  /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
    * IssueTracker exists, instead of waiting for the entire loop to return.
@@ -143,11 +152,30 @@ export async function runFactoryIssueLoop(
     workspaceDir,
     realmUrl: targetRealm,
   });
+  // One SkillLoader for both the context builder (front-loaded skills +
+  // on-demand index) and the read_skill tool, so they share the same
+  // library view and per-run cache.
+  let skillLibraryDirs = (config.skillLibraryDirs ?? []).map((dir) =>
+    resolve(dir),
+  );
+  let skillLoader = new SkillLoader(undefined, undefined, {
+    libraryDirs: skillLibraryDirs,
+  });
+  if (skillLibraryDirs.length > 0) {
+    // Fail fast on a misconfigured library (empty dir, wrong path, skills
+    // without frontmatter descriptions) instead of surfacing it as a
+    // skill-less agent mid-run. buildIndex throws in that case.
+    let index = await skillLoader.buildIndex();
+    log.info(
+      `Skill library overridden by --skills-dir (${index.length} skill(s)): ` +
+        skillLibraryDirs.join(', '),
+    );
+  }
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
       enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
     }),
-    skillLoader: new SkillLoader(),
+    skillLoader,
     issueLoader,
     enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
   });
@@ -214,6 +242,7 @@ export async function runFactoryIssueLoop(
     hostAppUrl,
     syncWorkspace,
     validationCache,
+    skillReader: skillLoader,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(

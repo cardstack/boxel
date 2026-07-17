@@ -295,6 +295,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
       enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
       skills,
+      skillIndex: context.skillIndex ?? [],
     });
 
     // Two tool surfaces are visible to the model on the Claude backend:

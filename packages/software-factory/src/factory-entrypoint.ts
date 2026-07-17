@@ -77,6 +77,14 @@ export interface FactoryEntrypointOptions {
    * Set via `--enable-boxel-ui-discovery` on the CLI.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * Override skill-library directories. When set, the on-demand skill
+   * library (index + read_skill) comes exclusively from these directories;
+   * front-loaded workflow skills still come from the bundled sources. An
+   * empty library fails the run at startup. Set via one or more
+   * `--skills-dir <path>` flags on the CLI.
+   */
+  skillsDirs?: string[];
 }
 
 export interface FactoryEntrypointAction {
@@ -206,6 +214,13 @@ export function getFactoryEntrypointUsage(): string {
     '                              When unset (and OPENROUTER_API_KEY env is also unset), the',
     '                              backend falls back to the realm server passthrough at',
     '                              `/_openrouter/chat/completions` — burns boxel tokens.',
+    '  --skills-dir <path>         Use this directory as the ONLY source of on-demand',
+    '                              skills (the index + read_skill tool) — the bundled',
+    '                              boxel-cli plugin skills are not read at all. The',
+    '                              front-loaded factory workflow skills still come from',
+    '                              the factory package. Fails at startup if the',
+    '                              directory yields no skills. Repeatable; earlier',
+    '                              flags win on name collisions.',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --enable-boxel-ui-discovery Make the agent search the catalog for @cardstack/boxel-ui',
     '                              component Spec cards before writing UI in a .gts template.',
@@ -263,6 +278,10 @@ export function parseFactoryEntrypointArgs(
         'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
+        'skills-dir': {
+          type: 'string',
+          multiple: true,
+        },
       },
     });
   } catch (error) {
@@ -306,6 +325,23 @@ export function parseFactoryEntrypointArgs(
     }
   }
 
+  let skillsDirs: string[] | undefined;
+  let rawSkillsDirs = parsed.values['skills-dir'];
+  if (Array.isArray(rawSkillsDirs)) {
+    let cleaned = rawSkillsDirs
+      .filter((d): d is string => typeof d === 'string')
+      .map((d) => d.trim())
+      .filter((d) => d !== '');
+    if (cleaned.length !== rawSkillsDirs.length) {
+      throw new FactoryEntrypointUsageError(
+        '--skills-dir requires a non-empty path',
+      );
+    }
+    if (cleaned.length > 0) {
+      skillsDirs = cleaned;
+    }
+  }
+
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealm: normalizeUrl(targetRealm, '--target-realm'),
@@ -317,6 +353,7 @@ export function parseFactoryEntrypointArgs(
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
     enableBoxelUiDiscovery:
       parsed.values['enable-boxel-ui-discovery'] === true ? true : undefined,
+    skillsDirs,
   };
 }
 
@@ -462,6 +499,7 @@ export async function runFactoryEntrypoint(
     debug: options.debug,
     retryBlocked: options.retryBlocked,
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
+    skillLibraryDirs: options.skillsDirs,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

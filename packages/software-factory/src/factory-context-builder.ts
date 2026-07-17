@@ -3,6 +3,7 @@ import type {
   IssueData,
   KnowledgeArticleData,
   ProjectData,
+  SkillIndexEntry,
   TestResult,
   ValidationResults,
 } from './factory-agent/index.ts';
@@ -72,13 +73,41 @@ export class ContextBuilder {
   }
 
   /**
+   * Resolve, load, and index skills for one issue.
+   *
+   * Front-loaded skills (`resolution.load`) are read in full and budgeted;
+   * everything else in the library becomes an on-demand index entry, with
+   * the resolver's `suggested` picks marked. Skills that made it into the
+   * front-loaded set are dropped from the index — their full text is
+   * already in the prompt.
+   */
+  private async resolveSkills(
+    issue: IssueData,
+    project: ProjectData,
+  ): Promise<{ skills: ResolvedSkill[]; skillIndex: SkillIndexEntry[] }> {
+    let resolution = this.skillResolver.resolve(issue, project);
+
+    let skills = await this.skillLoader.loadAll(resolution.load);
+    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+
+    let loadedNames = new Set(skills.map((s) => s.name));
+    let suggestedNames = new Set(resolution.suggested);
+    let skillIndex = (await this.skillLoader.buildIndex())
+      .filter((entry) => !loadedNames.has(entry.name))
+      .map((entry) =>
+        suggestedNames.has(entry.name) ? { ...entry, suggested: true } : entry,
+      );
+
+    return { skills, skillIndex };
+  }
+
+  /**
    * Assemble a complete AgentContext for one iteration of the execution loop.
    *
    * Steps:
-   * 1. Resolve skill names from issue + project context
-   * 2. Load all resolved skills from disk
-   * 3. Apply skill budget if configured
-   * 4. Return AgentContext (tools are provided separately as FactoryTool[])
+   * 1. Resolve front-loaded skill names + suggestions from issue/project
+   * 2. Load front-loaded skills from disk, build the on-demand skill index
+   * 3. Return AgentContext (tools are provided separately as FactoryTool[])
    */
   async build(params: {
     project: ProjectData;
@@ -92,24 +121,14 @@ export class ContextBuilder {
     let { project, issue, knowledge, targetRealm, darkfactoryModuleUrl } =
       params;
 
-    // Step 1: Resolve which skills are needed for this issue
-    let skillNames = this.skillResolver.resolve(issue, project);
+    let { skills, skillIndex } = await this.resolveSkills(issue, project);
 
-    // Step 2: Load skill content from disk
-    let skills: ResolvedSkill[] = await this.skillLoader.loadAll(
-      skillNames,
-      issue,
-    );
-
-    // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
-
-    // Step 4: Assemble the context
     let context: AgentContext = {
       project,
       issue,
       knowledge,
       skills,
+      skillIndex,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
@@ -170,22 +189,16 @@ export class ContextBuilder {
       }
     }
 
-    // Step 2: Resolve and load skills
-    let skillNames = this.skillResolver.resolve(issue, project);
-    let skills: ResolvedSkill[] = await this.skillLoader.loadAll(
-      skillNames,
-      issue,
-    );
+    // Step 2: Resolve and load front-loaded skills + on-demand index
+    let { skills, skillIndex } = await this.resolveSkills(issue, project);
 
-    // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
-
-    // Step 4: Assemble the context
+    // Step 3: Assemble the context
     let context: AgentContext = {
       project,
       issue,
       knowledge,
       skills,
+      skillIndex,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),

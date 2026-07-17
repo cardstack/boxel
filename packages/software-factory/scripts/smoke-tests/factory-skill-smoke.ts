@@ -33,7 +33,7 @@ const SAMPLE_ISSUES: { label: string; issue: IssueData }[] = [
     },
   },
   {
-    label: '.gts component work (triggers ember-best-practices)',
+    label: '.gts component work (triggers UI skill suggestions)',
     issue: {
       id: 'Issues/gts-component',
       title: 'Build a dashboard component',
@@ -117,11 +117,12 @@ async function main(): Promise<void> {
     log.info(`  Issue: ${issue.title}`);
 
     // 1. Resolve
-    let skillNames = resolver.resolve(issue, project);
-    log.info(`  Resolved skills: [${skillNames.join(', ')}]`);
+    let { load: skillNames, suggested } = resolver.resolve(issue, project);
+    log.info(`  Front-loaded skills: [${skillNames.join(', ')}]`);
+    log.info(`  Suggested (on demand): [${suggested.join(', ')}]`);
 
-    // 2. Load (with issue context for reference filtering)
-    let skills = await loader.loadAll(skillNames, issue);
+    // 2. Load the front-loaded set
+    let skills = await loader.loadAll(skillNames);
     log.info(`  Loaded: ${skills.length}/${skillNames.length} skills`);
 
     for (let skill of skills) {
@@ -150,33 +151,22 @@ async function main(): Promise<void> {
     }
   }
 
-  // Summary: list all discoverable skills
-  log.info('--- All discoverable skills ---');
-  let allSkillNames = [
-    'boxel-development',
-    'boxel-file-structure',
-    'boxel-api',
-    'boxel-command',
-    'ember-best-practices',
-    'software-factory-operations',
-  ];
-
-  let allSkills = await loader.loadAll(allSkillNames);
+  // Summary: the on-demand skill index (what read_skill exposes)
+  log.info('--- On-demand skill index ---');
+  let index = await loader.buildIndex();
   let grandTotal = 0;
-  for (let skill of allSkills) {
+  for (let entry of index) {
+    let skill = await loader.load(entry.name);
     let tokens = estimateTokens(skill);
     grandTotal += tokens;
     let refCount = skill.references?.length ?? 0;
     let refNote = refCount > 0 ? ` (${refCount} refs)` : '';
-    log.info(`  ${skill.name}: ~${tokens} tokens${refNote}`);
+    log.info(`  ${entry.name}: ~${tokens} tokens${refNote}`);
   }
-  let missing = allSkillNames.filter(
-    (n) => !allSkills.find((s) => s.name === n),
+  log.info(
+    `  Total: ~${grandTotal} tokens across ${index.length} indexed skills ` +
+      '(loaded on demand, never all at once)',
   );
-  if (missing.length > 0) {
-    log.info(`  Not found: [${missing.join(', ')}]`);
-  }
-  log.info(`  Total: ~${grandTotal} tokens across ${allSkills.length} skills`);
 
   log.info('\nSmoke test passed.');
 }

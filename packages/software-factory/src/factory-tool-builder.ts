@@ -16,6 +16,7 @@ import {
   type RunEvaluateInMemoryOptions,
   type RunEvaluateResult,
 } from './eval-execution.ts';
+import type { SkillReaderInterface } from './factory-skill-loader.ts';
 import type { ToolExecutor } from './factory-tool-executor.ts';
 import type { ToolRegistry } from './factory-tool-registry.ts';
 import {
@@ -95,6 +96,12 @@ export interface ToolBuilderConfig {
    * once by the pipeline).
    */
   validationCache?: ValidationRunCache;
+  /**
+   * On-demand skill reader backing the `read_skill` tool. Shared with the
+   * ContextBuilder's SkillLoader so both see the same skill library (and
+   * cache). When omitted, the `read_skill` tool is not registered.
+   */
+  skillReader?: SkillReaderInterface;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
   /** Injected for testing — defaults to runTestsInMemory. */
@@ -171,6 +178,10 @@ export function buildFactoryTools(
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
+
+  if (config.skillReader) {
+    tools.push(buildReadSkillTool(config.skillReader));
+  }
 
   // Wrap registered realm-api manifests (currently just `realm-create`).
   // Tracker-schema cards (Project / IssueTracker / Issue / KnowledgeArticle /
@@ -307,6 +318,79 @@ function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
         };
       }
       return { ok: true, schema };
+    },
+  };
+}
+
+function buildReadSkillTool(skillReader: SkillReaderInterface): FactoryTool {
+  return {
+    name: 'read_skill',
+    description:
+      'Load a skill from the factory skill library on demand. The system ' +
+      'prompt lists every available skill with a one-line description — ' +
+      'call this with the skill name BEFORE doing work its description ' +
+      'covers, instead of guessing at conventions. Without "reference", ' +
+      "returns the skill's SKILL.md content plus the filenames of its " +
+      'reference documents; call again with "reference" set to one of ' +
+      'those filenames to fetch that document. Results are served from ' +
+      'the local skill library — cheap to call, no realm access.',
+    parameters: {
+      type: 'object',
+      properties: {
+        skill: {
+          type: 'string',
+          description:
+            'Skill name exactly as it appears in the skill index (e.g. ' +
+            '`boxel`, `boxel-patterns`).',
+        },
+        reference: {
+          type: 'string',
+          description:
+            'Optional reference-document filename from a prior read_skill ' +
+            'result (e.g. `lint-workflow.md`). Omit to read the skill ' +
+            'itself.',
+        },
+      },
+      required: ['skill'],
+    },
+    execute: async (args) => {
+      let skill = requireStringArg(args, 'skill', 'read_skill');
+      let rawReference = args.reference;
+      let reference =
+        typeof rawReference === 'string' && rawReference.trim() !== ''
+          ? rawReference.trim()
+          : undefined;
+      // Gate on the index rather than the filesystem: skills excluded from
+      // the index (workspace/realm lifecycle the orchestrator owns) must
+      // not be loadable either, and an unknown name gets the list of what
+      // IS loadable so the model can self-correct in one round-trip.
+      let index = await skillReader.buildIndex();
+      if (!index.some((entry) => entry.name === skill)) {
+        return {
+          ok: false,
+          error:
+            `Unknown skill "${skill}". Available skills: ` +
+            `${index.map((entry) => entry.name).join(', ')}.`,
+        };
+      }
+      try {
+        if (reference) {
+          let content = await skillReader.readReference(skill, reference);
+          return { ok: true, skill, reference, content };
+        }
+        let result = await skillReader.readSkill(skill);
+        return {
+          ok: true,
+          skill: result.name,
+          content: result.content,
+          referenceFiles: result.referenceFiles,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     },
   };
 }

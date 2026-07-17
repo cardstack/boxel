@@ -24,6 +24,10 @@ Factory tools (call by name):
 - **`get_card_schema({ module, name })`** — fetch the live JSON Schema
   of a card definition. Required before writing a tracker
   (Project / Issue / KnowledgeArticle) or Spec card.
+- **`read_skill({ skill, reference? })`** — load a skill from the skill
+  library (see the Skill library section below). Returns the skill text
+  plus its reference filenames; pass `reference` to fetch one of those
+  documents.
 - **`run_lint`** / **`run_parse`** / **`run_evaluate`** /
   **`run_instantiate`** / **`run_tests`** — mid-turn validators. Optional:
   the orchestrator runs these automatically after `signal_done`.
@@ -43,14 +47,15 @@ Inspect existing state before making changes; do not guess.
 
 # Rules
 
-- **Stay in your target realm.** The loaded skills + the issue
-  description contain everything you need to implement the card. Do
+- **Stay in your target realm.** The loaded skills, the skill library
+  (via `read_skill`), and the issue description contain everything you
+  need to implement the card. Do
   NOT run `boxel file ls` / `boxel search` / `boxel read-transpiled`
   against any realm other than the target realm shown below — not the
   base realm, not the software-factory realm, not experiments{{#if enableBoxelUiDiscovery}}{{else}}, not catalog{{/if}}. Cross-realm
   exploration burns tokens and time without helping. If a pattern isn't
-  covered by your skills, write the card using your own knowledge and let
-  validation tell you what to fix.{{#if enableBoxelUiDiscovery}}
+  covered by the skill library, write the card using your own knowledge
+  and let validation tell you what to fix.{{#if enableBoxelUiDiscovery}}
   - **Exception — catalog component specs (mandatory).** The catalog
     realm (`@cardstack/catalog/`) publishes one Spec card per boxel-ui
     component, indexed and searchable. Before writing **any** UI in a
@@ -109,6 +114,34 @@ returned `{ attributes, relationships? }` JSON Schema verbatim. The
 tool introspects the real `CardDef` at runtime, so the shape stays
 correct as the tracker schema evolves. Schemas are cached per-process,
 so repeat calls are cheap.
+
+{{#if skillIndex}}
+
+# Skill library (load on demand)
+
+Beyond the skills included in full below, a library of skills is
+available on demand. Each entry is one skill; load it with
+`read_skill({ skill: '<name>' })` **before** doing work its description
+covers — do not guess at conventions a skill documents. The result
+lists the skill's reference documents; fetch one with
+`read_skill({ skill: '<name>', reference: '<filename>' })`. Load skills
+selectively — only what the current issue actually needs.
+
+Entries marked **(suggested)** were matched to this issue's text; treat
+them as a starting point, not a limit.
+
+These skills document the `boxel` CLI for several environments, not
+just this one. In this factory session, read-only commands they mention
+(`boxel search`, `boxel read-transpiled`) are fine via Bash, but
+**never** run realm-mutating commands they mention — `boxel realm
+push` / `sync` / `create`, `boxel file write` / `touch` / `delete`. You
+write workspace files with `Write` / `Edit`; the orchestrator owns
+syncing them to the realm.
+
+{{#each skillIndex}}
+- `{{name}}`{{#if suggested}} **(suggested)**{{/if}} — {{description}}
+{{/each}}
+{{/if}}
 
 {{#each skills}}
 

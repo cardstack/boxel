@@ -5,6 +5,7 @@ import type {
   KnowledgeArticleData,
   ProjectData,
   ResolvedSkill,
+  SkillIndexEntry,
   TestResult,
   ValidationResults,
   IssueData,
@@ -18,6 +19,7 @@ import {
 
 import type {
   SkillLoaderInterface,
+  SkillResolution,
   SkillResolver,
 } from '../src/factory-skill-loader.ts';
 
@@ -26,32 +28,40 @@ import type {
 // ---------------------------------------------------------------------------
 
 class StubSkillResolver implements SkillResolver {
-  /** Pre-configured skill names returned by resolve(). */
-  skillNames: string[];
+  /** Pre-configured resolution returned by resolve(). */
+  resolution: SkillResolution;
   /** Records all (issue, project) pairs passed to resolve(). */
   calls: { issue: IssueData; project: ProjectData }[] = [];
 
-  constructor(skillNames: string[] = ['boxel-development']) {
-    this.skillNames = skillNames;
+  constructor(
+    load: string[] = ['boxel-development'],
+    suggested: string[] = [],
+  ) {
+    this.resolution = { load, suggested };
   }
 
-  resolve(issue: IssueData, project: ProjectData): string[] {
+  resolve(issue: IssueData, project: ProjectData): SkillResolution {
     this.calls.push({ issue, project });
-    return this.skillNames;
+    return this.resolution;
   }
 }
 
 class StubSkillLoader implements SkillLoaderInterface {
   /** Map from skill name to the ResolvedSkill that load() returns. */
   private skillMap: Map<string, ResolvedSkill>;
-  /** Records all loadAll() calls: [skillNames, issue]. */
-  loadAllCalls: { skillNames: string[]; issue?: IssueData }[] = [];
+  /** Index entries returned by buildIndex(). */
+  indexEntries: SkillIndexEntry[];
+  /** Records all loadAll() calls. */
+  loadAllCalls: { skillNames: string[] }[] = [];
 
-  constructor(skills: ResolvedSkill[] = []) {
+  constructor(skills: ResolvedSkill[] = [], indexEntries?: SkillIndexEntry[]) {
     this.skillMap = new Map(skills.map((s) => [s.name, s]));
+    this.indexEntries =
+      indexEntries ??
+      skills.map((s) => ({ name: s.name, description: `About ${s.name}` }));
   }
 
-  async load(skillName: string, _issue?: IssueData): Promise<ResolvedSkill> {
+  async load(skillName: string): Promise<ResolvedSkill> {
     let skill = this.skillMap.get(skillName);
     if (!skill) {
       throw new Error(`StubSkillLoader: unknown skill "${skillName}"`);
@@ -59,11 +69,8 @@ class StubSkillLoader implements SkillLoaderInterface {
     return skill;
   }
 
-  async loadAll(
-    skillNames: string[],
-    issue?: IssueData,
-  ): Promise<ResolvedSkill[]> {
-    this.loadAllCalls.push({ skillNames, issue });
+  async loadAll(skillNames: string[]): Promise<ResolvedSkill[]> {
+    this.loadAllCalls.push({ skillNames });
     let results: ResolvedSkill[] = [];
     for (let name of skillNames) {
       let skill = this.skillMap.get(name);
@@ -72,6 +79,10 @@ class StubSkillLoader implements SkillLoaderInterface {
       }
     }
     return results;
+  }
+
+  async buildIndex(): Promise<SkillIndexEntry[]> {
+    return this.indexEntries;
   }
 }
 
@@ -205,31 +216,7 @@ module('factory-context-builder > skill resolution', function () {
     assert.deepEqual(
       loader.loadAllCalls[0].skillNames,
       ['boxel-development', 'ember-best-practices'],
-      'loadAll() received the resolved skill names',
-    );
-  });
-
-  test('passes issue to loadAll for reference filtering', async function (assert) {
-    let resolver = new StubSkillResolver(['boxel-development']);
-    let loader = new StubSkillLoader([makeSkill('boxel-development')]);
-    let { config } = makeConfig({
-      skillResolver: resolver,
-      skillLoader: loader,
-    });
-    let builder = new ContextBuilder(config);
-    let issue = makeIssue();
-
-    await builder.build({
-      project: makeProject(),
-      issue,
-      knowledge: [],
-      targetRealm: 'https://example.test/target/',
-    });
-
-    assert.strictEqual(
-      loader.loadAllCalls[0].issue,
-      issue,
-      'loadAll() received the issue for reference filtering',
+      'loadAll() received the front-load skill names',
     );
   });
 
@@ -258,6 +245,118 @@ module('factory-context-builder > skill resolution', function () {
     assert.strictEqual(ctx.skills.length, 2, 'two skills in context');
     assert.strictEqual(ctx.skills[0].name, 'boxel-development');
     assert.strictEqual(ctx.skills[1].name, 'ember-best-practices');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: On-demand skill index
+// ---------------------------------------------------------------------------
+
+module('factory-context-builder > skill index', function () {
+  test('context carries the skill index minus front-loaded skills', async function (assert) {
+    let resolver = new StubSkillResolver(['software-factory-operations']);
+    let loader = new StubSkillLoader(
+      [makeSkill('software-factory-operations')],
+      [
+        { name: 'boxel', description: 'Core Boxel coding skill' },
+        { name: 'boxel-patterns', description: 'Copy-paste patterns' },
+        {
+          name: 'software-factory-operations',
+          description: 'Factory workflow',
+        },
+      ],
+    );
+    let { config } = makeConfig({
+      skillResolver: resolver,
+      skillLoader: loader,
+    });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.build({
+      project: makeProject(),
+      issue: makeIssue(),
+      knowledge: [],
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.deepEqual(
+      ctx.skillIndex?.map((entry) => entry.name),
+      ['boxel', 'boxel-patterns'],
+      'front-loaded skill is dropped from the index',
+    );
+  });
+
+  test('resolver suggestions are marked in the index', async function (assert) {
+    let resolver = new StubSkillResolver(
+      ['software-factory-operations'],
+      ['boxel', 'boxel-design'],
+    );
+    let loader = new StubSkillLoader(
+      [makeSkill('software-factory-operations')],
+      [
+        { name: 'boxel', description: 'Core Boxel coding skill' },
+        { name: 'boxel-design', description: 'Visual decisions' },
+        { name: 'boxel-patterns', description: 'Copy-paste patterns' },
+      ],
+    );
+    let { config } = makeConfig({
+      skillResolver: resolver,
+      skillLoader: loader,
+    });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.build({
+      project: makeProject(),
+      issue: makeIssue(),
+      knowledge: [],
+      targetRealm: 'https://example.test/target/',
+    });
+
+    let byName = new Map(ctx.skillIndex!.map((entry) => [entry.name, entry]));
+    assert.true(byName.get('boxel')?.suggested, 'boxel marked suggested');
+    assert.true(
+      byName.get('boxel-design')?.suggested,
+      'boxel-design marked suggested',
+    );
+    assert.strictEqual(
+      byName.get('boxel-patterns')?.suggested,
+      undefined,
+      'unsuggested entry carries no marker',
+    );
+  });
+
+  test('buildForIssue also carries the skill index', async function (assert) {
+    let resolver = new StubSkillResolver(
+      ['software-factory-operations'],
+      ['boxel'],
+    );
+    let loader = new StubSkillLoader(
+      [makeSkill('software-factory-operations')],
+      [{ name: 'boxel', description: 'Core Boxel coding skill' }],
+    );
+    let issueLoader = new StubIssueRelationshipLoader();
+    let builder = new ContextBuilder({
+      skillResolver: resolver,
+      skillLoader: loader,
+      issueLoader,
+    });
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.deepEqual(
+      ctx.skillIndex,
+      [
+        {
+          name: 'boxel',
+          description: 'Core Boxel coding skill',
+          suggested: true,
+        },
+      ],
+      'index present with suggestion marker',
+    );
   });
 });
 

@@ -415,6 +415,7 @@ export function assembleSystemPrompt(
     targetRealm: context.targetRealm,
     darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
     skills,
+    skillIndex: context.skillIndex ?? [],
   });
 }
 
