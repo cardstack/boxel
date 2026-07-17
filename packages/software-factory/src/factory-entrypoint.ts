@@ -99,6 +99,12 @@ export interface FactoryEntrypointOptions {
   buildModel?: string;
   /** Effort for phase-split build turns. Default `medium`. */
   buildEffort?: string;
+  /**
+   * Orchestrator monitor level (v3, requires --v2): quiet | normal |
+   * verbose. Default `normal` — stall narration, per-turn telemetry,
+   * scheduler notes, and sync failures on the run log.
+   */
+  monitorLevel?: 'quiet' | 'normal' | 'verbose';
 }
 
 export interface FactoryEntrypointAction {
@@ -229,6 +235,10 @@ export function getFactoryEntrypointUsage(): string {
     '                              backend falls back to the realm server passthrough at',
     '                              `/_openrouter/chat/completions` — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
+    '  --monitor-level <level>     Orchestrator monitor verbosity on the run log (requires --v2):',
+    '                              "quiet" (stalls + failures only), "normal" (default — adds',
+    '                              per-turn telemetry and scheduler notes), "verbose" (adds turn',
+    '                              starts, heals, and sync successes).',
     '  --enable-boxel-ui-discovery Make the agent search the catalog for @cardstack/boxel-ui',
     '                              component Spec cards before writing UI in a .gts template.',
     '                              When omitted, the agent has no awareness of boxel-ui',
@@ -304,6 +314,9 @@ export function parseFactoryEntrypointArgs(
           type: 'string',
         },
         'build-effort': {
+          type: 'string',
+        },
+        'monitor-level': {
           type: 'string',
         },
       },
@@ -384,7 +397,20 @@ export function parseFactoryEntrypointArgs(
       typeof parsed.values['build-effort'] === 'string'
         ? parsed.values['build-effort']
         : undefined,
+    monitorLevel: parseMonitorLevel(parsed.values['monitor-level']),
   };
+}
+
+function parseMonitorLevel(
+  raw: unknown,
+): 'quiet' | 'normal' | 'verbose' | undefined {
+  if (typeof raw !== 'string') return undefined;
+  if (raw === 'quiet' || raw === 'normal' || raw === 'verbose') {
+    return raw;
+  }
+  throw new FactoryEntrypointUsageError(
+    `Invalid --monitor-level: "${raw}". Valid values: quiet, normal, verbose.`,
+  );
 }
 
 /**
@@ -613,6 +639,7 @@ export async function runFactoryEntrypoint(
     forkContext: options.forkContext,
     modelPolicy: buildModelPolicy(options),
     phaseSplit: options.phaseSplit,
+    monitorLevel: options.monitorLevel,
     // Wire the board and the seed issue's project the moment the bootstrap
     // issue finishes, rather than after the whole loop returns — so a run
     // whose later issues stall or get interrupted still ends up with the

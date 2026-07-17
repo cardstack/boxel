@@ -803,7 +803,7 @@ function buildScreenshotHtmlTool(config: ToolBuilderConfig): FactoryTool {
     name: 'screenshot_html',
     description:
       'Render a workspace HTML file in headless Chromium and write a PNG ' +
-      'screenshot into the workspace. Returns the PNG\'s workspace-relative ' +
+      "screenshot into the workspace. Returns the PNG's workspace-relative " +
       'path — then use your native Read tool on that path to SEE the image ' +
       'and critique it. This powers the HTML-first design loop: write a ' +
       'plain HTML+CSS mockup of the card (mobile isolated view, fitted ' +

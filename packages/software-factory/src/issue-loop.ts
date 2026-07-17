@@ -33,6 +33,7 @@ import {
   designEntriesFromToolCalls,
   cardPathsFromToolCalls,
 } from './run-log.ts';
+import type { RunMonitor } from './run-monitor.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
@@ -140,6 +141,13 @@ export interface IssueLoopConfig {
   /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
   runLog?: RunLogWriter;
   /**
+   * Orchestrator monitor (v3): stall narration, per-turn telemetry,
+   * scheduler + watchdog notes onto the run log. The loop drives
+   * beginTurn/endTurn around every agent.run and feeds stream events
+   * into the stall clock; the wiring owns start()/stop().
+   */
+  monitor?: RunMonitor;
+  /**
    * Per-turn model/thinking budget policy, keyed by turn type. The
    * ORCHESTRATOR owns this (turn type is deterministic here); issues
    * don't carry budgets. `fix` applies to inner iterations ≥ 2 —
@@ -147,11 +155,26 @@ export interface IssueLoopConfig {
    * full effort. Absent keys inherit the session default.
    */
   modelPolicy?: {
-    prime?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    bootstrap?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    design?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    build?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    fix?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    prime?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    bootstrap?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    design?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    build?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    fix?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
   };
   /**
    * Phase-split (v2): run each implementation issue's first iteration as
@@ -334,6 +357,7 @@ export async function runIssueLoop(
     syncWorkspace,
     briefUrl,
     runLog,
+    monitor,
     modelPolicy,
     phaseSplit = false,
     forkContext = false,
@@ -346,6 +370,56 @@ export async function runIssueLoop(
 
   let scheduler = new IssueScheduler(issueStore);
   await scheduler.loadIssues();
+
+  // Run one agent turn under the monitor: begin/end telemetry plus the
+  // stall clock (tool events + coarse assistant-message activity). A
+  // no-op passthrough when no monitor is wired.
+  let runTurn = async (
+    context: AgentContext,
+    info: {
+      issueTitle: string;
+      turnType: string;
+      iteration?: number;
+      maxIterations?: number;
+    },
+  ): Promise<AgentRunResult> => {
+    let prevOnToolCall = context.onToolCall;
+    let prevOnActivity = context.onActivity;
+    if (monitor) {
+      context.onToolCall = (entry) => {
+        monitor.noteToolEvent(entry);
+        prevOnToolCall?.(entry);
+      };
+      context.onActivity = (desc) => monitor.noteActivity(desc);
+      monitor.beginTurn({
+        ...info,
+        model: context.modelBudget?.model,
+        effort: context.modelBudget?.effort,
+      });
+    }
+    let turnStartMs = Date.now();
+    try {
+      let result = await agent.run(context, tools);
+      monitor?.endTurn({
+        status: result.status,
+        durationMs: Date.now() - turnStartMs,
+        usage: result.usage,
+      });
+      return result;
+    } catch (error) {
+      monitor?.endTurn({
+        status: 'error',
+        durationMs: Date.now() - turnStartMs,
+      });
+      throw error;
+    } finally {
+      // Restore the un-wrapped hooks: a later turn may spread this context
+      // (phase-split's buildContext) and would otherwise double-wrap,
+      // double-counting every tool event in the monitor's stats.
+      context.onToolCall = prevOnToolCall;
+      context.onActivity = prevOnActivity;
+    }
+  };
 
   let issueResults: IssueIterationResult[] = [];
   let outerCycles = 0;
@@ -432,6 +506,14 @@ export async function runIssueLoop(
       );
     }
 
+    if (monitor) {
+      let remaining = scheduler.unblockedCount(exhaustedIssues);
+      monitor.noteScheduler(
+        `Queue: picked "${issueDisplayTitle(issue)}" — ${remaining} unblocked issue${remaining === 1 ? '' : 's'} in the queue`,
+        `Priority ${issue.priority} · status ${issue.status} · up to ${maxIterationsPerIssue} iterations before this issue blocks.`,
+      );
+    }
+
     // Context forking (v2): one priming turn before the first
     // implementation issue. The prime reads skills + design language +
     // precedent and writes design/DESIGN-NOTES.md; its session id seeds a
@@ -452,7 +534,10 @@ export async function runIssueLoop(
         if (modelPolicy?.prime) {
           primeContext.modelBudget = modelPolicy.prime;
         }
-        let primeResult = await agent.run(primeContext, tools);
+        let primeResult = await runTurn(primeContext, {
+          issueTitle: 'shared design context',
+          turnType: 'prime',
+        });
         if (primeResult.sessionId) {
           primeSessionId = primeResult.sessionId;
           log.info(
@@ -643,7 +728,12 @@ export async function runIssueLoop(
           context.modelBudget = modelPolicy.design;
         }
         log.info('  Phase-split: DESIGN turn starting');
-        let designResult = await agent.run(context, tools);
+        let designResult = await runTurn(context, {
+          issueTitle: issueDisplayTitle(issue),
+          turnType: 'design',
+          iteration,
+          maxIterations: maxIterationsPerIssue,
+        });
         allToolCalls.push(...designResult.toolCalls);
         if (designResult.status === 'blocked') {
           result = designResult;
@@ -676,10 +766,25 @@ export async function runIssueLoop(
               { stream: true },
             );
           }
-          result = await agent.run(buildContext, tools);
+          result = await runTurn(buildContext, {
+            issueTitle: issueDisplayTitle(issue),
+            turnType: 'build',
+            iteration,
+            maxIterations: maxIterationsPerIssue,
+          });
         }
       } else {
-        result = await agent.run(context, tools);
+        result = await runTurn(context, {
+          issueTitle: issueDisplayTitle(issue),
+          turnType:
+            issue.issueType === 'bootstrap'
+              ? 'bootstrap'
+              : iteration >= 2
+                ? 'fix'
+                : 'implement',
+          iteration,
+          maxIterations: maxIterationsPerIssue,
+        });
       }
       let toolSyncMs = getSyncElapsedMs() - agentSyncStartMs;
       let agentMs = Math.max(0, Date.now() - agentStartMs - toolSyncMs);
@@ -792,8 +897,9 @@ export async function runIssueLoop(
         // failing step, else the last step that ran. Step cards are written
         // by the pipeline at Validations/<step>_<issueId>-<iteration>
         // ('evaluate' files as 'eval_').
-        let focusStep = validationResults.steps.find((s) => !s.passed)
-          ?? validationResults.steps[validationResults.steps.length - 1];
+        let focusStep =
+          validationResults.steps.find((s) => !s.passed) ??
+          validationResults.steps[validationResults.steps.length - 1];
         let stepFile =
           focusStep?.step === 'evaluate' ? 'eval' : focusStep?.step;
         await runLog.append([
@@ -1053,7 +1159,9 @@ export async function runIssueLoop(
   log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
 
   if (runLog) {
-    await runLog.finish(outcome === 'all_issues_done' ? 'completed' : 'stopped');
+    await runLog.finish(
+      outcome === 'all_issues_done' ? 'completed' : 'stopped',
+    );
   }
 
   // Mark the project as completed only when ALL issues in the realm are done

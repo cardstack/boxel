@@ -34,6 +34,7 @@ import { ContextBuilder } from './factory-context-builder.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
 import { RunLogWriter } from './run-log.ts';
+import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
 import {
   buildFactoryTools,
   type FactoryTool,
@@ -117,14 +118,36 @@ export interface IssueLoopWiringConfig {
   forkContext?: boolean;
   /** Per-turn model/effort budget policy (orchestrator-owned; see IssueLoopConfig). */
   modelPolicy?: {
-    prime?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    bootstrap?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    design?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    build?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
-    fix?: { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
+    prime?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    bootstrap?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    design?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    build?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    fix?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
   };
   /** Phase-split (v2): design turn + build turn per issue (see IssueLoopConfig). */
   phaseSplit?: boolean;
+  /**
+   * Orchestrator monitor level (v3). Applies only under v2 (needs the run
+   * log). 'normal' (default) posts stall narration, turn telemetry,
+   * scheduler notes, and sync failures; 'verbose' adds turn starts, heals,
+   * and sync successes; 'quiet' keeps stalls + failures only.
+   */
+  monitorLevel?: MonitorLevel;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -226,13 +249,30 @@ export async function runFactoryIssueLoop(
   // raw writes). Set once the RunLogWriter exists; runs after every
   // successful sync so the live blog can never stay stripped.
   let postSyncHeal: (() => Promise<void>) | undefined;
+  // Set once the RunMonitor exists (v2 only) — watchdog notes for sync
+  // failures (normal level) and heals/successes (verbose).
+  let monitor: RunMonitor | undefined;
   let syncWorkspace = async () => {
     let start = Date.now();
     try {
       let result = await syncGate.sync();
+      if (!result.ok) {
+        monitor?.noteWatchdog(
+          'sync-failed',
+          'Workspace sync to the realm failed',
+          {
+            body: `${result.error ?? 'unknown error'} — the loop retries on the next turn; the issue cannot be marked done until a sync lands.`,
+            failure: true,
+          },
+        );
+      }
       if (result.ok && postSyncHeal) {
         try {
           await postSyncHeal();
+          monitor?.noteWatchdog(
+            'heal',
+            'Run-log instance healed after sync (atomic FieldDef-strip workaround)',
+          );
         } catch {
           // Healing is best-effort; never fail a sync over it.
         }
@@ -324,6 +364,10 @@ export async function runFactoryIssueLoop(
     });
     let createdRunLog = runLog;
     postSyncHeal = () => createdRunLog.healInstance();
+    monitor = new RunMonitor({
+      runLog,
+      level: config.monitorLevel ?? 'normal',
+    });
   }
 
   let issueLoopConfig: IssueLoopConfig = {
@@ -338,6 +382,7 @@ export async function runFactoryIssueLoop(
     syncWorkspace,
     briefUrl: config.briefUrl,
     runLog,
+    monitor,
     modelPolicy: config.modelPolicy,
     phaseSplit: config.phaseSplit === true,
     forkContext: config.forkContext === true,
@@ -349,8 +394,10 @@ export async function runFactoryIssueLoop(
   };
 
   try {
+    monitor?.start();
     return await runIssueLoop(issueLoopConfig);
   } finally {
+    monitor?.stop();
     // Some agents (notably `OpencodeFactoryAgent`) hold persistent
     // backend state across iterations — long-lived opencode subprocess
     // + MCP server + JWT'd HTTP client. Tear that down here so a

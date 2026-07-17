@@ -137,6 +137,11 @@ export class IssueScheduler {
     return this.getUnblockedIssues(exclude).length > 0;
   }
 
+  /** Number of unblocked issues remaining (queue depth for monitor notes). */
+  unblockedCount(exclude?: ReadonlySet<string>): number {
+    return this.getUnblockedIssues(exclude).length;
+  }
+
   /** True if the loaded issue list is non-empty (regardless of status). */
   hasAnyIssues(): boolean {
     return this.issues.length > 0;

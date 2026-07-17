@@ -42,7 +42,11 @@ export interface RunLogEntryInput {
     | 'decision'
     | 'agent-spawn'
     | 'blocked'
-    | 'note';
+    | 'note'
+    // Orchestrator monitor (v3): stall narration / scheduler / watchdog
+    // notes, and per-turn cost/duration telemetry. See run-monitor.ts.
+    | 'monitor'
+    | 'telemetry';
   headline: string;
   body?: string;
   /** Absolute URL of a screenshot image to embed (public realms only). */
@@ -218,7 +222,11 @@ export class RunLogWriter {
           attrs.upNext = updates.upNext;
         }
         doc.data.relationships = rels;
-        await writeFile(this.instancePath, JSON.stringify(doc, null, 2), 'utf8');
+        await writeFile(
+          this.instancePath,
+          JSON.stringify(doc, null, 2),
+          'utf8',
+        );
         if (opts?.stream) {
           await this.rawWriteInstance();
         } else {
@@ -310,7 +318,12 @@ async function fileExists(path: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 const POST_UPDATE_KINDS = new Set(['comment', 'progress', 'decision']);
-const CHECK_TOOLS = ['run_lint', 'run_parse', 'run_evaluate', 'run_instantiate'];
+const CHECK_TOOLS = [
+  'run_lint',
+  'run_parse',
+  'run_evaluate',
+  'run_instantiate',
+];
 const CHECK_FAIL_MIN_INTERVAL_MS = 120_000;
 
 /**
@@ -371,7 +384,14 @@ export function createRunLogStreamHandler(opts: {
           ? String(entry.args.kind)
           : 'comment';
         void opts.runLog.append(
-          [{ kind: kind as RunLogEntryInput['kind'], headline, body, who: 'executor' }],
+          [
+            {
+              kind: kind as RunLogEntryInput['kind'],
+              headline,
+              body,
+              who: 'executor',
+            },
+          ],
           undefined,
           { stream: true },
         );
@@ -520,7 +540,10 @@ export function cardPathsFromToolCalls(
     if (call.tool !== 'Write') continue;
     let filePath = call.args?.file_path;
     if (typeof filePath !== 'string') continue;
-    let normalized = filePath.replace(/^.*boxel-factory-workspaces\/[^/]+\//, '');
+    let normalized = filePath.replace(
+      /^.*boxel-factory-workspaces\/[^/]+\//,
+      '',
+    );
     if (!normalized.endsWith('.json')) continue;
     if (EXCLUDED.test(normalized)) continue;
     if (!normalized.includes('/')) continue; // instances live in <Type>/<id>.json
@@ -535,7 +558,6 @@ export function cardPathsFromToolCalls(
 // ---------------------------------------------------------------------------
 // The RunLog CardDef module, written verbatim into the target realm
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // The RunLog CardDef module, written verbatim into the target realm.
@@ -589,6 +611,8 @@ const KIND_GLYPHS: Record<string, string> = {
   decision: '⚑',
   'agent-spawn': '⚙',
   note: '·',
+  monitor: '◉',
+  telemetry: '≡',
 };
 
 class RunLogEntry extends FieldDef {
@@ -735,7 +759,16 @@ class RunLogEntry extends FieldDef {
           color: #ff5050;
         }
         .entry[data-kind='iteration'] .chip,
-        .entry[data-kind='comment'] .chip {
+        .entry[data-kind='comment'] .chip,
+        .entry[data-kind='monitor'] .chip,
+        .entry[data-kind='telemetry'] .chip {
+          color: var(--rl-ink-quiet, #5c5967);
+        }
+        /* Orchestrator meta-chatter reads smaller than build milestones. */
+        .entry[data-kind='monitor'] .h,
+        .entry[data-kind='telemetry'] .h {
+          font-size: 12.5px;
+          font-weight: 500;
           color: var(--rl-ink-quiet, #5c5967);
         }
         .showme {

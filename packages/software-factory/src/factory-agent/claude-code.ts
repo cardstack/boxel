@@ -131,6 +131,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
     let toolCallLog: ToolCallEntry[] = [];
     let sessionId: string | undefined;
+    let usage: AgentRunResult['usage'];
     let captured: CapturedSignal | undefined;
     let abortController = new AbortController();
 
@@ -278,6 +279,38 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
             }
           }
         }
+        // Capture token/cost usage from the terminal result message so the
+        // orchestrator's turn telemetry can report what the turn cost.
+        if (message.type === 'result') {
+          let r = message as {
+            total_cost_usd?: number;
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+            };
+          };
+          usage = {
+            inputTokens: r.usage?.input_tokens,
+            outputTokens: r.usage?.output_tokens,
+            cacheReadTokens: r.usage?.cache_read_input_tokens,
+            costUsd: r.total_cost_usd,
+          };
+        }
+        // Coarse activity heartbeat (v3 RunMonitor): every complete
+        // assistant message resets the stall clock. Silence between
+        // messages = the model is generating.
+        if (context.onActivity && message.type === 'assistant') {
+          try {
+            context.onActivity(
+              summarizeAssistantMessage(
+                message as { message: { content?: unknown } },
+              ).slice(0, 120),
+            );
+          } catch {
+            // Monitoring must never break the run.
+          }
+        }
         // Stream native Write/Edit sightings to the live-blog hook as
         // they land (MCP factory tools stream via buildSdkToolsFromFactoryTools).
         if (context.onToolCall && message.type === 'assistant') {
@@ -316,13 +349,14 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     }
 
     if (captured?.kind === 'done') {
-      return { status: 'done', toolCalls: toolCallLog, sessionId };
+      return { status: 'done', toolCalls: toolCallLog, sessionId, usage };
     }
     if (captured?.kind === 'clarification') {
       return {
         status: 'blocked',
         toolCalls: toolCallLog,
         sessionId,
+        usage,
         message: captured.message,
       };
     }
@@ -334,6 +368,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
       toolCalls: toolCallLog,
       sessionId,
+      usage,
     };
   }
 

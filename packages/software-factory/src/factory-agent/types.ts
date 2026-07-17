@@ -281,6 +281,14 @@ export interface AgentContext {
     durationMs?: number;
   }) => void;
   /**
+   * Coarse activity heartbeat (v3 RunMonitor): invoked with a short
+   * description for every backend stream event that isn't already an
+   * onToolCall — e.g. each complete assistant message on the Claude
+   * backend. Used only to reset the stall clock; silence between calls
+   * means the model is generating. Must never throw.
+   */
+  onActivity?: (desc: string) => void;
+  /**
    * Phase-split (v2): which half of a split issue this turn is. 'design'
    * turns produce accepted mockups + design notes only; 'build' turns
    * translate them into card code, forked from the design session.
@@ -348,6 +356,18 @@ export interface AgentRunResult {
   message?: string;
   /** Backend session id for this turn (claude backend) — fork seed for v2 context forking. */
   sessionId?: string;
+  /**
+   * Token/cost usage for this turn when the backend reports it (the Claude
+   * SDK's terminal `result` message). Absent when the turn was aborted by
+   * a control signal before the result message arrived. Consumed by the
+   * v3 RunMonitor's turn-telemetry entries.
+   */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    costUsd?: number;
+  };
 }
 
 /**
