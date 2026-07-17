@@ -2100,7 +2100,16 @@ export default class MatrixService extends Service {
     this._systemCard = undefined;
     this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
+    // The client is recreated synchronously above, so re-establish the
+    // client-ready invariant here: `loadSDK()` (the only other place that
+    // fulfills this) runs once at boot and never re-runs, so a fresh deferred
+    // left pending would strand every post-logout `createRealmSession()` await
+    // (CS-12207). Guard on `_client` since `createClient` is a no-op when the
+    // SDK hasn't loaded yet.
     this.#clientReadyDeferred = new Deferred<void>();
+    if (this._client) {
+      this.#clientReadyDeferred.fulfill();
+    }
   }
 
   private teardownClient() {
