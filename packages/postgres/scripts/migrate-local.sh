@@ -11,10 +11,12 @@
 # depend on) and FIRST on `down` (drops are undone before the tables they touch
 # are removed), which keeps the combined sequence a valid linear order.
 #
-# The action (up | down [count] | redo ...) is forwarded from the caller, e.g.
-# `pnpm migrate up`, `pnpm migrate down "$COUNT"`. Callers only ever roll the
-# whole chain back (down count = every migration), so `down` rolls the removal
-# phase back in full and forwards the caller's count to the additive phase.
+# The action (up | down [count] | create <name> | redo ...) is forwarded from
+# the caller, e.g. `pnpm migrate up`, `pnpm migrate down "$COUNT"`. Callers only
+# ever roll the whole chain back (down count = every migration), so `down` rolls
+# the removal phase back in full and forwards the caller's count to the additive
+# phase. `create` is scaffolding, not application, so it targets the additive
+# phase only (see the create case below).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -35,15 +37,28 @@ mig() {
 action="${1:-up}"
 shift || true
 
-if [ "$action" = "down" ]; then
-  # Roll the removal phase back in full first (its own applied count), then hand
-  # the caller's count to the additive phase.
-  removal_count=$(find migrations-removal -maxdepth 1 -type f -name '[0-9]*.js' | wc -l | tr -d ' ')
-  if [ "$removal_count" -gt 0 ]; then
-    mig migrations-removal migrations_removal down "$removal_count"
-  fi
-  mig migrations migrations down "$@"
-else
-  mig migrations migrations "$action" "$@"
-  mig migrations-removal migrations_removal "$action" "$@"
-fi
+case "$action" in
+  create)
+    # Scaffolding is additive by default: `pnpm migrate create <name>` writes a
+    # single file to migrations/. To make a removal migration, create it this
+    # way and then `git mv` it into migrations-removal/ (node-pg-migrate tracks
+    # by filename, so moving a not-yet-applied file is clean). Running `create`
+    # against both phases would emit a spurious second migration every time.
+    mig migrations migrations create "$@"
+    ;;
+  down)
+    # Roll the removal phase back in full first (its own applied count), then
+    # hand the caller's count to the additive phase.
+    removal_count=$(find migrations-removal -maxdepth 1 -type f -name '[0-9]*.js' | wc -l | tr -d ' ')
+    if [ "$removal_count" -gt 0 ]; then
+      mig migrations-removal migrations_removal down "$removal_count"
+    fi
+    mig migrations migrations down "$@"
+    ;;
+  *)
+    # Apply actions (up, redo, …) run against both phases: additive first, then
+    # removal.
+    mig migrations migrations "$action" "$@"
+    mig migrations-removal migrations_removal "$action" "$@"
+    ;;
+esac
