@@ -20,14 +20,14 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
 
-// CS-12207: `MatrixService` is a singleton whose client-ready barrier
+// `MatrixService` is a singleton whose client-ready barrier
 // (`#clientReadyDeferred`) is only fulfilled once, at boot, inside `loadSDK()`.
 // Logout stays in-app (a router transition, not a page reload) and its
-// `finally` runs `resetState()`, which recreates the client synchronously but
-// then replaces `#clientReadyDeferred` with a fresh, never-fulfilled deferred.
-// The next login awaits that deferred in `createRealmSession()`, so it hangs
-// forever and the auth page never progresses. This test locks down the
-// invariant that `createRealmSession()` still resolves after a `resetState()`.
+// `finally` runs `resetState()`, so the barrier must survive that reset: if it
+// were replaced with a fresh, never-fulfilled deferred, the next login's
+// `createRealmSession()` would await it forever and the auth page would never
+// progress. This test locks down the invariant that `createRealmSession()`
+// still resolves after a `resetState()`.
 module(
   'Integration | matrix-service | re-login after logout',
   function (hooks) {
@@ -53,9 +53,8 @@ module(
       let matrixService = getService('matrix-service') as MatrixService;
       await matrixService.ready;
 
-      // `logout()` recreates the client and installs a fresh
-      // `#clientReadyDeferred` via `resetState()` in its `finally`. Drive that
-      // reset directly so the test doesn't depend on the full logout network
+      // `logout()` runs `resetState()` in its `finally`. Drive that reset
+      // directly so the test doesn't depend on the full logout network
       // roundtrip / router transition.
       matrixService.resetState();
 
@@ -68,7 +67,7 @@ module(
       assert.notStrictEqual(
         result,
         TIMEOUT,
-        'createRealmSession settles after resetState — the re-created clientReadyDeferred is fulfilled rather than left pending',
+        'createRealmSession settles after resetState — the clientReadyDeferred barrier survives the reset rather than being left pending',
       );
     });
   },
