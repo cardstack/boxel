@@ -312,6 +312,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import FileDef from 'https://cardstack.com/base/file-api';
 
 function clock(value: Date | string | undefined): string {
   if (!value) return '';
@@ -333,7 +334,9 @@ class RunLogEntry extends FieldDef {
   @field headline = contains(StringField);
   @field body = contains(MarkdownField);
   @field imageUrl = contains(StringField);
-  @field image = linksTo(() => CardDef);
+  // File cards (PngDef etc.) descend from FileDef, NOT CardDef — a
+  // CardDef-typed link rejects them at field validation.
+  @field image = linksTo(() => FileDef);
   @field card = linksTo(() => CardDef);
 
   static embedded = class Embedded extends Component<typeof this> {
