@@ -142,6 +142,14 @@ export default async function serialize({
 // `fieldOrCard` when fetching the child definition; otherwise nested
 // fields on the polymorphic subtype would be missing from the child
 // definition lookup and the values would silently drop.
+//
+// A compound field's child definition is not always resolvable: when
+// the field's declared type is an unexported class, its `fieldOrCard`
+// is a `fieldOf`/`ancestorOf` ref and the definition store only holds
+// entries for exports. Values under such a field can't be walked
+// schema-aware, so they pass through verbatim — this serializer's
+// output overwrites the stored source, and unnormalized inner code
+// refs are recoverable where dropped field data is not.
 async function processAttributes({
   attributes,
   definition,
@@ -220,7 +228,7 @@ async function processAttributes({
               virtualNetwork,
             );
             if (!childDef) {
-              return {};
+              return item;
             }
             return await processAttributes({
               attributes: item,
@@ -252,6 +260,7 @@ async function processAttributes({
         virtualNetwork,
       );
       if (!childDef) {
+        result[fieldName] = fieldValue;
         continue;
       }
       result[fieldName] = await processAttributes({
@@ -382,6 +391,18 @@ async function processRelationships({
       virtualNetwork,
     );
 
+    if (fieldDefinition === 'unresolvable') {
+      // The path crosses a compound field whose child definition can't
+      // be resolved (an unexported class). We can't tell what kind of
+      // relationship this is, but we know the card declares the holder
+      // field — preserve the relationship in normalized form rather
+      // than dropping it.
+      result[relationshipKey] = Array.isArray(value)
+        ? value.map((entry) => normalizeRelationship(entry))
+        : normalizeRelationship(value);
+      continue;
+    }
+
     if (!fieldDefinition || fieldDefinition.isComputed) {
       continue;
     }
@@ -420,6 +441,12 @@ async function processRelationships({
 // `meta.fields` sub-tree at the root; we walk it in parallel with the
 // path segments so polymorphic per-segment overrides drive the
 // definition lookup.
+//
+// Returns `undefined` when a segment does not exist on its definition
+// (or descends past a primitive) — the path names nothing the card
+// declares. Returns `'unresolvable'` when a segment exists but its
+// child definition can't be resolved (an unexported class), so the
+// caller can preserve the value rather than treat it as unknown.
 async function resolveDottedFieldDef(
   rootDefinition: Definition,
   dottedPath: string,
@@ -427,7 +454,7 @@ async function resolveDottedFieldDef(
   relativeTo: URL,
   definitionLookup: DefinitionLookup,
   virtualNetwork: VirtualNetwork,
-): Promise<FieldDefinition | undefined> {
+): Promise<FieldDefinition | 'unresolvable' | undefined> {
   let segments = dottedPath.split('.');
   let current: Pick<Definition, 'fields' | 'fieldDefs'> = rootDefinition;
   let currentMeta = metaFields;
@@ -454,7 +481,7 @@ async function resolveDottedFieldDef(
       virtualNetwork,
     );
     if (!next) {
-      return undefined;
+      return 'unresolvable';
     }
     current = next;
     currentMeta = isMeta(metaForSeg) ? metaForSeg.fields : undefined;

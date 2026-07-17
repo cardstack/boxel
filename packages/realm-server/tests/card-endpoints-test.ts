@@ -3948,6 +3948,254 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
       });
+
+      module(
+        'compound fields backed by an unexported FieldDef',
+        function (hooks) {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
+            permissions: {
+              '*': ['read', 'write'],
+              '@node-test_realm:localhost': ['read', 'realm-owner'],
+            },
+            fileSystem: {
+              'log.gts': `
+              import {
+                contains,
+                containsMany,
+                field,
+                linksTo,
+                CardDef,
+                FieldDef,
+              } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import DatetimeField from "@cardstack/base/datetime";
+
+              class Entry extends FieldDef {
+                @field kind = contains(StringField);
+                @field at = contains(DatetimeField);
+                @field headline = contains(StringField);
+                @field author = linksTo(() => Author);
+              }
+
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+              }
+
+              export class Log extends CardDef {
+                @field logTitle = contains(StringField);
+                @field entries = containsMany(Entry);
+                @field latest = contains(Entry);
+                @field owner = linksTo(() => Author);
+              }
+            `,
+              'author-1.json': {
+                data: {
+                  attributes: {
+                    name: 'Probe Author',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+              'log-1.json': {
+                data: {
+                  attributes: {
+                    logTitle: 'Probe',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  relationships: {
+                    // `owner` resolves through the exported Log definition;
+                    // `entries.0.author` paths through the unexported Entry.
+                    // Having both ensures the serializer's relationship pass
+                    // produces a non-empty result, so a dropped nested
+                    // relationship can't hide behind the whole original
+                    // relationships object being carried over unprocessed.
+                    owner: {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                    'entries.0.author': {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              },
+            },
+            onRealmSetup,
+          });
+
+          test('PATCH preserves compound field values on disk', async function (assert) {
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Probe (edited)',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            assert.ok(existsSync(cardFile), 'card json exists on disk');
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'containsMany compound entries persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.attributes?.latest,
+              {
+                kind: 'wrap-up',
+                at: '2026-07-17T03:00:00.000Z',
+                headline: 'latest entry',
+              },
+              'contains compound value persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.author'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship nested in compound entry persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.owner,
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship on the card itself persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Probe (edited)',
+              'patched top-level attribute persisted to disk',
+            );
+          });
+
+          test('PATCH merges against the stored file even when the index lags it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            // Edit the stored file directly — no realm write, no file
+            // watcher in this fixture — so the index still reflects the
+            // original content. A PATCH of an unrelated field must keep
+            // this edit: the merge base is the stored file, and using the
+            // (lagging) index instead would silently revert it.
+            let onDisk = readJSONSync(cardFile);
+            onDisk.data.attributes.cardInfo = { notes: 'edited on disk' };
+            writeFileSync(cardFile, JSON.stringify(onDisk, null, 2));
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Patched after disk edit',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let card = readJSONSync(cardFile);
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Patched after disk edit',
+              'patched attribute persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.cardInfo?.notes,
+              'edited on disk',
+              'file-only change survives a PATCH of an unrelated field',
+            );
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'compound entries survive a PATCH of an unrelated field',
+            );
+          });
+        },
+      );
     });
 
     module('card DELETE request', function (_hooks) {
