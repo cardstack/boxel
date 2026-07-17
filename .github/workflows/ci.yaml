@@ -296,8 +296,11 @@ jobs:
       # they don't break the previous code revision mid-rollout.
       - name: Guard removal-phase migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
-        shell: bash
-        run: node packages/postgres/scripts/check-removal-phase.cjs ${{ steps.migrations.outputs.files }}
+        env:
+          # Newline-separated file list; the guard reads it from this env var
+          # (no shell word-splitting, no multiline value inlined into the script).
+          CHANGED_MIGRATIONS: ${{ steps.migrations.outputs.files }}
+        run: node packages/postgres/scripts/check-removal-phase.cjs
 
       - name: Apply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'

@@ -108,8 +108,13 @@ function destructiveOpsInUp(upFn, sourceFile) {
   return [...ops];
 }
 
-const files = process.argv
-  .slice(2)
+// Files come from argv (local use) and/or the CHANGED_MIGRATIONS env var (the CI
+// step feeds determine-changed-migrations.sh's newline-separated list this way,
+// so the workflow doesn't rely on shell word-splitting).
+const files = [
+  ...process.argv.slice(2),
+  ...(process.env.CHANGED_MIGRATIONS || '').split(/\s+/),
+]
   .map((f) => f.trim())
   .filter((f) => f && /^\d+_.*\.(js|ts)$/.test(path.basename(f)))
   // Only the additive phase; drops in migrations-removal/ are the whole point.
