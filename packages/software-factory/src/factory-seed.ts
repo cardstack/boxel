@@ -79,14 +79,17 @@ export async function createSeedIssue(
 
   // The factory entrypoint pulls the target realm into `workspaceDir`
   // before calling us, so a pre-existing seed shows up locally.
+  //
+  // LOCAL PATCH (CS-12192): the seed path is a realm-wide constant, so a
+  // second `factory:go` against an already-bootstrapped realm would find the
+  // *previous* run's stale seed here and short-circuit — silently ignoring
+  // the new brief. For this workspace's sequential multi-brief pass we instead
+  // OVERWRITE the seed with the current brief every time, so each run bootstraps
+  // its own brief. `buildSeedIssueDocument` stamps status=backlog, so a seed
+  // left `done`/`blocked` by a prior run is re-armed. Not an upstream change.
   let existing = await readCard(workspaceDir, SEED_ISSUE_FILE);
-  if (existing.ok) {
-    log.info(`Seed issue already exists at ${SEED_ISSUE_FILE}`);
-    return { issueId: SEED_ISSUE_PATH, status: 'existing' };
-  }
-
-  // Anything other than "file missing" is a real problem — surface it.
-  if (existing.status !== 404) {
+  // Anything other than "found" or "file missing" is a real problem — surface it.
+  if (!existing.ok && existing.status !== 404) {
     throw new Error(
       `Failed to check for existing seed issue: ${existing.error ?? 'unknown error'}`,
     );
@@ -94,7 +97,11 @@ export async function createSeedIssue(
 
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
-  log.info(`Creating seed issue at ${SEED_ISSUE_FILE}`);
+  log.info(
+    existing.ok
+      ? `Overwriting existing seed issue at ${SEED_ISSUE_FILE} with current brief`
+      : `Creating seed issue at ${SEED_ISSUE_FILE}`,
+  );
   let writeResult = await writeCard(
     workspaceDir,
     SEED_ISSUE_FILE,
@@ -107,7 +114,11 @@ export async function createSeedIssue(
     );
   }
 
-  log.info(`Seed issue created: ${SEED_ISSUE_PATH}`);
+  log.info(
+    existing.ok
+      ? `Seed issue overwritten: ${SEED_ISSUE_PATH}`
+      : `Seed issue created: ${SEED_ISSUE_PATH}`,
+  );
   return { issueId: SEED_ISSUE_PATH, status: 'created' };
 }
 

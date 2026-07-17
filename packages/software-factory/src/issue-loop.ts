@@ -393,7 +393,15 @@ export async function runIssueLoop(
 
     // Create a fresh validator scoped to this issue so that artifacts
     // (e.g. TestRun cards) are named per-issue rather than shared.
-    let validator = createValidator(issue.id);
+    // Bootstrap issues create Project/Board/Knowledge-Article/Issue cards,
+    // never a Catalog Spec — so `instantiate` structurally can never pass
+    // for them (see CS-12185). Skip straight to NoOpValidator (already
+    // built for exactly this per its own docstring) instead of burning
+    // maxIterationsPerIssue on an unwinnable validation.
+    let validator =
+      issue.issueType === 'bootstrap'
+        ? new NoOpValidator()
+        : createValidator(issue.id);
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation

@@ -187,6 +187,13 @@ export class DefaultSkillResolver implements SkillResolver {
       'boxel-file-structure',
       'boxel-api',
       'boxel-command',
+      // Local-only addition for this workspace's factory runs: hard-won,
+      // silent-realm-corrupting gotchas (DateField/DateTimeField mismatch,
+      // external URL in a relationships link poisoning the whole realm's
+      // indexing transaction, etc.) that upstream's boxel-development refs
+      // don't cover. Not an upstream change — lives in this checkout's
+      // .agents/skills/ only.
+      'boxel-workspace-cardinal-rules',
     ];
 
     if (this.enableBoxelUiDiscovery) {
