@@ -446,7 +446,7 @@ class IndexComponent extends Component {
       }
       .FreestyleUsage-apiTable tr:nth-child(even),
       .FreestyleUsage-cssVarsTable tr:nth-child(even) {
-        background-color: color-mix(in oklab, var(--muted) 90%, transparent);
+        background-color: color-mix(in oklab, var(--border) 30%, transparent);
       }
       .FreestyleUsage-apiTable tr,
       .FreestyleUsage-cssVarsTable tr {
