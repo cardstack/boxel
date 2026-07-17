@@ -14,19 +14,33 @@
 // can target either table via the useWorkInProgressIndex query option.
 //
 // CONCURRENTLY avoids locking writes during long builds in production.
-// node-pg-migrate's outer singleTransaction wrapper is broken for this
-// migration via pgm.noTransaction() — CREATE/DROP INDEX CONCURRENTLY
-// cannot run inside a transaction at all.
+// node-pg-migrate's outer singleTransaction wrapper is opted out of via
+// pgm.noTransaction() — CREATE/DROP INDEX CONCURRENTLY cannot run inside
+// a transaction at all. node-pg-migrate logs
+// `#> WARNING: Need to break single transaction! <` when applying this
+// migration; that is expected, not a failure.
+//
+// An interrupted CONCURRENTLY build (e.g. a deploy restart mid-build)
+// leaves an INVALID index under the target name, which the planner
+// ignores. The migration only re-runs when a prior attempt failed to
+// record, so each CREATE is preceded by an unconditional DROP to clear
+// any such leftover and make retries self-healing.
 
 exports.up = (pgm) => {
   pgm.noTransaction();
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_types_containment_idx;`,
+  );
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS boxel_index_types_containment_idx
+    CREATE INDEX CONCURRENTLY boxel_index_types_containment_idx
       ON boxel_index
       USING GIN ((COALESCE(types, '[]'::jsonb)) jsonb_path_ops);
   `);
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_working_types_containment_idx;`,
+  );
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS boxel_index_working_types_containment_idx
+    CREATE INDEX CONCURRENTLY boxel_index_working_types_containment_idx
       ON boxel_index_working
       USING GIN ((COALESCE(types, '[]'::jsonb)) jsonb_path_ops);
   `);
@@ -43,11 +57,14 @@ exports.down = (pgm) => {
     `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_working_types_containment_idx;`,
   );
   // Restore under the original auto-generated names so the down migrations
-  // of 1735668047598 and 1735832183444 still find them.
+  // of 1735668047598 and 1735832183444 still find them. Same
+  // drop-then-create pattern as up() to clear INVALID leftovers on retry.
+  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS boxel_index_types_index;`);
   pgm.sql(
-    `CREATE INDEX CONCURRENTLY IF NOT EXISTS boxel_index_types_index ON boxel_index USING GIN (types);`,
+    `CREATE INDEX CONCURRENTLY boxel_index_types_index ON boxel_index USING GIN (types);`,
   );
+  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS boxel_index_working_types_index;`);
   pgm.sql(
-    `CREATE INDEX CONCURRENTLY IF NOT EXISTS boxel_index_working_types_index ON boxel_index_working USING GIN (types);`,
+    `CREATE INDEX CONCURRENTLY boxel_index_working_types_index ON boxel_index_working USING GIN (types);`,
   );
 };
