@@ -232,10 +232,10 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
   });
 
-  // Regression test for CS-10498: after the import-maps change, module
-  // identifiers can be in registered prefix form (e.g. @cardstack/catalog/...).
-  // getConsumedModules passed these directly to new URL() which throws
-  // TypeError: Invalid URL. The fix uses resolveCardReference() first.
+  // Module identifiers can be in registered prefix form (e.g.
+  // @cardstack/catalog/...); the loader accepts either spelling as input and
+  // emits dependency lists in canonical form — the prefix spelling wherever a
+  // realm-prefix mapping is registered.
   test('can determine consumed modules using prefix-form module identifier', async function (assert) {
     // Realm-prefix mappings live on the per-app VirtualNetwork — without
     // the finally clause this registration leaks into later tests,
@@ -247,14 +247,19 @@ module('Unit | loader', function (hooks) {
       // Import the module using its regular URL so it's in the loader cache
       await loader.import(`${testRealmURL}f`);
 
-      // Now call getConsumedModules with the prefix-form identifier.
-      // Without VN-aware resolution this throws TypeError: Invalid URL
-      // because new URL('@test-loader/f') is not a valid URL.
+      // Call getConsumedModules with the prefix-form identifier. This
+      // requires VN-aware resolution — new URL('@test-loader/f') is not a
+      // valid URL.
       let consumed = await loader.getConsumedModules(`@test-loader/f`);
       assert.deepEqual(
         consumed,
-        [`${testRealmURL}b`, `${testRealmURL}c`, `${testRealmURL}g`],
-        'consumed modules resolved correctly from prefix-form identifier',
+        [`@test-loader/b`, `@test-loader/c`, `@test-loader/g`],
+        'consumed modules come out in canonical prefix form',
+      );
+      assert.deepEqual(
+        await loader.getConsumedModules(`${testRealmURL}f`),
+        consumed,
+        'URL-form input produces the same canonical output',
       );
     } finally {
       virtualNetwork.removeRealmMapping('@test-loader/');
