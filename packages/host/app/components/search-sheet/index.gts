@@ -4,7 +4,6 @@ import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
@@ -27,6 +26,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
@@ -35,6 +35,7 @@ import {
 import SearchPanel from '../search/panel';
 
 import type StoreService from '../../services/store';
+import type { SortOption } from '../search/constants';
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -87,11 +88,31 @@ const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
 const BASE_FILTER: Filter = { type: baseRef };
 
 export default class SearchSheet extends Component<Signature> {
-  @tracked private searchKey = '';
-  @tracked private initialSelectedTypes: ResolvedCodeRef[] | undefined;
-
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
+  @service('search-sheet-state')
+  declare private searchSheetState: SearchSheetStateService;
+
+  // The sheet's search state is held in the session-scoped service so it
+  // survives the close/reopen that unmounts this component's subtree.
+  private get searchKey() {
+    return this.searchSheetState.searchKey;
+  }
+  private set searchKey(value: string) {
+    this.searchSheetState.searchKey = value;
+  }
+
+  private get initialSelectedTypes(): ResolvedCodeRef[] | undefined {
+    return this.searchSheetState.selectedTypes;
+  }
+
+  private get initialSelectedRealms(): URL[] {
+    return this.searchSheetState.selectedRealms;
+  }
+
+  private get initialActiveSort(): SortOption | undefined {
+    return this.searchSheetState.activeSort;
+  }
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -141,29 +162,27 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private onBlur() {
+    // A plain close/blur keeps the search so reopening restores it; only an
+    // explicit Cancel (or Escape) resets.
     this.args.onBlur();
-    if (this.args.mode === SearchSheetModes.Closed) {
-      this.resetState();
-    }
   }
 
   @action private handleCardSelect(selection: string | { realmURL: string }) {
     if (typeof selection !== 'string') {
       return;
     }
-    this.resetState();
+    // Selecting a result keeps the search, so reopening returns to it.
     this.args.onCardSelect(selection);
   }
 
   @action
   private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
     this.searchKey = term;
-    this.initialSelectedTypes = typeRef ? [typeRef] : undefined;
+    this.searchSheetState.selectedTypes = typeRef ? [typeRef] : undefined;
   }
 
   private resetState() {
-    this.searchKey = '';
-    this.initialSelectedTypes = undefined;
+    this.searchSheetState.resetState();
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -176,12 +195,18 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onSearch?.(searchKey);
   }
 
-  @action private handleRealmChange(_selectedRealms: URL[]) {
+  @action private handleRealmChange(selectedRealms: URL[]) {
+    this.searchSheetState.selectedRealms = selectedRealms;
     this.args.onFilterChange?.();
   }
 
-  @action private handleTypeChange(_selectedTypes: ResolvedCodeRef[]) {
+  @action private handleTypeChange(selectedTypes: ResolvedCodeRef[]) {
+    this.searchSheetState.selectedTypes = selectedTypes;
     this.args.onFilterChange?.();
+  }
+
+  @action private handleSortChange(option: SortOption) {
+    this.searchSheetState.activeSort = option;
   }
 
   @action private onSearchInputKeyDown(e: Event) {
@@ -268,8 +293,12 @@ export default class SearchSheet extends Component<Signature> {
           @searchKey={{this.searchKey}}
           @baseFilter={{BASE_FILTER}}
           @initialSelectedTypes={{this.initialSelectedTypes}}
+          @initialSelectedRealms={{this.initialSelectedRealms}}
+          @initialActiveSort={{this.initialActiveSort}}
+          @persist={{true}}
           @onRealmChange={{this.handleRealmChange}}
           @onTypeChange={{this.handleTypeChange}}
+          @onSortChange={{this.handleSortChange}}
           as |Bar Content|
         >
           <Bar

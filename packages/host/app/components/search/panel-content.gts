@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import Modifier from 'ember-modifier';
+import Modifier, { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
@@ -14,6 +14,7 @@ import {
   type getCard,
   type SearchEntryWireFilter,
   type SearchEntryWireQuery,
+  type SearchResultsYield,
   baseCardRef,
   GetCardContextName,
   internalKeyFor,
@@ -26,6 +27,7 @@ import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
+import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 
 import {
   buildRecentsQuery,
@@ -131,6 +133,11 @@ interface Signature {
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
     initialFocusedSection?: string | null;
+    // When true, view + pagination back onto the session-scoped
+    // search-sheet-state service, and the main results are snapshotted there so
+    // a reopen redisplays them immediately (the operator-mode search sheet opts
+    // in; the card choosers keep their own ephemeral state).
+    persist?: boolean;
     // When true, search-result tiles render the Adorn visual treatment
     // (teal hover type-label tab + teal selection chip).
     adorn?: boolean;
@@ -157,9 +164,32 @@ export default class PanelContent extends Component<Signature> {
   @service declare realmServer: RealmServerService;
   @service('recent-cards-service')
   declare private recentCardsService: RecentCards;
+  @service('search-sheet-state')
+  declare private searchSheetState: SearchSheetStateService;
 
-  @tracked activeViewId = 'grid';
-  pagination = new SectionPagination(this.args.initialFocusedSection);
+  @tracked private _localActiveViewId = 'grid';
+  #localPagination = new SectionPagination(this.args.initialFocusedSection);
+
+  // View + pagination live in the persistence service when persisting so they
+  // survive the sheet's close/reopen; otherwise they are component-local.
+  get activeViewId() {
+    return this.args.persist
+      ? this.searchSheetState.activeViewId
+      : this._localActiveViewId;
+  }
+  set activeViewId(id: string) {
+    if (this.args.persist) {
+      this.searchSheetState.activeViewId = id;
+    } else {
+      this._localActiveViewId = id;
+    }
+  }
+
+  get pagination(): SectionPagination {
+    return this.args.persist
+      ? this.searchSheetState.pagination
+      : this.#localPagination;
+  }
 
   @consume(GetCardContextName) declare private getCard: getCard;
 
@@ -376,6 +406,55 @@ export default class PanelContent extends Component<Signature> {
     this.args.onSortChange(option);
   }
 
+  // The results to render for the main search. While persisting, if a snapshot
+  // from a previous open exists and the recreated live resource hasn't produced
+  // rows yet, show the snapshot (flagged loading, so the "refreshing" indicator
+  // shows) — a single clean handoff to the live results once they land.
+  mainResultsFor = (live: SearchResultsYield): SearchResultsYield => {
+    if (!this.args.persist) {
+      return live;
+    }
+    let snapshot = this.searchSheetState.mainSnapshot;
+    if (snapshot && live.entries.length === 0 && live.isLoading) {
+      return {
+        entries: snapshot.entries,
+        meta: snapshot.meta,
+        isLoading: true,
+        errors: undefined,
+      };
+    }
+    return live;
+  };
+
+  // Capture the live main results into the service whenever they settle, so a
+  // later reopen can redisplay them. Guarded on `!isLoading` so a transient
+  // empty loading state (e.g. the re-run on reopen) never clobbers the cache.
+  // `<SearchResults>` yields a fresh `results` object every render, so this
+  // modifier re-runs on every render; the content check keeps it from writing
+  // an equal-but-new snapshot each time, which — since `mainResultsFor` reads
+  // `mainSnapshot` during render — would otherwise feed back into a re-render
+  // loop.
+  private captureMainSnapshot = modifier(
+    (_element: Element, [live]: [SearchResultsYield]) => {
+      if (live.isLoading) {
+        return;
+      }
+      let current = this.searchSheetState.mainSnapshot;
+      let unchanged =
+        current !== undefined &&
+        current.entries.length === live.entries.length &&
+        current.meta.page?.total === live.meta.page?.total &&
+        current.entries.every((entry, i) => entry.id === live.entries[i].id);
+      if (unchanged) {
+        return;
+      }
+      this.searchSheetState.mainSnapshot = {
+        entries: [...live.entries],
+        meta: live.meta,
+      };
+    },
+  );
+
   <template>
     <div
       {{ScrollToFocusedSection
@@ -406,6 +485,11 @@ export default class PanelContent extends Component<Signature> {
           @mode='none'
           as |mainResults|
         >
+          {{#if @persist}}
+            {{! Capture the settled main results so a reopen can redisplay them
+                instantly. }}
+            <span hidden {{this.captureMainSnapshot mainResults}}></span>
+          {{/if}}
           <SearchResults
             @query={{this.recentsSearchQuery}}
             @mode='none'
@@ -417,7 +501,7 @@ export default class PanelContent extends Component<Signature> {
               as |liveRecentCards|
             >
               <SheetResults
-                @mainResults={{mainResults}}
+                @mainResults={{this.mainResultsFor mainResults}}
                 @recentsResults={{recentsResults}}
                 @liveRecentCards={{liveRecentCards}}
                 @isCompact={{@isCompact}}
