@@ -14,6 +14,7 @@ import {
   type SkillLoaderInterface,
   type SkillResolver,
 } from './factory-skill-loader.ts';
+import { buildHostToolsSkill } from './host-import-manifest.ts';
 
 // ---------------------------------------------------------------------------
 // Issue relationship loader
@@ -52,6 +53,14 @@ export interface ContextBuilderConfig {
   enableBoxelUiDiscovery?: boolean;
   /** V2 lean/design-first mode — carried onto every AgentContext. */
   v2?: boolean;
+  /**
+   * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
+   * the host build (v3 import gate). When set, every built context gains
+   * a generated `host-tools-import-manifest` skill so the agent writes
+   * imports against the real catalogue instead of its prior — the
+   * `commands/`→`tools/` rename failure class.
+   */
+  hostToolImports?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +74,7 @@ export class ContextBuilder {
   private issueLoader: IssueRelationshipLoader | undefined;
   private enableBoxelUiDiscovery: boolean;
   private v2: boolean;
+  private hostToolImports: string[] | undefined;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
@@ -73,6 +83,19 @@ export class ContextBuilder {
     this.issueLoader = config.issueLoader;
     this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
     this.v2 = config.v2 === true;
+    this.hostToolImports = config.hostToolImports;
+  }
+
+  /**
+   * The generated host-tools manifest skill, appended AFTER the budget
+   * trim: it's the authoritative import catalogue and must never be the
+   * thing the token budget drops.
+   */
+  private withGeneratedSkills(skills: ResolvedSkill[]): ResolvedSkill[] {
+    if (!this.hostToolImports || this.hostToolImports.length === 0) {
+      return skills;
+    }
+    return [...skills, buildHostToolsSkill(this.hostToolImports)];
   }
 
   /**
@@ -106,7 +129,9 @@ export class ContextBuilder {
     );
 
     // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+    skills = this.withGeneratedSkills(
+      enforceSkillBudget(skills, this.maxSkillTokens),
+    );
 
     // Step 4: Assemble the context
     let context: AgentContext = {
@@ -183,7 +208,9 @@ export class ContextBuilder {
     );
 
     // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+    skills = this.withGeneratedSkills(
+      enforceSkillBudget(skills, this.maxSkillTokens),
+    );
 
     // Step 4: Assemble the context
     let context: AgentContext = {

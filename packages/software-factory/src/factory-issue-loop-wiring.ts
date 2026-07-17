@@ -37,6 +37,10 @@ import {
   ControlPlaneSync,
   ensureControlPlaneIgnoreFile,
 } from './control-plane-sync.ts';
+import {
+  defaultHostToolsDir,
+  deriveHostToolImports,
+} from './host-import-manifest.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
 import { RunLogWriter } from './run-log.ts';
 import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
@@ -237,6 +241,14 @@ export async function runFactoryIssueLoop(
     workspaceDir,
     realmUrl: controlRealm,
   });
+  // v3 import gate: derive the host-tools catalogue from the host source
+  // in this checkout, once per run. Feeds BOTH sides of the gate — the
+  // generated manifest skill in every agent context, and the static
+  // `imports` validation step. Degrades to no gate when the host source
+  // isn't present (undefined).
+  let hostToolImports = await deriveHostToolImports(
+    defaultHostToolsDir(PACKAGE_ROOT),
+  );
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
       enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
@@ -246,6 +258,7 @@ export async function runFactoryIssueLoop(
     issueLoader,
     enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
     v2: config.v2 === true,
+    hostToolImports,
   });
 
   // 3. Tool infrastructure
@@ -413,6 +426,7 @@ export async function runFactoryIssueLoop(
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
       cache: validationCache,
       includeTestStep: config.v2 !== true,
+      hostToolImports,
     });
 
   // 6. Run issue loop

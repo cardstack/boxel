@@ -151,6 +151,7 @@ export interface TestResult {
 
 /** Steps in the post-iteration validation pipeline. */
 export type ValidationStep =
+  | 'imports'
   | 'parse'
   | 'lint'
   | 'evaluate'

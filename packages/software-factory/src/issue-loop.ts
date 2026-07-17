@@ -647,10 +647,13 @@ export async function runIssueLoop(
     // iteration's context points at the same handler.
     let streamHandler: ReturnType<typeof createRunLogStreamHandler> | undefined;
     if (runLog) {
+      // Capture the id before the closure: `issue` is a mutable let the
+      // loop reassigns, so TS can't keep its narrowing inside a callback.
+      let streamIssueId = issue.id;
       streamHandler = createRunLogStreamHandler({
         runLog,
         addIssueComment: (body: string) =>
-          issueStore.addComment(issue.id, {
+          issueStore.addComment(streamIssueId, {
             body,
             author: 'factory-agent',
           }),
@@ -907,10 +910,14 @@ export async function runIssueLoop(
         // Link the most informative step's Validation card: the first
         // failing step, else the last step that ran. Step cards are written
         // by the pipeline at Validations/<step>_<issueId>-<iteration>
-        // ('evaluate' files as 'eval_').
+        // ('evaluate' files as 'eval_'). The in-process 'imports' step
+        // writes no artifact card, so it can't be the linked focus.
+        let linkableSteps = validationResults.steps.filter(
+          (s) => s.step !== 'imports',
+        );
         let focusStep =
-          validationResults.steps.find((s) => !s.passed) ??
-          validationResults.steps[validationResults.steps.length - 1];
+          linkableSteps.find((s) => !s.passed) ??
+          linkableSteps[linkableSteps.length - 1];
         let stepFile =
           focusStep?.step === 'evaluate' ? 'eval' : focusStep?.step;
         await runLog.append([
