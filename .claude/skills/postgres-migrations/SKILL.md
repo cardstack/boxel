@@ -9,8 +9,7 @@ description: How to author Postgres migrations in packages/postgres under the tw
 `packages/postgres/` migrations are split into two directories, each with its own
 node-pg-migrate tracking table, because a destructive schema change applied
 during a rolling deploy breaks the **previous** code revision while it is still
-serving (old tasks query a column the migration just dropped). This caused three
-published-realm outages (2026-07-10, 07-13, 07-15).
+serving (old tasks query a column the migration just dropped).
 
 | Directory             | Tracking table       | When it runs in a deploy                                                                                                  | For                                   |
 | --------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -57,10 +56,10 @@ carry a `package.json` pinning `{ "type": "commonjs" }`.
 
 `packages/postgres/scripts/check-removal-phase.cjs` (CI: "Guard removal-phase
 migrations") AST-parses each **newly added** `migrations/` file and fails if its
-`up()` drops or renames a column/table. It is scoped to changed files (so the 12
-historical drops already in `migrations/` are grandfathered) and looks only at
-`up()` (an additive migration's `down()` legitimately calls `dropColumn` to
-reverse itself). It is heuristic — it will not catch `NOT NULL` tightening, type
+`up()` drops or renames a column/table. It is scoped to changed files (so drops
+already present in `migrations/` are grandfathered) and looks only at `up()` (an
+additive migration's `down()` legitimately calls `dropColumn` to reverse
+itself). It is heuristic — it will not catch `NOT NULL` tightening, type
 narrowing, or destructive SQL built from non-literal strings — so the decision
 rule above still applies.
 

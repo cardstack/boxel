@@ -15,10 +15,9 @@ Migrations live in two directories, each with its own
 **Why:** a destructive change applied during a rolling deploy breaks the
 _previous_ code revision while it's still serving — the old tasks query a column
 the migration just dropped and every request 500s until they drain. Deferring
-drops/renames until after the new code is fully live avoids this. (This caused
-published-realm outages on 2026-07-10, 07-13, and 07-15.) The `migrate-db-remove`
-job is gated on the realm-server rollout reaching stability, so by the time a
-drop runs there is no task left on the old code.
+drops/renames until after the new code is fully live avoids this. The
+`migrate-db-remove` job is gated on the realm-server rollout reaching stability,
+so by the time a drop runs there is no task left on the old code.
 
 ### Which directory does my migration go in?
 
@@ -48,9 +47,9 @@ prefixes with 6+ consecutive zeros. `migrate create` stamps a valid one.
 
 A CI check (`scripts/check-removal-phase.cjs`) fails the build if a newly added
 `migrations/` migration drops or renames a column/table in its `up()`, pointing
-you to `migrations-removal/`. It's scoped to changed files (historical drops are
-grandfathered) and inspects only `up()` — an additive migration's `down()` may
-call `dropColumn` to reverse itself.
+you to `migrations-removal/`. It's scoped to changed files (drops already in
+`migrations/` are grandfathered) and inspects only `up()` — an additive
+migration's `down()` may call `dropColumn` to reverse itself.
 
 ### Applying migrations
 

@@ -4,23 +4,23 @@
 'use strict';
 
 // Guard: a migration added to `migrations/` (the additive phase) must not drop
-// or rename a column/table in its `up()`. Those are destructive changes that
-// break the previous code revision mid-rollout (old tasks query a column the
-// migration just removed) — the 07-10 / 07-13 / 07-15 published-realm outages.
-// They belong in `migrations-removal/`, which runs post-deploy once the old
-// tasks have drained. See scripts/migrate-local.sh and the migrate-db-remove
-// job in .github/workflows/manual-deploy.yml.
+// or rename a column/table in its `up()`. A destructive change applied during a
+// rolling deploy breaks the previous code revision while it is still serving —
+// old tasks query a column the migration just removed. Such changes belong in
+// `migrations-removal/`, which runs post-deploy once the old tasks have drained.
+// See scripts/migrate-local.sh and the migrate-db-remove job in
+// .github/workflows/manual-deploy.yml.
 //
 // Scoped to the migration files passed as arguments (the CI step feeds the
-// changed files from determine-changed-migrations.sh), so it never flags the
-// already-deployed historical drops in `migrations/` — only newly added ones.
+// changed files from determine-changed-migrations.sh), so it only checks newly
+// added migrations, not the drops already present in `migrations/`.
 //
 // AST-based (via the TypeScript parser) rather than grep so it can look ONLY at
 // the `up` function: an additive migration's `down()` legitimately calls
 // dropColumn/dropTable to reverse itself, and a text search can't tell the two
-// apart. Heuristic by design: catches column/table DROP and RENAME (the
-// rolling-deploy outage class), not NOT-NULL tightening, type narrowing, or
-// destructive SQL assembled from non-literal strings.
+// apart. Heuristic by design: catches column/table DROP and RENAME (what breaks
+// old code mid-rollout), not NOT-NULL tightening, type narrowing, or destructive
+// SQL assembled from non-literal strings.
 
 const fs = require('fs');
 const path = require('path');
