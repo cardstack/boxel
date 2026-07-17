@@ -193,7 +193,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         }
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
-      .default-card-template.edit
+      .default-card-template--inner.edit
+        > :is(.own-display-fields, .notes-footer)
         > :deep(
           .boxel-field
             > .content
@@ -203,7 +204,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         ) {
         padding-right: var(--boxel-icon-lg);
       }
-      .default-card-template.edit
+      .default-card-template--inner.edit
+        > :is(.own-display-fields, .notes-footer)
         > :deep(
           .boxel-field
             > .content
@@ -212,7 +214,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         padding-left: var(--boxel-icon-lg);
       }
       /* Add padding for readonly fields */
-      .default-card-template.edit > :deep(.boxel-field > .content .read-only) {
+      .default-card-template--inner.edit
+        > :is(.own-display-fields, .notes-footer)
+        > :deep(.boxel-field > .content .read-only) {
         padding-left: var(--boxel-icon-lg);
         padding-right: var(--boxel-icon-lg);
       }

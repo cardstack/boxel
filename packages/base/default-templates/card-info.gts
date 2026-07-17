@@ -305,8 +305,9 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         gap: var(--boxel-sp-xs);
       }
       .preview-toggle {
-        margin-left: auto;
         min-width: 10.5rem;
+        margin-left: auto;
+        margin-top: calc(-1 * var(--boxel-sp-xs));
         justify-content: space-between;
       }
       .preview-toggle-icon {
@@ -318,8 +319,11 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
       .default-preview {
         display: grid;
         gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp-xl);
-        padding: var(--boxel-sp-lg);
+        padding-top: var(--boxel-sp-xl);
+        padding-inline: var(--boxel-sp-lg);
+        padding-bottom: var(--boxel-sp-lg);
         background-color: var(--accent);
         border-radius: var(--radius);
         color: var(--accent-foreground);
@@ -329,7 +333,6 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         --boxel-field-content-padding: 0;
         min-height: unset;
         padding-top: unset;
-        padding-right: var(--boxel-sp-4xs);
       }
 
       .card-info-fields {
@@ -342,18 +345,19 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         grid-template-columns:
           var(--boxel-field-label-size, minmax(8rem, 25%))
           1fr;
-        align-items: center;
+        align-items: start;
         justify-items: center;
       }
       .card-info-thumbnail-preview {
         grid-area: thumbnail;
+        margin-top: var(--boxel-sp-sm);
+        margin-right: var(--boxel-sp-xl);
         border: 1px solid var(--border);
       }
       .card-info-thumbnail-popup-toggle {
         grid-area: thumbnail-toggle;
-        max-width: 9.375rem;
-        margin-inline: var(--boxel-sp-xs);
-        padding-inline: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xs);
+        margin-right: var(--boxel-sp-xl);
       }
       .card-info-edit-fields {
         grid-area: name-summary;
@@ -437,8 +441,12 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         .card-info-preview-group {
           margin-bottom: var(--boxel-sp);
         }
+        .preview-toggle {
+          margin-top: unset;
+        }
         .default-preview {
-          margin-bottom: 0;
+          margin-top: unset;
+          margin-bottom: var(--boxel-sp-xs);
         }
         .card-info-fields {
           --thumbnail-container-size: 4.375rem;
@@ -449,10 +457,15 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         .card-info-edit-field-group {
           gap: var(--boxel-sp-xs);
         }
+        .card-info-thumbnail-preview {
+          margin-top: 0;
+          margin-right: 0;
+        }
         .card-info-thumbnail-popup-toggle {
           align-self: start;
           max-width: var(--thumbnail-container-size);
           min-width: unset;
+          margin-top: 0;
           margin-inline: 0;
           padding-inline: 0;
           border-radius: var(--boxel-border-radius-sm);
