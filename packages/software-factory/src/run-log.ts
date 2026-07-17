@@ -38,8 +38,14 @@ export interface RunLogEntryInput {
     | 'note';
   headline: string;
   body?: string;
-  /** Absolute URL of a screenshot image to embed. */
+  /** Absolute URL of a screenshot image to embed (public realms only). */
   imageUrl?: string;
+  /**
+   * Realm-relative path of the screenshot's FILE CARD (extension kept,
+   * e.g. `design/song-isolated.png`) — preferred over imageUrl: the PngDef
+   * card renders with realm auth handled.
+   */
+  imageCardPath?: string;
   /**
    * Realm-relative card path (no .json extension, relative to realm root,
    * e.g. `JaraokePlayer/thursday-night-jaraoke`) — embeds the live card.
@@ -156,6 +162,11 @@ export class RunLogWriter {
             links: { self: `../${entry.cardPath}` },
           };
         }
+        if (entry.imageCardPath) {
+          rels[`entries.${index}.image`] = {
+            links: { self: `../${entry.imageCardPath}` },
+          };
+        }
       }
       if (updates?.nowWorkingOn !== undefined) {
         attrs.nowWorkingOn = updates.nowWorkingOn;
@@ -236,6 +247,7 @@ export function designEntriesFromToolCalls(
     latest.set(result.outputPath, {
       kind: 'design',
       headline: `Design round: ${result.outputPath.replace(/^design\//, '').replace(/\.png$/, '')}`,
+      imageCardPath: result.outputPath,
       imageUrl: new URL(result.outputPath, targetRealm).href,
     });
   }
@@ -274,6 +286,14 @@ export function cardPathsFromToolCalls(
 // The RunLog CardDef module, written verbatim into the target realm
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// The RunLog CardDef module, written verbatim into the target realm.
+// Design language: Boxel Workspace (card-grid v2) — stage/surface paper,
+// hairlines, mono micro-labels, Boxel-teal accent; ALL motion (scan line,
+// pulse, arrival wash) is gated on status=running.
+// ---------------------------------------------------------------------------
+
 const RUN_LOG_GTS = `import {
   CardDef,
   FieldDef,
@@ -287,6 +307,19 @@ import StringField from 'https://cardstack.com/base/string';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
+function clock(value: Date | string | undefined): string {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  } catch {
+    return '';
+  }
+}
+
 class RunLogEntry extends FieldDef {
   static displayName = 'Run Log Entry';
   @field kind = contains(StringField);
@@ -294,93 +327,110 @@ class RunLogEntry extends FieldDef {
   @field headline = contains(StringField);
   @field body = contains(MarkdownField);
   @field imageUrl = contains(StringField);
+  @field image = linksTo(() => CardDef);
   @field card = linksTo(() => CardDef);
 
   static embedded = class Embedded extends Component<typeof this> {
     get timeLabel() {
-      let at = this.args.model.at;
-      if (!at) return '';
-      try {
-        return new Date(at).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      } catch {
-        return '';
-      }
+      return clock(this.args.model.at);
     }
     <template>
       <div class='entry' data-kind={{@model.kind}}>
-        <div class='rail'>
-          <span class='time'>{{this.timeLabel}}</span>
-          <span class='kind'>{{@model.kind}}</span>
-        </div>
-        <div class='content'>
-          <h3 class='headline'>{{@model.headline}}</h3>
-          {{#if @model.body}}
-            <div class='body'><@fields.body /></div>
-          {{/if}}
-          {{#if @model.imageUrl}}
-            <img class='shot' src={{@model.imageUrl}} alt={{@model.headline}} />
-          {{/if}}
-          {{#if @model.card}}
-            <div class='live-card'>
+        <span class='t'>{{this.timeLabel}}</span>
+        <span class='chip'>{{@model.kind}}</span>
+        <span class='h'>{{@model.headline}}</span>
+        {{#if @model.body}}
+          <div class='b'><@fields.body /></div>
+        {{/if}}
+        {{#if @model.image}}
+          <div class='shot-frame'>
+            <@fields.image @format='embedded' />
+          </div>
+        {{else if @model.imageUrl}}
+          <div class='shot-frame'>
+            <img class='shot-img' src={{@model.imageUrl}} alt={{@model.headline}} />
+          </div>
+        {{/if}}
+        {{#if @model.card}}
+          <div class='livecard'>
+            <div class='shipped'>&#9679; shipped &mdash; live card</div>
+            <div class='cardwrap'>
               <@fields.card @format='embedded' />
             </div>
-          {{/if}}
-        </div>
+          </div>
+        {{/if}}
       </div>
       <style scoped>
         .entry {
-          display: flex;
-          gap: 14px;
-          padding: 14px 0;
-          border-bottom: 1px solid var(--boxel-border-color, #e7e7e3);
+          display: grid;
+          grid-template-columns: 52px 88px minmax(0, 1fr);
+          gap: 0 14px;
+          padding: 13px 0;
+          border-bottom: 1px solid var(--rl-hairline, #eceef1);
+          align-items: baseline;
+          font-family: var(--rl-sans, var(--boxel-font-family, sans-serif));
         }
-        .rail {
-          flex: none;
-          width: 82px;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .time {
-          font: 500 11px/1 var(--boxel-monospace-font-family, monospace);
+        .t {
+          font: 500 11px var(--rl-mono, monospace);
           font-variant-numeric: tabular-nums;
-          color: #6f6f6a;
+          color: var(--rl-ink-meta, #a2a2ab);
         }
-        .kind {
-          font: 500 9px/1.5 var(--boxel-monospace-font-family, monospace);
+        .chip {
+          font: 600 8.5px var(--rl-mono, monospace);
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: #a3a39d;
+          color: var(--rl-ink-meta, #a2a2ab);
+          white-space: nowrap;
         }
-        .entry[data-kind='card-ready'] .kind,
-        .entry[data-kind='run-done'] .kind {
-          color: #15803d;
+        .entry[data-kind='design'] .chip {
+          color: var(--rl-attention, #d97706);
         }
-        .content {
-          flex: 1;
-          min-width: 0;
+        .entry[data-kind='card-ready'] .chip,
+        .entry[data-kind='run-done'] .chip {
+          color: var(--rl-interactive, #0c9d7c);
         }
-        .headline {
-          margin: 0;
-          font: 600 14px/1.35 var(--boxel-font-family, sans-serif);
+        .h {
+          font: 600 14px/1.35 var(--rl-sans, sans-serif);
+          color: var(--rl-ink, #272330);
         }
-        .body {
-          margin-top: 4px;
-          font: 400 12.5px/1.5 var(--boxel-font-family, sans-serif);
-          color: #6f6f6a;
+        .b {
+          grid-column: 3;
+          font: 400 12.5px/1.5 var(--rl-sans, sans-serif);
+          color: var(--rl-ink-quiet, #5c5967);
+          margin-top: 3px;
         }
-        .shot {
-          display: block;
+        .shot-frame {
+          grid-column: 3;
           margin-top: 10px;
-          max-width: 100%;
-          border: 1px solid var(--boxel-border-color, #e7e7e3);
+          max-width: 540px;
+          border: 1px solid var(--rl-border, #e2e8f0);
           border-radius: 6px;
+          overflow: hidden;
+          background: var(--rl-surface, #fff);
         }
-        .live-card {
+        .shot-frame :deep(.boxel-card-container) {
+          border-radius: 0;
+          box-shadow: none;
+        }
+        .shot-img {
+          width: 100%;
+          display: block;
+        }
+        .livecard {
+          grid-column: 3;
           margin-top: 10px;
+          max-width: 540px;
+        }
+        .shipped {
+          font: 700 9px var(--rl-mono, monospace);
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--rl-interactive, #0c9d7c);
+          margin-bottom: 6px;
+        }
+        .cardwrap :deep(.boxel-card-container) {
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(28, 28, 50, 0.05);
         }
       </style>
     </template>
@@ -398,134 +448,348 @@ export class RunLog extends CardDef {
   @field entries = containsMany(RunLogEntry);
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RunLog) {
-      return this.runTitle ? \`Run log — \${this.runTitle}\` : 'Run log';
+      return this.runTitle ? 'Run log — ' + this.runTitle : 'Run log';
     },
   });
 
   static isolated = class Isolated extends Component<typeof this> {
+    get running() {
+      return this.args.model.status === 'running';
+    }
+    get statusWord() {
+      return this.running ? 'LIVE' : (this.args.model.status ?? '');
+    }
+    get startedLabel() {
+      return clock(this.args.model.startedAt);
+    }
+    get cardsReady() {
+      return (this.args.model.entries ?? []).filter(
+        (e) => e.kind === 'card-ready',
+      ).length;
+    }
+    get designRounds() {
+      return (this.args.model.entries ?? []).filter((e) => e.kind === 'design')
+        .length;
+    }
+    get validationsGreen() {
+      return (this.args.model.entries ?? []).filter(
+        (e) => e.kind === 'validation' && !(e.headline ?? '').includes('failed'),
+      ).length;
+    }
+    get issuesDone() {
+      return (this.args.model.entries ?? []).filter(
+        (e) => e.kind === 'issue-done',
+      ).length;
+    }
     <template>
-      <article class='run-log'>
+      <article class='runlog' data-status={{@model.status}}>
+        {{#if this.running}}<div class='scanline'></div>{{/if}}
         <header class='masthead'>
-          <div class='title-row'>
-            <h1>{{@model.runTitle}}</h1>
-            <span class='status' data-status={{@model.status}}>
-              {{#if (eqStatus @model.status 'running')}}● live{{else}}{{@model.status}}{{/if}}
-            </span>
-          </div>
-          <div class='now-next'>
-            <div><span class='label'>Now</span> {{@model.nowWorkingOn}}</div>
-            <div><span class='label'>Next</span> {{if @model.upNext @model.upNext '—'}}</div>
+          <span class='signage'>Factory &middot; Run Log</span>
+          <h1 class='run-title'>{{@model.runTitle}}</h1>
+          <div class='live-block'>
+            {{#if this.running}}<span class='live-dot'></span>{{/if}}
+            <span class='live-word'>{{this.statusWord}}</span>
+            <span class='started'>from {{this.startedLabel}}</span>
           </div>
         </header>
-        <div class='feed'>
-          {{#each @fields.entries as |Entry|}}
-            <Entry />
-          {{/each}}
+        <div class='nowband'>
+          <span class='k'>Now</span>
+          <span class='now-item'>{{@model.nowWorkingOn}}</span>
+          <span class='next-wrap'>
+            <span class='k'>Next</span>
+            <span class='next-item'>{{if @model.upNext @model.upNext '&mdash;'}}</span>
+          </span>
+        </div>
+        <div class='body-grid'>
+          <aside class='rail'>
+            <div class='stat'>
+              <div class='n accent'>{{this.cardsReady}}</div>
+              <div class='l'>Cards ready</div>
+            </div>
+            <div class='stat'>
+              <div class='n'>{{this.designRounds}}</div>
+              <div class='l'>Design rounds</div>
+            </div>
+            <div class='stat'>
+              <div class='n'>{{this.validationsGreen}}</div>
+              <div class='l'>Validations green</div>
+            </div>
+            <div class='stat'>
+              <div class='n'>{{this.issuesDone}}</div>
+              <div class='l'>Issues done</div>
+            </div>
+          </aside>
+          <div class='feed'>
+            {{#each @fields.entries as |Entry|}}
+              <Entry />
+            {{/each}}
+          </div>
         </div>
       </article>
       <style scoped>
-        .run-log {
-          max-width: 760px;
-          margin: 0 auto;
-          padding: 28px 24px 60px;
-          background: var(--boxel-background, #fafaf9);
-          font-family: var(--boxel-font-family, sans-serif);
+        .runlog {
+          --rl-ink: #272330;
+          --rl-ink-quiet: #5c5967;
+          --rl-ink-meta: #a2a2ab;
+          --rl-ink-ghost: #c0c0c7;
+          --rl-stage: var(--background, #f7f8fa);
+          --rl-surface: #ffffff;
+          --rl-track: #eef0f4;
+          --rl-border: #e2e8f0;
+          --rl-hairline: #eceef1;
+          --rl-interactive: var(--primary, #0c9d7c);
+          --rl-live: #00c495;
+          --rl-accent: var(--boxel-teal, #00ffba);
+          --rl-attention: #d97706;
+          --rl-mono: var(--boxel-monospace-font-family, 'IBM Plex Mono', monospace);
+          --rl-sans: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
+          position: relative;
+          container-type: inline-size;
+          container-name: runlog;
+          min-height: 100%;
+          background: var(--rl-stage);
+          color: var(--rl-ink);
+          font-family: var(--rl-sans);
+        }
+        .scanline {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 2px;
+          z-index: 2;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            var(--rl-accent),
+            var(--rl-live),
+            transparent
+          );
+          background-size: 200% 100%;
+          animation: scan 2.4s linear infinite;
+        }
+        @keyframes scan {
+          from { background-position: 200% 0; }
+          to { background-position: -200% 0; }
+        }
+        @keyframes softpulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
         }
         .masthead {
-          border-bottom: 2px solid #1c1c1a;
-          padding-bottom: 14px;
-          margin-bottom: 4px;
-        }
-        .title-row {
           display: flex;
-          align-items: baseline;
-          justify-content: space-between;
+          align-items: center;
           gap: 12px;
+          padding: 16px 22px 14px;
+          background: var(--rl-surface);
+          border-bottom: 1px solid var(--rl-hairline);
         }
-        h1 {
+        .signage {
+          padding: 3px 8px;
+          border: 1px solid var(--rl-border);
+          border-radius: 5px;
+          font: 600 9.5px var(--rl-mono);
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
+          color: var(--rl-ink-meta);
+          white-space: nowrap;
+        }
+        .run-title {
           margin: 0;
-          font: 650 24px/1.2 var(--boxel-font-family, sans-serif);
+          font: 650 20px/1.2 var(--rl-sans);
           letter-spacing: -0.01em;
         }
-        .status {
-          font: 600 11px/1 var(--boxel-monospace-font-family, monospace);
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #6f6f6a;
-        }
-        .status[data-status='running'] {
-          color: #be185d;
-        }
-        .now-next {
+        .live-block {
+          margin-left: auto;
           display: flex;
-          gap: 28px;
-          margin-top: 10px;
-          font: 500 13px/1.4 var(--boxel-font-family, sans-serif);
+          align-items: center;
+          gap: 8px;
         }
-        .label {
-          font: 500 9.5px/1 var(--boxel-monospace-font-family, monospace);
+        .live-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--rl-live);
+          animation: softpulse 2s ease-in-out infinite;
+        }
+        .live-word {
+          font: 700 10.5px var(--rl-mono);
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--rl-interactive);
+        }
+        .runlog[data-status='failed'] .live-word { color: #ff5050; }
+        .started {
+          font: 500 11px var(--rl-mono);
+          font-variant-numeric: tabular-nums;
+          color: var(--rl-ink-meta);
+        }
+        .nowband {
+          display: flex;
+          align-items: baseline;
+          gap: 14px;
+          padding: 14px 22px;
+          background: var(--rl-surface);
+          border-bottom: 1px solid var(--rl-hairline);
+        }
+        .k {
+          font: 600 9.5px var(--rl-mono);
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: #a3a39d;
-          margin-right: 6px;
+          color: var(--rl-ink-meta);
+          flex: none;
+        }
+        .now-item {
+          font: 400 24px/1.15 var(--rl-sans);
+          letter-spacing: -0.015em;
+          min-width: 0;
+        }
+        .next-wrap {
+          margin-left: auto;
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+        }
+        .next-item {
+          font: 400 13px var(--rl-sans);
+          color: var(--rl-ink-quiet);
+        }
+        .body-grid {
+          display: grid;
+          grid-template-columns: 188px minmax(0, 1fr);
+        }
+        .rail {
+          padding: 20px 0 26px 22px;
+          border-right: 1px solid var(--rl-hairline);
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+        .stat .n {
+          font: 300 40px/1 var(--rl-sans);
+          letter-spacing: -0.02em;
+          font-variant-numeric: tabular-nums;
+        }
+        .stat .n.accent { color: var(--rl-interactive); }
+        .stat .l {
+          font: 600 9px var(--rl-mono);
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
+          color: var(--rl-ink-meta);
+          margin-top: 5px;
         }
         .feed {
           display: flex;
           flex-direction: column-reverse;
+          padding: 6px 22px 22px 24px;
+        }
+        .feed > :first-child {
+          border-bottom: 0;
+        }
+        /* newest entry gets a one-shot teal arrival wash while live */
+        .runlog[data-status='running'] .feed > :last-child {
+          animation: arrive 3s ease-out 1;
+        }
+        @keyframes arrive {
+          0% { background: rgba(0, 255, 186, 0.14); }
+          100% { background: transparent; }
+        }
+        @container runlog (max-width: 700px) {
+          .body-grid { grid-template-columns: 1fr; }
+          .rail {
+            flex-direction: row;
+            gap: 26px;
+            padding: 16px 22px;
+            border-right: 0;
+            border-bottom: 1px solid var(--rl-hairline);
+          }
+          .stat .n { font-size: 26px; }
+          .now-item { font-size: 18px; }
+          .next-wrap { display: none; }
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
+    get running() {
+      return this.args.model.status === 'running';
+    }
+    get shipped() {
+      return (this.args.model.entries ?? []).filter(
+        (e) => e.kind === 'card-ready',
+      ).length;
+    }
+    get rounds() {
+      return (this.args.model.entries ?? []).filter((e) => e.kind === 'design')
+        .length;
+    }
     <template>
-      <div class='row'>
-        <span class='status' data-status={{@model.status}}>
-          {{#if (eqStatus @model.status 'running')}}● LIVE{{else}}{{@model.status}}{{/if}}
-        </span>
+      <div class='row' data-status={{@model.status}}>
+        {{#if this.running}}<span class='dot'></span>{{/if}}
         <div class='mid'>
-          <div class='name'>{{@model.runTitle}}</div>
-          <div class='meta'>Now: {{@model.nowWorkingOn}}</div>
+          <div class='nm'>{{@model.runTitle}}</div>
+          <div class='now'>Now: {{@model.nowWorkingOn}}</div>
         </div>
+        <span class='counts'><em>{{this.shipped}}</em> shipped &middot; {{this.rounds}} rounds</span>
       </div>
       <style scoped>
         .row {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 12px 14px;
-          font-family: var(--boxel-font-family, sans-serif);
+          gap: 11px;
+          padding: 11px 14px;
+          font-family: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
         }
-        .status {
-          font: 600 10px/1 var(--boxel-monospace-font-family, monospace);
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #6f6f6a;
+        .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #00c495;
           flex: none;
+          animation: softpulse 2s ease-in-out infinite;
         }
-        .status[data-status='running'] {
-          color: #be185d;
+        @keyframes softpulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
         }
         .mid { flex: 1; min-width: 0; }
-        .name { font: 500 13.5px/1.3 var(--boxel-font-family, sans-serif); }
-        .meta {
+        .nm { font: 600 13.5px/1.3 var(--boxel-font-family, sans-serif); }
+        .now {
           font: 400 11.5px/1.4 var(--boxel-font-family, sans-serif);
-          color: #6f6f6a;
+          color: #5c5967;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        .counts {
+          margin-left: auto;
+          font: 500 10.5px var(--boxel-monospace-font-family, monospace);
+          font-variant-numeric: tabular-nums;
+          color: #a2a2ab;
+          white-space: nowrap;
+        }
+        .counts em { font-style: normal; color: #0c9d7c; }
       </style>
     </template>
   };
 
   static fitted = class Fitted extends Component<typeof this> {
+    get running() {
+      return this.args.model.status === 'running';
+    }
+    get shipped() {
+      return (this.args.model.entries ?? []).filter(
+        (e) => e.kind === 'card-ready',
+      ).length;
+    }
     <template>
-      <div class='fit'>
-        <span class='status' data-status={{@model.status}}>
-          {{#if (eqStatus @model.status 'running')}}●{{else}}✓{{/if}}
-        </span>
-        <span class='name'>{{@model.runTitle}}</span>
+      <div class='fit' data-status={{@model.status}}>
+        <span class='dot'></span>
+        <span class='nm'>{{@model.runTitle}}</span>
+        <span class='now'>{{@model.nowWorkingOn}}</span>
+        <span class='count'>{{this.shipped}}</span>
       </div>
       <style scoped>
         .fit {
@@ -534,23 +798,63 @@ export class RunLog extends CardDef {
           gap: 8px;
           padding: 8px 10px;
           height: 100%;
+          min-height: 0;
           overflow: hidden;
-          font-family: var(--boxel-font-family, sans-serif);
+          font-family: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
         }
-        .status { color: #be185d; flex: none; font-size: 10px; }
-        .status[data-status='completed'] { color: #15803d; }
-        .name {
-          font: 500 12px/1.3 var(--boxel-font-family, sans-serif);
+        .dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #00c495;
+          flex: none;
+        }
+        .fit[data-status='running'] .dot {
+          animation: softpulse 2s ease-in-out infinite;
+        }
+        .fit[data-status='completed'] .dot { background: #0c9d7c; }
+        .fit[data-status='failed'] .dot { background: #ff5050; }
+        @keyframes softpulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+        .nm {
+          font: 600 12px/1.3 var(--boxel-font-family, sans-serif);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        .now, .count { display: none; }
+        @container fitted-card (min-width: 200px) {
+          .now {
+            display: block;
+            flex: 1;
+            min-width: 0;
+            font: 400 10.5px/1.3 var(--boxel-font-family, sans-serif);
+            color: #5c5967;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .count {
+            display: block;
+            font: 500 10px var(--boxel-monospace-font-family, monospace);
+            font-variant-numeric: tabular-nums;
+            color: #0c9d7c;
+          }
+        }
+        @container fitted-card (min-height: 170px) {
+          .fit {
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 12px;
+          }
+          .nm { font-size: 13.5px; white-space: normal; }
+          .now { flex: none; white-space: normal; }
+        }
       </style>
     </template>
   };
-}
-
-function eqStatus(a: string | undefined, b: string) {
-  return a === b;
 }
 `;
