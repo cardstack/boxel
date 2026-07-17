@@ -209,10 +209,25 @@ export async function runFactoryIssueLoop(
   // through this `syncWorkspace`, so the loop can read `getSyncElapsedMs()` to
   // attribute tool-triggered sync time to sync rather than agent time.
   let syncElapsedMs = 0;
+  // Every sync goes through the corrupting /_atomic?waitForIndex path,
+  // which strips containsMany FieldDef data from card sources — including
+  // the run-log instance whenever ANY sync uploads it (agent-triggered
+  // run_* tool syncs included, and conflict re-uploads after out-of-band
+  // raw writes). Set once the RunLogWriter exists; runs after every
+  // successful sync so the live blog can never stay stripped.
+  let postSyncHeal: (() => Promise<void>) | undefined;
   let syncWorkspace = async () => {
     let start = Date.now();
     try {
-      return await syncGate.sync();
+      let result = await syncGate.sync();
+      if (result.ok && postSyncHeal) {
+        try {
+          await postSyncHeal();
+        } catch {
+          // Healing is best-effort; never fail a sync over it.
+        }
+      }
+      return result;
     } finally {
       syncElapsedMs += Date.now() - start;
     }
@@ -297,6 +312,8 @@ export async function runFactoryIssueLoop(
       rawWriteFile: (relativePath, content) =>
         client.write(targetRealm, relativePath, content),
     });
+    let createdRunLog = runLog;
+    postSyncHeal = () => createdRunLog.healInstance();
   }
 
   let issueLoopConfig: IssueLoopConfig = {

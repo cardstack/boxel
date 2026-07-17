@@ -272,6 +272,15 @@ export class RunLogWriter {
     await this.rawWriteInstance();
   }
 
+  /**
+   * Public heal hook: re-write the instance raw over whatever the realm
+   * holds. Wired into the loop's shared syncWorkspace so every sync —
+   * including agent-tool-triggered ones — un-strips the run log.
+   */
+  async healInstance(): Promise<void> {
+    return this.rawWriteInstance();
+  }
+
   private async rawWriteInstance(): Promise<void> {
     if (!this.opts.rawWriteFile) return;
     try {
