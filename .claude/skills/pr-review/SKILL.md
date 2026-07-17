@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, classifies each finding (regression / pre-existing / follow-up / confirmation), and writes comments with enough mechanism and background that an author unfamiliar with that part of the codebase can act on them without a follow-up question. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the code-review skill; for a local guided tour without posting anything, use review-branch.
+description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, classifies each finding (regression / pre-existing / follow-up / confirmation), and writes comments with enough mechanism and background that an author unfamiliar with that part of the codebase can act on them without a follow-up question. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
 allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
 ---
 
@@ -12,7 +12,7 @@ A review here is a teaching document as much as a quality gate. The author may n
 
 Load these companion skills before writing a single comment; each applies in **both directions** — to the diff under review and to the review's own output:
 
-- **pr-comment-attribution** — every inline comment and the review body begin with the `[Claude Code 🤖]` prefix.
+- **pr-comment-attribution** — every comment the review posts — inline comments, thread replies, and the review body — begins with the `[Claude Code 🤖]` prefix.
 - **pr-privacy** — scan the diff for user data the author is about to publish (fixtures, code comments, screenshots, PR text), and scan the review's own comments before posting: quoting a log line or DB row into a review comment publishes it.
 - **evergreen-comments** — the review's own prose is evergreen (no ticket IDs, no PR numbers, no journey narration), and the diff's new or edited comments, docs, and skill files are checked for temporal wording, tracker references, and journey narration as a standing review dimension.
 
@@ -92,7 +92,7 @@ Post as **one pending review** so it lands atomically:
 
 1. `mcp__github__pull_request_review_write`, method `create` → pending review.
 2. `mcp__github__add_comment_to_pending_review` for each inline / file-level comment.
-3. `pull_request_review_write`, method `submit_pending`, event `COMMENT` — never APPROVE or REQUEST_CHANGES.
+3. `mcp__github__pull_request_review_write`, method `submit_pending`, event `COMMENT` — never APPROVE or REQUEST_CHANGES.
 
 Pre-submit self-check over every comment and the body:
 
@@ -104,6 +104,14 @@ Pre-submit self-check over every comment and the body:
 
 Then report back to the user: the bottom line, the finding count by class, and a link to the review.
 
-## After posting
+## After posting — replies and re-reviews
 
-Replies and new pushes re-open the loop. Verify a claimed fix against the actual new commits before acknowledging it — read the commit, don't trust the reply — and answer every response on its own thread. On re-review, diff since the last reviewed commit rather than restarting from zero, but re-run the Phase 2 twin and drift checks on whatever changed.
+Replies and new pushes re-open the loop. A re-review's job is continuity: critique what changed in response to each thread, in that thread.
+
+1. **Scope the diff.** Diff since the last reviewed commit rather than restarting from zero. Unchanged code is settled except where the changed code implicates it — a fix landing on one twin implementation but not the other, a moved decision leaving a stale copy behind — so re-run the Phase 2 twin and drift checks on whatever changed.
+2. **Verify each fix as a change, not as compliance.** Read the actual commits; don't trust the reply's description of them. A response can fix the symptom while missing the mechanism the thread named, introduce its own regression, or land on only one of the twins. The response gets the same Phase 2 rigor the original code got.
+3. **Continue in the author's thread.** Critique of a change made in response to an existing comment lands as a threaded reply on that comment (`mcp__github__add_reply_to_pull_request_comment`, or `gh api repos/{owner}/{repo}/pulls/{n}/comments/{id}/replies`) — the thread carries the context and the history. A new inline comment is reserved for a genuinely new finding no existing thread covers; those post through the Phase 6 pending-review flow.
+4. **Don't repeat the background.** The thread already explains why the machinery exists. When a change lands in an area an earlier comment covered, pick up at the thread's altitude — claim, what the new code does, evidence, verdict. Phase 4's background paragraph is for first contact with an area, not for every exchange about it.
+5. **State each thread's disposition plainly.** "This resolves it", "resolves the X half; Y is still open", or "the fix introduces a new issue: …" — the author should never have to infer whether a thread is done. Answer every author response, even when the answer is only confirmation.
+
+When many threads move at once, a short review body summarizing dispositions (resolved / still open / new findings) saves the author a thread-by-thread hunt; the detail stays in the threads.
