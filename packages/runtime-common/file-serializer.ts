@@ -395,11 +395,25 @@ async function processRelationships({
       // The path crosses a compound field whose child definition can't
       // be resolved (an unexported class). We can't tell what kind of
       // relationship this is, but we know the card declares the holder
-      // field — preserve the relationship in normalized form rather
-      // than dropping it.
-      result[relationshipKey] = Array.isArray(value)
-        ? value.map((entry) => normalizeRelationship(entry))
-        : normalizeRelationship(value);
+      // field — preserve the relationship rather than dropping it.
+      if (Array.isArray(value)) {
+        result[relationshipKey] = value.map((entry) =>
+          normalizeRelationship(entry),
+        );
+      } else if (Array.isArray(value.data)) {
+        // JSON:API to-many `data: [...]` form. `normalizeRelationship`
+        // only derives links from a single-resource `data`, so expand to
+        // the indexed keys to-many relationships are stored under, one
+        // entry per resource identifier, before normalizing each.
+        value.data.forEach((item, index) => {
+          result[`${relationshipKey}.${index}`] = normalizeRelationship({
+            ...(value.meta ? { meta: value.meta } : {}),
+            data: item,
+          });
+        });
+      } else {
+        result[relationshipKey] = normalizeRelationship(value);
+      }
       continue;
     }
 

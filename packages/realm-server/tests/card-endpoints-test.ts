@@ -4000,6 +4000,7 @@ module(basename(import.meta.filename), function () {
                 containsMany,
                 field,
                 linksTo,
+                linksToMany,
                 CardDef,
                 FieldDef,
               } from "@cardstack/base/card-api";
@@ -4011,6 +4012,7 @@ module(basename(import.meta.filename), function () {
                 @field at = contains(DatetimeField);
                 @field headline = contains(StringField);
                 @field author = linksTo(() => Author);
+                @field coauthors = linksToMany(() => Author);
               }
 
               export class Author extends CardDef {
@@ -4105,6 +4107,14 @@ module(basename(import.meta.filename), function () {
                       headline: 'latest entry',
                     },
                   },
+                  relationships: {
+                    // JSON:API to-many `data: [...]` form nested under
+                    // the unexported compound field; must survive as
+                    // indexed `.N` link keys on disk.
+                    'entries.0.coauthors': {
+                      data: [{ id: './author-1', type: 'card' }],
+                    },
+                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('./log'),
@@ -4153,6 +4163,15 @@ module(basename(import.meta.filename), function () {
                 },
               },
               'relationship nested in compound entry persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.coauthors.0'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'to-many data form nested in compound entry persisted as indexed link keys',
             );
             assert.deepEqual(
               card.data.relationships?.owner,
