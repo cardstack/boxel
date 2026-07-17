@@ -64,6 +64,18 @@ export interface RunLogWriterOptions {
   runTitle: string;
   /** Push the workspace to the realm (the loop's shared sync gate). */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Raw single-file write to the realm (card-source MIME, content as-is).
+   * Workaround for the /_atomic?waitForIndex=true bug that rewrites card
+   * sources with containsMany FieldDef attributes stripped to `{}`: after
+   * every workspace sync, the run-log instance is re-written raw so the
+   * live blog keeps its entry data. Optional — when absent the writer
+   * relies on syncWorkspace alone (and entries may render blank).
+   */
+  rawWriteFile?: (
+    relativePath: string,
+    content: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +229,19 @@ export class RunLogWriter {
     let result = await this.opts.syncWorkspace();
     if (!result.ok) {
       log.warn(`run-log sync failed: ${result.error ?? 'unknown'}`);
+    }
+    // Heal the atomic-sync FieldDef strip: re-write the instance raw.
+    if (this.opts.rawWriteFile) {
+      try {
+        let content = await readFile(this.instancePath, 'utf8');
+        let relativePath = `Runs/${this.opts.runSlug}.json`;
+        let written = await this.opts.rawWriteFile(relativePath, content);
+        if (!written.ok) {
+          log.warn(`run-log raw re-write failed: ${written.error ?? 'unknown'}`);
+        }
+      } catch (error) {
+        log.warn(`run-log raw re-write failed: ${String(error)}`);
+      }
     }
   }
 }

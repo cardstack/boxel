@@ -294,6 +294,8 @@ export async function runFactoryIssueLoop(
       runSlug,
       runTitle: config.runTitle ?? runSlug,
       syncWorkspace,
+      rawWriteFile: (relativePath, content) =>
+        client.write(targetRealm, relativePath, content),
     });
   }
 
