@@ -292,6 +292,35 @@ module('Unit | loader', function (hooks) {
     );
   });
 
+  test('dispose() unsubscribes a discarded loader from mapping-change notifications', async function (assert) {
+    // LoaderService replaces its loader on every module edit / session
+    // boundary. Each loader subscribes to realm-mapping changes; without
+    // dispose() the VirtualNetwork keeps that subscription — pinning the
+    // loader and its whole module cache indefinitely. After dispose(), a
+    // mapping change must no longer reach this loader.
+    //
+    // Probe with a net-zero add+remove rather than isModuleLoaded straight
+    // after an add: a mapping add shifts the cache-key form itself, so a
+    // still-cached module would fail to look up under its original URL even
+    // when nothing was discarded. Restoring the mapping restores the key
+    // form, so a surviving cache entry is observable again — which it is only
+    // if the loader ignored both notifications.
+    let virtualNetwork = getService('network').virtualNetwork;
+    let discarded = Loader.cloneLoader(loader);
+    await discarded.import(`${testRealmURL}f`);
+    assert.true(
+      discarded.isModuleLoaded(`${testRealmURL}f`),
+      'module is cached after import',
+    );
+    discarded.dispose();
+    virtualNetwork.addRealmMapping('@test-loader-dispose/', testRealmURL);
+    virtualNetwork.removeRealmMapping('@test-loader-dispose/');
+    assert.true(
+      discarded.isModuleLoaded(`${testRealmURL}f`),
+      "a disposed loader's cache survives mapping changes (subscription released)",
+    );
+  });
+
   test('isModuleLoaded returns false for a module that has not been imported', function (assert) {
     assert.false(
       loader.isModuleLoaded(`${testRealmURL}a`),

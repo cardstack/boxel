@@ -210,6 +210,13 @@ export class Loader {
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
   private virtualNetwork: VirtualNetwork | undefined;
+  // Unsubscribe for the realm-mapping-change listener registered below. The
+  // VirtualNetwork outlives any single loader (LoaderService replaces the
+  // loader on every module edit / session boundary), so a loader that isn't
+  // unsubscribed when it's discarded stays pinned — along with its whole
+  // module cache — by the listener the network still holds. `dispose()`
+  // releases it; the owner calls that before dropping the loader.
+  private unsubscribeMappingChange: (() => void) | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -235,11 +242,19 @@ export class Loader {
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
     // entry can't outlive the spelling it was keyed under.
-    this.virtualNetwork?.onMappingChange(() => {
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
     });
+  }
+
+  // Release the realm-mapping-change subscription so this loader can be
+  // garbage-collected once discarded. Only detaches the listener — it does not
+  // clear the caches, since a clone made from this loader carries them forward.
+  dispose() {
+    this.unsubscribeMappingChange?.();
+    this.unsubscribeMappingChange = undefined;
   }
 
   getVirtualNetwork(): VirtualNetwork | undefined {
