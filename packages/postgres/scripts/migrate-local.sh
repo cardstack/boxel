@@ -52,11 +52,16 @@ shift || true
 case "$action" in
   create)
     # Scaffolding is additive by default: `pnpm migrate create <name>` writes a
-    # single file to migrations/. To make a removal migration, create it this
-    # way and then `git mv` it into migrations-removal/ (node-pg-migrate tracks
-    # by filename, so moving a not-yet-applied file is clean). Running `create`
-    # against both phases would emit a spurious second migration every time.
+    # single file to migrations/. For a destructive migration use
+    # `create-removal` (below), which writes to migrations-removal/. Running
+    # `create` against both phases would emit a spurious second migration.
     mig migrations migrations create "$@"
+    ;;
+  create-removal)
+    # Scaffold a destructive migration (DROP COLUMN/TABLE, RENAME) directly into
+    # migrations-removal/, which runs post-deploy so the drop never executes
+    # while the previous code revision is still serving.
+    mig migrations-removal migrations_removal create "$@"
     ;;
   down)
     # Revert the requested count across the combined newest-first timeline of

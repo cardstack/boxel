@@ -291,6 +291,14 @@ jobs:
         shell: bash
         run: packages/postgres/scripts/determine-changed-migrations.sh
 
+      # Fail fast if a newly added additive migration drops/renames a column or
+      # table in its up() — those belong in migrations-removal/ (post-deploy) so
+      # they don't break the previous code revision mid-rollout.
+      - name: Guard removal-phase migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        shell: bash
+        run: node packages/postgres/scripts/check-removal-phase.cjs ${{ steps.migrations.outputs.files }}
+
       - name: Apply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
         working-directory: packages/postgres

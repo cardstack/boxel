@@ -2549,6 +2549,9 @@ importers:
       sql-parser-cst:
         specifier: 'catalog:'
         version: 0.28.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/realm-server:
     dependencies:
