@@ -74,6 +74,14 @@ file. Load what the current work touches, nothing more.
   `tools/write-binary-file`, `tools/save-card`). There is NO
   `@cardstack/boxel-host/commands/` path — imports from it fail only at
   runtime, after every static gate passes.
+- **`@context.searchResultsComponent` consumes a WIRE query, not a plain
+  Query.** Build it with `searchEntryWireQueryFromQuery(query)` from
+  `@cardstack/runtime-common`, then attach `realms: [<realm url>]` (array
+  — there is no `realm` key) and the display format via
+  `filter.eq.htmlQuery = { eq: { format: 'fitted' } }`. Invoke in BLOCK
+  form (`as |results|`, iterate `results.entries`, render
+  `<entry.component />` inside a parent-sized cell). A plain Query
+  self-closed renders NOTHING, silently.
 - **Drag-and-drop intake must read `dataTransfer.items` as a fallback**
   when `dataTransfer.files` is empty (Photos.app-style drags deliver file
   promises), and every drop must paint visible feedback — a silent no-op
