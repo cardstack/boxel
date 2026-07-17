@@ -86,8 +86,32 @@ module('Integration | tools | open-create-listing-modal', function (hooks) {
       },
       targetRealm: testRealmURL,
       openCardIds: [rri(`${testRealmURL}Pet/mango`)],
+      supportingCardIds: [],
       declarationKind: 'card',
     });
+  });
+
+  test('stores modal payload with supportingCardIds', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    let command = new OpenCreateListingModalTool(toolService.toolContext);
+
+    await command.execute({
+      codeRef: {
+        module: `${testRealmURL}pet`,
+        name: 'Pet',
+      },
+      targetRealm: testRealmURL,
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
+      supportingCardIds: [rri(`${testRealmURL}Pet/jackie`)],
+    } as never);
+
+    assert.deepEqual(
+      operatorModeStateService.createListingModalPayload?.supportingCardIds,
+      [rri(`${testRealmURL}Pet/jackie`)],
+      'supportingCardIds pass through to the modal payload',
+    );
   });
 
   test('stores modal payload without openCardIds', async function (assert) {

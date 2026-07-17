@@ -94,7 +94,9 @@ export default class CreateListingModal extends Component<Signature> {
   }
 
   private get selectedSupportingCardURLs(): string[] {
-    return this._selectedSupportingCardURLs ?? [];
+    return (
+      this._selectedSupportingCardURLs ?? this.payload?.supportingCardIds ?? []
+    );
   }
 
   private get hasSelectedSupportingCards(): boolean {

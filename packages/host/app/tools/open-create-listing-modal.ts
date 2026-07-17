@@ -45,6 +45,9 @@ export default class OpenCreateListingModalTool extends HostBaseTool<
       codeRef: input.codeRef,
       targetRealm: input.targetRealm,
       openCardIds: input.openCardIds as RealmResourceIdentifier[] | undefined,
+      supportingCardIds: input.supportingCardIds as
+        | RealmResourceIdentifier[]
+        | undefined,
       declarationKind,
     });
   }

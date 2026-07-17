@@ -225,6 +225,39 @@ module('Integration | components | create-listing-modal', function (hooks) {
       .hasText('Add Supporting Cards');
   });
 
+  test('shows seeded supporting card atom from payload', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.showCreateListingModal({
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
+      targetRealm: testRealmURL,
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
+      supportingCardIds: [rri(`${testRealmURL}Pet/jackie`)],
+      declarationKind: 'card',
+    });
+
+    await waitFor('[data-test-create-listing-modal]');
+    await waitFor(
+      `[data-test-selected-supporting-card="${testRealmURL}Pet/jackie"]`,
+    );
+
+    assert
+      .dom(`[data-test-selected-supporting-card="${testRealmURL}Pet/jackie"]`)
+      .exists();
+    assert
+      .dom(
+        `[data-test-selected-supporting-card-remove="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
+  });
+
   test('hides supporting cards for field listings', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
