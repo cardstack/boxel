@@ -549,6 +549,14 @@ export class RunLog extends CardDef {
         (e) => e.kind === 'issue-done',
       ).length;
     }
+    get warmingUp() {
+      return (
+        this.running &&
+        this.designRounds === 0 &&
+        this.cardsReady === 0 &&
+        (this.args.model.entries ?? []).length < 4
+      );
+    }
     <template>
       <article class='runlog' data-status={{@model.status}}>
         {{#if this.running}}<div class='scanline'></div>{{/if}}
@@ -567,9 +575,12 @@ export class RunLog extends CardDef {
             <span class='throbber'><i></i><i></i><i></i></span>
           {{/if}}
           <span class='now-item'>{{@model.nowWorkingOn}}</span>
+          {{#if this.warmingUp}}
+            <span class='now-hint'>setup phase — first design round lands in a few minutes</span>
+          {{/if}}
           <span class='next-wrap'>
             <span class='k'>Next</span>
-            <span class='next-item'>{{if @model.upNext @model.upNext '&mdash;'}}</span>
+            <span class='next-item'>{{if @model.upNext @model.upNext '—'}}</span>
           </span>
         </div>
         <div class='body-grid'>
@@ -592,6 +603,24 @@ export class RunLog extends CardDef {
             </div>
           </aside>
           <div class='feed'>
+            {{#if this.running}}
+              <div class='intro'>
+                <span class='intro-signage'>How this works</span>
+                <p class='intro-copy'>
+                  The factory is building this realm live. It reads the brief,
+                  plans the card family, mocks each card in HTML first,
+                  critiques and revises the design, then writes the real code
+                  — every milestone lands here the moment it happens, newest
+                  at the top.
+                </p>
+                <div class='legend'>
+                  <span class='lg'><i class='dot d-design'></i> design round</span>
+                  <span class='lg'><i class='dot d-val'></i> validation</span>
+                  <span class='lg'><i class='dot d-ready'></i> card ready</span>
+                  <span class='lg'><i class='dot d-issue'></i> issue progress</span>
+                </div>
+              </div>
+            {{/if}}
             {{#each @fields.entries as |Entry|}}
               <Entry />
             {{/each}}
@@ -774,7 +803,57 @@ export class RunLog extends CardDef {
         .feed {
           display: flex;
           flex-direction: column-reverse;
+          /* pin content to the visual top; slack space stays below */
+          justify-content: flex-end;
           padding: 6px 22px 22px 24px;
+        }
+        .intro {
+          margin-top: 16px;
+          padding: 14px 16px;
+          border: 1px dashed var(--rl-border);
+          border-radius: 8px;
+          background: var(--rl-surface);
+        }
+        .intro-signage {
+          font: 600 9px var(--rl-mono);
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
+          color: var(--rl-ink-meta);
+        }
+        .intro-copy {
+          margin: 6px 0 10px;
+          font: 400 12.5px/1.55 var(--rl-sans);
+          color: var(--rl-ink-quiet);
+          max-width: 60ch;
+        }
+        .legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 16px;
+        }
+        .lg {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font: 500 9.5px var(--rl-mono);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--rl-ink-meta);
+        }
+        .dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          display: inline-block;
+        }
+        .d-design { background: var(--rl-attention); }
+        .d-val { background: var(--rl-live); }
+        .d-ready { background: var(--rl-interactive); }
+        .d-issue { background: var(--rl-ink-ghost); }
+        .now-hint {
+          align-self: center;
+          font: 400 12px var(--rl-sans);
+          color: var(--rl-ink-meta);
         }
         .feed > :first-child {
           border-bottom: 0;
