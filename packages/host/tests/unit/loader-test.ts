@@ -266,6 +266,32 @@ module('Unit | loader', function (hooks) {
     }
   });
 
+  test('a realm-mapping change discards the module cache', async function (assert) {
+    // The loader keys its module cache by canonical RRI form, whose
+    // relationship to a URL is only stable between mapping changes. A mapping
+    // add/remove must therefore discard the cache so an entry can't survive
+    // under a spelling that no longer resolves the same way.
+    let virtualNetwork = getService('network').virtualNetwork;
+    await loader.import(`${testRealmURL}f`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}f`),
+      'module is cached after import',
+    );
+    virtualNetwork.addRealmMapping('@test-loader-discard/', testRealmURL);
+    try {
+      assert.false(
+        loader.isModuleLoaded(`${testRealmURL}f`),
+        'adding a realm mapping discards the module cache',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test-loader-discard/');
+    }
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}f`),
+      'removing a realm mapping also discards the module cache',
+    );
+  });
+
   test('isModuleLoaded returns false for a module that has not been imported', function (assert) {
     assert.false(
       loader.isModuleLoaded(`${testRealmURL}a`),
