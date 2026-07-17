@@ -60,6 +60,29 @@ FreestyleMenu.prototype.scrollActiveItemIntoView = function () {
   }
 };
 
+// Section links in FreestyleMenu carry an extra click handler that mutates
+// the menu's tracked expansion state. Real (trusted) clicks run a microtask
+// checkpoint between listeners, so Ember re-renders the menu — rebuilding the
+// clicked <li> — before LinkTo's own click handler runs. That handler is the
+// one that calls preventDefault, so the browser follows the href instead:
+// a full page reload on every section switch. Defer the mutation past the
+// click dispatch so the LinkTo survives long enough to handle its own click.
+// (Synthetic clicks, e.g. in tests, don't checkpoint mid-dispatch, which is
+// why this only bites real users.)
+{
+  let expandSection = function (this: FreestyleMenu, sectionName: string) {
+    setTimeout(() => {
+      this.expandedSections.add(sectionName);
+      this.userCollapsedSections.delete(sectionName);
+    }, 0);
+  };
+  Object.defineProperty(FreestyleMenu.prototype, 'expandSection', {
+    get() {
+      return expandSection.bind(this);
+    },
+  });
+}
+
 // A handful of usage titles differ from the name the component is exported as.
 const EXPORT_NAME_OVERRIDES: Record<string, string> = {
   Container: 'BoxelContainer',
