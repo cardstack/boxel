@@ -4,11 +4,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  indexingErrors,
   shortErrorMessage,
   shortBrokenLinks,
   shortFrontmatterError,
   formatEntry,
+  type IndexingErrorsDocument,
   type IndexingErrorEntry,
   type BrokenLinkEntry,
   type FrontmatterErrorEntry,
@@ -17,15 +17,33 @@ import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
   getTestDbAdapter,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// Drives `boxel realm indexing-errors --realm <url> --json` as a subprocess
+// and asserts on the JSON-API document it prints. Error rows are seeded
+// directly into `boxel_index` in-process (the noopPrerenderer can't produce
+// them from source) — only the command that surfaces them is a subprocess
+// call. The `formatEntry` / `short*` helpers remain unit-tested in-process.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
+
+// Run the command under test as a subprocess and return the parsed
+// JSON-API document. The command must succeed; failures surface via stderr.
+async function fetchIndexingErrors(): Promise<IndexingErrorsDocument> {
+  let res = await runBoxel(
+    ['realm', 'indexing-errors', '--realm', realmUrl, '--json'],
+    { home },
+  );
+  expect(res.ok, res.stderr).toBe(true);
+  return res.json<IndexingErrorsDocument>();
+}
 
 beforeAll(async () => {
   // Boot a clean realm with no fileSystem — the noopPrerenderer can't
@@ -35,10 +53,10 @@ beforeAll(async () => {
   // via INSERT below.
   await startTestRealmServer();
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -48,11 +66,9 @@ afterAll(async () => {
 
 describe('realm indexing-errors (integration)', () => {
   it('returns ok with an empty data array for a healthy realm', async () => {
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    expect(result.document).toBeDefined();
-    expect(Array.isArray(result.document!.data)).toBe(true);
-    expect(result.document!.data).toEqual([]);
+    let document = await fetchIndexingErrors();
+    expect(Array.isArray(document.data)).toBe(true);
+    expect(document.data).toEqual([]);
   });
 
   it('reports errored entries with errorDoc and diagnostics', async () => {
@@ -91,11 +107,10 @@ describe('realm indexing-errors (integration)', () => {
       },
     );
 
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    expect(result.document!.data.length).toBe(1);
+    let document = await fetchIndexingErrors();
+    expect(document.data.length).toBe(1);
 
-    let entry = result.document!.data[0] as IndexingErrorEntry;
+    let entry = document.data[0] as IndexingErrorEntry;
     expect(entry.type).toBe('indexing-error');
     expect(entry.id).toBe(`instance::${cardURL}`);
     expect(entry.attributes.url).toBe(cardURL);
@@ -140,11 +155,8 @@ describe('realm indexing-errors (integration)', () => {
       );
     }
 
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    let forUrl = result.document!.data.filter(
-      (e) => e.attributes.url === sharedURL,
-    );
+    let document = await fetchIndexingErrors();
+    let forUrl = document.data.filter((e) => e.attributes.url === sharedURL);
     expect(forUrl.length).toBe(2);
     let ids = forUrl.map((e) => e.id).sort();
     expect(ids).toEqual([`file::${sharedURL}`, `instance::${sharedURL}`]);
@@ -183,11 +195,10 @@ describe('realm indexing-errors (integration)', () => {
       },
     );
 
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    let entry = result.document!.data.find(
-      (e) => e.attributes.url === cardURL,
-    ) as BrokenLinkEntry | undefined;
+    let document = await fetchIndexingErrors();
+    let entry = document.data.find((e) => e.attributes.url === cardURL) as
+      | BrokenLinkEntry
+      | undefined;
     expect(entry).toBeDefined();
     expect(entry!.type).toBe('broken-link');
     expect(entry!.attributes.brokenLinks).toEqual(brokenLinks);
@@ -216,11 +227,10 @@ describe('realm indexing-errors (integration)', () => {
       },
     );
 
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    let entry = result.document!.data.find(
-      (e) => e.attributes.url === fileURL,
-    ) as FrontmatterErrorEntry | undefined;
+    let document = await fetchIndexingErrors();
+    let entry = document.data.find((e) => e.attributes.url === fileURL) as
+      | FrontmatterErrorEntry
+      | undefined;
     expect(entry).toBeDefined();
     expect(entry!.type).toBe('frontmatter-error');
     expect(entry!.attributes.frontmatterParseError).toEqual(
@@ -258,11 +268,8 @@ describe('realm indexing-errors (integration)', () => {
       },
     );
 
-    let result = await indexingErrors(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    let forUrl = result.document!.data.filter(
-      (e) => e.attributes.url === fileURL,
-    );
+    let document = await fetchIndexingErrors();
+    let forUrl = document.data.filter((e) => e.attributes.url === fileURL);
     expect(forUrl.length).toBe(2);
     let byType = Object.fromEntries(forUrl.map((e) => [e.type, e]));
 
@@ -282,22 +289,29 @@ describe('realm indexing-errors (integration)', () => {
   });
 
   it('returns ok=false when the realm is unreachable', async () => {
-    let result = await indexingErrors('http://127.0.0.1:1/fake/', {
-      profileManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBeDefined();
+    let res = await runBoxel(
+      ['realm', 'indexing-errors', '--realm', 'http://127.0.0.1:1/fake/'],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).not.toBe('');
   });
 
   it('returns NO_ACTIVE_PROFILE_ERROR when no profile is active', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await indexingErrors(realmUrl, {
-      profileManager: emptyManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    // Materialize an empty profile store so the CLI reaches the
+    // no-active-profile guard rather than any first-run bootstrapping.
+    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
+    try {
+      let res = await runBoxel(
+        ['realm', 'indexing-errors', '--realm', realmUrl],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 
   it('shortErrorMessage prefers title over message and collapses whitespace', () => {

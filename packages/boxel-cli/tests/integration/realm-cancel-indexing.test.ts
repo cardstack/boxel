@@ -8,21 +8,35 @@ import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// Drives `boxel realm cancel-indexing --realm <url>` as a subprocess. The
+// command POSTs `{ cancelPending }` to `<realm>/_cancel-indexing-job`
+// (running-only by default; `--cancel-pending` also drains the queue) and
+// exits 0 on the server's 2xx, 1 with the reason on stderr otherwise.
+// Because the request body isn't observable across the process boundary,
+// the two flag forms are exercised end-to-end (each hits a distinct server
+// branch) rather than asserted on the wire.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
+// Retained for the one white-box case below (mocking a non-2xx realm
+// response) — impossible to reproduce across the subprocess boundary, so
+// it stays an in-process call against the command function.
+let profileManager: ProfileManager;
 
 beforeAll(async () => {
   await startTestRealmServer();
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  profileManager = testHome.profileManager;
   await setupTestProfile(profileManager);
 });
 
@@ -33,56 +47,43 @@ afterAll(async () => {
 
 describe('realm cancel-indexing (integration)', () => {
   it('cancels indexing on a running realm and returns ok', async () => {
-    let result = await cancelIndexing(realmUrl, { profileManager });
-    expect(result.ok).toBe(true);
-    expect(result.error).toBeUndefined();
+    let res = await runBoxel(
+      ['realm', 'cancel-indexing', '--realm', realmUrl],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
   });
 
   it('returns error for an unreachable realm', async () => {
-    let result = await cancelIndexing('http://127.0.0.1:1/fake/', {
-      profileManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBeDefined();
+    let res = await runBoxel(
+      ['realm', 'cancel-indexing', '--realm', 'http://127.0.0.1:1/fake/'],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).not.toBe('');
   });
 
-  it('POSTs `{ cancelPending: false }` by default (running-only)', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await cancelIndexing(realmUrl, { profileManager });
-
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [url, init] = fetchSpy.mock.calls[0];
-      expect(String(url)).toBe(`${realmUrl}_cancel-indexing-job`);
-      expect(init!.method).toBe('POST');
-      let headers = init!.headers as Record<string, string>;
-      expect(headers['Content-Type']).toBe('application/json');
-      expect(headers['Accept']).toBe('application/json');
-      expect(JSON.parse(init!.body as string)).toEqual({
-        cancelPending: false,
-      });
-    } finally {
-      fetchSpy.mockRestore();
-    }
+  it('cancels running-only by default (no --cancel-pending)', async () => {
+    let res = await runBoxel(
+      ['realm', 'cancel-indexing', '--realm', realmUrl],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
   });
 
-  it('POSTs `{ cancelPending: true }` when cancelPending option is set', async () => {
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    try {
-      await cancelIndexing(realmUrl, {
-        profileManager,
-        cancelPending: true,
-      });
-
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      let [, init] = fetchSpy.mock.calls[0];
-      expect(JSON.parse(init!.body as string)).toEqual({ cancelPending: true });
-    } finally {
-      fetchSpy.mockRestore();
-    }
+  it('cancels running and pending jobs when --cancel-pending is set', async () => {
+    let res = await runBoxel(
+      ['realm', 'cancel-indexing', '--realm', realmUrl, '--cancel-pending'],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
   });
 
   it('returns an error with HTTP status when the realm responds non-2xx', async () => {
+    // White-box: a deterministic non-2xx response can't be produced
+    // black-box (an unknown/unauthorized realm makes authedRealmFetch
+    // throw, not return a status), so this stays an in-process call with
+    // a mocked fetch to cover the error-formatting path.
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmFetch')
       .mockResolvedValueOnce(
@@ -102,13 +103,19 @@ describe('realm cancel-indexing (integration)', () => {
   });
 
   it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await cancelIndexing(realmUrl, {
-      profileManager: emptyManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    // Materialize an empty profile store so the CLI reaches the
+    // no-active-profile guard rather than any first-run bootstrapping.
+    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
+    try {
+      let res = await runBoxel(
+        ['realm', 'cancel-indexing', '--realm', realmUrl],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });

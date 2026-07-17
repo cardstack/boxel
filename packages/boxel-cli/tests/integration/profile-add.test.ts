@@ -1,8 +1,7 @@
 import '../helpers/setup-realm-server.ts';
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import {
   describe,
   it,
@@ -20,8 +19,8 @@ import {
   TEST_PASSWORD,
   matrixURL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-const cliEntry = resolve(__dirname, '../../dist/index.js');
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
 const matrixId = `@${TEST_USERNAME}:localhost`;
 
@@ -35,10 +34,12 @@ afterAll(async () => {
   await stopTestRealmServer();
 });
 
-// These tests subprocess the built CLI binary (packages/boxel-cli/dist) and
+// These tests drive the built CLI as a subprocess through the shared
+// runBoxel harness (which selects the binary via BOXEL_CLI_BIN) and
 // exercise the happy-path `profile add` flow that CS-10725 made
-// network-bound. They moved here from tests/smoke.test.ts so they can hit
-// the dockerised Synapse + realm-server rather than the public internet.
+// network-bound. They moved here from tests/smoke.test.ts so they can
+// hit the dockerised Synapse + realm-server rather than the public
+// internet.
 describe('boxel profile add (integration, subprocess)', () => {
   let tmpHome: string;
 
@@ -50,40 +51,33 @@ describe('boxel profile add (integration, subprocess)', () => {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  const sanitizedParentEnv = () =>
-    Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !key.startsWith('BOXEL_')),
-    );
-
-  // Wraps execFileSync with the shared HOME + BOXEL_PASSWORD env and any
-  // caller-supplied flags. Tests opt in to BOXEL_ENVIRONMENT etc. via
-  // extraEnv. All invocations point at the in-process Synapse + realm
+  // Drive `boxel profile add` with the shared HOME + BOXEL_PASSWORD env
+  // and any caller-supplied flags. Tests opt in to BOXEL_ENVIRONMENT etc.
+  // via extraEnv. All invocations point at the in-process Synapse + realm
   // server unless the test overrides --matrix-url / --realm-server-url.
-  const run = (args: string[], extraEnv: NodeJS.ProcessEnv = {}) =>
-    execFileSync(process.execPath, [cliEntry, 'profile', 'add', ...args], {
-      encoding: 'utf8',
-      env: {
-        ...sanitizedParentEnv(),
-        HOME: tmpHome,
-        BOXEL_PASSWORD: TEST_PASSWORD,
-        ...extraEnv,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  // runBoxel strips the parent env's BOXEL_* vars, so extraEnv is the only
+  // source of those for the subprocess. Fails the test if the command
+  // exits non-zero (the successful-add precondition every caller relies on).
+  const run = async (args: string[], extraEnv: NodeJS.ProcessEnv = {}) => {
+    let res = await runBoxel(['profile', 'add', ...args], {
+      home: tmpHome,
+      env: { BOXEL_PASSWORD: TEST_PASSWORD, ...extraEnv },
     });
+    expect(res.ok, res.stderr).toBe(true);
+    return res.stdout;
+  };
 
   const readProfiles = () =>
     JSON.parse(
       fs.readFileSync(join(tmpHome, '.boxel-cli', 'profiles.json'), 'utf8'),
     );
 
-  it('--quiet silences the success line and still writes the profile', () => {
+  it('--quiet silences the success line and still writes the profile', async () => {
     // End-to-end check that `--quiet` (a global flag, so it comes before
     // `profile`) swallows the "Profile created" line while the on-disk
     // side-effect still happens.
-    const stdout = execFileSync(
-      process.execPath,
+    const res = await runBoxel(
       [
-        cliEntry,
         '--quiet',
         'profile',
         'add',
@@ -94,24 +88,17 @@ describe('boxel profile add (integration, subprocess)', () => {
         '-r',
         realmServerUrl,
       ],
-      {
-        encoding: 'utf8',
-        env: {
-          ...sanitizedParentEnv(),
-          HOME: tmpHome,
-          BOXEL_PASSWORD: TEST_PASSWORD,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
+      { home: tmpHome, env: { BOXEL_PASSWORD: TEST_PASSWORD } },
     );
-    expect(stdout).toBe('');
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toBe('');
     expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
       true,
     );
   });
 
-  it('emits the "Profile created" line normally without --quiet', () => {
-    const stdout = run([
+  it('emits the "Profile created" line normally without --quiet', async () => {
+    const stdout = await run([
       '-u',
       matrixId,
       '-m',
@@ -122,8 +109,8 @@ describe('boxel profile add (integration, subprocess)', () => {
     expect(stdout).toMatch(/Profile created/);
   });
 
-  it('writes matrixAccessToken (not password) for a non-standard domain with URL flags', () => {
-    run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+  it('writes matrixAccessToken (not password) for a non-standard domain with URL flags', async () => {
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
 
     const config = readProfiles();
     const profile = config.profiles[matrixId];
@@ -138,8 +125,8 @@ describe('boxel profile add (integration, subprocess)', () => {
     expect(profile.password).toBeUndefined();
   });
 
-  it('trims whitespace from URL flag values', () => {
-    run([
+  it('trims whitespace from URL flag values', async () => {
+    await run([
       '-u',
       matrixId,
       '-m',
@@ -155,10 +142,10 @@ describe('boxel profile add (integration, subprocess)', () => {
     });
   });
 
-  it('lets --matrix-url and --realm-server-url override BOXEL_ENVIRONMENT', () => {
+  it('lets --matrix-url and --realm-server-url override BOXEL_ENVIRONMENT', async () => {
     // BOXEL_ENVIRONMENT would normally derive
     // http://matrix.cs-10998-foo.localhost — explicit flags must win.
-    run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl], {
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl], {
       BOXEL_ENVIRONMENT: 'cs-10998-foo',
     });
 
@@ -169,11 +156,11 @@ describe('boxel profile add (integration, subprocess)', () => {
     });
   });
 
-  it('ignores an invalid BOXEL_ENVIRONMENT when both URL flags are supplied', () => {
+  it('ignores an invalid BOXEL_ENVIRONMENT when both URL flags are supplied', async () => {
     // If both URLs are explicit, BOXEL_ENVIRONMENT is never consulted —
     // even a value that would normally exit 1 (slugifies to empty) must
     // not block the command.
-    run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl], {
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl], {
       BOXEL_ENVIRONMENT: '!!!',
     });
 
@@ -184,17 +171,17 @@ describe('boxel profile add (integration, subprocess)', () => {
     });
   });
 
-  it('refreshes the stored access token when re-adding an existing profile', () => {
+  it('refreshes the stored access token when re-adding an existing profile', async () => {
     // Pre-CS-10725 this test verified that re-running `profile add` with
     // different URLs updated the stored URLs. After CS-10725 we can no
     // longer freely substitute fake URLs (both runs need to actually log
     // in), so the test instead verifies the new, more important property:
     // re-running addProfile against the same URLs produces a fresh
     // matrixAccessToken and matrixDeviceId.
-    run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
     const first = readProfiles().profiles[matrixId];
 
-    run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
     const second = readProfiles().profiles[matrixId];
 
     expect(second.matrixAccessToken).not.toBe(first.matrixAccessToken);

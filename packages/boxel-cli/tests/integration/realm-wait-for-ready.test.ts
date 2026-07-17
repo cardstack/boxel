@@ -3,27 +3,32 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { waitForReady } from '../../src/commands/realm/wait-for-ready.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// Drives `boxel realm wait-for-ready --realm <url>` as a subprocess. The
+// command polls the realm's `_readiness-check` endpoint until it responds
+// OK or the `--timeout` elapses, exiting 0 when ready and 1 (with the
+// reason on stderr) otherwise.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 
 beforeAll(async () => {
   await startTestRealmServer();
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -33,29 +38,45 @@ afterAll(async () => {
 
 describe('realm wait-for-ready (integration)', () => {
   it('returns ready for a running realm', async () => {
-    let result = await waitForReady(realmUrl, {
-      timeoutMs: 5000,
-      profileManager,
-    });
-    expect(result.ready).toBe(true);
-    expect(result.error).toBeUndefined();
+    let res = await runBoxel(
+      ['realm', 'wait-for-ready', '--realm', realmUrl, '--timeout', '5000'],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
   });
 
   it('returns not ready when realm URL is unreachable', async () => {
-    let result = await waitForReady('http://127.0.0.1:1/fake/', {
-      timeoutMs: 500,
-      profileManager,
-    });
-    expect(result.ready).toBe(false);
-    expect(result.error).toContain('not ready after');
+    let res = await runBoxel(
+      [
+        'realm',
+        'wait-for-ready',
+        '--realm',
+        'http://127.0.0.1:1/fake/',
+        '--timeout',
+        '500',
+      ],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('not ready after');
   });
 
   it('returns an error when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await waitForReady(realmUrl, { profileManager: emptyManager });
-    expect(result.ready).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    // Materialize an empty profile store so the CLI reaches the
+    // no-active-profile guard rather than any first-run bootstrapping.
+    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
+    try {
+      let res = await runBoxel(
+        ['realm', 'wait-for-ready', '--realm', realmUrl],
+        {
+          home: emptyHome,
+        },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });

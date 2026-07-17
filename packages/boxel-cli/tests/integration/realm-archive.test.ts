@@ -3,31 +3,45 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createRealm } from '../../src/commands/realm/create.ts';
-import { archiveRealm } from '../../src/commands/realm/archive.ts';
-import { restoreRealm } from '../../src/commands/realm/restore.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
   registerUser,
   matrixURL,
   matrixRegistrationSecret,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel realm archive <url> --yes` and `boxel realm restore <url>` are
+// owner-only mutations that print a human confirmation line and exit
+// non-zero on failure. We drive the installed binary and verify the
+// resulting archived/restored state via `realm list --json`.
+
+let home: string;
 let cleanupProfile: () => void;
+
+interface ListResult {
+  realms: { url: string; hidden: boolean; archived: boolean }[];
+  error?: string;
+}
+
+async function listCli(flags: string[] = []): Promise<ListResult> {
+  let res = await runBoxel(['realm', 'list', '--json', ...flags], { home });
+  expect(res.ok, res.stderr).toBe(true);
+  return res.json<ListResult>();
+}
 
 beforeAll(async () => {
   await startTestRealmServer();
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -37,40 +51,36 @@ afterAll(async () => {
 
 describe('realm archive (integration)', () => {
   it('archives a realm for the owner', async () => {
-    let name = uniqueRealmName();
-    let { realmUrl } = await createRealm(name, `Test ${name}`, {
-      profileManager,
-    });
+    let { realmUrl } = await createTestRealmViaCli(home);
 
-    let result = await archiveRealm({ realmUrl, profileManager });
+    let res = await runBoxel(['realm', 'archive', realmUrl, '--yes'], { home });
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toContain('Archived:');
+    expect(res.stdout).toContain(realmUrl);
 
-    expect(result.error).toBeUndefined();
-    expect(result.archived).toBe(true);
-    expect(result.realmUrl).toBe(realmUrl);
+    let listed = await listCli(['--include-archived']);
+    let entry = listed.realms.find((r) => r.url === realmUrl);
+    expect(entry?.archived).toBe(true);
   });
 
   it('normalizes a trailing-slash-less input', async () => {
-    let name = uniqueRealmName();
-    let { realmUrl } = await createRealm(name, `Test ${name}`, {
-      profileManager,
-    });
+    let { realmUrl } = await createTestRealmViaCli(home);
 
     let withoutSlash = realmUrl.replace(/\/$/, '');
-    let result = await archiveRealm({
-      realmUrl: withoutSlash,
-      profileManager,
+    let res = await runBoxel(['realm', 'archive', withoutSlash, '--yes'], {
+      home,
     });
+    expect(res.ok, res.stderr).toBe(true);
+    // The command normalizes and echoes the trailing-slash form.
+    expect(res.stdout).toContain(realmUrl);
 
-    expect(result.error).toBeUndefined();
-    expect(result.archived).toBe(true);
-    expect(result.realmUrl).toBe(realmUrl);
+    let listed = await listCli(['--include-archived']);
+    let entry = listed.realms.find((r) => r.url === realmUrl);
+    expect(entry?.archived).toBe(true);
   });
 
   it('returns a 403 error when the caller does not own the realm', async () => {
-    let realmName = uniqueRealmName();
-    let { realmUrl } = await createRealm(realmName, `Test ${realmName}`, {
-      profileManager,
-    });
+    let { realmUrl } = await createTestRealmViaCli(home);
 
     let userBSuffix = `userb-${Date.now()}-${Math.random()
       .toString(36)
@@ -85,9 +95,9 @@ describe('realm archive (integration)', () => {
       registrationSecret: matrixRegistrationSecret,
     });
 
-    let userBProfile = createTestProfileDir();
+    let userBHome = createTestHome();
     try {
-      await userBProfile.profileManager.addProfile(
+      await userBHome.profileManager.addProfile(
         `@${userBUsername}:localhost`,
         userBPassword,
         'CLI Test User B',
@@ -95,54 +105,59 @@ describe('realm archive (integration)', () => {
         `${TEST_REALM_SERVER_URL}/`,
       );
 
-      let result = await archiveRealm({
-        realmUrl,
-        profileManager: userBProfile.profileManager,
+      let res = await runBoxel(['realm', 'archive', realmUrl, '--yes'], {
+        home: userBHome.home,
       });
 
-      expect(result.archived).toBe(false);
-      expect(result.error).toMatch(/403/);
-      expect(result.error).toMatch(/do not own this realm/);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toMatch(/403/);
+      expect(res.stderr).toMatch(/do not own this realm/);
     } finally {
-      userBProfile.cleanup();
+      userBHome.cleanup();
     }
   });
 
   it('returns an error when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await archiveRealm({
-      realmUrl: `${TEST_REALM_SERVER_URL}/anything/`,
-      profileManager: emptyManager,
-    });
-    expect(result.archived).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
+    try {
+      let res = await runBoxel(
+        ['realm', 'archive', `${TEST_REALM_SERVER_URL}/anything/`, '--yes'],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });
 
 describe('realm restore (integration)', () => {
   it('restores a previously archived realm for the owner', async () => {
-    let name = uniqueRealmName();
-    let { realmUrl } = await createRealm(name, `Test ${name}`, {
-      profileManager,
+    let { realmUrl } = await createTestRealmViaCli(home);
+    let archive = await runBoxel(['realm', 'archive', realmUrl, '--yes'], {
+      home,
     });
-    let archive = await archiveRealm({ realmUrl, profileManager });
-    expect(archive.archived).toBe(true);
+    expect(archive.ok, archive.stderr).toBe(true);
 
-    let result = await restoreRealm({ realmUrl, profileManager });
+    let res = await runBoxel(['realm', 'restore', realmUrl], { home });
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toContain('Restored:');
+    expect(res.stdout).toContain(realmUrl);
 
-    expect(result.error).toBeUndefined();
-    expect(result.restored).toBe(true);
-    expect(result.realmUrl).toBe(realmUrl);
+    // A restored realm is no longer archived and reappears in the default
+    // (non-archived) list.
+    let listed = await listCli();
+    expect(listed.realms.map((r) => r.url)).toContain(realmUrl);
   });
 
   it('returns a 403 error when the caller does not own the realm', async () => {
-    let realmName = uniqueRealmName();
-    let { realmUrl } = await createRealm(realmName, `Test ${realmName}`, {
-      profileManager,
+    let { realmUrl } = await createTestRealmViaCli(home);
+    let archive = await runBoxel(['realm', 'archive', realmUrl, '--yes'], {
+      home,
     });
-    await archiveRealm({ realmUrl, profileManager });
+    expect(archive.ok, archive.stderr).toBe(true);
 
     let userBSuffix = `userb-${Date.now()}-${Math.random()
       .toString(36)
@@ -157,9 +172,9 @@ describe('realm restore (integration)', () => {
       registrationSecret: matrixRegistrationSecret,
     });
 
-    let userBProfile = createTestProfileDir();
+    let userBHome = createTestHome();
     try {
-      await userBProfile.profileManager.addProfile(
+      await userBHome.profileManager.addProfile(
         `@${userBUsername}:localhost`,
         userBPassword,
         'CLI Test User B',
@@ -167,31 +182,33 @@ describe('realm restore (integration)', () => {
         `${TEST_REALM_SERVER_URL}/`,
       );
 
-      let result = await restoreRealm({
-        realmUrl,
-        profileManager: userBProfile.profileManager,
+      let res = await runBoxel(['realm', 'restore', realmUrl], {
+        home: userBHome.home,
       });
 
-      expect(result.restored).toBe(false);
-      expect(result.error).toMatch(/403/);
-      expect(result.error).toMatch(/do not own this realm/);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toMatch(/403/);
+      expect(res.stderr).toMatch(/do not own this realm/);
     } finally {
-      userBProfile.cleanup();
+      userBHome.cleanup();
     }
 
     // Cleanup: restore the realm so it doesn't leak into other tests.
-    await restoreRealm({ realmUrl, profileManager });
+    await runBoxel(['realm', 'restore', realmUrl], { home });
   });
 
   it('returns an error when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await restoreRealm({
-      realmUrl: `${TEST_REALM_SERVER_URL}/anything/`,
-      profileManager: emptyManager,
-    });
-    expect(result.restored).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
+    try {
+      let res = await runBoxel(
+        ['realm', 'restore', `${TEST_REALM_SERVER_URL}/anything/`],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import { runBoxel } from './run-boxel.ts';
 import {
   prepareTestDB,
   createTestPgAdapter,
@@ -339,4 +340,34 @@ export function uniqueRealmName(): string {
   let ts = Date.now().toString(36);
   let rand = Math.random().toString(36).slice(2, 6);
   return `cli-test-${ts}-${rand}`;
+}
+
+/**
+ * Create a realm through the CLI binary — `boxel realm create <name>
+ * <display>` — rather than the in-process `createRealm`, and return its
+ * URL. The command stores a realm token keyed by realm URL in the
+ * profile on disk, so we read the URL back from there (matching how the
+ * in-process tests derived it from the in-memory profile).
+ *
+ * Requires a profile already seeded on disk under `<home>/.boxel-cli`
+ * (via `setupTestProfile` / `setupJwtTestProfile` on a `ProfileManager`
+ * scoped to that home — see `createTestHome`).
+ */
+export async function createTestRealmViaCli(
+  home: string,
+  name: string = uniqueRealmName(),
+): Promise<{ realmUrl: string; name: string }> {
+  let res = await runBoxel(['realm', 'create', name, `Test ${name}`], { home });
+  if (!res.ok) {
+    throw new Error(
+      `\`realm create\` failed (exit ${res.exitCode}):\n${res.stderr}`,
+    );
+  }
+  let realmTokens =
+    reloadProfile(home).getActiveProfile()?.profile.realmTokens ?? {};
+  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
+  if (!entry) {
+    throw new Error(`No realm JWT stored for ${name} after \`realm create\``);
+  }
+  return { realmUrl: entry[0], name };
 }
