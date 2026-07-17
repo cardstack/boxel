@@ -28,6 +28,7 @@ import { IssueScheduler } from './issue-scheduler.ts';
 import { logger } from './logger.ts';
 import {
   type RunLogWriter,
+  createRunLogStreamHandler,
   designEntriesFromToolCalls,
   cardPathsFromToolCalls,
 } from './run-log.ts';
@@ -553,6 +554,25 @@ export async function runIssueLoop(
         context.resumeSession = { sessionId: primeSessionId, fork: true };
       }
 
+      // Live blog: stream design screenshots, .gts writes, failed checks,
+      // and the agent's own post_update commentary onto the run-log card
+      // (and issue comments) AS THEY HAPPEN — a long agent turn must never
+      // leave the run log silent.
+      let streamHandler:
+        | ReturnType<typeof createRunLogStreamHandler>
+        | undefined;
+      if (runLog) {
+        streamHandler = createRunLogStreamHandler({
+          runLog,
+          addIssueComment: (body: string) =>
+            issueStore.addComment(issue.id, {
+              body,
+              author: 'factory-agent',
+            }),
+        });
+        context.onToolCall = streamHandler.handler;
+      }
+
       // Run the agent — it calls tools during its turn. Realm-touching `run_*`
       // tools sync the workspace before executing, so subtract that tool-sync
       // time from the agent's wall clock: it's attributed to sync (via the
@@ -570,7 +590,9 @@ export async function runIssueLoop(
         `  Agent returned ${result.toolCalls.length} tool call(s)${debug ? ` in ${fmtSecs(agentMs)}` : ''}`,
       );
 
-      if (runLog) {
+      // Post-turn design summary only when nothing streamed live (the
+      // stream handler already posted each design round as it happened).
+      if (runLog && !streamHandler?.sawDesign()) {
         let designEntries = designEntriesFromToolCalls(
           result.toolCalls,
           targetRealm,

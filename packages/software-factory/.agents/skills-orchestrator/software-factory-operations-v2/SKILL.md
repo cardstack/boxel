@@ -61,6 +61,12 @@ file. Load what the current work touches, nothing more.
 
 ## Hard rules
 
+- **Live-blog with `post_update`.** The operator watches a live run-log
+  card. Post at every meaningful moment — design kickoff, what each
+  critique round found, decisions and tradeoffs, starting to code,
+  recovering from a failed check. First person, 1–3 sentences, concrete.
+  Never work silently for more than a few minutes; the commentary channel
+  is as important as the artifacts.
 - **NO `.test.gts` files.** Tests belong to a separate hardening phase
   invoked later over artifacts that earned them. This loop ships zero
   tests by design; do not "helpfully" add any.

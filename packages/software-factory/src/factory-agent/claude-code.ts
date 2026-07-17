@@ -135,7 +135,14 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let abortController = new AbortController();
 
     let sdkTools = buildSdkToolsFromFactoryTools(mcpFactoryTools, {
-      onToolCall: (entry) => toolCallLog.push(entry),
+      onToolCall: (entry) => {
+        toolCallLog.push(entry);
+        try {
+          context.onToolCall?.(entry);
+        } catch {
+          // Live-blog streaming must never break the run.
+        }
+      },
       onSignal: (signal) => {
         captured = signal;
         abortController.abort();
@@ -260,6 +267,31 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
               log.info(`Agent backend: claude (model=${modelName})`);
               this.modelLogged = true;
             }
+          }
+        }
+        // Stream native Write/Edit sightings to the live-blog hook as
+        // they land (MCP factory tools stream via buildSdkToolsFromFactoryTools).
+        if (context.onToolCall && message.type === 'assistant') {
+          try {
+            let content = (message as { message?: { content?: unknown } })
+              .message?.content;
+            if (Array.isArray(content)) {
+              for (let block of content) {
+                let b = block as {
+                  type?: string;
+                  name?: string;
+                  input?: Record<string, unknown>;
+                };
+                if (
+                  b?.type === 'tool_use' &&
+                  (b.name === 'Write' || b.name === 'Edit')
+                ) {
+                  context.onToolCall({ tool: b.name, args: b.input ?? {} });
+                }
+              }
+            }
+          } catch {
+            // Live-blog streaming must never break the run.
           }
         }
         if (this.config.debug) {

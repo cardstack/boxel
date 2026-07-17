@@ -268,6 +268,18 @@ export interface AgentContext {
    * captured from this turn seeds every subsequent fork.
    */
   primeTurn?: boolean;
+  /**
+   * Live streaming hook (v2 live blog): invoked for every factory MCP tool
+   * result as it lands, and for native Write/Edit tool_use blocks as they
+   * stream (result undefined for those). Must never throw — callers wrap
+   * it defensively, but keep handlers cheap and fire-and-forget.
+   */
+  onToolCall?: (entry: {
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+    durationMs?: number;
+  }) => void;
 }
 
 export interface AgentAction {

@@ -181,6 +181,7 @@ export function buildFactoryTools(
     buildListSkillsTool(),
     buildReadSkillTool(),
     buildScreenshotHtmlTool(config),
+    buildPostUpdateTool(),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -739,6 +740,59 @@ function buildReadSkillTool(): FactoryTool {
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    },
+  };
+}
+
+/**
+ * The agent's live-blog channel. The tool itself just acknowledges — the
+ * orchestrator observes the call through the tool-call stream
+ * (`AgentContext.onToolCall`) and fans the post out to the run-log card
+ * and the current issue's comments. Keeping the tool side-effect-free
+ * means it works identically in every wiring (tests, prime turns, forks).
+ */
+function buildPostUpdateTool(): FactoryTool {
+  return {
+    name: 'post_update',
+    description:
+      'Post a short, social-media-style update about what you are doing ' +
+      'right now and why — it appears live on the run-log card and as a ' +
+      'comment on the issue you are working. Post at every meaningful ' +
+      'moment: kicking off a design, what a critique found, a decision ' +
+      'and its tradeoff, starting to code, recovering from a failed ' +
+      'check. First person, concrete, 1-3 sentences. This commentary ' +
+      'channel is as important as the artifacts themselves.',
+    parameters: {
+      type: 'object',
+      properties: {
+        headline: {
+          type: 'string',
+          description:
+            'One-line update, e.g. "Critique round 2: the fitted tile ' +
+            'was drowning in chrome — stripping it back."',
+        },
+        body: {
+          type: 'string',
+          description:
+            'Optional 1-3 sentence elaboration: the why, the tradeoff, ' +
+            'what is next.',
+        },
+        kind: {
+          type: 'string',
+          enum: ['comment', 'progress', 'decision'],
+          description:
+            'comment = commentary/context; progress = milestone within ' +
+            'the task; decision = a choice you made and why.',
+        },
+      },
+      required: ['headline'],
+    },
+    execute: async (args) => {
+      let headline = String(args.headline ?? '').trim();
+      if (!headline) {
+        return { ok: false, error: 'headline is required' };
+      }
+      return { ok: true, note: 'posted to the run log' };
     },
   };
 }

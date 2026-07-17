@@ -38,6 +38,9 @@ export interface RunLogEntryInput {
     | 'status'
     | 'iteration'
     | 'comment'
+    | 'progress'
+    | 'decision'
+    | 'agent-spawn'
     | 'blocked'
     | 'note';
   headline: string;
@@ -55,6 +58,8 @@ export interface RunLogEntryInput {
    * e.g. `JaraokePlayer/thursday-night-jaraoke`) — embeds the live card.
    */
   cardPath?: string;
+  /** Who is speaking: orchestrator | executor | validator | an agent name. */
+  who?: string;
 }
 
 export interface RunLogWriterOptions {
@@ -85,10 +90,22 @@ export interface RunLogWriterOptions {
 export class RunLogWriter {
   private opts: RunLogWriterOptions;
   private instancePath: string;
+  /**
+   * All writes are serialized through this chain: streamed appends fire
+   * from tool-call hooks mid-agent-turn and would otherwise race the
+   * loop's own read-modify-write appends.
+   */
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(opts: RunLogWriterOptions) {
     this.opts = opts;
     this.instancePath = join(opts.workspaceDir, 'Runs', `${opts.runSlug}.json`);
+  }
+
+  private enqueue(fn: () => Promise<void>): Promise<void> {
+    let next = this.chain.then(fn, fn);
+    this.chain = next;
+    return next;
   }
 
   /** Idempotent: writes the CardDef module if missing and creates or re-arms the instance. */
@@ -153,49 +170,64 @@ export class RunLogWriter {
     }
   }
 
-  /** Append one or more entries in a single write+sync. */
+  /**
+   * Append one or more entries in a single write+sync. With
+   * `opts.stream: true` the full workspace sync is skipped — the instance
+   * is raw-written to the realm directly, which is cheap enough to call
+   * from per-tool-call streaming hooks mid-agent-turn.
+   */
   async append(
     entries: RunLogEntryInput[],
     updates?: { nowWorkingOn?: string; upNext?: string },
+    opts?: { stream?: boolean },
   ): Promise<void> {
     if (entries.length === 0 && !updates) return;
-    try {
-      let doc = JSON.parse(await readFile(this.instancePath, 'utf8'));
-      let attrs = doc.data.attributes;
-      let rels: Record<string, unknown> = doc.data.relationships ?? {};
+    return this.enqueue(async () => {
+      try {
+        let doc = JSON.parse(await readFile(this.instancePath, 'utf8'));
+        let attrs = doc.data.attributes;
+        let rels: Record<string, unknown> = doc.data.relationships ?? {};
 
-      for (let entry of entries) {
-        let index = attrs.entries.length;
-        attrs.entries.push({
-          kind: entry.kind,
-          at: new Date().toISOString(),
-          headline: entry.headline,
-          body: entry.body ?? null,
-          imageUrl: entry.imageUrl ?? null,
-        });
-        if (entry.cardPath) {
-          rels[`entries.${index}.card`] = {
-            links: { self: `../${entry.cardPath}` },
-          };
+        for (let entry of entries) {
+          let index = attrs.entries.length;
+          attrs.entries.push({
+            kind: entry.kind,
+            at: new Date().toISOString(),
+            headline: entry.headline,
+            body: entry.body ?? null,
+            imageUrl: entry.imageUrl ?? null,
+            // The writer is the orchestrator's pen; streamed agent entries
+            // pass their own voice ('executor', an agent name, …).
+            who: entry.who ?? 'orchestrator',
+          });
+          if (entry.cardPath) {
+            rels[`entries.${index}.card`] = {
+              links: { self: `../${entry.cardPath}` },
+            };
+          }
+          if (entry.imageCardPath) {
+            rels[`entries.${index}.image`] = {
+              links: { self: `../${entry.imageCardPath}` },
+            };
+          }
         }
-        if (entry.imageCardPath) {
-          rels[`entries.${index}.image`] = {
-            links: { self: `../${entry.imageCardPath}` },
-          };
+        if (updates?.nowWorkingOn !== undefined) {
+          attrs.nowWorkingOn = updates.nowWorkingOn;
         }
+        if (updates?.upNext !== undefined) {
+          attrs.upNext = updates.upNext;
+        }
+        doc.data.relationships = rels;
+        await writeFile(this.instancePath, JSON.stringify(doc, null, 2), 'utf8');
+        if (opts?.stream) {
+          await this.rawWriteInstance();
+        } else {
+          await this.syncUnqueued();
+        }
+      } catch (error) {
+        log.warn(`run-log append failed: ${String(error)}`);
       }
-      if (updates?.nowWorkingOn !== undefined) {
-        attrs.nowWorkingOn = updates.nowWorkingOn;
-      }
-      if (updates?.upNext !== undefined) {
-        attrs.upNext = updates.upNext;
-      }
-      doc.data.relationships = rels;
-      await writeFile(this.instancePath, JSON.stringify(doc, null, 2), 'utf8');
-      await this.sync();
-    } catch (error) {
-      log.warn(`run-log append failed: ${String(error)}`);
-    }
+    });
   }
 
   async finish(status: 'completed' | 'failed' | 'stopped'): Promise<void> {
@@ -217,31 +249,40 @@ export class RunLogWriter {
   }
 
   private async patch(updates: { status?: string }): Promise<void> {
-    let doc = JSON.parse(await readFile(this.instancePath, 'utf8'));
-    if (updates.status) {
-      doc.data.attributes.status = updates.status;
-    }
-    await writeFile(this.instancePath, JSON.stringify(doc, null, 2), 'utf8');
-    await this.sync();
+    return this.enqueue(async () => {
+      let doc = JSON.parse(await readFile(this.instancePath, 'utf8'));
+      if (updates.status) {
+        doc.data.attributes.status = updates.status;
+      }
+      await writeFile(this.instancePath, JSON.stringify(doc, null, 2), 'utf8');
+      await this.syncUnqueued();
+    });
   }
 
   private async sync(): Promise<void> {
+    return this.enqueue(() => this.syncUnqueued());
+  }
+
+  private async syncUnqueued(): Promise<void> {
     let result = await this.opts.syncWorkspace();
     if (!result.ok) {
       log.warn(`run-log sync failed: ${result.error ?? 'unknown'}`);
     }
     // Heal the atomic-sync FieldDef strip: re-write the instance raw.
-    if (this.opts.rawWriteFile) {
-      try {
-        let content = await readFile(this.instancePath, 'utf8');
-        let relativePath = `Runs/${this.opts.runSlug}.json`;
-        let written = await this.opts.rawWriteFile(relativePath, content);
-        if (!written.ok) {
-          log.warn(`run-log raw re-write failed: ${written.error ?? 'unknown'}`);
-        }
-      } catch (error) {
-        log.warn(`run-log raw re-write failed: ${String(error)}`);
+    await this.rawWriteInstance();
+  }
+
+  private async rawWriteInstance(): Promise<void> {
+    if (!this.opts.rawWriteFile) return;
+    try {
+      let content = await readFile(this.instancePath, 'utf8');
+      let relativePath = `Runs/${this.opts.runSlug}.json`;
+      let written = await this.opts.rawWriteFile(relativePath, content);
+      if (!written.ok) {
+        log.warn(`run-log raw re-write failed: ${written.error ?? 'unknown'}`);
       }
+    } catch (error) {
+      log.warn(`run-log raw re-write failed: ${String(error)}`);
     }
   }
 }
@@ -253,6 +294,148 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Live-blog streaming: tool-call events → run-log entries, mid-agent-turn
+// ---------------------------------------------------------------------------
+
+const POST_UPDATE_KINDS = new Set(['comment', 'progress', 'decision']);
+const CHECK_TOOLS = ['run_lint', 'run_parse', 'run_evaluate', 'run_instantiate'];
+const CHECK_FAIL_MIN_INTERVAL_MS = 120_000;
+
+/**
+ * Build an `AgentContext.onToolCall` handler that live-blogs an agent turn:
+ *
+ * - `post_update` calls (the agent's own commentary channel) → run-log
+ *   entry + issue comment, verbatim.
+ * - successful `screenshot_html` → a design entry with the image linked
+ *   (full sync so the PNG itself reaches the realm).
+ * - first native Write of each non-test `.gts` → "Writing <file>".
+ * - failed validation checks → one "fixing" note per tool per 2 minutes.
+ *
+ * Everything is fire-and-forget; the writer serializes the actual file
+ * writes. `sawDesign()` tells the loop whether the post-turn design
+ * summary would duplicate what already streamed.
+ */
+export function createRunLogStreamHandler(opts: {
+  runLog: RunLogWriter;
+  addIssueComment?: (body: string) => Promise<void>;
+}): {
+  handler: (entry: {
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+    durationMs?: number;
+  }) => void;
+  sawDesign: () => boolean;
+} {
+  let sawDesign = false;
+  let seenGtsWrites = new Set<string>();
+  let lastCheckFailAt = new Map<string, number>();
+
+  let handler = (entry: {
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+  }): void => {
+    try {
+      let tool = entry.tool.replace(/^mcp__[^_]+__/, '');
+
+      if (tool === 'post_update' || tool.endsWith('post_update')) {
+        let headline = String(entry.args.headline ?? '').trim();
+        if (!headline) return;
+        let body =
+          typeof entry.args.body === 'string' && entry.args.body.trim()
+            ? entry.args.body.trim()
+            : undefined;
+        let kind = POST_UPDATE_KINDS.has(String(entry.args.kind))
+          ? String(entry.args.kind)
+          : 'comment';
+        void opts.runLog.append(
+          [{ kind: kind as RunLogEntryInput['kind'], headline, body, who: 'executor' }],
+          undefined,
+          { stream: true },
+        );
+        if (opts.addIssueComment) {
+          void opts
+            .addIssueComment(body ? `**${headline}**\n\n${body}` : headline)
+            .catch(() => {});
+        }
+        return;
+      }
+
+      if (tool === 'screenshot_html' || tool.endsWith('screenshot_html')) {
+        let result = entry.result as
+          | { ok?: boolean; outputPath?: string }
+          | undefined;
+        if (!result?.ok || !result.outputPath) return;
+        sawDesign = true;
+        let name = result.outputPath
+          .replace(/^design\//, '')
+          .replace(/\.png$/, '');
+        // Full sync (not stream) so the screenshot file itself reaches the
+        // realm before the entry links it.
+        void opts.runLog.append([
+          {
+            kind: 'design',
+            headline: `Design round: ${name}`,
+            imageCardPath: result.outputPath,
+            who: 'executor',
+          },
+        ]);
+        return;
+      }
+
+      if (tool === 'Write' || tool === 'Edit') {
+        let filePath = String(entry.args.file_path ?? entry.args.path ?? '');
+        if (!filePath.endsWith('.gts') || filePath.endsWith('.test.gts')) {
+          return;
+        }
+        let name = filePath.split('/').pop() ?? filePath;
+        if (seenGtsWrites.has(name)) return;
+        seenGtsWrites.add(name);
+        void opts.runLog.append(
+          [
+            {
+              kind: 'progress',
+              headline: `Writing ${name}`,
+              body: 'Design accepted — translating the mockup into card code.',
+              who: 'executor',
+            },
+          ],
+          undefined,
+          { stream: true },
+        );
+        return;
+      }
+
+      let checkTool = CHECK_TOOLS.find((t) => tool === t || tool.endsWith(t));
+      if (checkTool) {
+        let result = entry.result as { status?: string } | undefined;
+        if (result?.status !== 'failed') return;
+        let now = Date.now();
+        let last = lastCheckFailAt.get(checkTool) ?? 0;
+        if (now - last < CHECK_FAIL_MIN_INTERVAL_MS) return;
+        lastCheckFailAt.set(checkTool, now);
+        void opts.runLog.append(
+          [
+            {
+              kind: 'progress',
+              headline: `${checkTool.replace('run_', '')} check failed — fixing`,
+              who: 'executor',
+            },
+          ],
+          undefined,
+          { stream: true },
+        );
+      }
+    } catch {
+      // Streaming must never break the run.
+    }
+  };
+
+  return { handler, sawDesign: () => sawDesign };
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +535,24 @@ function clock(value: Date | string | undefined): string {
   }
 }
 
+const KIND_GLYPHS: Record<string, string> = {
+  phase: '◆',
+  'issue-picked': '▸',
+  'issue-done': '■',
+  design: '✦',
+  validation: '✓',
+  'card-ready': '●',
+  'run-done': '◼',
+  status: '↻',
+  iteration: '↻',
+  blocked: '▲',
+  comment: '❝',
+  progress: '▹',
+  decision: '⚑',
+  'agent-spawn': '⚙',
+  note: '·',
+};
+
 class RunLogEntry extends FieldDef {
   static displayName = 'Run Log Entry';
   @field kind = contains(StringField);
@@ -359,22 +560,49 @@ class RunLogEntry extends FieldDef {
   @field headline = contains(StringField);
   @field body = contains(MarkdownField);
   @field imageUrl = contains(StringField);
+  /** Who is speaking: orchestrator | executor | validator | an agent name. */
+  @field who = contains(StringField);
   // File cards (PngDef etc.) descend from FileDef, NOT CardDef — a
   // CardDef-typed link rejects them at field validation.
   @field image = linksTo(() => FileDef);
   @field card = linksTo(() => CardDef);
 
   static embedded = class Embedded extends Component<typeof this> {
+    @tracked nowMs = Date.now();
+    #ticker: ReturnType<typeof setInterval>;
+
+    constructor(owner: unknown, args: any) {
+      super(owner, args);
+      this.#ticker = setInterval(() => {
+        this.nowMs = Date.now();
+      }, 30000);
+      registerDestructor(this, () => clearInterval(this.#ticker));
+    }
+
     get timeLabel() {
       return clock(this.args.model.at);
+    }
+    get agoLabel() {
+      let at = this.args.model.at;
+      if (!at) return '';
+      let mins = Math.floor((this.nowMs - new Date(at).getTime()) / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+    }
+    get glyph() {
+      return KIND_GLYPHS[this.args.model.kind ?? ''] ?? '·';
     }
     get isShipMoment() {
       return this.args.model.kind === 'card-ready';
     }
     <template>
       <div class='entry' data-kind={{@model.kind}}>
-        <span class='t'>{{this.timeLabel}}</span>
-        <span class='chip'>{{@model.kind}}</span>
+        <span class='t'>{{this.timeLabel}}
+          <span class='ago'>{{this.agoLabel}}</span></span>
+        <span class='chip'><span class='glyph'>{{this.glyph}}</span>
+          {{@model.kind}}
+          {{#if @model.who}}<span class='who'>{{@model.who}}</span>{{/if}}</span>
         <span class='h'>{{@model.headline}}</span>
         {{#if @model.body}}
           <div class='b'><@fields.body /></div>
@@ -399,7 +627,9 @@ class RunLogEntry extends FieldDef {
           {{else}}
             <div class='showme'>
               <span class='showme-label'>show me</span>
-              <@fields.card @format='atom' />
+              <div class='fitted-frame'>
+                <@fields.card @format='fitted' />
+              </div>
             </div>
           {{/if}}
         {{/if}}
@@ -407,7 +637,7 @@ class RunLogEntry extends FieldDef {
       <style scoped>
         .entry {
           display: grid;
-          grid-template-columns: 52px 88px minmax(0, 1fr);
+          grid-template-columns: 52px 102px minmax(0, 1fr);
           gap: 0 14px;
           padding: 13px 0;
           border-bottom: 1px solid var(--rl-hairline, #eceef1);
@@ -419,12 +649,32 @@ class RunLogEntry extends FieldDef {
           font-variant-numeric: tabular-nums;
           color: var(--rl-ink-meta, #a2a2ab);
         }
+        .ago {
+          display: block;
+          font: 400 8.5px var(--rl-mono, monospace);
+          letter-spacing: 0.02em;
+          color: var(--rl-ink-ghost, #c0c0c7);
+          margin-top: 2px;
+          white-space: nowrap;
+        }
         .chip {
           font: 600 8.5px var(--rl-mono, monospace);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--rl-ink-meta, #a2a2ab);
           white-space: nowrap;
+        }
+        .glyph {
+          font-size: 10px;
+          letter-spacing: 0;
+          margin-right: 1px;
+        }
+        .who {
+          display: block;
+          margin-top: 2px;
+          font: 500 8px var(--rl-mono, monospace);
+          letter-spacing: 0.08em;
+          color: var(--rl-ink-ghost, #c0c0c7);
         }
         .entry[data-kind='design'] .chip {
           color: var(--rl-attention, #d97706);
@@ -443,19 +693,26 @@ class RunLogEntry extends FieldDef {
         }
         .showme {
           grid-column: 3;
-          margin-top: 8px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
+          margin-top: 10px;
         }
         .showme-label {
+          display: block;
           font: 700 9px var(--rl-mono, monospace);
           letter-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--rl-ink-meta, #a2a2ab);
+          margin-bottom: 6px;
         }
-        .showme :deep(.boxel-card-container) {
-          border-radius: 5px;
+        /* Linked issue/wiki cards render as a real fitted view — a sized,
+           parent-owned box (not an atom chip). */
+        .fitted-frame {
+          width: 100%;
+          max-width: 460px;
+          height: 92px;
+        }
+        .fitted-frame :deep(.boxel-card-container) {
+          height: 100%;
+          border-radius: 8px;
           box-shadow: 0 0 0 1px var(--rl-border, #e2e8f0);
           cursor: pointer;
         }
