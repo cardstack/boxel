@@ -143,7 +143,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-xs);
       }
-      .default-card-template.edit > .notes-footer {
+      .default-card-template--inner.edit > .notes-footer {
         background-color: var(--muted);
       }
       /* keep field labels beside their inputs, wrapping the label above the
