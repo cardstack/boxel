@@ -28,6 +28,14 @@ file. Load what the current work touches, nothing more.
 | File-backed fields (images, files, csv) | `boxel-file-def` |
 | Catalog Spec conventions | `boxel-development` reference `dev-spec-usage.md` |
 | Reusable UI components before hand-rolling any UI | `boxel-ui-component-discovery` |
+| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces` |
+| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds | `boxel-live-surfaces` |
+| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome | `boxel-delegated-render-control` |
+| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy) | `boxel-fetch-contexts` |
+
+Host-tool imports: the authoritative catalogue is the generated
+`host-tools-import-manifest` skill already in your context — never guess
+an import path; the `imports` validation step fails phantom ones.
 
 ## Required flow (design-first)
 

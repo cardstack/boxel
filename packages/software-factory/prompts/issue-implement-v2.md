@@ -118,3 +118,14 @@ minutes.
   parse/lint/eval/instantiate automatically. Do NOT set the issue status
   yourself. Calling `signal_done` without the design artifacts, the card,
   an instance, and a Spec is a failure.
+
+## After you finish (v3 render gate)
+
+The orchestrator will screenshot the cards you shipped (real host
+renders) and a verifier agent will judge every acceptance criterion
+against the PIXELS — a criterion only passes on a visible, working
+affordance. "The command class exists" fails. So: every capability the
+issue promises must be reachable through something the user can SEE
+(a button, a populated list, a rendered value), and your sample
+instances must make each surface render with real content, never an
+empty state.
