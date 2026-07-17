@@ -70,6 +70,14 @@ file. Load what the current work touches, nothing more.
 - **NO `.test.gts` files.** Tests belong to a separate hardening phase
   invoked later over artifacts that earned them. This loop ships zero
   tests by design; do not "helpfully" add any.
+- **Host command imports are `@cardstack/boxel-host/tools/<name>`** (e.g.
+  `tools/write-binary-file`, `tools/save-card`). There is NO
+  `@cardstack/boxel-host/commands/` path — imports from it fail only at
+  runtime, after every static gate passes.
+- **Drag-and-drop intake must read `dataTransfer.items` as a fallback**
+  when `dataTransfer.files` is empty (Photos.app-style drags deliver file
+  promises), and every drop must paint visible feedback — a silent no-op
+  drop is a defect.
 - **Never write to the source realm**; all artifacts go to the target
   realm via the workspace.
 - **Stay inside the workspace.** Native fs tools are structurally scoped
