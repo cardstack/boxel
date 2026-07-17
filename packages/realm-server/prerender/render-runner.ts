@@ -1,4 +1,5 @@
 import {
+  type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
   type RenderError,
@@ -837,7 +838,14 @@ export class RenderRunner {
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    opts?: {
+      timeoutMs?: number;
+      simulateTimeoutMs?: number;
+      // Test-only: pretend the page's host build doesn't advertise the
+      // `fusedIndexMeta` capability, exercising the per-pass transition
+      // path a page pinned to such a build takes.
+      simulateLegacyHost?: true;
+    };
     signal?: AbortSignal;
     // See the matching param on `prerenderModuleAttempt`.
     onTabAcquired?: (info: { pageId: string }) => void;
@@ -922,9 +930,11 @@ export class RenderRunner {
     // `icon` for a file), recorded onto `response.meta.diagnostics.indexRoutesMs`
     // as each step completes. Decomposes the index visit's per-visit floor
     // into measured route buckets instead of leaving it inferred from
-    // `renderElapsedMs`. Recorded wherever the step runs — on an index visit
-    // that is every leg; a self-sufficient prerender-html visit records only
-    // its `fileExtract` leg.
+    // `renderElapsedMs`. Recorded wherever the step runs — a fused index
+    // pass folds the extract into the `meta` bucket (no `fileExtract` leg;
+    // the extract's share is itemized as `diagnostics.fileExtractMs`); a
+    // self-sufficient prerender-html visit records only its `fileExtract`
+    // leg.
     let recordIndexRouteMs = (
       rendering: 'card' | 'file',
       route: string,
@@ -956,8 +966,12 @@ export class RenderRunner {
       // originating priority instead of silently dropping to 0. Always
       // overwrite (including with undefined) so a tab reused across
       // multiple visits never bleeds a prior visit's values into the
-      // next render.
-      await page.evaluate(
+      // next render. The same round-trip reads back the page's host
+      // capabilities: the page pins whatever host build it loaded, and the
+      // host deploys independently of this server, so render strategies the
+      // host must understand are gated per page on its advertised
+      // `__boxelHostCapabilities`.
+      let hostCapabilities = await page.evaluate(
         (
           sessionAuth: string,
           id: string | undefined,
@@ -969,11 +983,37 @@ export class RenderRunner {
           (
             globalThis as unknown as { __boxelJobPriority?: number }
           ).__boxelJobPriority = jobPriority;
+          return (
+            (
+              globalThis as unknown as {
+                __boxelHostCapabilities?: Record<string, boolean>;
+              }
+            ).__boxelHostCapabilities ?? {}
+          );
         },
         auth,
         jobId,
         priority,
       );
+      // A card-instance index visit fuses the file extract into the
+      // render.meta transition — one transition + settle for both the
+      // instance row and the file row — when the page's host build supports
+      // it. Other visit shapes keep per-pass transitions: the fused (union)
+      // visit runs meta last (after the html renders mark linksTo fields
+      // used), and a prerender-html visit's extract is its own
+      // self-sufficiency step.
+      let fusedIndexPass =
+        visitType === 'index' &&
+        requested.cardRender &&
+        requested.fileExtract &&
+        Boolean(hostCapabilities?.fusedIndexMeta) &&
+        !opts?.simulateLegacyHost;
+      if (fusedIndexPass) {
+        requested.fileExtract = false;
+        log.debug(
+          `visit prerender url=${url} affinity=${affinityKey} fusing fileExtract into render.meta`,
+        );
+      }
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
       await page
@@ -990,16 +1030,20 @@ export class RenderRunner {
       // must not attempt another loader reset, so we strip it after first use.
       let clearCacheConsumed = false;
       let optionsForPass = (
-        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+        pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ) => {
         let optionsForThisPass: RenderRouteOptions = {
           ...baseOptions,
-          // Always set only the flag for the current pass so the host route
+          // Set only the flag(s) for the current pass so the host route
           // picks the right branch in #buildModel regardless of what other
-          // passes are part of this visit.
-          fileExtract: pass === 'fileExtract' ? true : undefined,
+          // passes are part of this visit. The fused index pass carries both
+          // flags — the host serves it from the card branch and folds the
+          // file extract into the render.meta payload.
+          fileExtract:
+            pass === 'fileExtract' || pass === 'fusedIndex' ? true : undefined,
           fileRender: pass === 'fileRender' ? true : undefined,
-          cardRender: pass === 'cardRender' ? true : undefined,
+          cardRender:
+            pass === 'cardRender' || pass === 'fusedIndex' ? true : undefined,
         };
         if (!clearCacheConsumed && baseOptions.clearCache) {
           optionsForThisPass.clearCache = true;
@@ -1018,8 +1062,13 @@ export class RenderRunner {
         return optionsForThisPass;
       };
 
-      // ── fileExtract pass ───────────────────────────────────────────────
-      if (requested.fileExtract) {
+      // Runs a standalone render.file-extract transition and stores its
+      // result on `response.fileExtract`. Serves the fileExtract pass and
+      // the fused-index fallback (a card render error must still yield a
+      // file row). Returns 'short-circuit' when the visit must stop here:
+      // the page was evicted (unusable), or the extract hit an auth wall
+      // every later pass would hit too.
+      let runFileExtractPass = async (): Promise<'ok' | 'short-circuit'> => {
         let extractOptions = optionsForPass('fileExtract');
         let serializedOptions = serializeRenderRouteOptions(extractOptions);
         let captureOptions: CaptureOptions = {
@@ -1069,14 +1118,7 @@ export class RenderRunner {
           if (poolInfo.evicted) {
             response.fileExtract = extractResponse;
             response.pageUnusableError = renderError;
-            return this.#finalizeVisit(
-              response,
-              pageId,
-              renderStart,
-              launchMs,
-              waits,
-              poolInfo,
-            );
+            return 'short-circuit';
           }
           if (this.#isAuthError(renderError)) {
             // Auth failure means the caller isn't allowed — the page itself
@@ -1084,14 +1126,7 @@ export class RenderRunner {
             // subsequent passes (they'd hit the same auth failure) without
             // marking the page unusable.
             response.fileExtract = extractResponse;
-            return this.#finalizeVisit(
-              response,
-              pageId,
-              renderStart,
-              launchMs,
-              waits,
-              poolInfo,
-            );
+            return 'short-circuit';
           }
         } else {
           let fileCapture = capture as FileExtractCapture;
@@ -1150,14 +1185,30 @@ export class RenderRunner {
             };
           }
         }
-        extractResponse.error = this.#mergeConsoleErrors(
+        // The merge always runs so the pass drains the page's console-error
+        // buffer, but only a produced error is assigned: an unconditional
+        // assignment would plant an `error: undefined` own-key, making a
+        // standalone extract deep-unequal to a fused one that carries no
+        // error key at all.
+        let mergedExtractError = this.#mergeConsoleErrors(
           pageId,
           extractResponse.error,
         );
+        if (mergedExtractError) {
+          extractResponse.error = mergedExtractError;
+        }
         response.fileExtract = extractResponse;
         if (poolInfo.evicted) {
           response.pageUnusableError =
             extractResponse.error ?? response.pageUnusableError;
+          return 'short-circuit';
+        }
+        return 'ok';
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        if ((await runFileExtractPass()) === 'short-circuit') {
           return this.#finalizeVisit(
             response,
             pageId,
@@ -1172,7 +1223,9 @@ export class RenderRunner {
       // ── cardRender pass ────────────────────────────────────────────────
       throwIfAborted(signal, 'rendering');
       if (requested.cardRender) {
-        let cardOptions = optionsForPass('cardRender');
+        let cardOptions = optionsForPass(
+          fusedIndexPass ? 'fusedIndex' : 'cardRender',
+        );
         let serializedOptions = serializeRenderRouteOptions(cardOptions);
         let optionsSegment = encodeURIComponent(serializedOptions);
         let nonce = String(++this.#nonce);
@@ -1293,8 +1346,10 @@ export class RenderRunner {
           // pure function of the card's type (`types[0]`, which meta
           // resolves): the job-scoped memo lets the first visit for a type
           // render the icon and every later visit of that type reuse the
-          // captured markup, skipping the icon route.
-          let metaResult = await runTimedStep<PrerenderMeta>(
+          // captured markup, skipping the icon route. On a fused index pass
+          // this one transition also returns the file row's extract inside
+          // the payload.
+          let metaResult = await runTimedStep<FusedIndexMeta>(
             'visit card render.meta',
             async () => {
               await transitionTo(
@@ -1310,7 +1365,14 @@ export class RenderRunner {
             'meta',
           );
           if (metaResult !== undefined) {
-            meta = metaResult;
+            // Split the extract off before `meta` is spread into
+            // `cardResponse` below — the card row's payload must never
+            // carry the file half.
+            let { fileExtract: fusedExtract, ...cardMeta } = metaResult;
+            meta = cardMeta;
+            if (fusedExtract) {
+              response.fileExtract = fusedExtract;
+            }
           } else {
             // The entry step failed, so the page is showing the error
             // route: a subsequent capture would wait on fresh render
@@ -1534,6 +1596,52 @@ export class RenderRunner {
             waits,
             poolInfo,
           );
+        }
+
+        // ── fused-extract fallback ─────────────────────────────────────
+        // A fused index pass carries the file extract inside render.meta,
+        // so a card render error leaves the file half missing. The page is
+        // still operational here — the eviction path returned above, and
+        // eviction is reserved for errors that wedge the Ember run loop
+        // (the window-level trap in the host's render route); a route-level
+        // card error leaves the page fully able to serve transitions. A
+        // broken card must still yield a good file row, so run the
+        // standalone extract transition. On the eviction path no fallback
+        // is possible (nothing can run on an unusable page), so the file
+        // half is absent for that attempt and its row degrades to an error
+        // row until the next index of the file. Auth failure is the other
+        // exception: the extract would hit the same wall, so mirror the
+        // card error onto the file half and end the visit — the same
+        // short-circuit a standalone extract pass takes on auth failure.
+        if (fusedIndexPass && !response.fileExtract) {
+          if (cardError && this.#isAuthError(cardError)) {
+            response.fileExtract = {
+              id: url,
+              nonce,
+              status: 'error',
+              searchDoc: null,
+              deps: cardError.error.deps ?? [],
+              error: cardError,
+            };
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
+          if ((await runFileExtractPass()) === 'short-circuit') {
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
         }
       }
 
