@@ -12,6 +12,7 @@ let noop = () => {};
 
 export default class AiAssistantApplyButtonUsage extends Component {
   @tracked state: ApplyButtonState = 'ready';
+  @tracked isCompact = false;
 
   @action cycleState() {
     switch (this.state) {
@@ -48,7 +49,11 @@ export default class AiAssistantApplyButtonUsage extends Component {
           style='--ai-bot-message-background-color: #3b394b;'
           {{on 'click' this.cycleState}}
         >
-          <ApplyButton @state={{this.state}} {{on 'click' noop}} />
+          <ApplyButton
+            @state={{this.state}}
+            @isCompact={{this.isCompact}}
+            {{on 'click' noop}}
+          />
         </div>
       </:example>
       <:api as |Args|>
@@ -65,6 +70,12 @@ export default class AiAssistantApplyButtonUsage extends Component {
           }}
           @description='Button state'
           @onInput={{fn (mut this.state)}}
+        />
+        <Args.Bool
+          @name='isCompact'
+          @value={{this.isCompact}}
+          @description='Renders the small inline indicator used by compact tool calls'
+          @onInput={{fn (mut this.isCompact)}}
         />
       </:api>
     </FreestyleUsage>
