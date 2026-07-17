@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Demo Poster Board"
+      },
+      "frameSettings": [
+        {
+          "cardIndex": 3,
+          "x": 460,
+          "y": 340
+        },
+        {
+          "cardIndex": 4,
+          "x": 680,
+          "y": 90
+        }
+      ]
+    },
+    "relationships": {
+      "cards.0": {
+        "links": {
+          "self": "../../4b6602-wine-cellar-card-definition/WineBottle/011f0239-9a66-405f-a874-32bb4146ee7b"
+        }
+      },
+      "cards.1": {
+        "links": {
+          "self": "../../d29736-tier-list/TierList/my-language-ranking"
+        }
+      },
+      "cards.2": {
+        "links": {
+          "self": "../../blog-app/games/Wordle/play"
+        }
+      },
+      "cards.3": {
+        "links": {
+          "self": "../../673fb6-blackjack-cardgame-definition/Blackjack/be0fd885-7672-4379-a001-ea8611da2ec2"
+        }
+      },
+      "cards.4": {
+        "links": {
+          "self": "../../4b6602-wine-cellar-card-definition/WineBottle/7bc1c7b6-f051-4a45-aaba-8f41b62eed0d"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../poster-board",
+        "name": "PosterBoard"
+      }
+    }
+  }
+}
