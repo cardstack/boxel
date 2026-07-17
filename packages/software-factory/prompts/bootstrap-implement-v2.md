@@ -5,7 +5,14 @@ create all the project artifacts needed to begin implementation.
 
 ## Brief
 
-**URL:** {{briefUrl}}
+**Source:** {{briefUrl}}
+
+(The source is a Boxel brief card — our authored content — OR, for
+inspired-by ports, the GitHub repository itself standing in lieu of a
+wiki entry. Either way the full brief content is inlined in the issue
+description below; do NOT fetch this URL as a card. Port runs
+additionally carry the port-background and port-code-analysis Knowledge
+Articles via `relatedKnowledge` — those are the authoritative source.)
 
 ## Current Issue
 
