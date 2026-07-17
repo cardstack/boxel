@@ -205,13 +205,15 @@ export default class CardPrerender extends Component {
   );
 
   // Composite visit task — runs the caller-selected subset of
-  // {fileExtract, cardRender, fileRender} on a shared nonce and with a single
-  // clearCache consumption. Mirrors the server-side prerenderVisitAttempt,
-  // including its visitType bifurcation: an 'index' visit of a card instance
-  // runs the fused meta entry (which carries the file extract) plus the
-  // card's and the file's icons — never an html-format render; a non-card
-  // index visit runs the standalone extract; a 'prerender-html' visit runs
-  // only the html formats + markdown. No visitType runs the fused union.
+  // {fileExtract, cardRender, fileRender} in one visit with a single
+  // clearCache consumption; each pass takes its own nonce so the render
+  // route's model cache keys them distinctly. Mirrors the server-side
+  // prerenderVisitAttempt, including its visitType bifurcation: an 'index'
+  // visit of a card instance runs the fused meta entry (which carries the
+  // file extract) plus the card's and the file's icons — never an
+  // html-format render; a non-card index visit runs the standalone extract;
+  // a 'prerender-html' visit runs only the html formats + markdown. No
+  // visitType runs the fused union.
   private prerenderVisitTask = enqueueTask(
     async ({
       url,
