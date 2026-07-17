@@ -10,14 +10,14 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 
-import type { SortOption } from '@cardstack/host/components/card-search/constants';
+import type { SortOption } from '@cardstack/host/components/search/constants';
 
 import {
   buildRecentsQuery,
   buildSearchQuery,
   searchScopeForOptions,
   shouldSkipSearchQuery,
-} from '@cardstack/host/utils/card-search/query-builder';
+} from '@cardstack/host/utils/search/query-builder';
 
 const SORT_AZ: SortOption = {
   displayName: 'A-Z',
@@ -35,7 +35,7 @@ function titleBranches(term: string): Filter[] {
   return [{ contains: { _title: term } }, { contains: { cardTitle: term } }];
 }
 
-module('Unit | card-search/query-builder', function () {
+module('Unit | search/query-builder', function () {
   module('buildSearchQuery', function () {
     test('empty search key with no baseFilter combines not-spec with the card-json dedup', function (assert) {
       let query = buildSearchQuery('', SORT_AZ);

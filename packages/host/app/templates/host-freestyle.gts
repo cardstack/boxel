@@ -26,11 +26,11 @@ import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/mes
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
 import MiniCardChooserUsage from '@cardstack/host/components/card-chooser/mini/usage';
 import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
-import SearchResults from '@cardstack/host/components/card-search/search-results';
 import MiniFileChooserUsage from '@cardstack/host/components/file-chooser/mini/usage';
 import MarkdownEmbedPreviewPaneUsage from '@cardstack/host/components/markdown-embed-chooser/pane-usage';
 import MarkdownEmbedPreviewUsage from '@cardstack/host/components/markdown-embed-chooser/preview/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
+import SearchResults from '@cardstack/host/components/search/search-results';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';

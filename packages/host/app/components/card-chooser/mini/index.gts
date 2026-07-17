@@ -4,11 +4,11 @@ import { tracked } from '@glimmer/tracking';
 
 import type { Filter } from '@cardstack/runtime-common';
 
-import SearchPanel from '@cardstack/host/components/card-search/panel';
+import SearchPanel from '@cardstack/host/components/search/panel';
 import {
   removeCardJsonExtension,
   type NewCardArgs,
-} from '@cardstack/host/utils/card-search/types';
+} from '@cardstack/host/utils/search/types';
 
 interface Signature {
   Element: HTMLDivElement;

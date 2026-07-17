@@ -61,7 +61,7 @@ import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import consumeContext from '../../helpers/consume-context';
 
-import { removeCardJsonExtension } from '../../utils/card-search/types';
+import { removeCardJsonExtension } from '../../utils/search/types';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';

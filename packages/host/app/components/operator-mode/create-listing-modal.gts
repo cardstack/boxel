@@ -27,16 +27,16 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-import SearchResults from '@cardstack/host/components/card-search/search-results';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
+import SearchResults from '@cardstack/host/components/search/search-results';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
-import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
+import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 
 interface Signature {
   Args: {};
