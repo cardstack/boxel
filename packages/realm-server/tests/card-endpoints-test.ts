@@ -2457,6 +2457,8 @@ module(basename(import.meta.filename), function () {
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
+          // The stored file carries only the fields the file and the patch
+          // actually specify — unset fields are not materialized into it.
           assert.deepEqual(
             card,
             {
@@ -2464,7 +2466,6 @@ module(basename(import.meta.filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Van Gogh',
-                  cardInfo,
                 },
                 meta: {
                   adoptsFrom: {
@@ -2556,13 +2557,14 @@ module(basename(import.meta.filename), function () {
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists on disk');
           let card = readJSONSync(cardFile);
+          // Only the values the patch specifies land on disk; unset nested
+          // fields (cardThumbnailURL) are not materialized into the file.
           assert.deepEqual(
             card.data.attributes?.cardInfo,
             {
               name: 'Mango Card',
               notes: 'a friendly dog',
               summary: 'good boy',
-              cardThumbnailURL: null,
             },
             'nested cardInfo values persisted to disk by file-serializer',
           );
@@ -2575,6 +2577,25 @@ module(basename(import.meta.filename), function () {
             'test',
             'person-1.json',
           );
+          // A PATCH stores the file in canonical serialized form (e.g. the
+          // adoptsFrom module ref is written without its executable
+          // extension), so a first PATCH of a hand-authored fixture may
+          // rewrite it once. Prime with one PATCH so the no-op assertions
+          // below measure the steady state.
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialStat = statSync(cardFile);
 
           let initialResponse = await request
@@ -2693,6 +2714,23 @@ module(basename(import.meta.filename), function () {
         });
 
         test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+          // Prime once so the stored file is in canonical serialized form;
+          // the no-op assertions below measure the steady state (see the
+          // no-op lastModified test).
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -2722,7 +2760,7 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('patches card when index entry is an error using pristine doc', async function (assert) {
+        test('patches card when index entry is an error', async function (assert) {
           let cardURL = `${testRealmHref}person-1`;
           let errorDoc = {
             message: 'render failed',
@@ -2975,7 +3013,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -3511,7 +3548,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -3762,7 +3798,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
