@@ -33,6 +33,7 @@ import {
 import { ContextBuilder } from './factory-context-builder.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
+import { RunLogWriter } from './run-log.ts';
 import {
   buildFactoryTools,
   type FactoryTool,
@@ -110,6 +111,8 @@ export interface IssueLoopWiringConfig {
    * Also turns boxel-ui discovery on unless explicitly disabled upstream.
    */
   v2?: boolean;
+  /** Brief title — names the live-blog RunLog card (v2). */
+  runTitle?: string;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -278,6 +281,20 @@ export async function runFactoryIssueLoop(
   // 6. Run issue loop
   log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
+  let runLog: RunLogWriter | undefined;
+  if (config.v2 === true) {
+    let runSlug = (config.briefUrl.split('/').pop() ?? 'factory-run')
+      .replace(/\.json$/i, '')
+      .toLowerCase();
+    runLog = new RunLogWriter({
+      workspaceDir,
+      targetRealm,
+      runSlug,
+      runTitle: config.runTitle ?? runSlug,
+      syncWorkspace,
+    });
+  }
+
   let issueLoopConfig: IssueLoopConfig = {
     agent,
     contextBuilder,
@@ -289,6 +306,7 @@ export async function runFactoryIssueLoop(
     workspaceDir,
     syncWorkspace,
     briefUrl: config.briefUrl,
+    runLog,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,

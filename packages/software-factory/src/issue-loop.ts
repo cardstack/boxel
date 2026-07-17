@@ -26,6 +26,11 @@ import type { IssueStore } from './issue-scheduler.ts';
 
 import { IssueScheduler } from './issue-scheduler.ts';
 import { logger } from './logger.ts';
+import {
+  type RunLogWriter,
+  designEntriesFromToolCalls,
+  cardPathsFromToolCalls,
+} from './run-log.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
 
 let log = logger('issue-loop');
@@ -130,6 +135,8 @@ export interface IssueLoopConfig {
    */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   briefUrl?: string;
+  /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
+  runLog?: RunLogWriter;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
@@ -219,6 +226,14 @@ function issueSummaryLabel(issue: SchedulableIssue): string {
   return summary ? `"${issue.id}" — "${summary}"` : `"${issue.id}"`;
 }
 
+/** Human-facing issue title for the run log (no quoting/id noise). */
+function issueDisplayTitle(issue: SchedulableIssue): string {
+  let summary = issue.summary ?? (issue as Record<string, unknown>).title;
+  return typeof summary === 'string' && summary.trim() !== ''
+    ? summary
+    : issue.id;
+}
+
 function formatValidation(results: ValidationResults): string {
   if (results.passed) {
     let stepCount = results.steps.length;
@@ -274,6 +289,7 @@ export async function runIssueLoop(
     darkfactoryModuleUrl,
     syncWorkspace,
     briefUrl,
+    runLog,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
     debug = false,
@@ -329,6 +345,10 @@ export async function runIssueLoop(
   // Outer loop: iterate over unblocked issues
   // -------------------------------------------------------------------------
 
+  if (runLog) {
+    await runLog.start();
+  }
+
   while (
     scheduler.hasUnblockedIssues(exhaustedIssues) &&
     outerCycles < maxOuterCycles
@@ -341,6 +361,14 @@ export async function runIssueLoop(
     if (!issue) {
       log.info('No unblocked issues remain — exiting outer loop');
       break;
+    }
+
+    if (runLog) {
+      let issueTitle = issueDisplayTitle(issue);
+      await runLog.append(
+        [{ kind: 'issue-picked', headline: `Started: ${issueTitle}` }],
+        { nowWorkingOn: issueTitle },
+      );
     }
 
     // Reset per-issue timing accumulators; `cycleStartMs` anchors this
@@ -447,6 +475,16 @@ export async function runIssueLoop(
         `  Agent returned ${result.toolCalls.length} tool call(s)${debug ? ` in ${fmtSecs(agentMs)}` : ''}`,
       );
 
+      if (runLog) {
+        let designEntries = designEntriesFromToolCalls(
+          result.toolCalls,
+          targetRealm,
+        );
+        if (designEntries.length > 0) {
+          await runLog.append(designEntries);
+        }
+      }
+
       // The agent itself reports "I cannot proceed" via two paths:
       // calling `request_clarification` (clarification.message), or
       // an unrecoverable backend error (e.g. session.error from
@@ -520,6 +558,18 @@ export async function runIssueLoop(
           syncFailed ? ' (sync failed — ignoring validation pass/fail)' : ''
         }`,
       );
+
+      if (runLog && validationResults) {
+        await runLog.append([
+          {
+            kind: 'validation',
+            headline: validationResults.passed
+              ? 'Validation passed'
+              : 'Validation failed — revising',
+            body: formatValidation(validationResults),
+          },
+        ]);
+      }
 
       // The loop owns issue status transitions. The agent signals
       // completion via signal_done; the loop promotes to "done" only
@@ -656,6 +706,23 @@ export async function runIssueLoop(
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
     );
+
+    if (runLog && exitReason === 'done') {
+      let cardEntries = cardPathsFromToolCalls(allToolCalls).map(
+        (cardPath) => ({
+          kind: 'card-ready' as const,
+          headline: `Card ready: ${cardPath}`,
+          cardPath,
+        }),
+      );
+      await runLog.append([
+        ...cardEntries,
+        {
+          kind: 'issue-done',
+          headline: `Done: ${issueDisplayTitle(issue)}`,
+        },
+      ]);
+    }
     if (debug) {
       log.info(
         `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
@@ -719,6 +786,10 @@ export async function runIssueLoop(
   }
 
   log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
+
+  if (runLog) {
+    await runLog.finish(outcome === 'all_issues_done' ? 'completed' : 'stopped');
+  }
 
   // Mark the project as completed only when ALL issues in the realm are done
   // (not just the ones we processed). This prevents marking complete when

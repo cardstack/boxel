@@ -52,7 +52,10 @@ file. Load what the current work touches, nothing more.
    `run_evaluate()`, `run_instantiate()`. Fix what they report. These
    return in-memory results; each one syncs your workspace to the realm
    first. Zero-coverage passes come back as errors — never treat them
-   as green.
+   as green. **Never curl/HTTP-poll the realm for files you just wrote**
+   — your writes only reach the realm when a `run_*` tool syncs them;
+   a 404 from curl before that means nothing. Verify through the
+   `run_*` tools.
 5. **Done**: `signal_done()`. If validation feedback comes back, fix and
    signal again. If truly blocked, `request_clarification({ message })`.
 

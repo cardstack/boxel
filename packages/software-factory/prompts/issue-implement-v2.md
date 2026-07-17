@@ -67,11 +67,13 @@ not by ceremony. Work design-first, in this order:
 
 ## 2. DESIGN — HTML mockup before any schema
 
-- Write `design/<card-slug>.html`: a plain HTML+CSS mockup of the card with
-  **hard-coded, realistic sample copy** (real names, real numbers — never
-  lorem ipsum). Show every surface that matters on one page: the isolated
-  view (mobile width), the fitted tiles (badge / strip / card), and an
-  embedded list row.
+- Write `design/<card-slug>.html`: **ONE page** — a plain HTML+CSS mockup of
+  the card with **hard-coded, realistic sample copy** (real names, real
+  numbers — never lorem ipsum). Put every surface on that one page, labeled:
+  the isolated view (mobile width; add a wide variant section if the card
+  prefers wide format), the fitted tiles (badge / strip / card), and an
+  embedded list row. One file, one screenshot, one crit pass covers
+  everything — do NOT write a separate HTML file per surface.
 - Call `screenshot_html({ path: "design/<card-slug>.html" })`, then `Read`
   the returned PNG and **critique it**: name concrete defects (hierarchy,
   wrapping, spacing, color, copy) against the design language in the
