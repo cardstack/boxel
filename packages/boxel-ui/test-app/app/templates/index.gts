@@ -1,4 +1,5 @@
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -21,6 +22,8 @@ import IconsGrid from '../components/icons-grid';
 
 import {
   CardContainer,
+  BoxelButton,
+  BoxelInput,
   BoxelSelect,
   CopyButton,
   FieldContainer,
@@ -29,6 +32,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import formatComponentName from '../helpers/format-component-name';
+import { loadThemeFonts } from '../utils/theme-fonts';
 
 interface UsageComponent {
   title: string;
@@ -72,6 +76,14 @@ const EXPORT_NAME_OVERRIDES: Record<string, string> = {
 
 // Must match the mobile breakpoint used by the media queries below.
 const SMALL_SCREEN = '(max-width: 599px)';
+
+// Theme exports (e.g. from tweakcn) also carry @theme blocks, resets, etc.;
+// only the :root and .dark variable blocks belong in a theme's cssVariables.
+function extractThemeBlocks(css: string): string {
+  return [...css.matchAll(/(?::root|\.dark)\s*\{[^{}]*\}/g)]
+    .map((m) => m[0])
+    .join('\n\n');
+}
 
 function importStatementFor(title: string): string {
   let exportName = EXPORT_NAME_OVERRIDES[title] ?? title;
@@ -144,6 +156,50 @@ class IndexComponent extends Component {
                 @onChange={{this.toggleMode}}
               />
             </FieldContainer>
+            <BoxelButton
+              @kind='secondary'
+              @size='extra-small'
+              {{on 'click' this.toggleImportTheme}}
+            >
+              Import Theme
+            </BoxelButton>
+            {{#if this.isImportingTheme}}
+              <div class='theme-import-panel'>
+                <FieldContainer @label='Name' @tag='label'>
+                  <BoxelInput
+                    placeholder='My Theme'
+                    @value={{this.importThemeName}}
+                    @onInput={{this.updateImportThemeName}}
+                  />
+                </FieldContainer>
+                <FieldContainer @label='Theme CSS' @tag='label'>
+                  <BoxelInput
+                    class='theme-import-css'
+                    @type='textarea'
+                    placeholder=':root { --background: #f8f7fa; … }'
+                    @value={{this.importThemeCss}}
+                    @onInput={{this.updateImportThemeCss}}
+                  />
+                </FieldContainer>
+                <div class='theme-import-actions'>
+                  <BoxelButton
+                    @kind='secondary'
+                    @size='extra-small'
+                    {{on 'click' this.toggleImportTheme}}
+                  >
+                    Cancel
+                  </BoxelButton>
+                  <BoxelButton
+                    @kind='primary'
+                    @size='extra-small'
+                    @disabled={{this.isImportedThemeCssEmpty}}
+                    {{on 'click' this.importTheme}}
+                  >
+                    Apply
+                  </BoxelButton>
+                </div>
+              </div>
+            {{/if}}
           </BoxelContainer>
           <FreestyleSection @name='Icons' class='freestyle-components-section'>
             <IconsGrid />
@@ -214,6 +270,25 @@ class IndexComponent extends Component {
       .boxel-freestyle-theme-settings {
         --boxel-container-gap: var(--boxel-sp-2xs) var(--boxel-sp);
         --boxel-container-padding: var(--boxel-sp-xs) var(--boxel-sp);
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .theme-import-panel {
+        flex-basis: 100%;
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-xs);
+        border-top: 1px solid var(--border);
+      }
+      .theme-import-css {
+        min-height: 8rem;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .theme-import-actions {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        justify-content: flex-end;
       }
       .boxel-freestyle-theme-selector {
         min-width: 12.5rem;
@@ -483,7 +558,8 @@ class IndexComponent extends Component {
   </template>
 
   private intervalId?: NodeJS.Timeout;
-  private themes: Theme[] = [{ name: '<None>' }, ...Themes];
+  // Tracked so imported themes show up in the selector.
+  @tracked private themes: Theme[] = [{ name: '<None>' }, ...Themes];
   private usageComponents = ALL_USAGE_COMPONENTS.map(([name, c]) => {
     return {
       title: name,
@@ -498,6 +574,17 @@ class IndexComponent extends Component {
   @tracked private theme?: Theme;
   @tracked private mode: 'light' | 'dark' = 'light';
   @tracked private isCycleThemesEnabled = false;
+  @tracked private isImportingTheme = false;
+  @tracked private importThemeName = '';
+  @tracked private importThemeCss = '';
+
+  private get importedThemeBlocks() {
+    return extractThemeBlocks(this.importThemeCss);
+  }
+
+  private get isImportedThemeCssEmpty() {
+    return this.importedThemeBlocks.length === 0;
+  }
 
   private get isDarkMode() {
     return this.mode === 'dark';
@@ -576,6 +663,38 @@ class IndexComponent extends Component {
         ?.setAttribute('aria-expanded', String(this.emberFreestyle.showMenu));
     });
   };
+
+  @action private toggleImportTheme() {
+    this.isImportingTheme = !this.isImportingTheme;
+  }
+
+  @action private updateImportThemeName(value: string) {
+    this.importThemeName = value;
+  }
+
+  @action private updateImportThemeCss(value: string) {
+    this.importThemeCss = value;
+  }
+
+  @action private importTheme() {
+    let cssVariables = this.importedThemeBlocks;
+    if (!cssVariables) {
+      return;
+    }
+    let base = this.importThemeName.trim() || 'Imported Theme';
+    let name = base;
+    for (let i = 2; this.themes.some((t) => t.name === name); i++) {
+      name = `${base} (${i})`;
+    }
+    let theme: Theme = { name, cssVariables };
+    // The static font link in index.html only covers the built-in themes.
+    loadThemeFonts(cssVariables);
+    this.themes = [...this.themes, theme];
+    this.isImportingTheme = false;
+    this.importThemeName = '';
+    this.importThemeCss = '';
+    this.selectTheme(theme);
+  }
 
   @action private selectTheme(theme?: Theme) {
     this.theme = theme;
