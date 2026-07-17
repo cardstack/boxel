@@ -62,6 +62,14 @@ export interface RunLogEntryInput {
    * e.g. `JaraokePlayer/thursday-night-jaraoke`) — embeds the live card.
    */
   cardPath?: string;
+  /**
+   * Which realm `cardPath` is relative to under the v3 control/product
+   * split: 'product' (default — built cards in the target realm) or
+   * 'control' (issues, validation artifacts). Links are written as
+   * absolute URLs so they resolve regardless of which realm hosts the
+   * run log. Without a split the two realms coincide.
+   */
+  cardRealm?: 'product' | 'control';
   /** Who is speaking: orchestrator | executor | validator | an agent name. */
   who?: string;
 }
@@ -69,6 +77,14 @@ export interface RunLogEntryInput {
 export interface RunLogWriterOptions {
   workspaceDir: string;
   targetRealm: string;
+  /**
+   * Control realm hosting the run log under the v3 split. Defaults to
+   * `targetRealm` (no split). Entry links resolve absolute: cardPath
+   * against `targetRealm` (or `controlRealm` when the entry says
+   * `cardRealm: 'control'`), imageCardPath against `targetRealm` (design
+   * PNGs ride the product sync — raw writes are text-only).
+   */
+  controlRealm?: string;
   runSlug: string;
   runTitle: string;
   /** Push the workspace to the realm (the loop's shared sync gate). */
@@ -204,14 +220,24 @@ export class RunLogWriter {
             // pass their own voice ('executor', an agent name, …).
             who: entry.who ?? 'orchestrator',
           });
+          // Links are absolute: under the v3 split the run log lives in
+          // the control realm while ship-moment cards live in the product
+          // realm, so `../` relativity would dangle. Absolute same-realm
+          // links are equally valid without a split.
           if (entry.cardPath) {
+            let base =
+              entry.cardRealm === 'control'
+                ? (this.opts.controlRealm ?? this.opts.targetRealm)
+                : this.opts.targetRealm;
             rels[`entries.${index}.card`] = {
-              links: { self: `../${entry.cardPath}` },
+              links: { self: new URL(entry.cardPath, base).href },
             };
           }
           if (entry.imageCardPath) {
             rels[`entries.${index}.image`] = {
-              links: { self: `../${entry.imageCardPath}` },
+              links: {
+                self: new URL(entry.imageCardPath, this.opts.targetRealm).href,
+              },
             };
           }
         }

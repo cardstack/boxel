@@ -3,6 +3,10 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import {
+  ControlPlaneSync,
+  ensureControlPlaneIgnoreFile,
+} from './control-plane-sync.ts';
+import {
   linkBoardToRealmIndex,
   writeRealmDashboardCard,
   type LinkBoardToRealmIndexOptions,
@@ -51,6 +55,13 @@ const BOOTSTRAP_LINK_SEARCH_RETRIES = 5;
 export interface FactoryEntrypointOptions {
   briefUrl: string;
   targetRealm: string | null;
+  /**
+   * Control realm (v3 split): issues, tracker cards, validations, and the
+   * run log live here; the target realm keeps only the built product.
+   * Created if missing, like the target realm. Null = no split (v2
+   * behavior — everything in the target realm).
+   */
+  controlRealm?: string | null;
   realmServerUrl: string | null;
   agent: FactoryAgentProvider;
   /** Only set when agent === 'openrouter' and the flag carried a `=<id>` suffix. */
@@ -222,6 +233,13 @@ export function getFactoryEntrypointUsage(): string {
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
+    '  --control-realm <realm>     Control realm for the v3 control/product split. Issues,',
+    '                              tracker cards, validation artifacts, and the run log live',
+    '                              here (raw-written, immune to the atomic FieldDef strip);',
+    '                              the target realm keeps only the built product — so product',
+    '                              .gts updates never invalidate the run log the operator is',
+    '                              watching, and control churn never re-runs product queries.',
+    '                              Created if missing. Omit for v2 single-realm behavior.',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
     '                              "codex" (not yet implemented),',
@@ -272,6 +290,9 @@ export function parseFactoryEntrypointArgs(
           type: 'string',
         },
         'target-realm': {
+          type: 'string',
+        },
+        'control-realm': {
           type: 'string',
         },
         'realm-server-url': {
@@ -365,6 +386,10 @@ export function parseFactoryEntrypointArgs(
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealm: normalizeUrl(targetRealm, '--target-realm'),
+    controlRealm:
+      typeof parsed.values['control-realm'] === 'string'
+        ? normalizeUrl(parsed.values['control-realm'], '--control-realm')
+        : null,
     realmServerUrl,
     agent: parsedAgent.provider,
     openRouterModel: parsedAgent.openRouterModel,
@@ -525,6 +550,25 @@ export async function runFactoryEntrypoint(
     dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
   )(targetRealmResolution);
 
+  // v3 control/product split: resolve + bootstrap the control realm the
+  // same way as the target (created if missing). A control realm equal to
+  // the target degenerates to the single-realm v2 flow.
+  let controlRealmUrl: string | undefined;
+  if (options.controlRealm) {
+    let controlResolution = (
+      dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
+    )({
+      targetRealm: options.controlRealm,
+      realmServerUrl: options.realmServerUrl,
+    });
+    let controlRealm = await (
+      dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
+    )(controlResolution);
+    if (controlRealm.url !== targetRealm.url) {
+      controlRealmUrl = controlRealm.url;
+    }
+  }
+
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
 
   // Establish the local workspace for target-realm I/O. Every factory
@@ -548,6 +592,21 @@ export async function runFactoryEntrypoint(
 
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
+
+  // Under the split: exclude control-plane paths from the product atomic
+  // sync (BEFORE the first sync below), then pull the control realm's
+  // control-plane files into the shared workspace so resume runs see
+  // prior issues/run logs.
+  let controlSync: ControlPlaneSync | undefined;
+  if (controlRealmUrl) {
+    await ensureControlPlaneIgnoreFile(workspaceDir);
+    controlSync = new ControlPlaneSync({
+      client,
+      controlRealm: controlRealmUrl,
+      workspaceDir,
+    });
+    await controlSync.pull();
+  }
 
   // For a realm the factory just created, replace the default CardsGrid
   // index page with a RealmDashboard instance so the realm opens to the
@@ -574,6 +633,19 @@ export async function runFactoryEntrypoint(
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
 
+  // Under the split the seed issue is a control-plane file — excluded from
+  // the product sync above — so push it to the control realm now. Raw
+  // writes don't wait for indexing; the loop wiring bounded-polls
+  // listIssues before starting.
+  if (controlSync) {
+    let controlPush = await controlSync.sync();
+    if (!controlPush.ok) {
+      throw new Error(
+        `Initial control-plane sync failed — the seed issue may not have reached the control realm: ${controlPush.error ?? 'unknown error'}`,
+      );
+    }
+  }
+
   // Wire the artifacts the bootstrap issue creates into the realm. The
   // bootstrap agent makes an IssueTracker board and a Project; the index card
   // and seed issue were both written before those existed, so they start with
@@ -592,9 +664,12 @@ export async function runFactoryEntrypoint(
     // result: the hook is the only wiring a run that stalls or is interrupted
     // before the backstop ever gets, so it can't afford to lose that race.
     let searchRetries = waitForIndex ? BOOTSTRAP_LINK_SEARCH_RETRIES : 0;
+    // Under the split the bootstrap agent's IssueTracker/Project land in
+    // the CONTROL realm: search there, and write the index card's board
+    // link as an absolute URL (index.json lives in the product realm).
     let linkArgs = {
       client,
-      realmUrl: targetRealm.url,
+      realmUrl: controlRealmUrl ?? targetRealm.url,
       workspaceDir,
       darkfactoryModuleUrl,
       searchRetries,
@@ -604,11 +679,15 @@ export async function runFactoryEntrypoint(
     // neither card yet, each search otherwise burns its full retry budget in
     // turn; overlapping them halves the worst-case wait.
     let [boardLinked, projectLinked] = await Promise.all([
-      linkBoard(linkArgs),
+      linkBoard({ ...linkArgs, absoluteLink: controlRealmUrl !== undefined }),
       linkSeedProject(linkArgs),
     ]);
     if (boardLinked || projectLinked) {
       await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
+      // The seed issue's project link is a control-plane change.
+      if (controlSync) {
+        await controlSync.sync();
+      }
     }
   };
 
@@ -624,6 +703,8 @@ export async function runFactoryEntrypoint(
   let loopResult = await loopFn({
     briefUrl: options.briefUrl,
     targetRealm: targetRealm.url,
+    controlRealm: controlRealmUrl,
+    controlSync,
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,

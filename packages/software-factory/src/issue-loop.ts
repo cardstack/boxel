@@ -115,6 +115,13 @@ export interface IssueLoopConfig {
   createValidator: (issueId: string) => Validator;
   targetRealm: string;
   /**
+   * Control realm hosting issues / run log / validations under the v3
+   * split. Defaults to `targetRealm` (no split). Only used for run-log
+   * link targeting — the issue store and sync plumbing are wired to the
+   * right realms upstream.
+   */
+  controlRealm?: string;
+  /**
    * Module URL for the tracker schema (Project / Issue / KnowledgeArticle).
    * Surfaced in the system prompt so the agent can hand-write the correct
    * `meta.adoptsFrom.module` when constructing tracker JSON via native `Write`.
@@ -368,6 +375,8 @@ export async function runIssueLoop(
     onBootstrapComplete,
   } = config;
 
+  let controlRealm = config.controlRealm ?? targetRealm;
+
   let scheduler = new IssueScheduler(issueStore);
   await scheduler.loadIssues();
 
@@ -499,7 +508,8 @@ export async function runIssueLoop(
               issue.status !== 'in_progress'
                 ? 'Issue status: backlog → in progress'
                 : undefined,
-            cardPath: issueCardPath(issue, targetRealm),
+            cardPath: issueCardPath(issue, controlRealm),
+            cardRealm: 'control' as const,
           },
         ],
         { nowWorkingOn: issueTitle },
@@ -824,7 +834,8 @@ export async function runIssueLoop(
               kind: 'blocked',
               headline: `Blocked: ${issueDisplayTitle(issue)}`,
               body: blockMessage,
-              cardPath: issueCardPath(issue, targetRealm),
+              cardPath: issueCardPath(issue, controlRealm),
+              cardRealm: 'control' as const,
             },
           ]);
         }
@@ -910,7 +921,10 @@ export async function runIssueLoop(
               : 'Validation failed — revising',
             body: formatValidation(validationResults),
             ...(focusStep
-              ? { cardPath: `Validations/${stepFile}_${issue.id}-${iteration}` }
+              ? {
+                  cardPath: `Validations/${stepFile}_${issue.id}-${iteration}`,
+                  cardRealm: 'control' as const,
+                }
               : {}),
           },
         ]);
@@ -934,7 +948,8 @@ export async function runIssueLoop(
               {
                 kind: 'status',
                 headline: `Issue status: in progress → done`,
-                cardPath: issueCardPath(issue, targetRealm),
+                cardPath: issueCardPath(issue, controlRealm),
+                cardRealm: 'control' as const,
               },
             ]);
           }
@@ -1043,7 +1058,8 @@ export async function runIssueLoop(
                 kind: 'blocked',
                 headline: `Issue status: in progress → blocked (max iterations)`,
                 body: `Validation still failing after ${maxIterationsPerIssue} iterations — orchestrator comment added to the issue with the failure context.`,
-                cardPath: issueCardPath(issue, targetRealm),
+                cardPath: issueCardPath(issue, controlRealm),
+                cardRealm: 'control' as const,
               },
             ]);
           }

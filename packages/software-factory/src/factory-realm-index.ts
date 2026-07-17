@@ -129,6 +129,13 @@ export interface LinkBoardToRealmIndexOptions {
   searchRetries?: number;
   /** Delay between empty-result retries. Defaults to `SEARCH_RETRY_DELAY_MS`. */
   searchRetryDelayMs?: number;
+  /**
+   * Write the board link as an absolute card URL instead of a
+   * realm-relative `./path`. Required under the v3 control/product split:
+   * the index card lives in the product realm while the IssueTracker
+   * board lives in the control realm, so a relative link would dangle.
+   */
+  absoluteLink?: boolean;
 }
 
 /**
@@ -167,7 +174,10 @@ export async function linkBoardToRealmIndex(
         // board and the seed issue's project stay on the same generation.
         sort: [{ by: 'lastModified', direction: 'desc' as const }],
       }),
-    buildLink: (id, realm) => `./${toRealmRelativePath(id, realm)}`,
+    buildLink: (id, realm) =>
+      options.absoluteLink === true
+        ? id
+        : `./${toRealmRelativePath(id, realm)}`,
     log,
     searchRetries: options.searchRetries,
     searchRetryDelayMs: options.searchRetryDelayMs,

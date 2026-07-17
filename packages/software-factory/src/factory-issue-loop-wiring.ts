@@ -33,6 +33,11 @@ import {
 import { ContextBuilder } from './factory-context-builder.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
+import {
+  ControlPlaneSync,
+  ensureControlPlaneIgnoreFile,
+} from './control-plane-sync.ts';
+import { retryWithPoll } from './retry-with-poll.ts';
 import { RunLogWriter } from './run-log.ts';
 import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
 import {
@@ -149,6 +154,22 @@ export interface IssueLoopWiringConfig {
    */
   monitorLevel?: MonitorLevel;
   /**
+   * Control realm (v3 split): issues, tracker cards, validation artifacts,
+   * and the run log live here; the product (`targetRealm`) keeps only the
+   * built defs + instances. When set (and different from the target
+   * realm), control-plane paths are excluded from the product atomic sync
+   * via `.boxelignore` and raw-written to this realm instead — which also
+   * makes the entire control plane immune to the /_atomic FieldDef strip.
+   * Unset = v2 behavior (everything in the target realm).
+   */
+  controlRealm?: string;
+  /**
+   * Share the entrypoint's ControlPlaneSync (with its pushed-hash state)
+   * instead of constructing a fresh one — avoids re-pushing every control
+   * file at loop start. Only meaningful when `controlRealm` is set.
+   */
+  controlSync?: ControlPlaneSync;
+  /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
    * IssueTracker exists, instead of waiting for the entire loop to return.
@@ -169,14 +190,42 @@ export async function runFactoryIssueLoop(
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
-  // 1. Issue store
+  // v3 control/product split: when a distinct control realm is configured,
+  // issues / tracker / validations / run log live there and are raw-written
+  // (never atomic-synced); the target realm keeps only the product.
+  let controlRealm = config.controlRealm
+    ? ensureTrailingSlash(config.controlRealm)
+    : targetRealm;
+  let split = controlRealm !== targetRealm;
+  let controlSync: ControlPlaneSync | undefined;
+  if (split) {
+    await ensureControlPlaneIgnoreFile(workspaceDir);
+    controlSync =
+      config.controlSync ??
+      new ControlPlaneSync({ client, controlRealm, workspaceDir });
+    log.info(`Control/product split active: control realm=${controlRealm}`);
+  }
+
+  // 1. Issue store — reads/writes the control realm under the split.
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealm,
+    realmUrl: controlRealm,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
   });
+
+  // Under the split the seed issue reaches the control realm via raw
+  // writes, which don't wait for indexing — bounded-poll so the loop's
+  // first listIssues doesn't race the indexer and exit "all done, 0
+  // issues". (The non-split path pushes with waitForIndex instead.)
+  if (split) {
+    await retryWithPoll(
+      () => issueStore.listIssues(),
+      (issues) => issues.length === 0,
+      { totalWaitMs: 20_000, pollMs: 1_000 },
+    );
+  }
 
   // 1b. Retry blocked issues (default on, opt out with --no-retry-blocked)
   if (config.retryBlocked) {
@@ -186,7 +235,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealm,
+    realmUrl: controlRealm,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
@@ -255,7 +304,25 @@ export async function runFactoryIssueLoop(
   let syncWorkspace = async () => {
     let start = Date.now();
     try {
+      // Product sync (atomic; control paths excluded via .boxelignore under
+      // the split), then the control-plane raw-write sync. Both must land
+      // for the composite to report ok — the loop refuses to mark issues
+      // done on a failed sync, and that guarantee has to cover both realms.
       let result = await syncGate.sync();
+      if (controlSync) {
+        let controlResult = await controlSync.sync();
+        if (!controlResult.ok) {
+          result = {
+            ok: false,
+            error: [
+              result.ok ? undefined : result.error,
+              `control-plane sync: ${controlResult.error ?? 'unknown error'}`,
+            ]
+              .filter(Boolean)
+              .join('; '),
+          };
+        }
+      }
       if (!result.ok) {
         monitor?.noteWatchdog(
           'sync-failed',
@@ -266,7 +333,10 @@ export async function runFactoryIssueLoop(
           },
         );
       }
-      if (result.ok && postSyncHeal) {
+      // Heal is only needed when the run log rides the atomic sync path
+      // (no split). Under the split the run log is raw-written to the
+      // control realm and never exposed to the FieldDef strip.
+      if (result.ok && postSyncHeal && !split) {
         try {
           await postSyncHeal();
           monitor?.noteWatchdog(
@@ -356,11 +426,14 @@ export async function runFactoryIssueLoop(
     runLog = new RunLogWriter({
       workspaceDir,
       targetRealm,
+      controlRealm,
       runSlug,
       runTitle: config.runTitle ?? runSlug,
       syncWorkspace,
+      // Streamed appends raw-write straight to the realm that hosts the
+      // run log — the control realm under the split.
       rawWriteFile: (relativePath, content) =>
-        client.write(targetRealm, relativePath, content),
+        client.write(controlRealm, relativePath, content),
     });
     let createdRunLog = runLog;
     postSyncHeal = () => createdRunLog.healInstance();
@@ -377,6 +450,7 @@ export async function runFactoryIssueLoop(
     issueStore,
     createValidator,
     targetRealm,
+    controlRealm,
     darkfactoryModuleUrl,
     workspaceDir,
     syncWorkspace,
