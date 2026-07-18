@@ -1,4 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+  readFileSync,
+  utimesSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -47,6 +54,27 @@ module('validation-run-cache', function (hooks) {
       touch(workspaceDir, 'card.gts', 'export class Card { changed = true }');
       let c = await computeWorkspaceFingerprint(workspaceDir);
       assert.notStrictEqual(a, c, 'edited file → different fingerprint');
+    });
+
+    test('is stable when a pull rewrites identical content with a fresh mtime', async function (assert) {
+      let a = await computeWorkspaceFingerprint(workspaceDir);
+      // Simulate a bidirectional sync's pull: same bytes, new mtime/ctime.
+      let target = join(workspaceDir, 'card.gts');
+      let bytes = readFileSync(target);
+      let future = new Date(Date.now() + 60_000);
+      writeFileSync(target, bytes);
+      utimesSync(target, future, future);
+      let b = await computeWorkspaceFingerprint(workspaceDir);
+      assert.strictEqual(
+        a,
+        b,
+        'identical content rewritten with a new mtime → same fingerprint',
+      );
+
+      // A real content edit at the same size still changes the fingerprint.
+      writeFileSync(target, Buffer.alloc(bytes.length, 0x59));
+      let c = await computeWorkspaceFingerprint(workspaceDir);
+      assert.notStrictEqual(a, c, 'same-size content edit → different fingerprint');
     });
 
     test('ignores sync bookkeeping (.boxel-history, .boxel-sync.json)', async function (assert) {

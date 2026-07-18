@@ -581,10 +581,12 @@ export function buildModelPolicy(options: {
       ...(fixModel ? { model: fixModel } : {}),
       effort: normalizeEffort(options.fixEffort, 'medium'),
     },
-    // Acceptance walkthrough (v3): a fresh, unforked verifier context —
-    // no cache-family concern — so the cheap image-capable model is the
-    // default outright.
-    acceptance: { model: 'claude-sonnet-5', effort: 'medium' },
+    // Review turn (PM gate): deliberately NOT budgeted — it inherits the
+    // session flagship. The reviewer makes taste + product judgments
+    // (ship / bounce / reprioritize the backlog) that the cheap tier
+    // shipped false verdicts on; a fresh unforked context has no
+    // cache-family concern either way. (Operator directive 2026-07-17:
+    // review is the powerful model's job.)
   };
 
   // Phase-split build turns: LARGE output (the .gts emissions) — the one
@@ -708,10 +710,16 @@ export async function runFactoryEntrypoint(
     await controlSync.pull();
   }
 
-  // For a realm the factory just created, replace the default CardsGrid
-  // index page with a RealmDashboard instance so the realm opens to the
-  // factory dashboard. A pre-existing realm keeps its current index page.
-  if (targetRealm.createdRealm) {
+  // Legacy single-realm mode only: replace the default CardsGrid index
+  // with a RealmDashboard so the realm opens to the factory dashboard.
+  // Under the control/product split the PRODUCT realm keeps its stock
+  // index — the product realm is the user's deliverable, not a factory
+  // surface (operator directive 2026-07-17: no custom workspace/home
+  // card per build; the stock grid shows the product cards, and a
+  // future out-of-box workspace.gts with pinning/readme replaces
+  // per-build home customization). Tracking surfaces live in the
+  // control realm.
+  if (targetRealm.createdRealm && !controlRealmUrl) {
     let writeRealmIndex =
       dependencies?.writeRealmIndex ?? writeRealmDashboardCard;
     await writeRealmIndex(workspaceDir, targetRealm.url);
@@ -721,6 +729,10 @@ export async function runFactoryEntrypoint(
   let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(brief, {
     darkfactoryModuleUrl,
     workspaceDir,
+    // v2: hierarchical design — a design-foundation issue (brand guide,
+    // tokens, family coherence sheet) runs between bootstrap and the
+    // implementation issues.
+    designFoundation: options.v2 === true,
   });
 
   // Push the freshly-written seed (and any other pre-existing workspace
@@ -778,8 +790,14 @@ export async function runFactoryEntrypoint(
     // and share no state, so run them concurrently. When the realm has
     // neither card yet, each search otherwise burns its full retry budget in
     // turn; overlapping them halves the worst-case wait.
+    // Under the split the product realm keeps its STOCK index (no
+    // dashboard was written), so there is no board relationship to patch
+    // — skip linkBoard entirely; only the seed issue's project link (a
+    // control-plane file) still gets wired.
     let [boardLinked, projectLinked] = await Promise.all([
-      linkBoard({ ...linkArgs, absoluteLink: controlRealmUrl !== undefined }),
+      controlRealmUrl
+        ? Promise.resolve(false)
+        : linkBoard({ ...linkArgs, absoluteLink: false }),
       linkSeedProject(linkArgs),
     ]);
     if (boardLinked || projectLinked) {

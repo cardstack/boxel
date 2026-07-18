@@ -65,6 +65,20 @@ decision that resolved it. First person, 1–3 sentences.
 
 ## 1. Ground yourself
 
+- **Scope check FIRST**: read `Knowledge Articles/build-plan.json` and
+  your issue's "In scope (this pass)" list. Mock ONLY the in-scope
+  surfaces at the in-scope sizes — if this pass says "fitted tile only,"
+  do not design the wide strip or expanded card (a pass-2 issue owns
+  those). Depth over breadth: make the small scope excellent.
+- **BINDING design language — read it FIRST when it exists:**
+  `Knowledge Articles/brand-guide.json` (guiding words, palette, rules),
+  `design/tokens.css` (the CSS variables — your mockup MUST link this
+  file and use its `--*` variables, never invent new colors/type), and
+  `design/family-sheet.html` (what the family looks like — your card
+  must read as a sibling of those, not a new style). Deviating from the
+  brand guide is a defect; if the guide genuinely can't express this
+  card, post the tension via `post_update` and extend the tokens rather
+  than fork them.
 - `Read` / `Glob` the workspace; `Bash` + `boxel search --realm <target-realm-url>` for cards already in the target realm.
 - Call `list_skills`, then `read_skill` the skills this issue touches.
   Read precedent: if a similar card exists in the workspace, read its `.gts`.

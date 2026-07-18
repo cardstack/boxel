@@ -11,10 +11,19 @@ between iterations; your working directory is that mirror, so
 realm-relative paths (`song.gts`, `Song/one.json`) resolve directly with
 the native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash` tools.
 
-This skill is deliberately small. Most knowledge loads **on demand**:
-call `list_skills` for the catalog, `read_skill({ name })` for a skill's
-overview, and `read_skill({ name, reference })` for a specific reference
-file. Load what the current work touches, nothing more.
+This skill is deliberately small. Most knowledge loads **on demand**,
+two equivalent ways:
+
+- **Files (preferred for discovery): the full skill catalog lives at
+  `.claude/skills/<name>/` in your workspace** — SKILL.md overviews plus
+  `references/*.md` deep docs. `Glob`/`Grep`/`Read` them like any
+  project: `Grep -ri 'fitted' .claude/skills` finds the doc you didn't
+  know existed. When unsure whether guidance exists for something you're
+  about to build, grep here FIRST.
+- **Tools**: `list_skills` for the catalog, `read_skill({ name })` /
+  `read_skill({ name, reference })` for targeted loads.
+
+Load what the current work touches, nothing more.
 
 ## When you need X, read Y
 
@@ -51,7 +60,12 @@ an import path; the `imports` validation step fails phantom ones.
    embedded + fitted templates), sample instances (same data as the
    mockup), and a Catalog Spec (`Spec/<slug>.json`, adoptsFrom
    `https://cardstack.com/base/spec#Spec`, `linkedExamples` →
-   instances). The Spec MUST populate its catalog-facing `title` (display
+   instances). **MANDATORY before writing any fitted template:
+   `read_skill({ name: 'boxel-development', reference:
+   'dev-fitted-formats.md' })`** — it is the container-query standard
+   (host `fitted-card` container, height quanta h40→h445, FittedCard
+   component, overflow discipline). A fitted view that ignores it — one
+   layout for all sizes, a local container on the root — fails review. The Spec MUST populate its catalog-facing `title` (display
    name) and `description` (one sentence) attributes in addition to the
    readMe — a Spec with empty title/description renders as an unnamed
    card in the catalog UI. Call `get_card_schema` before writing any
@@ -63,9 +77,18 @@ an import path; the `imports` validation step fails phantom ones.
    as green. **Never curl/HTTP-poll the realm for files you just wrote**
    — your writes only reach the realm when a `run_*` tool syncs them;
    a 404 from curl before that means nothing. Verify through the
-   `run_*` tools.
+   `run_*` tools. **Prefer `{ path }`-scoped checks on the file you're
+   fixing** — whole-realm results include pre-existing failures in files
+   you didn't write; note those with `post_update` and move on, never
+   fix files outside your issue.
 5. **Done**: `signal_done()`. If validation feedback comes back, fix and
    signal again. If truly blocked, `request_clarification({ message })`.
+6. **Review**: after your signal_done, the issue enters REVIEW — a
+   product-manager reviewer judges the rendered output. If it comes back
+   with "Review feedback (rework requested)" in your context, those are
+   the exact, complete required changes: make them with surgical
+   `Edit`s (nothing more — improvements beyond the list belong to
+   follow-up issues the reviewer files), then `signal_done` again.
 
 ## Hard rules
 
@@ -78,6 +101,13 @@ an import path; the `imports` validation step fails phantom ones.
 - **NO `.test.gts` files.** Tests belong to a separate hardening phase
   invoked later over artifacts that earned them. This loop ships zero
   tests by design; do not "helpfully" add any.
+- **Media fields are links to realm files, never inline bytes.** An
+  image/file on a card is `@field x = linksTo(() => ImageDef)` (or
+  FileDef) pointing at a real file in the workspace. NEVER design a
+  field or FieldDef that stores `data:`/base64/blob strings in JSON —
+  not even a 1×1 placeholder "just for the demo." A no-media-yet
+  instance leaves the link empty and the template renders a placeholder
+  block; the field's SHAPE stays correct.
 - **Host command imports are `@cardstack/boxel-host/tools/<name>`** (e.g.
   `tools/write-binary-file`, `tools/save-card`). There is NO
   `@cardstack/boxel-host/commands/` path — imports from it fail only at
@@ -103,6 +133,25 @@ an import path; the `imports` validation step fails phantom ones.
   the `comments` array instead (Read the issue JSON, append, Write back).
   You may set `status` only to `"blocked"` or `"backlog"`; `done` /
   `in_progress` are orchestrator-owned.
+- **Fix with `Edit`, never re-`Write` an existing file.** After a file's
+  initial `Write`, every subsequent change to it — bug fixes, check
+  failures, small revisions — MUST be a surgical `Edit` (smallest
+  search/replace span that fixes the problem). Re-emitting a whole
+  `.gts` costs 1–2 minutes of generation per attempt vs seconds for an
+  `Edit`; it is the single biggest time sink in a build turn. Only
+  re-`Write` when more than half the file is changing.
+- **Two identical check failures = stop rewriting, start reading.** If
+  the same `run_*` check fails twice with the same error on your file,
+  do NOT emit a third fix attempt on intuition — `read_skill` the
+  matching reference from the table above, diagnose against the doc,
+  then fix once with `Edit`.
+- **Decorators fail inside class EXPRESSIONS.** `@tracked` (or any
+  decorator) on a field of `static isolated = class ... {}` fails
+  `run_parse` with "Decorators are not valid here". Hoist the component
+  to a named top-level class declared ABOVE the card class
+  (`class FooIsolated extends Component<typeof Foo> { ... }` then
+  `static isolated = FooIsolated;`), and type a constructor's `owner`
+  param as `Owner` (or `any`) — `unknown` fails against Component.
 - **Write idiomatic source, never compiled output.** When an eval/
   instantiate error cites a line/column it refers to the transpiled JS —
   `boxel read-transpiled <path> --realm <url>` to map it back, then fix
@@ -112,3 +161,11 @@ an import path; the `imports` validation step fails phantom ones.
   fields for consumers; prefer FieldDefs for recurring shapes; keep
   per-format content matrices in mind (what does a consumer get at each
   size?).
+- **Stay inside your issue's declared scope — never gold-plate.** Read
+  `Knowledge Articles/build-plan.json` (how this issue fits the whole
+  build) and your issue's "In scope (this pass)" list. Deliver EXACTLY
+  that scope, polished. Items under "Deferred (second pass)" are OUT of
+  scope — they have their own pass-2 issue; building them now wastes the
+  budget and duplicates future work. Small-and-polished beats
+  broad-and-rough. If you spot something important that no pass covers,
+  note it via `post_update` — do not build it.

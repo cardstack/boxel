@@ -9,6 +9,7 @@ import {
   buildOneShotMessages,
   FilePromptLoader,
   interpolate,
+  isBugFixIssue,
   PromptTemplateNotFoundError,
 } from '../src/factory-prompt-loader.ts';
 
@@ -834,3 +835,57 @@ module(
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// Bug-fix routing — defects skip the design round
+// ---------------------------------------------------------------------------
+
+module('factory-prompt-loader > bug-fix routing', function () {
+  test('isBugFixIssue matches defect/bug types, not feature', function (assert) {
+    assert.true(isBugFixIssue({ issueType: 'defect' }));
+    assert.true(isBugFixIssue({ issueType: 'bug' }));
+    assert.true(isBugFixIssue({ issueType: 'Regression' }));
+    assert.false(isBugFixIssue({ issueType: 'feature' }));
+    assert.false(isBugFixIssue({ issueType: 'adjustment' }));
+    assert.false(isBugFixIssue({}));
+    assert.false(isBugFixIssue(undefined));
+  });
+
+  test('a v2 defect issue gets the diagnose-and-fix prompt (no design round)', function (assert) {
+    let loader = new FilePromptLoader();
+    let prompt = assembleImplementPrompt({
+      context: makeMinimalContext({
+        v2: true,
+        issue: { id: 'Issues/crash', issueType: 'defect', summary: 'x crashes' },
+      }),
+      loader,
+    });
+    assert.true(
+      /bug fix on an existing card/i.test(prompt),
+      'uses issue-fix-v2',
+    );
+    assert.true(
+      /Do NOT run a design round/i.test(prompt),
+      'explicitly forbids the design round',
+    );
+    assert.notOk(
+      /HTML mockup before any schema/i.test(prompt),
+      'no design-first mockup section',
+    );
+  });
+
+  test('a v2 feature issue still gets the design-first implement prompt', function (assert) {
+    let loader = new FilePromptLoader();
+    let prompt = assembleImplementPrompt({
+      context: makeMinimalContext({
+        v2: true,
+        issue: { id: 'Issues/new', issueType: 'feature', summary: 'new card' },
+      }),
+      loader,
+    });
+    assert.true(
+      /DESIGN — HTML mockup before any schema/i.test(prompt),
+      'feature build keeps the design round',
+    );
+  });
+});

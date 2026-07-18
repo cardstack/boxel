@@ -423,6 +423,29 @@ export function assembleSystemPrompt(
  * Includes tool results when present (e.g., after invoke_tool actions
  * from a prior plan() call that returned tool invocations before implementation).
  */
+/**
+ * Issue types that FIX broken behavior on a card that already shipped
+ * (as opposed to building a new one). These skip the design round — no
+ * mockups, no critique — and use the diagnose-and-fix prompt. Defects filed
+ * by the acceptance walkthrough carry `defect`; the rest are defensive
+ * synonyms a bootstrap agent might emit.
+ */
+const BUG_FIX_ISSUE_TYPES = new Set([
+  'defect',
+  'bug',
+  'regression',
+  'hotfix',
+  'fix',
+]);
+
+/** True for a bug-fix issue — see BUG_FIX_ISSUE_TYPES. */
+export function isBugFixIssue(
+  issue: { issueType?: string } | undefined,
+): boolean {
+  let t = issue?.issueType;
+  return typeof t === 'string' && BUG_FIX_ISSUE_TYPES.has(t.toLowerCase());
+}
+
 export function assembleImplementPrompt(
   options: AssembleImplementPromptOptions,
 ): string {
@@ -430,15 +453,19 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  // Phase-split (v2): the design turn and the build turn get dedicated
+  // Prompt selection. Bug-fix issues take a diagnose-and-fix prompt with no
+  // design round (the card already shipped; only its behavior is broken).
+  // Otherwise, phase-split (v2) gives the design and build turns dedicated
   // prompts; an unsplit v2 turn keeps the combined design-first prompt.
   let template =
     context.v2 === true
-      ? context.phase === 'design'
-        ? 'issue-design-v2'
-        : context.phase === 'build'
-          ? 'issue-build-v2'
-          : 'issue-implement-v2'
+      ? isBugFixIssue(context.issue as { issueType?: string })
+        ? 'issue-fix-v2'
+        : context.phase === 'design'
+          ? 'issue-design-v2'
+          : context.phase === 'build'
+            ? 'issue-build-v2'
+            : 'issue-implement-v2'
       : 'issue-implement';
   return loader.load(template, {
     project: context.project,

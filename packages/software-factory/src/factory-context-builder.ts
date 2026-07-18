@@ -15,6 +15,9 @@ import {
   type SkillResolver,
 } from './factory-skill-loader.ts';
 import { buildHostToolsSkill } from './host-import-manifest.ts';
+import { logger } from './logger.ts';
+
+let log = logger('factory-context-builder');
 
 // ---------------------------------------------------------------------------
 // Issue relationship loader
@@ -188,16 +191,26 @@ export class ContextBuilder {
     ]);
 
     if (!project) {
-      // Bootstrap issues have no project yet — the agent creates it.
-      // Supply a minimal stub so AgentContext.project stays required.
+      // A missing project link is normal on several paths — bootstrap
+      // (the agent creates the Project), PORT-0 analysis (runs ahead of
+      // bootstrap by blockedBy design), and agent-authored issues like
+      // the acceptance walkthrough's auto-filed defects, whose JSON may
+      // omit relationships entirely. Throwing here killed a whole run
+      // over one unlinked defect issue (wardrobe, 2026-07-17); the
+      // project is orientation context, not a correctness requirement,
+      // so degrade to a stub and log instead. AgentContext.project stays
+      // required.
       let issueType = (issue as Record<string, unknown>).issueType;
-      if (issueType === 'bootstrap') {
-        project = { id: 'bootstrap-pending' };
-      } else {
-        throw new Error(
-          `Issue "${issue.id}" has no linked project — cannot build context`,
+      if (
+        issueType !== 'bootstrap' &&
+        issueType !== 'analysis' &&
+        issueType !== 'design'
+      ) {
+        log.warn(
+          `Issue "${issue.id}" has no linked project — building context with a stub`,
         );
       }
+      project = { id: 'bootstrap-pending' };
     }
 
     // Step 2: Resolve and load skills

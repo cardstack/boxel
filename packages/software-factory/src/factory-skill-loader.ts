@@ -207,6 +207,14 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['boxel-file-structure'];
     }
 
+    // Design-foundation turns author a brand guide + tokens + family
+    // coherence sheet — taste work, not card code. File-structure covers
+    // the KA JSON; boxel-design carries the visual-language method (it
+    // resolves from the materialized catalog's fallback dirs).
+    if (issueType === 'design') {
+      return ['boxel-file-structure', 'boxel-design'];
+    }
+
     // V2 lean mode: small always-on core; everything else on demand via
     // the list_skills / read_skill tools. The design-first workflow and
     // the "when you need X, read Y" pointer table live in the V2

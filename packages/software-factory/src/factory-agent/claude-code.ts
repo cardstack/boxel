@@ -58,6 +58,7 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder.ts';
+import { TurnToolTelemetry } from './agent-tool-telemetry.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter.ts';
 import { logger } from '../logger.ts';
@@ -130,8 +131,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let userPrompt = this.buildUserPrompt(context);
 
     let toolCallLog: ToolCallEntry[] = [];
+    let telemetry = new TurnToolTelemetry(this.config.workspaceDir);
     let sessionId: string | undefined;
     let usage: AgentRunResult['usage'];
+    // Running totals from per-assistant-message usage. The terminal
+    // `result` message is the authoritative source, but our signal-capture
+    // path aborts the query the moment the agent calls signal_done — the
+    // result message never arrives on ANY successful turn, so without this
+    // fallback every telemetry entry ships with no token counts at all.
+    let streamedUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+    let sawStreamedUsage = false;
     let captured: CapturedSignal | undefined;
     let abortController = new AbortController();
 
@@ -235,10 +244,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // relative-path commands (`cat sticky-note.gts`) inside the
       // workspace by default.
       ...(workspaceDir ? { cwd: workspaceDir } : {}),
-      // Isolate from the host user's Claude Code settings — we want
-      // deterministic agent behavior regardless of whose machine this
-      // runs on.
-      settingSources: [],
+      // Load PROJECT-level settings only: the factory materializes its
+      // skill catalog into `<workspace>/.claude/skills/` at run start
+      // (workspace-skills.ts), and 'project' lets the harness discover
+      // those the same way Claude Code discovers any project's skills —
+      // the model's trained lookup path. Deliberately NOT 'user'/'local':
+      // still isolated from the host user's own Claude settings, and the
+      // workspace lives under os.tmpdir() so no parent .claude can leak
+      // in. Without a workspaceDir there is no cwd to load from — keep
+      // the empty (fully isolated) behavior.
+      settingSources: workspaceDir ? ['project'] : [],
       // Context forking (v2): resume a primed session, branching to a new
       // session id so every fork inherits the primed conversation as a
       // shared (provider-cached) prefix without mutating the original.
@@ -297,6 +312,29 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
             costUsd: r.total_cost_usd,
           };
         }
+        // Accumulate per-call usage from each assistant message: summed
+        // input/cache-read reflects total billed tokens across the turn's
+        // API calls; summed output is total generated. Kept as a fallback
+        // for signal-aborted turns (see streamedUsage above).
+        if (message.type === 'assistant') {
+          let u = (
+            message as {
+              message?: {
+                usage?: {
+                  input_tokens?: number;
+                  output_tokens?: number;
+                  cache_read_input_tokens?: number;
+                };
+              };
+            }
+          ).message?.usage;
+          if (u) {
+            sawStreamedUsage = true;
+            streamedUsage.inputTokens += u.input_tokens ?? 0;
+            streamedUsage.outputTokens += u.output_tokens ?? 0;
+            streamedUsage.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+          }
+        }
         // Coarse activity heartbeat (v3 RunMonitor): every complete
         // assistant message resets the stall clock. Silence between
         // messages = the model is generating.
@@ -311,9 +349,10 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
             // Monitoring must never break the run.
           }
         }
-        // Stream native Write/Edit sightings to the live-blog hook as
-        // they land (MCP factory tools stream via buildSdkToolsFromFactoryTools).
-        if (context.onToolCall && message.type === 'assistant') {
+        // Record every streamed tool_use for the always-on waste audit, and
+        // stream native Write/Edit sightings to the live-blog hook as they
+        // land (MCP factory tools stream via buildSdkToolsFromFactoryTools).
+        if (message.type === 'assistant') {
           try {
             let content = (message as { message?: { content?: unknown } })
               .message?.content;
@@ -324,8 +363,10 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
                   name?: string;
                   input?: Record<string, unknown>;
                 };
+                if (b?.type !== 'tool_use' || !b.name) continue;
+                telemetry.record(b.name, b.input ?? {});
                 if (
-                  b?.type === 'tool_use' &&
+                  context.onToolCall &&
                   (b.name === 'Write' || b.name === 'Edit')
                 ) {
                   context.onToolCall({ tool: b.name, args: b.input ?? {} });
@@ -333,7 +374,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
               }
             }
           } catch {
-            // Live-blog streaming must never break the run.
+            // Telemetry / live-blog streaming must never break the run.
           }
         }
         if (this.config.debug) {
@@ -344,8 +385,20 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     } catch (error) {
       // An intentional abort from our signal-capture path is not an error.
       if (!captured) {
+        telemetry.finish();
         throw error;
       }
+    }
+
+    // Always-on per-turn waste audit (re-reads, whole-file rewrites,
+    // screenshot thrash, mutating Bash). Emitted once per turn regardless of
+    // how the turn ended.
+    telemetry.finish();
+
+    // Signal-aborted turns never see the terminal result message — fall
+    // back to the streamed running totals so telemetry still gets tokens.
+    if (!usage && sawStreamedUsage) {
+      usage = streamedUsage;
     }
 
     if (captured?.kind === 'done') {
@@ -484,6 +537,12 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     if (context.acceptanceTurn) {
       return this.promptLoader.load('acceptance-walkthrough', {
         issue: context.issue,
+        // Only a real project card (URL id) is linkable from a defect
+        // issue — the 'bootstrap-pending' stub would serialize as a
+        // dangling relative link.
+        project: context.project?.id?.startsWith('http')
+          ? context.project
+          : undefined,
         darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
         renderSummary: context.acceptanceTurn.renderSummary,
         screenshots: context.acceptanceTurn.screenshots,
@@ -491,6 +550,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
           context.acceptanceTurn.failedCaptures.length > 0
             ? context.acceptanceTurn.failedCaptures
             : undefined,
+      });
+    }
+    if (issueType === 'design') {
+      // Design-foundation turn (hierarchical design): look & feel →
+      // brand guide + tokens.css → family coherence sheet. Runs once,
+      // after bootstrap, before every implementation issue.
+      return this.promptLoader.load('issue-design-foundation', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
       });
     }
     if (issueType === 'analysis') {

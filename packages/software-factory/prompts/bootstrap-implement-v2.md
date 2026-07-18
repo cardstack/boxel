@@ -115,7 +115,37 @@ their own catalog specs or separate issues.
 card B uses card A as a field type or linked card), the depended-upon card's
 issue must come first. Set `order` so that dependency cards are processed
 before their consumers, and wire `blockedBy` so the consuming card's issue
-cannot start until the dependency card's issue is done.
+cannot start until the dependency card's issue is done. (`blockedBy` means
+"depends on the DONE-ness of" — normal sequencing, not blockage.)
+
+**Scope each issue as an MVP pass — breadth and depth are budgets, not
+defaults.** The coding agent does NOT know the big picture; if an issue
+reads open-ended it will gold-plate every surface and burn hours doing a
+full project's work. So plan two passes up front:
+
+- **First-pass issues (the ones described above)**: the description MUST
+  contain an explicit `**In scope (this pass)**` list — the minimal
+  subset done WELL (e.g., "isolated view; fitted TILE ~200×180 only;
+  3 core fields; happy path") — and a `**Deferred (second pass)**` list
+  naming what is intentionally out (wide/strip fitted variants, edge
+  states, secondary fields, bulk flows). Small and polished beats broad
+  and rough.
+- **Second-pass issues, created NOW**: for each card with meaningful
+  deferred scope, also create `Issues/<slug>-<card-name-slug>-pass-2.json`
+  — same format, `issueType` `"enhancement"`, priority `"low"`, `order`
+  AFTER every first-pass issue, `blockedBy` its first-pass issue, and a
+  description that IS the deferred list. These run only if the build
+  moves forward; the operator can cancel them wholesale. Never fold
+  second-pass scope into a first-pass issue.
+
+**Build-plan Knowledge Article** — write
+`Knowledge Articles/build-plan.json`: the big picture the coding agents
+lack. Cover: the card-family map (what links to what and why), the pass
+sequencing (which issues are first-pass MVPs, which are second-pass
+polish, the dependency chains), and what "good enough" means per pass.
+Wire it into EVERY issue's `relatedKnowledge` (next free index) so every
+agent turn sees where its issue fits the whole. This document is
+maintained: the reviewer updates it as the build's reality evolves.
 
 **Issue format** — for each entry-point card, create an issue named after the card at `Issues/<slug>-<card-name-slug>.json` (e.g., `Issues/sticky-note.json` for a "Sticky Note" card):
 
@@ -131,7 +161,13 @@ cannot start until the dependency card's issue is done.
   - `project` → `../Projects/<slug>`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`
   - `relatedKnowledge.1` → `../Knowledge Articles/<slug>-agent-onboarding`
-  - `blockedBy` → issues for any entry-point cards this card depends on
+  - `blockedBy.0` → `../Issues/design-foundation-seed` on EVERY
+    implementation issue — the design-foundation issue (runs right after
+    this bootstrap) establishes the brand guide, tokens, and family
+    coherence sheet that all card designs consume; no card may design
+    ahead of it
+  - further `blockedBy.N` → issues for any entry-point cards this card
+    depends on
 
 adoptsFrom: the darkfactory `Issue` type.
 

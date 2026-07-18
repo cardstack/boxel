@@ -20,7 +20,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { logger } from './logger.ts';
@@ -35,9 +35,49 @@ let log = logger('validation-run-cache');
 const FINGERPRINT_IGNORED = new Set(['.boxel-history', '.boxel-sync.json']);
 
 /**
+ * Per-file content-hash memo, keyed by absolute path. A bidirectional sync's
+ * pull step rewrites unchanged files to disk with fresh mtime/ctime, so
+ * mtime is not a sound proxy for "changed" — fingerprinting on it busted the
+ * sync gate after every pull and turned every no-op sync into a full network
+ * round-trip. We hash file *content* instead, and memo the hash by
+ * (path, size, mtimeMs) so an unchanged file is stat-only (no re-read) and a
+ * pull-rewritten-but-identical file costs exactly one content hash to
+ * confirm it can still be skipped. The memo caches only the digest, so its
+ * footprint is bounded by the workspace's file count.
+ */
+const fileContentHashMemo = new Map<
+  string,
+  { size: number; mtimeMs: number; hash: string }
+>();
+
+async function contentHashForFile(
+  full: string,
+  size: number,
+  mtimeMs: number,
+): Promise<string> {
+  let memoized = fileContentHashMemo.get(full);
+  if (memoized && memoized.size === size && memoized.mtimeMs === mtimeMs) {
+    return memoized.hash;
+  }
+  let hash: string;
+  try {
+    hash = createHash('sha1')
+      .update(await readFile(full))
+      .digest('hex');
+  } catch {
+    // Unreadable (raced deletion, permission) — fall back to size so the
+    // entry still varies with the file rather than throwing out the walk.
+    hash = `unreadable:${size}`;
+  }
+  fileContentHashMemo.set(full, { size, mtimeMs, hash });
+  return hash;
+}
+
+/**
  * Cheap content fingerprint of a workspace directory: a hash over every
- * file's relative path, size, and mtime. Editing, adding, or deleting any
- * file changes it; re-syncing or checkpointing does not.
+ * file's relative path, size, and content digest. Editing, adding, or
+ * deleting any file changes it; re-syncing, pulling, or checkpointing does
+ * not (an identical file that a pull rewrote keeps its content digest).
  *
  * `extraIgnoredTopLevel` names additional top-level directories to leave
  * out of the fingerprint (e.g. `Validations` for the validation cache —
@@ -70,10 +110,8 @@ export async function computeWorkspaceFingerprint(
       if (info.isDirectory()) {
         await walk(full, rel);
       } else {
-        // ctimeMs joins size + mtimeMs to reduce the odds of a same-size
-        // edit landing within one coarse mtime tick fingerprinting as
-        // unchanged.
-        entries.push(`${rel}|${info.size}|${info.mtimeMs}|${info.ctimeMs}`);
+        let hash = await contentHashForFile(full, info.size, info.mtimeMs);
+        entries.push(`${rel}|${info.size}|${hash}`);
       }
     }
   }

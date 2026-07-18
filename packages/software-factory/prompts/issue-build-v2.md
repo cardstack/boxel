@@ -84,6 +84,11 @@ non-obvious translation decision, and when recovering from a failed check.
 
 - `run_lint({ path })` each file; then `run_parse()`, `run_evaluate()`,
   `run_instantiate()` for the whole realm. Fix what they report.
+- **Fix with `Edit`, not `Write`.** Once a file exists, every fix is a
+  surgical search/replace `Edit` on the failing lines — re-emitting the
+  whole file costs 1–2 minutes of generation per attempt and is the main
+  reason build turns run long. Failures in files you didn't write this
+  turn are pre-existing: note them via `post_update` and move on.
 - **Do NOT write any `.test.gts` files** — tests belong to a later
   hardening phase.
 

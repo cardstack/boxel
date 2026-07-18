@@ -148,3 +148,35 @@ test('ensureControlPlaneIgnoreFile is idempotent and appends to user content', a
     await rm(workspaceDir, { recursive: true, force: true });
   }
 });
+
+test('ensureControlPlaneIgnoreFile refreshes a STALE managed block', async () => {
+  let workspaceDir = await makeWorkspace();
+  try {
+    // An older run wrote a control block that predates RunLogEntries — the
+    // exact state that leaked entry cards into the product atomic sync (500).
+    let stale = [
+      '/scratch/',
+      '',
+      '# software-factory control-plane split',
+      '/Issues/',
+      '/Runs/',
+      '/run-log.gts',
+      '/.boxelignore',
+      '',
+    ].join('\n');
+    await writeFile(join(workspaceDir, '.boxelignore'), stale);
+
+    await ensureControlPlaneIgnoreFile(workspaceDir);
+    let refreshed = await readFile(join(workspaceDir, '.boxelignore'), 'utf8');
+
+    // The current CONTROL_DIRS set is now present…
+    assert.match(refreshed, /^\/RunLogEntries\/$/m, 'stale block refreshed to include RunLogEntries');
+    // …the user content is preserved…
+    assert.match(refreshed, /^\/scratch\/$/m, 'user-authored lines kept');
+    // …and the marker appears exactly once (no duplicate stacked block).
+    let markerCount = (refreshed.match(/# software-factory control-plane split/g) || []).length;
+    assert.equal(markerCount, 1, 'no duplicate control-plane marker block');
+  } finally {
+    await rm(workspaceDir, { recursive: true, force: true });
+  }
+});

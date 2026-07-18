@@ -18,6 +18,8 @@ import type { IssueStore } from '../src/issue-scheduler.ts';
 import {
   runIssueLoop,
   NoOpValidator,
+  decideSessionStrategy,
+  failureFingerprint,
   type IssueContextBuilderLike,
   type IssueLoopConfig,
   type Validator,
@@ -133,7 +135,9 @@ class MockLoopAgent implements LoopAgent {
       }
     }
 
-    return { status: 'done', toolCalls };
+    // A stable per-turn session id so the loop's inner-iteration chaining
+    // (resume the prior iteration's session) is observable in tests.
+    return { status: 'done', toolCalls, sessionId: `sess-${this.turnIndex}` };
   }
 
   get callCount(): number {
@@ -498,6 +502,48 @@ module('issue-loop > validation failure', function () {
     assert.false(
       contextBuilder.buildCalls[1].validationResults?.passed,
       'second iteration gets failing validation from first',
+    );
+  });
+
+  test('fix iterations chain the prior iteration session (no re-read)', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        { toolCalls: [{ tool: 'write_file', args: { path: 'c.gts', content: 'v1' } }] },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'c.gts', content: 'v2' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () =>
+          new MockValidator([makeFailingValidation(), makePassingValidation()]),
+      }),
+    );
+
+    // Iteration 1 starts fresh (no prior session to chain).
+    assert.strictEqual(
+      agent.receivedContexts[0].resumeSession,
+      undefined,
+      'first iteration does not resume a session',
+    );
+    // Iteration 2 resumes iteration 1's session (sess-1) as a fork, so the
+    // files/edits it already read stay in context instead of being re-read.
+    assert.deepEqual(
+      agent.receivedContexts[1].resumeSession,
+      { sessionId: 'sess-1', fork: true },
+      'second iteration forks the first iteration session',
     );
   });
 });
@@ -1371,5 +1417,96 @@ module('issue-loop > project completion', function () {
       [],
       'project status NOT updated when issues blocked',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session-reuse decision
+// ---------------------------------------------------------------------------
+
+function failing(steps: Record<string, number>): ValidationResults {
+  let names = new Set(Object.keys(steps));
+  return {
+    passed: false,
+    steps: (['parse', 'lint', 'evaluate', 'instantiate', 'test'] as const).map(
+      (step) => ({
+        step,
+        passed: !names.has(step),
+        errors: names.has(step)
+          ? Array.from({ length: steps[step] }, () => ({ message: `${step} err` }))
+          : [],
+      }),
+    ),
+  };
+}
+
+module('issue-loop > failureFingerprint', function () {
+  test('empty for passing or missing results', function (assert) {
+    assert.deepEqual(failureFingerprint(undefined), { steps: '', errorCount: 0 });
+    assert.deepEqual(failureFingerprint(makePassingValidation()), {
+      steps: '',
+      errorCount: 0,
+    });
+  });
+
+  test('sorted failing steps + total error count', function (assert) {
+    assert.deepEqual(failureFingerprint(failing({ test: 2, lint: 1 })), {
+      steps: 'lint,test',
+      errorCount: 3,
+    });
+  });
+});
+
+module('issue-loop > decideSessionStrategy', function () {
+  test('first turn is always fresh', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 1,
+      hasPriorSession: false,
+      chainDepth: 0,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('no prior session is fresh even past iteration 1', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: false,
+      chainDepth: 0,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('continues while converging (fewer errors, same step)', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: true,
+      chainDepth: 1,
+      previousFailure: failureFingerprint(failing({ lint: 3 })),
+      currentFailure: failureFingerprint(failing({ lint: 1 })),
+    });
+    assert.strictEqual(d.strategy, 'continue');
+  });
+
+  test('resets to fresh when the same failure repeats with no progress', function (assert) {
+    let same = failureFingerprint(failing({ lint: 2 }));
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: true,
+      chainDepth: 1,
+      previousFailure: same,
+      currentFailure: same,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('resets to fresh at the chain cap', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 5,
+      hasPriorSession: true,
+      chainDepth: 3,
+      previousFailure: failureFingerprint(failing({ lint: 3 })),
+      currentFailure: failureFingerprint(failing({ test: 1 })),
+    });
+    assert.strictEqual(d.strategy, 'fresh');
   });
 });

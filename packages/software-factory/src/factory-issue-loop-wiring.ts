@@ -61,6 +61,7 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler.ts';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader.ts';
 import { withStdoutRedirected } from './redirect-stdout.ts';
+import { materializeWorkspaceSkills } from './workspace-skills.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -220,6 +221,13 @@ export async function runFactoryIssueLoop(
       new ControlPlaneSync({ client, controlRealm, workspaceDir });
     log.info(`Control/product split active: control realm=${controlRealm}`);
   }
+
+  // Materialize the skill catalog into `<workspace>/.claude/skills/` so
+  // agents can look skills up the way Claude Code does — native
+  // Glob/Grep/Read over real files (searchable, instinct-aligned) —
+  // instead of only through the read_skill MCP tool. Dotdirs never sync
+  // to the realm. Best-effort by design.
+  await materializeWorkspaceSkills(workspaceDir);
 
   // 1. Issue store — reads/writes the control realm under the split.
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);

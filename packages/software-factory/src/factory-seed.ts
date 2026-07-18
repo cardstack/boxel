@@ -20,7 +20,7 @@ import {
   linkRelationshipToCard,
   toRealmRelativePath,
 } from './realm-operations.ts';
-import { readCard, writeCard } from './workspace-fs.ts';
+import { readCard, writeCard, type WorkspaceReadResult } from './workspace-fs.ts';
 
 /**
  * Infer the darkfactory module URL from a target realm URL.
@@ -50,6 +50,16 @@ export interface SeedIssueOptions {
    * issue loop starts picking issues.
    */
   workspaceDir: string;
+  /**
+   * v2/v3: also seed a DESIGN-FOUNDATION issue (blockedBy bootstrap,
+   * blocking every implementation issue) that establishes the shared
+   * design language BEFORE any card is designed: overall look & feel →
+   * brand guide with guiding words + CSS variables → a one-sheet simple
+   * pass over every card in the family. Coherence first, detail later
+   * (operator directive 2026-07-17); per-card design turns consume its
+   * artifacts as binding context.
+   */
+  designFoundation?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +70,8 @@ const SEED_ISSUE_PATH = 'Issues/bootstrap-seed';
 const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
 const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
 const ANALYSIS_ISSUE_FILE = `${ANALYSIS_ISSUE_PATH}.json`;
+export const DESIGN_FOUNDATION_ISSUE_PATH = 'Issues/design-foundation-seed';
+const DESIGN_FOUNDATION_ISSUE_FILE = `${DESIGN_FOUNDATION_ISSUE_PATH}.json`;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -77,18 +89,10 @@ export async function createSeedIssue(
   brief: FactoryBrief,
   options: SeedIssueOptions,
 ): Promise<SeedIssueResult> {
-  let { darkfactoryModuleUrl, workspaceDir } = options;
+  let { darkfactoryModuleUrl, workspaceDir, designFoundation } = options;
 
   // The factory entrypoint pulls the target realm into `workspaceDir`
   // before calling us, so a pre-existing seed shows up locally.
-  //
-  // LOCAL PATCH (CS-12192): the seed path is a realm-wide constant, so a
-  // second `factory:go` against an already-bootstrapped realm would find the
-  // *previous* run's stale seed here and short-circuit — silently ignoring
-  // the new brief. For this workspace's sequential multi-brief pass we instead
-  // OVERWRITE the seed with the current brief every time, so each run bootstraps
-  // its own brief. `buildSeedIssueDocument` stamps status=backlog, so a seed
-  // left `done`/`blocked` by a prior run is re-armed. Not an upstream change.
   let existing = await readCard(workspaceDir, SEED_ISSUE_FILE);
   // Anything other than "found" or "file missing" is a real problem — surface it.
   if (!existing.ok && existing.status !== 404) {
@@ -97,6 +101,17 @@ export async function createSeedIssue(
     );
   }
 
+  // Resume vs re-arm. On a restart the entrypoint pulls the control realm
+  // into this workspace FIRST, so a seed a prior turn already completed is
+  // sitting here at status `done`. Blindly re-writing it to `backlog` makes
+  // the loop redo finished work — the operator watched the PORT-ANALYSIS
+  // issue re-run a repo study whose Knowledge Articles were already written
+  // (2026-07-17). So: if a done seed belongs to the CURRENT brief, leave it
+  // intact and let the loop resume from the board. Still overwrite when the
+  // brief CHANGED — that's the sequential multi-brief pass the LOCAL PATCH
+  // note below is about (a done seed from a *different* brief must re-arm).
+  let bootstrapResume = seedMatchesAndDone(existing, brief.sourceUrl);
+
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
   // GitHub-port flow (v3): a PORT-ANALYSIS issue runs before bootstrap —
@@ -104,23 +119,83 @@ export async function createSeedIssue(
   // layout) and writes the port-background Knowledge Article that
   // bootstrap plans the card family from. Bootstrap is blockedBy it.
   if (brief.githubRepoUrl) {
-    let analysisDocument = buildAnalysisSeedIssueDocument(
-      brief,
-      darkfactoryModuleUrl,
-    );
-    let analysisWrite = await writeCard(
-      workspaceDir,
-      ANALYSIS_ISSUE_FILE,
-      JSON.stringify(analysisDocument, null, 2),
-    );
-    if (!analysisWrite.ok) {
-      throw new Error(
-        `Failed to create port-analysis seed issue: ${analysisWrite.error ?? 'unknown error'}`,
+    let existingAnalysis = await readCard(workspaceDir, ANALYSIS_ISSUE_FILE);
+    if (seedMatchesAndDone(existingAnalysis, brief.githubRepoUrl)) {
+      log.info(
+        `Port-analysis seed already done for ${brief.githubRepoUrl} — leaving it intact so the loop resumes from the board instead of re-running the repo study`,
       );
+    } else {
+      let analysisDocument = buildAnalysisSeedIssueDocument(
+        brief,
+        darkfactoryModuleUrl,
+      );
+      let analysisWrite = await writeCard(
+        workspaceDir,
+        ANALYSIS_ISSUE_FILE,
+        JSON.stringify(analysisDocument, null, 2),
+      );
+      if (!analysisWrite.ok) {
+        throw new Error(
+          `Failed to create port-analysis seed issue: ${analysisWrite.error ?? 'unknown error'}`,
+        );
+      }
+      log.info(`Port-analysis seed issue created: ${ANALYSIS_ISSUE_PATH}`);
     }
-    log.info(`Port-analysis seed issue created: ${ANALYSIS_ISSUE_PATH}`);
   }
 
+  // Design-foundation phase (v2/v3): runs after bootstrap, before every
+  // implementation issue. Establishes the design language once so all
+  // per-card design turns inherit it — coherence first, detail later.
+  if (designFoundation) {
+    let existingFoundation = await readCard(
+      workspaceDir,
+      DESIGN_FOUNDATION_ISSUE_FILE,
+    );
+    // The foundation seed carries no brief token of its own, so tie its
+    // resume to bootstrap's: same brief + already done ⇒ keep it, don't
+    // re-arm. A changed brief re-arms bootstrap and the foundation with it.
+    if (bootstrapResume && isDone(existingFoundation)) {
+      log.info(
+        `Design-foundation seed already done — leaving it intact (resume, not re-arm)`,
+      );
+    } else {
+      let foundationDocument = buildDesignFoundationSeedIssueDocument(
+        brief,
+        darkfactoryModuleUrl,
+      );
+      let foundationWrite = await writeCard(
+        workspaceDir,
+        DESIGN_FOUNDATION_ISSUE_FILE,
+        JSON.stringify(foundationDocument, null, 2),
+      );
+      if (!foundationWrite.ok) {
+        throw new Error(
+          `Failed to create design-foundation seed issue: ${foundationWrite.error ?? 'unknown error'}`,
+        );
+      }
+      log.info(
+        `Design-foundation seed issue created: ${DESIGN_FOUNDATION_ISSUE_PATH}`,
+      );
+    }
+  }
+
+  // Bootstrap itself: a done seed for the current brief stays done so the
+  // loop picks up wherever the board left off.
+  if (bootstrapResume) {
+    log.info(
+      `Bootstrap seed already done for this brief — leaving it intact; the loop will resume from the board`,
+    );
+    return { issueId: SEED_ISSUE_PATH, status: 'existing' };
+  }
+
+  // LOCAL PATCH (CS-12192): the seed path is a realm-wide constant, so a
+  // second `factory:go` against an already-bootstrapped realm would find the
+  // *previous* run's stale seed here. We overwrite it with the current brief
+  // so each run bootstraps its own brief; `buildSeedIssueDocument` stamps
+  // status=backlog, re-arming a seed a prior brief left done/blocked. The
+  // resume guard above already spared a *matching-brief* done seed, so this
+  // path only fires for a new/changed brief or a never-completed seed. Not
+  // an upstream change.
   log.info(
     existing.ok
       ? `Overwriting existing seed issue at ${SEED_ISSUE_FILE} with current brief`
@@ -212,6 +287,34 @@ export async function linkProjectToSeedIssue(
     searchRetries: options.searchRetries,
     searchRetryDelayMs: options.searchRetryDelayMs,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Resume guard
+// ---------------------------------------------------------------------------
+
+/** True when a pulled seed card is present and its status is `done`. */
+function isDone(read: WorkspaceReadResult): boolean {
+  if (!read.ok || !read.document) return false;
+  let attrs = (
+    read.document.data as { attributes?: Record<string, unknown> } | undefined
+  )?.attributes;
+  return attrs?.status === 'done';
+}
+
+/**
+ * True when a pulled seed is `done` AND belongs to the CURRENT brief. The
+ * identity token (the brief's source/repo URL) is embedded verbatim in the
+ * seed's summary/description, so a substring check distinguishes "resume this
+ * brief" (keep the done seed) from "a prior brief left a done seed here"
+ * (re-arm — the sequential multi-brief pass). An empty token never matches.
+ */
+function seedMatchesAndDone(
+  read: WorkspaceReadResult,
+  identityToken: string,
+): boolean {
+  if (!identityToken || !isDone(read)) return false;
+  return JSON.stringify(read.document).includes(identityToken);
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +470,76 @@ function buildAnalysisSeedIssueDocument(
         acceptanceCriteria,
         createdAt: now,
         updatedAt: now,
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Build the DESIGN-FOUNDATION seed issue: the hierarchical design phase
+ * that runs after bootstrap and before every implementation issue.
+ * Coherence first, detail later — the per-card design turns consume its
+ * brand guide + tokens + family sheet as binding context.
+ */
+function buildDesignFoundationSeedIssueDocument(
+  _brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  let now = new Date().toISOString();
+
+  let description = [
+    `Establish the shared design language for this build BEFORE any card`,
+    `is designed in detail. Work top-down:`,
+    ``,
+    `1. **Look & feel** — read the project's Knowledge Articles (port`,
+    `   background / brief context) and decide the overall visual`,
+    `   direction: mood, references, what this app should feel like.`,
+    `2. **Brand guide** — write \`Knowledge Articles/brand-guide.json\``,
+    `   (guiding words, palette, type, spacing, dos/don'ts) AND`,
+    `   \`design/tokens.css\` (the CSS custom properties every mockup and`,
+    `   .gts template will use).`,
+    `3. **Family coherence sheet** — \`design/family-sheet.html\`: a`,
+    `   SIMPLE version of every card in the domain side-by-side, linking`,
+    `   tokens.css. Screenshot it, critique for coherence, revise once.`,
+    ``,
+    `Detailed per-card design (fitted quanta, per-format matrices) happens`,
+    `later in each card's own design turn — those turns consume your`,
+    `artifacts as binding context. The full protocol is in your turn`,
+    `instructions.`,
+  ].join('\n');
+
+  let acceptanceCriteria = [
+    '- [ ] Brand guide Knowledge Article written: guiding words, palette, typography, spacing, dos/don\'ts',
+    '- [ ] design/tokens.css written: the CSS custom properties (--*) all future mockups and templates use',
+    '- [ ] design/family-sheet.html: a simple rendering of EVERY card in the domain on one sheet, using tokens.css',
+    '- [ ] Family sheet screenshotted, critiqued for coherence, and revised at least once',
+  ].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'DESIGN-0',
+        summary: 'Establish the design language: brand guide, tokens, family sheet',
+        description,
+        issueType: 'design',
+        status: 'backlog',
+        priority: 'critical',
+        order: 2,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      relationships: {
+        'blockedBy.0': {
+          links: { self: `../${SEED_ISSUE_PATH}` },
+        },
       },
       meta: {
         adoptsFrom: {

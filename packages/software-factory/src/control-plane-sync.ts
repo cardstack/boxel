@@ -55,6 +55,7 @@ export const CONTROL_DIRS = [
   'Spec',
   'Validations',
   'Runs',
+  'RunLogEntries',
 ] as const;
 
 /** Root-level files owned by the control plane (the run-log CardDef). */
@@ -98,11 +99,22 @@ export async function ensureControlPlaneIgnoreFile(
   } catch {
     // No ignore file yet.
   }
-  if (existing.includes(IGNORE_MARKER)) {
+  // Already exactly current — nothing to do.
+  if (existing.includes(block)) {
     return;
   }
-  let content = existing
-    ? `${existing.replace(/\n?$/, '\n')}\n${block}`
+  // A stale block is present (an older CONTROL_DIRS set — e.g. before
+  // RunLogEntries was added). Strip the old managed block (its marker line
+  // plus the consecutive `/…` path lines it owns) and re-append the fresh
+  // one, so a CONTROL_DIRS change propagates to existing workspaces instead
+  // of leaving control paths leaking into the product atomic sync.
+  let markerRe = new RegExp(
+    `^${IGNORE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n(?:/.*\\n?)*`,
+    'm',
+  );
+  let stripped = existing.replace(markerRe, '');
+  let content = stripped.trim()
+    ? `${stripped.replace(/\n?$/, '\n')}\n${block}`
     : block;
   await writeFile(ignorePath, content, 'utf8');
   log.info(

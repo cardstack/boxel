@@ -775,7 +775,18 @@ function buildPostUpdateTool(): FactoryTool {
           type: 'string',
           description:
             'Optional 1-3 sentence elaboration: the why, the tradeoff, ' +
-            'what is next.',
+            'what is next. Renders as Boxel Flavored Markdown. When you ' +
+            'mention a card you created or touched, reference it with a ' +
+            'card directive using its WORKSPACE PATH (e.g. ' +
+            '"Garment/tee.json" or "Knowledge Articles/port-background.json") ' +
+            '— the run log resolves the path to the live card and the right ' +
+            'realm for you. Choose the form by how much the reader should ' +
+            'see: inline `:card[Path]` renders a small atom pill, use it for ' +
+            'a card named in passing; block `::card[Path]` renders the card ' +
+            'embedded, use it to spotlight one just-shipped card; ' +
+            '`::card[Path | fitted strip]` (or `fitted tile`, `fitted ' +
+            '400x200`) renders a sized tile, use it for a compact visual. ' +
+            'Prefer one embedded spotlight over many; use atoms for the rest.',
         },
         kind: {
           type: 'string',
