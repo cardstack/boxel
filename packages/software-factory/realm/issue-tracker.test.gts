@@ -52,15 +52,19 @@ async function selectGroupBy(key: string) {
 
 function makeIssueWithFields(
   issueId: string,
-  attrs: Record<string, string | null | undefined>,
+  attrs: Record<string, unknown>,
   filename: string,
+  extraRelationships: Record<string, unknown> = {},
 ): Record<string, Record<string, unknown>> {
   return {
     [filename]: {
       data: {
         type: 'card',
         attributes: { issueId, summary: `${issueId} issue`, ...attrs },
-        relationships: { project: { links: { self: projectId } } },
+        relationships: {
+          project: { links: { self: projectId } },
+          ...extraRelationships,
+        },
         meta: { adoptsFrom: { module: issueTrackerModule, name: 'Issue' } },
       },
     },
@@ -130,6 +134,127 @@ function makeBoard(
 }
 
 export function runTests() {
+  module('Issue Tracker | issue formats', function (hooks) {
+    setupApplicationTest(hooks);
+    setupLocalIndexing(hooks);
+    setupOnSave(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+    });
+
+    hooks.beforeEach(async function () {
+      await setupAcceptanceTestRealm({
+        realmURL: testRealmURL,
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          ...makeProject(),
+          ...makeIssueWithFields(
+            'IT-1',
+            { status: 'done' },
+            'Issues/done-dependency.json',
+          ),
+          ...makeIssueWithFields(
+            'IT-2',
+            {
+              status: 'in_progress',
+              comments: [
+                {
+                  author: 'Test User',
+                  body: 'A visible comment by default.',
+                },
+              ],
+            },
+            'Issues/sequenced-issue.json',
+            {
+              'blockedBy.0': {
+                links: { self: `${testRealmURL}Issues/done-dependency` },
+              },
+            },
+          ),
+          ...makeIssueWithFields(
+            'IT-3',
+            { status: 'blocked' },
+            'Issues/blocked-dependency.json',
+          ),
+          ...makeIssueWithFields(
+            'IT-4',
+            { status: 'backlog' },
+            'Issues/blocked-consumer.json',
+            {
+              'blockedBy.0': {
+                links: { self: `${testRealmURL}Issues/blocked-dependency` },
+              },
+            },
+          ),
+          ...makeBoard(),
+        },
+      });
+    });
+
+    test('comments and dependency details are expanded and labeled clearly by default', async function (assert) {
+      let issueId = `${testRealmURL}Issues/sequenced-issue`;
+
+      await visitOperatorMode({
+        stacks: [[{ id: issueId, format: 'isolated' }]],
+      });
+      await waitFor('#comments');
+
+      assert
+        .dom('#comments')
+        .hasAttribute('aria-expanded', 'true', 'isolated comments are open');
+      assert
+        .dom('#section-comments')
+        .hasAttribute('aria-hidden', 'false', 'isolated comments are visible');
+      assert
+        .dom('[data-test-dependencies-heading]')
+        .hasText('Depends On', 'isolated view describes normal dependencies');
+
+      await visitOperatorMode({
+        stacks: [[{ id: issueId, format: 'edit' }]],
+      });
+      await waitFor('[data-test-issue-edit]');
+
+      assert
+        .dom('#comments')
+        .hasAttribute('aria-expanded', 'true', 'edit comments are open');
+      assert
+        .dom('#section-comments')
+        .hasAttribute('aria-hidden', 'false', 'edit comments are visible');
+      assert
+        .dom('[data-test-dependencies-heading]')
+        .hasText('Depends On', 'edit view describes normal dependencies');
+    });
+
+    test('fitted cards distinguish dependencies from blocked dependencies', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: boardId, format: 'isolated' }]],
+      });
+      await waitFor('[data-test-dependency-label="IT-4"]');
+
+      assert
+        .dom('[data-test-dependency-label="IT-2"]')
+        .hasText(
+          'Depends on IT-1',
+          'completed dependency is normal sequencing',
+        );
+      assert
+        .dom('[data-test-blocked-dependency-dot="IT-2"]')
+        .doesNotExist('normal dependency has no blocked warning');
+      assert
+        .dom('[data-test-dependency-label="IT-4"]')
+        .hasText(
+          'Blocked by IT-3',
+          'a directly blocked dependency prevents the issue from proceeding',
+        );
+      assert
+        .dom('[data-test-blocked-dependency-dot="IT-4"]')
+        .exists('blocked dependency has a warning indicator');
+    });
+  });
+
   module('Issue Tracker | board interactions', function (hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);

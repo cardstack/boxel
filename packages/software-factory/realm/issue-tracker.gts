@@ -163,7 +163,7 @@ class IssueIsolated extends Component<typeof Issue> {
   @tracked showSidebar = true;
   @tracked descriptionOpen = true;
   @tracked acceptanceCriteriaOpen = true;
-  @tracked commentsOpen = false;
+  @tracked commentsOpen = true;
 
   get statusColor(): string | undefined {
     return getIssueStatusColor(this.args.model, this.args.model?.status);
@@ -345,7 +345,12 @@ class IssueIsolated extends Component<typeof Issue> {
 
             {{#if @model.blockedBy.length}}
               <div class='sidebar-section'>
-                <h3 class='sidebar-section-title'>Blocked By</h3>
+                <h3
+                  class='sidebar-section-title'
+                  data-test-dependencies-heading
+                >
+                  Depends On
+                </h3>
                 <div class='related-list'>
                   <@fields.blockedBy />
                 </div>
@@ -660,7 +665,7 @@ class IssueEdit extends Component<typeof Issue> {
   @tracked showSidebar = true;
   @tracked descriptionOpen = true;
   @tracked acceptanceCriteriaOpen = true;
-  @tracked commentsOpen = false;
+  @tracked commentsOpen = true;
 
   get statusColor(): string | undefined {
     return getIssueStatusColor(this.args.model, this.args.model?.status);
@@ -835,7 +840,9 @@ class IssueEdit extends Component<typeof Issue> {
               </FieldContainer>
             </div>
             <div class='sidebar-section'>
-              <h3 class='sidebar-section-title'>Blocked By</h3>
+              <h3 class='sidebar-section-title' data-test-dependencies-heading>
+                Depends On
+              </h3>
               <FieldContainer @label='' @vertical={{true}}>
                 <@fields.blockedBy />
               </FieldContainer>
@@ -1097,6 +1104,35 @@ export class Issue extends CardDef {
   });
 
   static fitted = class Fitted extends Component<typeof Issue> {
+    // Dependencies normally sequence work. Use the blocked warning state only
+    // when a direct dependency is itself in the blocked status.
+    get blockedDependencies() {
+      return (this.args.model?.blockedBy ?? []).filter(
+        (dependency) => dependency?.status === 'blocked',
+      );
+    }
+
+    get hasBlockedDependency(): boolean {
+      return this.blockedDependencies.length > 0;
+    }
+
+    get dependencyLabel(): string {
+      let dependencies = this.args.model?.blockedBy ?? [];
+      let issueIds = (list: typeof dependencies): string =>
+        list
+          .map((dependency) => dependency?.issueId)
+          .filter(Boolean)
+          .join(', ');
+
+      if (this.hasBlockedDependency) {
+        return `Blocked by ${
+          issueIds(this.blockedDependencies) || this.blockedDependencies.length
+        }`;
+      }
+
+      return `Depends on ${issueIds(dependencies) || dependencies.length}`;
+    }
+
     get statusColor(): string | undefined {
       return getIssueStatusColor(this.args.model, this.args.model?.status);
     }
@@ -1144,9 +1180,22 @@ export class Issue extends CardDef {
               </div>
             {{/if}}
             {{#if @model.blockedBy.length}}
-              <div class='meta-link-item meta-blocked-by'>
+              <div
+                class='meta-link-item meta-depends-on
+                  {{if this.hasBlockedDependency "has-blocked-dependency"}}'
+              >
                 <CircleAlert class='meta-link-icon' />
-                <span>Blocked by {{@model.blockedBy.length}}</span>
+                <span data-test-dependency-label={{@model.issueId}}>
+                  {{this.dependencyLabel}}
+                </span>
+                {{#if this.hasBlockedDependency}}
+                  <span
+                    class='blocked-dependency-dot'
+                    data-test-blocked-dependency-dot={{@model.issueId}}
+                    title='A dependency is blocked — this issue cannot proceed until it unblocks'
+                    aria-hidden='true'
+                  ></span>
+                {{/if}}
               </div>
             {{/if}}
             {{#if @model.relatedKnowledge.length}}
@@ -1308,6 +1357,18 @@ export class Issue extends CardDef {
           font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground, var(--boxel-500));
           overflow: hidden;
+        }
+        .meta-depends-on.has-blocked-dependency {
+          color: var(--destructive, #b91c1c);
+        }
+        .blocked-dependency-dot {
+          display: inline-block;
+          width: 0.375rem;
+          height: 0.375rem;
+          border-radius: 50%;
+          background: var(--destructive, #dc2626);
+          margin-left: 0.125rem;
+          flex-shrink: 0;
         }
         .meta-link-icon {
           width: 0.75rem;
