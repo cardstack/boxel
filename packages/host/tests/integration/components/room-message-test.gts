@@ -329,6 +329,53 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .doesNotHaveClass('bot-tools-only');
   });
 
+  test('a streaming compact tool call shows a spinner rather than the full-size "Working…" pill', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: true,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Let me read that skill first.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'bot-tool-1',
+          name: 'readRealmFile',
+          arguments: {
+            urls: ['http://test-realm/skills/pirate-speak/SKILL.md'],
+            description: 'Read file: pirate-speak/SKILL.md',
+          },
+          executedBy: AI_BOT_EXECUTOR,
+        },
+        undefined,
+        'event-1',
+        false,
+        'Apply',
+        'ready',
+        undefined,
+        this.owner,
+      ),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    let indicator =
+      '[data-test-tool-call-id="bot-tool-1"] [data-test-apply-state="preparing"]';
+    assert.dom('[data-test-tool-call-id="bot-tool-1"]').hasClass('compact');
+    assert.dom(indicator).exists();
+    assert
+      .dom(indicator)
+      .doesNotContainText(
+        'Working',
+        'compact preparing indicator does not clip the full-size pill',
+      );
+    assert.dom(`${indicator} svg`).exists('a spinner is shown instead');
+  });
+
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {
     let testScenario = await setupTestScenario({
       isStreaming: false,

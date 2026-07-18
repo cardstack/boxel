@@ -4,6 +4,7 @@ import {
   RealmPaths,
   SupportedMimeType,
   fetchUserPermissions,
+  logger,
   markdownDefRef,
   skillCardRef,
   systemInitiatedPriority,
@@ -32,12 +33,92 @@ import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 // prerenderer (a real host in headless Chrome, with the same shims and virtual
 // network a user's browser has), so a module this endpoint passes is one the
 // deployed host can actually load.
+//
+// The validation sweep prerenders every distinct tool module, which costs
+// seconds warm and tens of seconds on a cold prerender loader. To keep this
+// usable as a frequent monitor, the per-realm result is cached and refreshed
+// off the request path: a poll serves the last computed result immediately and,
+// when that result is older than REFRESH_AFTER_MS, kicks a background refresh
+// for the next poll. Only the first poll after a process start pays the sweep
+// synchronously, so the response is always a definite pass/fail. The served
+// result is therefore at most one refresh interval stale — `ageSeconds` on the
+// response reports how old it is.
 
 interface SkillToolFailure {
   skill: string;
   module: string;
   name: string;
   error: string;
+}
+
+interface SkillValidationAttributes {
+  status: 'pass' | 'fail';
+  skillsChecked: number;
+  toolsChecked: number;
+  failures: SkillToolFailure[];
+}
+
+interface ComputeDeps {
+  dbAdapter: CreateRoutesArgs['dbAdapter'];
+  definitionLookup: CreateRoutesArgs['definitionLookup'];
+  virtualNetwork: CreateRoutesArgs['virtualNetwork'];
+  prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
+  createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
+}
+
+interface CachedValidation {
+  computedAt: number;
+  attributes: SkillValidationAttributes;
+}
+
+// Serve a cached result this fresh as-is; older than this, serve it but kick a
+// background refresh. Kept below the monitor's cadence so each poll refreshes
+// the previous poll's result off the request path.
+const REFRESH_AFTER_MS = 4 * 60 * 1000;
+const log = logger('realm:skill-validation');
+
+// Per-realm result cache plus the in-flight refresh dedup map, both keyed by
+// realm URL. Held per handler instance (see below) rather than at module scope
+// so servers sharing a process — every realm-server test fixture — don't share
+// each other's cached results.
+interface ValidationCache {
+  results: Map<string, CachedValidation>;
+  refreshInFlight: Map<string, Promise<CachedValidation>>;
+}
+
+// Recompute and cache one realm's result, deduping concurrent refreshes so a
+// poll landing during an in-flight sweep joins it rather than starting another.
+function refreshValidation(
+  realm: Realm,
+  deps: ComputeDeps,
+  cache: ValidationCache,
+): Promise<CachedValidation> {
+  let existing = cache.refreshInFlight.get(realm.url);
+  if (existing) {
+    return existing;
+  }
+  let pending = (async () => {
+    try {
+      let attributes = await computeValidation(realm, deps);
+      let entry: CachedValidation = { computedAt: Date.now(), attributes };
+      cache.results.set(realm.url, entry);
+      return entry;
+    } finally {
+      // Clean up inside the promise body rather than via `pending.finally(...)`:
+      // that would spawn a second promise which, on a refresh rejection,
+      // rejects unobserved and surfaces as an unhandled rejection (the only
+      // observed promise is `pending`, returned to the caller). A concurrent
+      // call for this realm gets the existing in-flight promise (the guard
+      // above), so no other refresh can be queued while this one runs — the
+      // map entry is always this one, so clear it unconditionally.
+      cache.refreshInFlight.delete(realm.url);
+    }
+  })();
+  cache.refreshInFlight.set(realm.url, pending);
+  return pending;
 }
 
 export default function handleSkillValidation({
@@ -54,6 +135,10 @@ export default function handleSkillValidation({
     realmSecretSeed,
     serverURL,
   );
+  let cache: ValidationCache = {
+    results: new Map(),
+    refreshInFlight: new Map(),
+  };
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (
       !(await isAuthorizedToViewMonitoring(ctxt.request, realmServerSecretSeed))
@@ -106,70 +191,46 @@ export default function handleSkillValidation({
       return;
     }
 
-    let indexQueryEngine = new IndexQueryEngine(
+    let deps: ComputeDeps = {
       dbAdapter,
       definitionLookup,
       virtualNetwork,
-    );
-    let skills: { id: string; tools: ToolRef[] }[];
-    try {
-      let { cards } = await indexQueryEngine.searchCards(
-        new URL(realm.url),
-        { filter: { type: skillCardRef } },
-        {},
-      );
-      // Discover markdown skills with a type-only file search, then narrow to
-      // `kind: 'skill'` here. An `eq: { kind }` filter would make the query
-      // resolve MarkdownDef's field definition; when that lookup misses, the
-      // search engine swallows the resulting error into an empty result set,
-      // silently dropping every markdown skill. A type match is
-      // definition-free — it matches the indexed `types` column — so discovery
-      // stays reliable regardless of which definitions are loaded here.
-      let { files: markdownFiles } = await indexQueryEngine.searchFiles(
-        new URL(realm.url),
-        { filter: { type: markdownDefRef } },
-        {},
-      );
-      let files = markdownFiles.filter(
-        (file) =>
-          (file.searchDoc?.kind ?? file.resource?.attributes?.kind) === 'skill',
-      );
-      skills = [
-        ...cards.map((card) => ({
-          id: card.id!,
-          tools: cardToolRefsFor(card),
-        })),
-        ...files.map((file) => ({
-          id: file.canonicalURL,
-          tools: markdownToolRefsFor(file),
-        })),
-      ];
-    } catch (e: any) {
-      await sendResponseForSystemError(
-        ctxt,
-        `unable to search for skills in realm ${realm.url}: ${e.message}`,
-      );
-      return;
+      prerenderer,
+      createPrerenderAuth,
+    };
+
+    // Serve the cached result. Only compute on the request path when nothing
+    // is cached yet (the first poll after a process start) or the caller asks
+    // for a fresh result with `refresh=true`; a stale-but-present result is
+    // otherwise served immediately while a background refresh recomputes it for
+    // the next poll.
+    let forceRefresh = ctxt.URL.searchParams.get('refresh') === 'true';
+    let cached = cache.results.get(realm.url);
+    let entry: CachedValidation;
+    if (forceRefresh || !cached) {
+      try {
+        entry = await refreshValidation(realm, deps, cache);
+      } catch (e: any) {
+        await sendResponseForSystemError(
+          ctxt,
+          `unable to validate skills in realm ${realm.url}: ${e.message}`,
+        );
+        return;
+      }
+    } else {
+      entry = cached;
+      if (Date.now() - entry.computedAt > REFRESH_AFTER_MS) {
+        // A failure here leaves the last good result in place (logged, not
+        // surfaced) rather than blocking or failing the poll.
+        refreshValidation(realm, deps, cache).catch((e: any) => {
+          log.error(
+            `background skill-validation refresh for ${realm.url} failed: ${e.message}`,
+          );
+        });
+      }
     }
 
-    let failures: SkillToolFailure[];
-    try {
-      failures = await validateToolModules({
-        skills,
-        realm,
-        dbAdapter,
-        prerenderer,
-        createPrerenderAuth,
-      });
-    } catch (e: any) {
-      await sendResponseForSystemError(
-        ctxt,
-        `unable to validate skill modules in realm ${realm.url}: ${e.message}`,
-      );
-      return;
-    }
-
-    let toolCount = skills.reduce((sum, s) => sum + s.tools.length, 0);
+    let ageSeconds = Math.round((Date.now() - entry.computedAt) / 1000);
     return setContextResponse(
       ctxt,
       new Response(
@@ -177,12 +238,7 @@ export default function handleSkillValidation({
           data: {
             type: 'skill-validation',
             id: realm.url,
-            attributes: {
-              status: failures.length === 0 ? 'pass' : 'fail',
-              skillsChecked: skills.length,
-              toolsChecked: toolCount,
-              failures,
-            },
+            attributes: { ...entry.attributes, ageSeconds },
           },
         }),
         {
@@ -190,6 +246,74 @@ export default function handleSkillValidation({
         },
       ),
     );
+  };
+}
+
+// Enumerate the realm's skills (legacy Skill cards + markdown skills) and
+// validate every distinct tool module they reference. Throws on a search/DB
+// failure; a returned result always carries a definite pass/fail status.
+async function computeValidation(
+  realm: Realm,
+  deps: ComputeDeps,
+): Promise<SkillValidationAttributes> {
+  let {
+    dbAdapter,
+    definitionLookup,
+    virtualNetwork,
+    prerenderer,
+    createPrerenderAuth,
+  } = deps;
+  let indexQueryEngine = new IndexQueryEngine(
+    dbAdapter,
+    definitionLookup,
+    virtualNetwork,
+  );
+
+  let { cards } = await indexQueryEngine.searchCards(
+    new URL(realm.url),
+    { filter: { type: skillCardRef } },
+    {},
+  );
+  // Discover markdown skills with a type-only file search, then narrow to
+  // `kind: 'skill'` here. An `eq: { kind }` filter would make the query
+  // resolve MarkdownDef's field definition; when that lookup misses, the
+  // search engine swallows the resulting error into an empty result set,
+  // silently dropping every markdown skill. A type match is definition-free —
+  // it matches the indexed `types` column — so discovery stays reliable
+  // regardless of which definitions are loaded here.
+  let { files: markdownFiles } = await indexQueryEngine.searchFiles(
+    new URL(realm.url),
+    { filter: { type: markdownDefRef } },
+    {},
+  );
+  let files = markdownFiles.filter(
+    (file) =>
+      (file.searchDoc?.kind ?? file.resource?.attributes?.kind) === 'skill',
+  );
+  let skills = [
+    ...cards.map((card) => ({
+      id: card.id!,
+      tools: cardToolRefsFor(card),
+    })),
+    ...files.map((file) => ({
+      id: file.canonicalURL,
+      tools: markdownToolRefsFor(file),
+    })),
+  ];
+
+  let failures = await validateToolModules({
+    skills,
+    realm,
+    dbAdapter,
+    prerenderer,
+    createPrerenderAuth,
+  });
+  let toolCount = skills.reduce((sum, s) => sum + s.tools.length, 0);
+  return {
+    status: failures.length === 0 ? 'pass' : 'fail',
+    skillsChecked: skills.length,
+    toolsChecked: toolCount,
+    failures,
   };
 }
 

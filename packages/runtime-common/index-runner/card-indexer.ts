@@ -23,7 +23,6 @@ import { unresolveResourceInstanceURLs } from '../url.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
 import { uniqueDeps } from './dependency-collections.ts';
-import { canonicalURL } from './dependency-url.ts';
 
 export interface CardIndexerOptions {
   path: LocalPath;
@@ -165,12 +164,17 @@ export async function performCardIndexing({
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
     let runtimeErrorDeps = renderResult?.deps ?? [];
     let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
-      canonicalURL(m, instanceURL.href, virtualNetwork),
+      dependencyResolver.canonicalURL(m, instanceURL.href),
     );
     let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ? [canonicalURL(renderError.error.id, instanceURL.href, virtualNetwork)]
+        ? [
+            dependencyResolver.canonicalURL(
+              renderError.error.id,
+              instanceURL.href,
+            ),
+          ]
         : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(

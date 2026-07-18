@@ -2,8 +2,14 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { rri, type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
+  rri,
+  type LooseSingleCardDocument,
+  type ModulePrerenderArgs,
+  type Prerenderer,
+} from '@cardstack/runtime-common';
+import {
+  getTestPrerenderer,
   realmServerSecretSeed,
   setupPermissionedRealmCached,
   testRealmURL,
@@ -56,6 +62,39 @@ function skillDoc(
         },
       },
     },
+  };
+}
+
+// A prerenderer that counts `prerenderModule` calls and delegates everything
+// else (realm indexing during setup needs a real `prerenderVisit`, so a pure
+// stub won't do). The count lets a test observe when the validation endpoint
+// actually reruns the sweep versus serving its cached result.
+interface CountingPrerenderer {
+  prerenderer: Prerenderer;
+  setDelegate: (delegate: Prerenderer) => void;
+  moduleCalls: () => number;
+}
+function makeCountingPrerenderer(): CountingPrerenderer {
+  let delegate: Prerenderer | undefined;
+  let moduleCalls = 0;
+  let prerenderer = new Proxy({} as Prerenderer, {
+    get(_target, prop, receiver) {
+      if (prop === 'prerenderModule') {
+        return (args: ModulePrerenderArgs) => {
+          moduleCalls++;
+          return delegate!.prerenderModule(args);
+        };
+      }
+      let value = Reflect.get(delegate!, prop, receiver);
+      return typeof value === 'function' ? value.bind(delegate!) : value;
+    },
+  });
+  return {
+    prerenderer,
+    setDelegate: (d) => {
+      delegate = d;
+    },
+    moduleCalls: () => moduleCalls,
   };
 }
 
@@ -235,6 +274,85 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(attributes.skillsChecked, 3, 'all skills checked');
         assert.strictEqual(attributes.toolsChecked, 2, 'tools checked');
         assert.deepEqual(attributes.failures, [], 'no failures');
+      });
+    });
+
+    module('_skill-validation result caching', function (hooks) {
+      let request: SuperTest<Test>;
+      let counting = makeCountingPrerenderer();
+
+      // Registered before setupPermissionedRealmCached so it runs first: the
+      // delegate is in place before the template build and server boot route
+      // their prerender work through the counting proxy.
+      hooks.before(async function () {
+        counting.setDelegate(await getTestPrerenderer());
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        fileSystem: {
+          'test-tool.gts': TOOL_MODULE_SOURCE,
+          'valid-skill.json': skillDoc([
+            { module: `${testRealmURL.href}test-tool`, name: 'default' },
+          ]),
+        },
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        prerenderer: counting.prerenderer,
+        onRealmSetup(args) {
+          request = args.request;
+        },
+      });
+
+      test('serves a cached result and only reruns the sweep on refresh=true', async function (assert) {
+        let token = await monitoringAuthToken(realmServerSecretSeed);
+        let poll = (query = '') =>
+          request
+            .get(
+              `/_skill-validation?realm=${encodeURIComponent(
+                testRealmURL.href,
+              )}${query}`,
+            )
+            .set('Authorization', `Bearer ${token}`);
+
+        // Nothing is cached after boot, so the first poll computes on the
+        // request path — one prerenderModule per unique tool module (one here).
+        let beforeCold = counting.moduleCalls();
+        let first = await poll();
+        assert.strictEqual(first.status, 200, 'first poll succeeds');
+        assert.strictEqual(
+          first.body.data.attributes.status,
+          'pass',
+          'first poll passes',
+        );
+        assert.ok(
+          counting.moduleCalls() > beforeCold,
+          'the cold poll runs the sweep',
+        );
+
+        // A second poll well inside the refresh interval serves the cached
+        // result without touching the prerenderer.
+        let afterCold = counting.moduleCalls();
+        let second = await poll();
+        assert.strictEqual(second.status, 200, 'second poll succeeds');
+        assert.strictEqual(
+          second.body.data.attributes.status,
+          'pass',
+          'second poll passes',
+        );
+        assert.strictEqual(
+          counting.moduleCalls(),
+          afterCold,
+          'the warm poll serves the cache without rerunning the sweep',
+        );
+
+        // refresh=true forces a synchronous recompute regardless of cache age.
+        let refreshed = await poll('&refresh=true');
+        assert.strictEqual(refreshed.status, 200, 'refresh poll succeeds');
+        assert.ok(
+          counting.moduleCalls() > afterCold,
+          'refresh=true reruns the sweep',
+        );
       });
     });
   });

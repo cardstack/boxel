@@ -23,12 +23,12 @@ import type {
   RecentsSection,
   SearchSheetSection,
   UrlSection,
-} from '@cardstack/host/utils/card-search/sections';
+} from '@cardstack/host/utils/search/sections';
 
 import {
   removeCardJsonExtension,
   type NewCardArgs,
-} from '@cardstack/host/utils/card-search/types';
+} from '@cardstack/host/utils/search/types';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
 import ResultTile from './result-tile';

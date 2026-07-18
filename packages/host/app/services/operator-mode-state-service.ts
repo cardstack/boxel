@@ -50,14 +50,13 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { removeCardJsonExtension } from '../utils/card-search/types';
-
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
 } from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
+import { removeCardJsonExtension } from '../utils/search/types';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';

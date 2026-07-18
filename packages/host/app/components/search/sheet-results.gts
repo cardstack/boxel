@@ -16,7 +16,7 @@ import type {
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
+import type { SectionPagination } from '@cardstack/host/utils/search/section-pagination';
 import {
   assembleSections,
   buildLiveRecentsSection,
@@ -25,8 +25,8 @@ import {
   buildUrlSection,
   type RecentsSection,
   type SearchSheetSection,
-} from '@cardstack/host/utils/card-search/sections';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+} from '@cardstack/host/utils/search/sections';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import ResultSection from './result-section';

@@ -49,7 +49,7 @@ import {
   AdornCheckmarkSelected,
 } from '@cardstack/host/components/adorn/adorn-select-checkmark';
 
-import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
+import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 
 import { htmlComponent } from '../../lib/html-component';
 import { knownFileMetaUrls } from '../../lib/known-file-meta-urls';

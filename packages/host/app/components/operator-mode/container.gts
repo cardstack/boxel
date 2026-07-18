@@ -38,9 +38,9 @@ import type MarkdownEmbedChooserService from '@cardstack/host/services/markdown-
 import type MessageService from '@cardstack/host/services/message-service';
 
 import CardChooserModal from '../card-chooser/modal';
-import SearchResults from '../card-search/search-results';
 import FileChooserModal from '../file-chooser/modal';
 import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
+import SearchResults from '../search/search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';

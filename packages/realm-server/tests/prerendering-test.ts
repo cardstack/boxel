@@ -3266,6 +3266,45 @@ module(basename(import.meta.filename), function () {
       );
       assert.false(result.pool.timedOut, 'prerender did not time out');
     });
+
+    test('a fused index visit mirrors an auth error onto the file half without a fallback transition', async function (assert) {
+      const cardFileURL = `${providerRealmURL}secret.json`;
+
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: providerRealmURL,
+        realm: providerRealmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+      });
+
+      assert.strictEqual(
+        response.card?.error?.error.status,
+        401,
+        'card half carries the auth error',
+      );
+      assert.strictEqual(
+        response.fileExtract?.status,
+        'error',
+        'file half is an error row',
+      );
+      assert.strictEqual(
+        response.fileExtract?.error?.error.status,
+        401,
+        'file half mirrors the auth error',
+      );
+      // A fallback extract would hit the same auth wall, so none runs — the
+      // file half is synthesized from the card error instead.
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition runs on the auth path',
+      );
+      assert.false(pool.timedOut, 'auth failure is not reported as a timeout');
+      assert.false(pool.evicted, 'auth failure does not evict the page');
+    });
   });
 
   module('prerender - public query fallback', function (hooks) {
@@ -7791,10 +7830,13 @@ module(basename(import.meta.filename), function () {
 
       // Per-route index timings are the index-half sibling of
       // renderFormatsMs: they ride the index visit's meta — one number per
-      // index-half route step (meta / icon for the card, fileExtract / icon
-      // for the file) — while the prerender-html visit, which runs no
-      // index-half route here, reports none. (No jobId is threaded, so the
-      // per-type icon memo is inactive and each icon route actually runs.)
+      // index-half route step — while the prerender-html visit, which runs
+      // no index-half route here, reports none. The index visit of a card
+      // instance fuses the extract into its render.meta transition, so
+      // `card.meta` covers both halves (the extract's share itemized as
+      // `fileExtractMs`) and no standalone `file.fileExtract` leg exists.
+      // (No jobId is threaded, so the per-type icon memo is inactive and
+      // each icon route actually runs.)
       let indexRoutesMs = index.meta?.diagnostics?.indexRoutesMs;
       assert.strictEqual(
         typeof indexRoutesMs?.card?.meta,
@@ -7807,9 +7849,14 @@ module(basename(import.meta.filename), function () {
         'index visit records the card icon route timing',
       );
       assert.strictEqual(
-        typeof indexRoutesMs?.file?.fileExtract,
+        indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'index visit runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof index.meta?.diagnostics?.fileExtractMs,
         'number',
-        'index visit records the file extract route timing',
+        'index visit itemizes the extract share of the fused meta transition',
       );
       assert.strictEqual(
         typeof indexRoutesMs?.file?.icon,
@@ -7820,7 +7867,8 @@ module(basename(import.meta.filename), function () {
         html.meta?.diagnostics?.indexRoutesMs,
         'prerender-html visit records no per-route index timings',
       );
-      // The fused visit runs both halves, so it records the index routes too.
+      // The fused (union) visit runs meta last, after the html renders, so
+      // its extract stays a standalone transition and records its own leg.
       let fusedIndexRoutesMs = fused.meta?.diagnostics?.indexRoutesMs;
       assert.strictEqual(
         typeof fusedIndexRoutesMs?.card?.meta,
@@ -7831,6 +7879,144 @@ module(basename(import.meta.filename), function () {
         typeof fusedIndexRoutesMs?.card?.icon,
         'number',
         'fused visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.file?.fileExtract,
+        'number',
+        'fused visit records the standalone file extract route timing',
+      );
+    });
+
+    test('a legacy host without the fused capability gets per-pass transitions with identical output', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      const fileDefCodeRef = {
+        module: baseRRI('json-file-def'),
+        name: 'JsonFileDef',
+      };
+      let visitArgs = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index' as const,
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef,
+        } as const,
+      };
+      let legacy = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          opts: { simulateLegacyHost: true },
+        })
+      ).response;
+      let fused = (await prerenderer.prerenderVisit(visitArgs)).response;
+
+      // The legacy path pays a standalone extract transition; the fused
+      // path folds the extract into render.meta and itemizes its share.
+      assert.strictEqual(
+        typeof legacy.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        'number',
+        'legacy host records a standalone file extract transition',
+      );
+      assert.strictEqual(
+        legacy.meta?.diagnostics?.fileExtractMs,
+        undefined,
+        'legacy host has no fused extract share to itemize',
+      );
+      assert.strictEqual(
+        fused.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'fused host runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof fused.meta?.diagnostics?.fileExtractMs,
+        'number',
+        'fused host itemizes the extract share of the meta transition',
+      );
+
+      // Both strategies produce the same output.
+      assert.deepEqual(
+        fused.card?.serialized,
+        legacy.card?.serialized,
+        'serialized doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.searchDoc,
+        legacy.card?.searchDoc,
+        'search doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.types,
+        legacy.card?.types,
+        'types match the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.displayNames,
+        legacy.card?.displayNames,
+        'display names match the legacy path',
+      );
+      assert.deepEqual(
+        [...new Set(fused.card?.deps ?? [])].sort(),
+        [...new Set(legacy.card?.deps ?? [])].sort(),
+        'card deps match the legacy path as a set',
+      );
+      {
+        let { deps: fusedDeps, nonce: _n1, ...fusedRest } = fused.fileExtract!;
+        let {
+          deps: legacyDeps,
+          nonce: _n2,
+          ...legacyRest
+        } = legacy.fileExtract!;
+        assert.deepEqual(
+          fusedRest,
+          legacyRest,
+          'file extract matches the legacy path',
+        );
+        assert.deepEqual(
+          [...new Set(fusedDeps)].sort(),
+          [...new Set(legacyDeps)].sort(),
+          'file extract deps match the legacy path as a set',
+        );
+      }
+    });
+
+    test('an eviction during the fused pass ends the visit without a fallback extract', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // A render timeout is a wedged-page signal: the page gets evicted and
+      // no further transition can run on it, so the fused visit ends with
+      // the file half absent. The file row degrades to an error row for
+      // this attempt and heals on the next index of the file — the pinned
+      // trade-off for carrying the extract inside the meta transition.
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+        opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+      });
+
+      assert.true(pool.timedOut, 'the fused transition timed out');
+      assert.true(pool.evicted, 'the timeout evicted the page');
+      assert.ok(
+        response.pageUnusableError,
+        'the visit reports the page unusable',
+      );
+      assert.strictEqual(
+        response.fileExtract,
+        undefined,
+        'no fallback extract runs on an evicted page',
+      );
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition was recorded',
       );
     });
 
@@ -8011,6 +8197,20 @@ module(basename(import.meta.filename), function () {
           response.card?.iconHTML,
           null,
           'icon render is skipped once the meta entry has errored',
+        );
+        // The extract normally rides the fused meta transition, which the
+        // card error lost — the fallback standalone extract transition must
+        // still produce the file row (the card error is a route-level error;
+        // the page stays fully operational).
+        assert.strictEqual(
+          response.fileExtract?.status,
+          'ready',
+          'the fallback extract still produces the file row',
+        );
+        assert.strictEqual(
+          typeof response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+          'number',
+          'the fallback extract records its standalone route timing',
         );
         assert.false(
           pool.timedOut,

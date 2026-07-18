@@ -354,6 +354,7 @@ const ALL_TEST_FILES: string[] = [
   './search-entries-engine-test',
   './search-bounds-test',
   './coerce-error-message-test',
+  './canonical-url-memo-test',
   './realm-operations-test',
   './resolve-published-realm-url-test',
   './fallback-models-test',
@@ -376,6 +377,7 @@ const ALL_TEST_FILES: string[] = [
   './worker-request-signature-test',
   './worker-request-forwarder-test',
   './worker-reader-test',
+  './worker-job-registration-test',
   './realm-index-updater-test',
 ];
 

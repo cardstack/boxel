@@ -32,13 +32,13 @@ import {
   buildSearchQuery,
   searchScopeForOptions,
   shouldSkipSearchQuery,
-} from '@cardstack/host/utils/card-search/query-builder';
-import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+} from '@cardstack/host/utils/search/query-builder';
+import { SectionPagination } from '@cardstack/host/utils/search/section-pagination';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
-} from '@cardstack/host/utils/card-search/url';
+} from '@cardstack/host/utils/search/url';
 
 import { SECTION_DISPLAY_LIMIT_FOCUSED, type SortOption } from './constants';
 import LiveRecentsProvider from './live-recents-provider';

@@ -5988,10 +5988,17 @@ export class Realm {
     // +source POSTs, an immediately-following publishability call could
     // otherwise see a stale snapshot and miss real violations (e.g. a
     // leaky card that just landed but isn't indexed yet).
+    //
+    // The drain's wait is unbounded: the incremental job it awaits can sit
+    // queued behind other realms' work when the worker pool is saturated.
+    // The timing log below attributes a slow or empty-looking report to
+    // the drain vs. the scan itself.
+    let drainStartMs = Date.now();
     let pending = this.incrementalIndexing();
     if (pending) {
       await pending;
     }
+    let drainMs = Date.now() - drainStartMs;
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
@@ -6331,6 +6338,14 @@ export class Realm {
 
     let publishable =
       privateDependencyViolations.length === 0 && errorViolations.length === 0;
+
+    this.#log.info(
+      `publishability for ${sourceRealmURL}: drained incremental indexing ` +
+        `in ${drainMs}ms; ${rootResources.length} instances scanned, ` +
+        `${errorRows.length} error rows, ` +
+        `${privateDependencyViolations.length} private-dependency violations, ` +
+        `publishable=${publishable}`,
+    );
 
     let doc = {
       data: {

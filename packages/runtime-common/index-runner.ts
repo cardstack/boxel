@@ -46,9 +46,22 @@ import {
   discoverInvalidations,
   type DiscoverInvalidationsResult,
 } from './index-runner/discover-invalidations.ts';
-import { visitFileForIndexing } from './index-runner/visit-file.ts';
+import {
+  renderFileForIndexing,
+  routeIndexVisitResult,
+  type IndexVisitRenderResult,
+} from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
+
+// The result of a prefetched render, with any thrown error captured rather
+// than rejected so an un-awaited prefetch can't surface as an unhandled
+// rejection. `skipped` covers files the render short-circuited (ignored /
+// different realm).
+type VisitRenderOutcome =
+  | { status: 'rendered'; result: IndexVisitRenderResult }
+  | { status: 'skipped' }
+  | { status: 'error'; error: unknown };
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -103,10 +116,6 @@ export class IndexRunner {
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
-  // Aggregate wall of every `batch.updateEntry` row write in the current pass.
-  // Summed here (not per row) because a row can't time its own INSERT; surfaces
-  // on the job result's `phaseTimings.writeMs`. Reset at the start of each pass.
-  #writeMsTotal = 0;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -202,7 +211,6 @@ export class IndexRunner {
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
     current.#dependencyResolver.reset();
-    current.#writeMsTotal = 0;
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
     // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
@@ -276,47 +284,49 @@ export class IndexRunner {
     // queueing it behind the caller.
     let filesCompleted = 0;
     let totalFiles = invalidations.length;
+    // One batched read of every visit's created-at + content hash/size, so the
+    // per-visit lookups below are served from memory rather than two DB
+    // round-trips each across the whole pass.
+    await current.batch.prefetchFileMeta(
+      current.#visitLocalPaths(invalidations),
+    );
     let loopStart = Date.now();
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     try {
-      for (let invalidation of invalidations) {
-        // Resume guard. If a previous attempt of this same job already
-        // wrote URL_X to the working table AND the EFS mtime hasn't
-        // changed since, skip the visit — the existing working row is
-        // still authoritative and `applyBatchUpdates` will promote it
-        // (the constructor pre-seeded it into `#invalidations`). If
-        // mtime DID change, fall through to a normal visit so the
-        // upsert in `updateEntry` overwrites the resumed row with
-        // current content.
-        let resumedMtime = resumedRows.get(invalidation.href);
-        if (resumedMtime !== undefined) {
-          let currentMtime = discoverResult.filesystemMtimes[invalidation.href];
-          if (currentMtime !== undefined && currentMtime === resumedMtime) {
-            resumedSkipped++;
-            filesCompleted++;
-            current.#onProgress?.({
-              type: 'file-visited',
-              realmURL: current.realmURL.href,
-              jobId: current.#jobInfo.jobId,
-              url: invalidation.href,
-              filesCompleted,
-              totalFiles,
-            });
-            continue;
+      await current.#runVisitLoop(invalidations, {
+        // Resume guard. If a previous attempt of this same job already wrote
+        // URL_X to the working table AND the EFS mtime hasn't changed since,
+        // skip the visit — the existing working row is still authoritative
+        // and `applyBatchUpdates` will promote it (the constructor pre-seeded
+        // it into `#invalidations`). If mtime DID change, fall through to a
+        // normal visit so the upsert in `updateEntry` overwrites the resumed
+        // row with current content.
+        skipReason: (url) => {
+          let resumedMtime = resumedRows.get(url.href);
+          if (resumedMtime === undefined) {
+            return undefined;
           }
-        }
-        await current.tryToVisit(invalidation);
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles,
-        });
-      }
+          let currentMtime = discoverResult.filesystemMtimes[url.href];
+          return currentMtime !== undefined && currentMtime === resumedMtime
+            ? 'resumed'
+            : undefined;
+        },
+        onSkip: () => {
+          resumedSkipped++;
+        },
+        onVisited: (url) => {
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: url.href,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
@@ -375,7 +385,7 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.#writeMsTotal,
+        writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
@@ -390,7 +400,6 @@ export class IndexRunner {
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
-    current.#writeMsTotal = 0;
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
     // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
@@ -476,35 +485,51 @@ export class IndexRunner {
     let totalFiles = invalidations.length;
 
     let hrefs = urls.map((u) => u.href);
+    // One batched read of the invalidation set's created-at + content hash/size
+    // so the per-visit lookups are served from memory. Deletes and resumed URLs
+    // that get skipped below just leave unused cache entries — harmless.
+    await current.batch.prefetchFileMeta(
+      current.#visitLocalPaths(invalidations),
+    );
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     let loopStart = Date.now();
     try {
-      for (let invalidation of invalidations) {
-        if (
-          operations.get(invalidation.href) === 'delete' &&
-          hrefs.includes(invalidation.href)
-        ) {
-          // file is deleted, there is nothing to visit
-        } else if (resumedRows.has(invalidation.href)) {
-          // Previous attempt of this job already produced a working
-          // row for this URL. `args.changes` is the deterministic seed
-          // for incremental jobs; if the file changed again, that's a
-          // different changeset enqueued as a separate job. Skip.
-          resumedSkipped++;
-        } else {
-          await current.tryToVisit(invalidation);
-        }
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles,
-        });
-      }
+      await current.#runVisitLoop(invalidations, {
+        skipReason: (url) => {
+          if (
+            operations.get(url.href) === 'delete' &&
+            hrefs.includes(url.href)
+          ) {
+            // file is deleted, there is nothing to visit
+            return 'delete';
+          }
+          // Previous attempt of this job already produced a working row for
+          // this URL. `args.changes` is the deterministic seed for
+          // incremental jobs; if the file changed again, that's a different
+          // changeset enqueued as a separate job. Skip.
+          if (resumedRows.has(url.href)) {
+            return 'resumed';
+          }
+          return undefined;
+        },
+        onSkip: (_url, reason) => {
+          if (reason === 'resumed') {
+            resumedSkipped++;
+          }
+        },
+        onVisited: (url) => {
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: url.href,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
@@ -555,7 +580,7 @@ export class IndexRunner {
         discoverMs,
         orderMs,
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
-        writeMs: current.#writeMsTotal,
+        writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
       },
     };
@@ -582,9 +607,33 @@ export class IndexRunner {
     });
   }
 
-  private async tryToVisit(url: URL) {
+  // Local paths for the URLs this pass will visit, keyed the same way the
+  // visit's own file-meta lookups are (`realmPaths.local(url)`). URLs outside
+  // this realm are skipped — the visit skips them too. Handed to
+  // `batch.prefetchFileMeta` so the per-visit created-at / content-meta lookups
+  // are served from one batched read instead of a round-trip each.
+  #visitLocalPaths(urls: URL[]): string[] {
+    let paths: string[] = [];
+    for (let url of urls) {
+      try {
+        paths.push(this.#realmPaths.local(url));
+      } catch (_e) {
+        // different realm — not visited, so nothing to prefetch
+      }
+    }
+    return paths;
+  }
+
+  // The render (tab-bound) half of a visit. Reads the file and runs the
+  // prerender round-trip(s) but never touches the index tables, so a
+  // prefetched render can run while the previous visit's rows are still being
+  // written. Rejections are folded into the returned outcome — a prefetched
+  // render sits un-awaited for a tick, and an escaping rejection there would
+  // be an unhandled-rejection rather than something the loop can route to a
+  // file-error row.
+  async #renderVisit(url: URL): Promise<VisitRenderOutcome> {
     try {
-      await visitFileForIndexing({
+      let result = await renderFileForIndexing({
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,
@@ -600,85 +649,164 @@ export class IndexRunner {
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
-        indexCardWithResult: async (args) => await this.indexCard(args),
-        indexFileWithResults: async (args) => await this.indexFile(args),
       });
-    } catch (err: any) {
-      if (isCardError(err) && err.status === 404) {
-        this.#log.info(
-          `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
-        );
+      return result ? { status: 'rendered', result } : { status: 'skipped' };
+    } catch (error) {
+      return { status: 'error', error };
+    }
+  }
+
+  // The bookkeeping + row-write (worker/DB-bound) half of a visit. Runs in
+  // the shadow of the next visit's render.
+  async #finishVisit(result: IndexVisitRenderResult): Promise<void> {
+    await routeIndexVisitResult(result, {
+      indexCardWithResult: async (args) => await this.indexCard(args),
+      indexFileWithResults: async (args) => await this.indexFile(args),
+    });
+  }
+
+  // Render-ahead visit loop. Visits are FINISHED strictly in order — the
+  // post-render bookkeeping reads prior visits' index rows (dependency-error
+  // propagation), and the visit order sequences dependencies before their
+  // dependents — but the NEXT visit's render is started before the current
+  // visit's bookkeeping + row write, so the tab renders file N+1 while the
+  // worker writes file N. Since a render reads only production `boxel_index`
+  // (never this pass's uncommitted `boxel_index_working` rows), rendering
+  // ahead cannot observe a write that hasn't landed yet.
+  //
+  // `skipReason` suppresses the render for URLs a prior attempt already
+  // resolved (`'resumed'`) or that were deleted (`'delete'`); it must be pure
+  // because the prefetch look-ahead and the finish cursor each call it. Every
+  // URL still reports progress in order via `onVisited`.
+  async #runVisitLoop(
+    invalidations: URL[],
+    {
+      skipReason,
+      onSkip,
+      onVisited,
+    }: {
+      skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
+      onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
+      onVisited: (url: URL) => void;
+    },
+  ): Promise<void> {
+    let n = invalidations.length;
+    let renders = new Map<number, Promise<VisitRenderOutcome>>();
+    // Start the render for the next non-skipped URL at or after `from`,
+    // keeping exactly one render in flight ahead of the finish cursor.
+    let prefetch = (from: number) => {
+      for (let j = from; j < n; j++) {
+        if (renders.has(j)) {
+          return;
+        }
+        if (skipReason(invalidations[j])) {
+          continue;
+        }
+        renders.set(j, this.#renderVisit(invalidations[j]));
         return;
       }
-      // A transport-level failure of the index visit — its
-      // prerender-server request timing out/aborting, or a reader/network
-      // error — never reaches performCardIndexing/performFileIndexing's
-      // own error-entry construction: visitFileForIndexing rethrows
-      // before calling indexCardWithResult/indexFileWithResults. (HTML
-      // prerendering is a separate job; the request here is the index
-      // pass's own visit.) Left uncaught, one file's failure propagates
-      // out of the fromScratch/incremental visit loop, skips
-      // batch.done(), and discards every other successfully-visited
-      // file's rows for the whole job. Persist a file-error row instead
-      // so the failure is isolated to this URL, matching the error_doc
-      // pattern used for in-band render errors.
-      let message = coerceErrorMessage(
-        err,
-        `Indexing failed for ${url.href} with no error message (${jobIdentity(this.#jobInfo)})`,
+    };
+    prefetch(0);
+    for (let i = 0; i < n; i++) {
+      let url = invalidations[i];
+      let reason = skipReason(url);
+      if (reason) {
+        onSkip(url, reason);
+        onVisited(url);
+        prefetch(i + 1);
+        continue;
+      }
+      let outcome = await renders.get(i)!;
+      renders.delete(i);
+      // Kick off the next render now so its round-trip overlaps the finish
+      // work below.
+      prefetch(i + 1);
+      try {
+        if (outcome.status === 'error') {
+          throw outcome.error;
+        }
+        if (outcome.status === 'rendered') {
+          await this.#finishVisit(outcome.result);
+        }
+      } catch (err) {
+        await this.#handleVisitError(url, err);
+      }
+      onVisited(url);
+    }
+  }
+
+  async #handleVisitError(url: URL, err: any): Promise<void> {
+    if (isCardError(err) && err.status === 404) {
+      this.#log.info(
+        `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
       );
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} failed to index ${url.href}, recording file-error: ${message}`,
-      );
-      let error = isCardError(err)
-        ? serializableError(err)
-        : serializableError(
-            Object.assign(new CardError(message, { status: 500 }), {
-              stack: (err as Error)?.stack,
-            }),
-          );
-      error.message = message;
-      let fileEntry: FileErrorIndexEntry = {
-        type: 'file-error',
+      return;
+    }
+    // A transport-level failure of the visit — its prerender-server request
+    // timing out/aborting, or a reader/network error — never reaches
+    // performCardIndexing/performFileIndexing's own error-entry construction:
+    // renderFileForIndexing rejects before `#finishVisit` routes it. (HTML
+    // prerendering is a separate job; the request here is the index pass's own
+    // visit.) Left uncaught, one file's failure propagates out of the
+    // fromScratch/incremental visit loop, skips batch.done(), and discards
+    // every other successfully-visited file's rows for the whole job. Persist
+    // a file-error row instead so the failure is isolated to this URL,
+    // matching the error_doc pattern used for in-band render errors.
+    let message = coerceErrorMessage(
+      err,
+      `Indexing failed for ${url.href} with no error message (${jobIdentity(this.#jobInfo)})`,
+    );
+    this.#log.warn(
+      `${jobIdentity(this.#jobInfo)} failed to index ${url.href}, recording file-error: ${message}`,
+    );
+    let error = isCardError(err)
+      ? serializableError(err)
+      : serializableError(
+          Object.assign(new CardError(message, { status: 500 }), {
+            stack: (err as Error)?.stack,
+          }),
+        );
+    error.message = message;
+    let fileEntry: FileErrorIndexEntry = {
+      type: 'file-error',
+      error,
+    };
+    await this.batch.bufferEntry(url, fileEntry);
+    this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
+    this.stats.fileErrors++;
+    // `Batch.invalidate()` already tombstoned every type this URL previously
+    // had in the index — for an existing card that's both `instance` and
+    // `file`. Overwriting only the `file` tombstone above would let
+    // batch.done() promote the untouched `instance` tombstone, silently
+    // removing a previously-good card from search over a transient error. The
+    // index is the oracle for "was this a card?": the batch records which live
+    // row types it tombstoned, so an existing card is protected even when the
+    // file can't be read — which may be exactly how the visit failed.
+    // Re-parsing the source is only the fallback for a brand-new file, which
+    // has no prior row to protect but should still surface its failure as an
+    // instance error when it's a card.
+    let isCardInstance =
+      this.batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
+    if (!isCardInstance && url.href.endsWith('.json')) {
+      try {
+        let fileRef = await this.#reader.readFile(url);
+        let resource = fileRef?.content
+          ? (JSON.parse(fileRef.content)?.data as unknown)
+          : undefined;
+        isCardInstance = Boolean(resource && isCardResource(resource));
+      } catch (parseErr) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+        );
+      }
+    }
+    if (isCardInstance) {
+      let instanceEntry: InstanceErrorIndexEntry = {
+        type: 'instance-error',
         error,
       };
-      await this.batch.updateEntry(url, fileEntry);
-      this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
-      this.stats.fileErrors++;
-      // `Batch.invalidate()` already tombstoned every type this URL
-      // previously had in the index — for an existing card that's both
-      // `instance` and `file`. Overwriting only the `file` tombstone
-      // above would let batch.done() promote the untouched `instance`
-      // tombstone, silently removing a previously-good card from search
-      // over a transient error. The index is the oracle for "was this a
-      // card?": the batch records which live row types it tombstoned, so
-      // an existing card is protected even when the file can't be read —
-      // which may be exactly how the visit failed. Re-parsing the source
-      // is only the fallback for a brand-new file, which has no prior
-      // row to protect but should still surface its failure as an
-      // instance error when it's a card.
-      let isCardInstance =
-        this.batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
-      if (!isCardInstance && url.href.endsWith('.json')) {
-        try {
-          let fileRef = await this.#reader.readFile(url);
-          let resource = fileRef?.content
-            ? (JSON.parse(fileRef.content)?.data as unknown)
-            : undefined;
-          isCardInstance = Boolean(resource && isCardResource(resource));
-        } catch (parseErr) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
-          );
-        }
-      }
-      if (isCardInstance) {
-        let instanceEntry: InstanceErrorIndexEntry = {
-          type: 'instance-error',
-          error,
-        };
-        await this.batch.updateEntry(url, instanceEntry);
-        this.stats.instanceErrors++;
-      }
+      await this.batch.bufferEntry(url, instanceEntry);
+      this.stats.instanceErrors++;
     }
   }
 
@@ -912,16 +1040,13 @@ export class IndexRunner {
     }
   }
 
-  // Time the row write and fold it into the pass's aggregate. The single
-  // chokepoint every `boxel_index_working` row write goes through, so the job
-  // result's `phaseTimings.writeMs` covers instance and file rows alike.
+  // The single chokepoint every `boxel_index_working` row write goes through.
+  // Hands the row to the batch's write-behind buffer rather than upserting it
+  // inline, so the visit loop can start the next file's render while this row
+  // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
+  // times the physical writes; the job result reads `batch.writeMs`.
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
-    let start = Date.now();
-    try {
-      await this.batch.updateEntry(url, entry);
-    } finally {
-      this.#writeMsTotal += Date.now() - start;
-    }
+    await this.batch.bufferEntry(url, entry);
   }
 }
 
