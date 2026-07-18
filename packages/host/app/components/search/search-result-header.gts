@@ -11,7 +11,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
 import type { SortOption } from './constants';
 import type { ViewOption } from './constants';

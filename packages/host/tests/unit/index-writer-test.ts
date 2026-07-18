@@ -13,6 +13,7 @@ import {
   mergeErrorsByGeneration,
   ri,
   rri,
+  type FileEntry,
   type LooseCardResource,
   type IndexedInstance,
   type BoxelIndexTable,
@@ -22,6 +23,7 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
+import { persistFileMeta } from '@cardstack/runtime-common/file-meta';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
@@ -249,6 +251,138 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
       'the "production" realm generations are correct',
+    );
+  });
+
+  test('prefetchFileMeta serves per-visit created-at + content-meta lookups from one batched read', async function (assert) {
+    // Seed realm_file_meta the way the realm write path does: created_at for
+    // every file, content hash/size for the files that have been hashed.
+    let seeded = await persistFileMeta(adapter, testRealmURL, [
+      { path: '1.json', contentHash: 'hash-1', contentSize: 11 },
+      { path: '2.json', contentHash: 'hash-2', contentSize: 22 },
+      { path: '3.json' }, // created_at only — no hash/size (e.g. a pre-hashing file)
+    ]);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    // '4.json' has no row at all, exercising the unprefetched fallback below.
+    await batch.prefetchFileMeta(['1.json', '2.json', '3.json', '4.json']);
+
+    // After the prefetch, the per-visit lookups the index loop makes are served
+    // from memory: no further DB round-trips for the prefetched files.
+    let executeCalls = 0;
+    let origExecute = adapter.execute.bind(adapter);
+    adapter.execute = ((sql: string, opts?: any) => {
+      executeCalls++;
+      return origExecute(sql, opts);
+    }) as typeof adapter.execute;
+    try {
+      assert.deepEqual(await batch.getContentMeta('1.json'), {
+        contentHash: 'hash-1',
+        contentSize: 11,
+      });
+      assert.deepEqual(await batch.getContentMeta('2.json'), {
+        contentHash: 'hash-2',
+        contentSize: 22,
+      });
+      assert.deepEqual(
+        await batch.getContentMeta('3.json'),
+        { contentHash: undefined, contentSize: undefined },
+        'a file with a row but no persisted hash/size is served as undefined from the cache',
+      );
+      assert.strictEqual(
+        await batch.ensureFileCreatedAt('1.json'),
+        seeded.get('1.json')!.createdAt,
+        'created_at is served from the cache',
+      );
+      assert.strictEqual(
+        executeCalls,
+        0,
+        'prefetched lookups make no DB round-trips',
+      );
+    } finally {
+      adapter.execute = origExecute;
+    }
+
+    // A file the prefetch didn't cover falls back to the per-path read — which
+    // for ensureFileCreatedAt still creates the row — so behavior is unchanged
+    // when a lookup misses the cache.
+    let created4 = await batch.ensureFileCreatedAt('4.json');
+    assert.true(
+      created4 > 0,
+      'an unprefetched file still gets a created_at via the per-path fallback',
+    );
+    assert.deepEqual(
+      await batch.getContentMeta('4.json'),
+      { contentHash: undefined, contentSize: undefined },
+      'an unprefetched file with no hash/size falls back to a per-path read',
+    );
+  });
+
+  test('buffered index writes defer until flush, and a dependency read flushes them first', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    // Force the server (split) write path so a flush coalesces the buffered
+    // rows into one multi-row upsert; SQLite otherwise takes the fused
+    // per-row path. Both paths share the buffer + flush-on-dependency-read
+    // semantics this test pins.
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: true },
+    );
+
+    let depURL = new URL(`${testRealmURL}a.json`);
+    let dependentURL = new URL(`${testRealmURL}b.json`);
+    let fileEntry = (name: string): FileEntry => ({
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name },
+    });
+
+    await batch.bufferEntry(depURL, fileEntry('a'));
+    await batch.bufferEntry(dependentURL, fileEntry('b'));
+
+    // The invalidation set knows both URLs immediately — the swap in `done()`
+    // and the dependency skip both key off it — but nothing is written yet.
+    assert.deepEqual(
+      [...batch.invalidations].sort(),
+      [depURL.href, dependentURL.href],
+      'buffered URLs join the invalidation set synchronously',
+    );
+    let beforeFlush = await adapter.execute(
+      `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(beforeFlush, [], 'no rows are written while buffered');
+
+    // A dependency-error read that touches a buffered URL flushes the buffer
+    // first, so a dependent's bookkeeping sees the dependency's row.
+    let depRows = await batch.getDependencyRows([depURL.href]);
+    assert.deepEqual(
+      depRows.map((r) => r.url),
+      [depURL.href],
+      'the dependency read returns the now-flushed buffered row',
+    );
+
+    // The flush wrote every buffered row, not only the one queried — so a
+    // dependent's transitively-earlier writes are all visible too.
+    let afterFlush = await adapter.execute(
+      `SELECT url FROM boxel_index_working WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      afterFlush,
+      [{ url: depURL.href }, { url: dependentURL.href }],
+      'the flush coalesced all buffered rows into the working table',
     );
   });
 

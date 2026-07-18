@@ -24,7 +24,7 @@ import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
   removeCardJsonExtension,
   type NewCardArgs,
-} from '@cardstack/host/utils/card-search/types';
+} from '@cardstack/host/utils/search/types';
 
 import CardRenderer from '../card-renderer';
 

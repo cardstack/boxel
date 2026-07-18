@@ -1244,12 +1244,12 @@ LIMIT 20;
 
 The index visit runs at most three route steps, and `indexRoutesMs` records each one's wall-clock, split by the card indexing and the FileDef file indexing (the index-half sibling of the render channel's `renderFormatsMs`):
 
-- **`card.meta`** — the `render.meta` route: instantiate the card, run computeds, build the search doc, and resolve `types` / `displayNames` / `deps`. The types chain is a prototype-chain walk inside this route, not a step of its own — its cost is inside this number. `serializeMs` / `searchDocMs` / `searchDocSettleMs` break the _doc build_ out of it (Mode J); the remainder of `card.meta` is the route's own transition + settle.
+- **`card.meta`** — the `render.meta` route: instantiate the card, run computeds, build the search doc, and resolve `types` / `displayNames` / `deps`. The types chain is a prototype-chain walk inside this route, not a step of its own — its cost is inside this number. On a card-instance index visit this is the **fused** transition: it also performs the file row's extract, whose share is itemized as `diagnostics.fileExtractMs`. `serializeMs` / `searchDocMs` / `searchDocSettleMs` break the _doc build_ out of it (Mode J); the remainder of `card.meta` net of `fileExtractMs` is the route's own transition + settle.
 - **`card.icon`** — the `render.icon` route. Present only when the icon route actually ran; **absent when the per-type icon memo served the icon**, since a memo hit renders nothing and costs ~0 this visit. So across one job's cards of a given type, expect `card.icon` on the first card of the type and none on the rest.
-- **`file.fileExtract`** — the `render.file-extract` route: the file's resource, types, and deps.
+- **`file.fileExtract`** — a standalone `render.file-extract` route transition: the file's resource, types, and deps. Present on non-card files (they have no card side to fuse into), on the fallback extract a card render error triggers, and on a prerender-html visit that self-resolves its file resource. **Absent on a card-instance visit's happy path** — there the extract runs inside the fused `card.meta` transition and shows up as `fileExtractMs` instead.
 - **`file.icon`** — the file's `render.icon` route, same memo behavior as `card.icon`.
 
-`meta` and `icon` are the card's routes; `fileExtract` and `icon` are the file's. A card-instance `.json` produces both a `card` block (from the instance visit) and a `file` block (from the FileDef visit) in the same visit.
+`meta` and `icon` are the card's routes; `fileExtract` and `icon` are the file's. A card-instance `.json` produces both a `card` block and a `file` block from the same visit: the instance row's payload and the file row's extract both come out of the one fused `card.meta` transition, while `file.icon` still records when the file icon renders.
 
 **The residual is the plumbing.** `indexRoutesMs`'s numbers sum to less than `renderElapsedMs`; the gap is the inter-route machinery (route transitions, instantiation, settle handoffs) — the part of the floor that isn't a route step. On a trivial card that residual, plus `card.meta` net of its (near-zero) doc build, _is_ the floor.
 
@@ -1281,7 +1281,7 @@ A row here with a large `render_ms`, a near-zero doc cost, and a `meta_ms` that'
 ```sql
 SELECT
   diagnostics->'indexRoutesMs'->'card' AS card_routes,   -- {"meta":…, "icon":…}
-  diagnostics->'indexRoutesMs'->'file' AS file_routes,   -- {"fileExtract":…, "icon":…}
+  diagnostics->'indexRoutesMs'->'file' AS file_routes,   -- {"icon":…} on a card row (extract fused into meta); {"fileExtract":…, "icon":…} where a standalone extract ran
   (diagnostics->>'renderElapsedMs')::int AS render_ms
 FROM boxel_index
 WHERE url = '<card-url>' AND type = 'instance';

@@ -3958,15 +3958,24 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
-
+  // Loader identities and dependency lists are in canonical RRI form, while
+  // the dependency tracker keys module nodes by http(s) URL and drops
+  // anything else — so convert at this boundary via the loader's
+  // tracking-key form.
   let loader = Loader.getLoaderFor(ctor);
+  trackRuntimeModuleDependency(
+    loader ? loader.dependencyTrackingKey(identity.module) : identity.module,
+    dependencyTrackingContext,
+  );
   if (!loader) {
     return;
   }
 
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
-    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
+    trackRuntimeModuleDependency(
+      loader.dependencyTrackingKey(dep),
+      dependencyTrackingContext,
+    );
   }
 }
 

@@ -150,7 +150,7 @@ let {
     },
     userIndexCount: {
       description:
-        'The number of workers that service only user-initiated indexing (priority 10) and nothing below it — a dedicated index tier that never gets held by the slower user-initiated prerender-html jobs (default 0)',
+        'The number of workers that claim only indexing job types at the user-initiated priority — a dedicated index lane that can never be occupied by prerender-html or other job types (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -675,15 +675,22 @@ let adapter: PgAdapter;
   // claim jobs at or above it, oldest-first among those. User-initiated
   // indexing and prerender-html are co-equal (both `userInitiatedPriority`
   // — a published realm's rendered HTML is as first-class as its search
-  // index), so the user-index and high-priority pools both floor at that
-  // tier and serve all user-initiated work — indexing and prerender-html
-  // alike — and never system-tier jobs. The two counts stay separate knobs
-  // for deployment flexibility but land equivalent floor-10 workers; size
-  // the total to the user-work rate so neither indexing nor rendering
-  // starves the other. The all-priority pool floors at the lowest tier and
-  // serves everything, including system-initiated prerender-html.
+  // index), so a priority floor alone cannot keep the two kinds of work
+  // from occupying the same workers. What separates them is the claim
+  // query's job-type filter: a worker only dequeues job types it has
+  // registered handlers for, and the user-index pool starts with
+  // `--indexJobsOnly` so it registers exactly the indexing job types.
+  // That makes it a lane a prerender-html sweep can never hold — indexing
+  // gates realm provisioning and every write's read-your-writes drain, so
+  // it must stay responsive even when long render sweeps saturate the
+  // high-priority pool. The high-priority pool serves all user-initiated
+  // work, indexing and prerender-html alike; the all-priority pool floors
+  // at the lowest tier and serves everything, including system-initiated
+  // prerender-html.
   for (let i = 0; i < userIndexCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings);
+    await startWorker(userInitiatedPriority, urlMappings, {
+      indexJobsOnly: true,
+    });
   }
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
@@ -849,6 +856,7 @@ async function markFailedJob({
 async function startWorker(
   priority: number,
   urlMappings: [URL | string, URL][],
+  opts?: { indexJobsOnly?: boolean },
 ) {
   let worker = spawn(
     'node',
@@ -857,6 +865,7 @@ async function startWorker(
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
+      ...(opts?.indexJobsOnly ? [`--indexJobsOnly`] : []),
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from instanceof URL ? from.href : from}'`,
@@ -900,7 +909,7 @@ async function startWorker(
       log.info(
         `worker ${name} exited (code=${code}, signal=${signal}). spawning replacement worker`,
       );
-      startWorker(priority, urlMappings);
+      startWorker(priority, urlMappings, opts);
     }
 
     // Free orphan reservations in the background. The new worker won't be

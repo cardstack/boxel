@@ -2,7 +2,7 @@ import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index.ts';
 import type { DefinitionCacheEntries } from '../definition-lookup.ts';
 import type { SerializedError } from '../error.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
-import { canonicalURL } from './dependency-url.ts';
+import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 import {
   canTraverseRelationshipDependency,
   normalizeDependencyForLookup,
@@ -17,6 +17,7 @@ interface IndexBackedDependencyErrorOptions {
   ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   getInvalidations(): string[];
+  canonicalURLMemo: CanonicalURLMemo;
 }
 
 export class IndexBackedDependencyErrors {
@@ -27,6 +28,7 @@ export class IndexBackedDependencyErrors {
   ) => Promise<DefinitionCacheEntries>;
   #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
   #getInvalidations: () => string[];
+  #canonicalURLMemo: CanonicalURLMemo;
   #relationshipDependencyRows = new Map<string, DependencyIndexRow[]>();
 
   constructor({
@@ -35,12 +37,14 @@ export class IndexBackedDependencyErrors {
     readDefinitionCacheEntries,
     getDependencyRows,
     getInvalidations,
+    canonicalURLMemo,
   }: IndexBackedDependencyErrorOptions) {
     this.#realmURL = realmURL;
     this.#virtualNetwork = virtualNetwork;
     this.#readDefinitionCacheEntries = readDefinitionCacheEntries;
     this.#getDependencyRows = getDependencyRows;
     this.#getInvalidations = getInvalidations;
+    this.#canonicalURLMemo = canonicalURLMemo;
   }
 
   reset(): void {
@@ -52,6 +56,7 @@ export class IndexBackedDependencyErrors {
       url.href,
       this.#realmURL.href,
       this.#virtualNetwork,
+      this.#canonicalURLMemo,
     );
     this.#relationshipDependencyRows.delete(canonical);
   }
@@ -232,6 +237,7 @@ export class IndexBackedDependencyErrors {
         dep,
         base,
         this.#virtualNetwork,
+        this.#canonicalURLMemo,
       );
       if (!normalized || normalized.endsWith('.json')) {
         return;
@@ -288,6 +294,7 @@ export class IndexBackedDependencyErrors {
         dep,
         base,
         this.#virtualNetwork,
+        this.#canonicalURLMemo,
       );
       if (
         !canTraverseRelationshipDependency(
@@ -362,7 +369,12 @@ export class IndexBackedDependencyErrors {
   ): Promise<SerializedError[]> {
     let urls = [...new Set(deps)]
       .map((dep) =>
-        normalizeStoredDependency(dep, relativeTo, this.#virtualNetwork),
+        normalizeStoredDependency(
+          dep,
+          relativeTo,
+          this.#virtualNetwork,
+          this.#canonicalURLMemo,
+        ),
       )
       .filter((dep) =>
         canTraverseRelationshipDependency(
@@ -380,7 +392,12 @@ export class IndexBackedDependencyErrors {
     let seenErrors = new Set<string>();
     let pendingInvalidations = new Set(
       this.#getInvalidations().map((href) =>
-        normalizeStoredDependency(href, this.#realmURL, this.#virtualNetwork),
+        normalizeStoredDependency(
+          href,
+          this.#realmURL,
+          this.#virtualNetwork,
+          this.#canonicalURLMemo,
+        ),
       ),
     );
     for (let dep of urls) {

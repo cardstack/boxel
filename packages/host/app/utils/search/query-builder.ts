@@ -21,7 +21,7 @@ import {
   specRef,
 } from '@cardstack/runtime-common';
 
-import type { SortOption } from '@cardstack/host/components/card-search/constants';
+import type { SortOption } from '@cardstack/host/components/search/constants';
 
 import { isSearchKeyEmpty, isURLSearchKey } from './url';
 

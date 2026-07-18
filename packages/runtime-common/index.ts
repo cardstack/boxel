@@ -236,6 +236,12 @@ export interface PrerenderMetaDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
+  // Wall-clock of the file extract a fused index render performs inside the
+  // render.meta route after the card payload is materialized (see
+  // FusedIndexMeta). This is the extract's share of the visit's
+  // `indexRoutesMs.card.meta` bucket; a standalone render.file-extract
+  // transition reports through `indexRoutesMs.file.fileExtract` instead.
+  fileExtractMs?: number;
   // Unresolvable `searchable` annotation paths found while building the
   // module's definitions, persisted to `modules.diagnostics`. Populated by the
   // module-prerender route's definition-build validation, not a card render.
@@ -255,6 +261,19 @@ export interface PrerenderMeta {
   // `response.meta.diagnostics` so it persists to
   // `boxel_index.diagnostics` for SQL-side perf triage.
   diagnostics?: PrerenderMetaDiagnostics;
+}
+
+// A render.meta payload that also carries the file-extract result for the
+// same file. Produced when the render options request both `cardRender` and
+// `fileExtract`: the meta route materializes the full card payload first,
+// then runs the file extract in its own dependency-tracking session, so an
+// index visit of a card-instance file pays a single route transition for
+// both the instance row and the file row. Drivers split `fileExtract` off
+// the capture before treating the remainder as the card payload; hosts that
+// don't advertise the `fusedIndexMeta` capability never receive both flags
+// and produce a plain PrerenderMeta.
+export interface FusedIndexMeta extends PrerenderMeta {
+  fileExtract?: FileExtractResponse;
 }
 
 // Lightweight payload produced by the host app's render.types route. The
@@ -353,12 +372,17 @@ export interface RenderTimeoutDiagnostics {
   // The `meta` number covers the whole `render.meta` route, so the
   // types / displayNames chain that route builds is inside that bucket, not a
   // step of its own — the standalone `types` route is html-half work driving
-  // the fitted/embedded renders, and never runs on an index visit. Only
+  // the fitted/embedded renders, and never runs on an index visit. On a
+  // card-instance index visit against a fused-capable host, `meta` is the
+  // consolidated transition and also contains the file extract (its share is
+  // itemized as `diagnostics.fileExtractMs`), so `fileExtract` is absent;
+  // `fileExtract` appears where a standalone render.file-extract transition
+  // ran — non-card files, the fallback extract after a card render error, and
+  // a prerender-html visit that resolves its own file resource. Only
   // populated where the index-half step actually runs, so it decomposes the
   // per-visit floor into measured route buckets rather than leaving it
   // inferred from `renderElapsedMs`: on an index visit it rides
-  // `boxel_index.diagnostics`; the `fileExtract` leg can also appear on a
-  // prerender-html visit that resolves its own file resource.
+  // `boxel_index.diagnostics`.
   indexRoutesMs?: {
     card?: Record<string, number>;
     file?: Record<string, number>;

@@ -1,14 +1,17 @@
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import type EmberFreestyle from 'ember-freestyle/services/ember-freestyle';
 
 import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown';
 
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
+import FreestyleMenu from 'ember-freestyle/components/freestyle-menu';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
@@ -19,6 +22,8 @@ import IconsGrid from '../components/icons-grid';
 
 import {
   CardContainer,
+  BoxelButton,
+  BoxelInput,
   BoxelSelect,
   CopyButton,
   FieldContainer,
@@ -27,11 +32,55 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import formatComponentName from '../helpers/format-component-name';
+import { loadThemeFonts } from '../utils/theme-fonts';
 
 interface UsageComponent {
   title: string;
   component: ComponentLike;
   importStatement: string;
+}
+
+// The scroll spy schedules FreestyleMenu#scrollActiveItemIntoView while the
+// user scrolls the page. Upstream it uses Element#scrollIntoView, which also
+// scrolls the document — hijacking the in-progress page scroll whenever the
+// active menu item sits outside the nav's visible area. Constrain the
+// auto-scroll to the nav's own scroll container.
+FreestyleMenu.prototype.scrollActiveItemIntoView = function () {
+  let el = document.querySelector('.FreestyleMenu-submenuItem.is-active');
+  let nav = el?.closest('.FreestyleGuide-nav');
+  if (!el || !nav) {
+    return;
+  }
+  let elRect = el.getBoundingClientRect();
+  let navRect = nav.getBoundingClientRect();
+  if (elRect.top < navRect.top) {
+    nav.scrollTop += elRect.top - navRect.top;
+  } else if (elRect.bottom > navRect.bottom) {
+    nav.scrollTop += elRect.bottom - navRect.bottom;
+  }
+};
+
+// Section links in FreestyleMenu carry an extra click handler that mutates
+// the menu's tracked expansion state. Real (trusted) clicks run a microtask
+// checkpoint between listeners, so Ember re-renders the menu — rebuilding the
+// clicked <li> — before LinkTo's own click handler runs. That handler is the
+// one that calls preventDefault, so the browser follows the href instead:
+// a full page reload on every section switch. Defer the mutation past the
+// click dispatch so the LinkTo survives long enough to handle its own click.
+// (Synthetic clicks, e.g. in tests, don't checkpoint mid-dispatch, which is
+// why this only bites real users.)
+{
+  let expandSection = function (this: FreestyleMenu, sectionName: string) {
+    setTimeout(() => {
+      this.expandedSections.add(sectionName);
+      this.userCollapsedSections.delete(sectionName);
+    }, 0);
+  };
+  Object.defineProperty(FreestyleMenu.prototype, 'expandSection', {
+    get() {
+      return expandSection.bind(this);
+    },
+  });
 }
 
 // A handful of usage titles differ from the name the component is exported as.
@@ -47,6 +96,17 @@ const EXPORT_NAME_OVERRIDES: Record<string, string> = {
   EntityThumbnailDisplay: 'EntityDisplayWithThumbnail',
   Kanban: 'DndKanbanBoard',
 };
+
+// Must match the mobile breakpoint used by the media queries below.
+const SMALL_SCREEN = '(max-width: 599px)';
+
+// Theme exports (e.g. from tweakcn) also carry @theme blocks, resets, etc.;
+// only the :root and .dark variable blocks belong in a theme's cssVariables.
+function extractThemeBlocks(css: string): string {
+  return [...css.matchAll(/(?::root|\.dark)\s*\{[^{}]*\}/g)]
+    .map((m) => m[0])
+    .join('\n\n');
+}
 
 function importStatementFor(title: string): string {
   let exportName = EXPORT_NAME_OVERRIDES[title] ?? title;
@@ -78,39 +138,91 @@ class IndexComponent extends Component {
             class='boxel-freestyle-theme-settings'
             @display='flex'
           >
-            <div class='boxel-freestyle-theme-row'>
-              <FieldContainer
-                class='boxel-freestyle-theme-field'
-                @inline={{true}}
-                @label='Theme'
-                @tag='label'
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Theme'
+              @tag='label'
+            >
+              <BoxelSelect
+                class='boxel-freestyle-theme-selector'
+                @placeholder='Select Theme'
+                @selected={{this.theme}}
+                @options={{this.themes}}
+                @onChange={{this.selectTheme}}
+                as |theme|
               >
-                <BoxelSelect
-                  class='boxel-freestyle-theme-selector'
-                  @placeholder='Select Theme'
-                  @selected={{this.theme}}
-                  @options={{this.themes}}
-                  @onChange={{this.selectTheme}}
-                  as |theme|
-                >
-                  {{theme.name}}
-                </BoxelSelect>
-              </FieldContainer>
-              <FieldContainer @inline={{true}} @label='Dark Mode' @tag='label'>
-                <Switch
-                  @label='Dark Mode'
-                  @isEnabled={{this.isDarkMode}}
-                  @onChange={{this.toggleMode}}
-                />
-              </FieldContainer>
-            </div>
-            <FieldContainer @inline={{true}} @label='Cycle Themes' @tag='label'>
+                {{theme.name}}
+              </BoxelSelect>
+            </FieldContainer>
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Cycle Themes'
+              @tag='label'
+            >
               <Switch
                 @label='Cycle Themes'
                 @isEnabled={{this.isCycleThemesEnabled}}
                 @onChange={{this.toggleCycling}}
               />
             </FieldContainer>
+            <FieldContainer
+              class='theme-field'
+              @inline={{true}}
+              @label='Dark Mode'
+              @tag='label'
+            >
+              <Switch
+                @label='Dark Mode'
+                @isEnabled={{this.isDarkMode}}
+                @onChange={{this.toggleMode}}
+              />
+            </FieldContainer>
+            <BoxelButton
+              @kind='secondary'
+              @size='extra-small'
+              {{on 'click' this.toggleImportTheme}}
+            >
+              Import Theme
+            </BoxelButton>
+            {{#if this.isImportingTheme}}
+              <div class='theme-import-panel'>
+                <FieldContainer @label='Name' @tag='label'>
+                  <BoxelInput
+                    placeholder='My Theme'
+                    @value={{this.importThemeName}}
+                    @onInput={{this.updateImportThemeName}}
+                  />
+                </FieldContainer>
+                <FieldContainer @label='Theme CSS' @tag='label'>
+                  <BoxelInput
+                    class='theme-import-css'
+                    @type='textarea'
+                    placeholder=':root { --background: #f8f7fa; … }'
+                    @value={{this.importThemeCss}}
+                    @onInput={{this.updateImportThemeCss}}
+                  />
+                </FieldContainer>
+                <div class='theme-import-actions'>
+                  <BoxelButton
+                    @kind='secondary'
+                    @size='extra-small'
+                    {{on 'click' this.toggleImportTheme}}
+                  >
+                    Cancel
+                  </BoxelButton>
+                  <BoxelButton
+                    @kind='primary'
+                    @size='extra-small'
+                    @disabled={{this.isImportedThemeCssEmpty}}
+                    {{on 'click' this.importTheme}}
+                  >
+                    Apply
+                  </BoxelButton>
+                </div>
+              </div>
+            {{/if}}
           </BoxelContainer>
           <FreestyleSection @name='Icons' class='freestyle-components-section'>
             <IconsGrid />
@@ -150,6 +262,7 @@ class IndexComponent extends Component {
     <style scoped>
       .boxel-freestyle-guide input:not(.boxel-input):not([type='checkbox']),
       .boxel-freestyle-guide select:not(.boxel-select) {
+        max-width: 100%;
         background-color: var(--background);
         color: var(--foreground);
         border: 1px solid var(--border);
@@ -172,38 +285,36 @@ class IndexComponent extends Component {
       }
       .boxel-freestyle-guide-container {
         border-radius: 0;
+        /* CardContainer's overflow: hidden makes it the containing scroll
+           box for the sticky nav sidebar, which then never sticks to the
+           viewport. Nothing needs clipping here (no rounded corners). */
+        overflow: visible;
       }
       .boxel-freestyle-theme-settings {
-        --boxel-container-gap: 0;
-        --boxel-container-padding: 0;
-        --boxel-form-control-height: 30px;
-        position: absolute;
-        top: var(--boxel-sp-lg);
-        right: var(--boxel-sp-4xl);
-        width: min-content;
-      }
-      .boxel-freestyle-theme-row {
-        display: flex;
+        --boxel-container-gap: var(--boxel-sp-2xs) var(--boxel-sp);
+        --boxel-container-padding: var(--boxel-sp-xs) var(--boxel-sp);
+        flex-wrap: wrap;
         align-items: center;
+      }
+      .theme-import-panel {
+        flex-basis: 100%;
+        display: grid;
         gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-xs);
+        border-top: 1px solid var(--border);
+      }
+      .theme-import-css {
+        min-height: 8rem;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .theme-import-actions {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        justify-content: flex-end;
       }
       .boxel-freestyle-theme-selector {
-        min-width: 10rem;
-      }
-      @media (max-width: 1279px) {
-        /* At narrow widths the header no longer has room for the floating
-           settings box, so it flows in the content area instead. */
-        .boxel-freestyle-theme-settings {
-          position: static;
-          width: auto;
-          --boxel-container-gap: var(--boxel-sp-xs) var(--boxel-sp);
-          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-          border-bottom: 1px solid
-            color-mix(in oklab, var(--border) 60%, transparent);
-        }
-        .boxel-freestyle-theme-row {
-          flex-wrap: wrap;
-        }
+        min-width: 12.5rem;
       }
       .subsection-import {
         display: flex;
@@ -252,7 +363,7 @@ class IndexComponent extends Component {
       }
       .FreestyleGuide-subtitle {
         margin-top: var(--boxel-sp-4xs);
-        font-size: 0.875rem;
+        font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -265,34 +376,86 @@ class IndexComponent extends Component {
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
         border-right-color: var(--sidebar-border);
+        z-index: 1;
+      }
+      .FreestyleGuide-content {
+        /* As a flex: 1 child its default min-width: auto lets wide content
+           (tables, code blocks) push the column past the space the row
+           gives it; never let it grow beyond that. */
+        min-width: 0;
+        max-width: 100%;
+        /* ember-freestyle's overflow: auto makes the content column the
+           containing scroll box for sticky descendants (e.g. the icons-grid
+           header), but the page body is what actually scrolls at every
+           width — the column is never height-constrained — so they never
+           stick. */
+        overflow: visible;
       }
       @media (max-width: 599px) {
-        /* Below 600px ember-freestyle stacks the nav above the content;
-           cap its height and let the content column scroll instead. */
+        /* Standard modal-drawer scroll lock: only bites while the drawer is
+           open, since the nav is removed from the DOM when closed. */
+        body:has(.FreestyleGuide-nav) {
+          overflow: hidden;
+        }
         .FreestyleGuide-header {
           padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
         }
         .FreestyleGuide-title {
-          font-size: 1.375rem;
+          font-size: 20px;
+        }
+        .FreestyleGuide-subtitle {
+          font-size: 10px;
+        }
+        .theme-field {
+          --boxel-label-font-size: var(--boxel-font-size-xs);
+        }
+        /* Backdrop behind the drawer. It lives on the nav's own parent so
+           both share a stacking context — a body-level pseudo could end up
+           on the wrong side of the themed container's stacking context.
+           Taps land on .FreestyleGuide-body, outside the nav, which the
+           delegated click handler treats as dismissal. */
+        .FreestyleGuide-body:has(.FreestyleGuide-nav)::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          z-index: 2;
+          background-color: color-mix(
+            in oklab,
+            var(--foreground) 40%,
+            transparent
+          );
+          animation: freestyle-backdrop-fade-in 200ms ease;
         }
         .FreestyleGuide-nav {
-          position: static;
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: var(--boxel-xs-container);
+          max-width: 85vw;
           height: auto;
-          max-height: 40vh;
-          border-bottom: 1px solid var(--sidebar-border);
+          background: var(--muted);
+          overscroll-behavior: contain;
+          z-index: 3;
+          animation: freestyle-nav-slide-in 200ms ease;
         }
         .FreestyleGuide-content {
           flex: 1;
           min-height: 0;
           margin-top: 0;
         }
-        .boxel-freestyle-theme-settings {
-          --boxel-container-padding: var(--boxel-sp-sm) var(--boxel-sp);
-        }
         .FreestyleUsage-apiTable,
         .FreestyleUsage-cssVarsTable {
           display: block;
           overflow-x: auto;
+        }
+      }
+      @keyframes freestyle-nav-slide-in {
+        from {
+          transform: translateX(-100%);
+        }
+      }
+      @keyframes freestyle-backdrop-fade-in {
+        from {
+          opacity: 0;
         }
       }
       .FreestyleMenu-itemLink,
@@ -340,6 +503,7 @@ class IndexComponent extends Component {
         font-weight: 600;
       }
       .FreestyleSection-name {
+        max-width: 100%;
         margin-bottom: var(--boxel-sp);
         padding-bottom: var(--boxel-sp-xs);
         font-size: 1.375rem;
@@ -365,6 +529,7 @@ class IndexComponent extends Component {
       .FreestyleUsage-description {
         line-height: 1.55;
         color: color-mix(in oklab, var(--foreground) 75%, transparent);
+        font-size: var(--boxel-font-size-sm);
       }
       .FreestyleUsage-preview {
         --radius: var(--theme-radius, var(--boxel-border-radius));
@@ -379,11 +544,7 @@ class IndexComponent extends Component {
       }
       .FreestyleUsage-apiTable tr:nth-child(even),
       .FreestyleUsage-cssVarsTable tr:nth-child(even) {
-        background-color: color-mix(
-          in oklab,
-          var(--background) 90%,
-          var(--foreground)
-        );
+        background-color: color-mix(in oklab, var(--border) 30%, transparent);
       }
       .FreestyleUsage-apiTable tr,
       .FreestyleUsage-cssVarsTable tr {
@@ -406,15 +567,22 @@ class IndexComponent extends Component {
       .FreestyleGuide-ctaIcon {
         fill: var(--foreground);
       }
+      .FreestyleGuide-aside {
+        z-index: 3;
+      }
       .FreestyleUsageControls {
         background: var(--popover);
         color: var(--popover-foreground);
+      }
+      .FreestyleUsageControls-itemControl {
+        max-width: 100%;
       }
     </style>
   </template>
 
   private intervalId?: NodeJS.Timeout;
-  private themes: Theme[] = [{ name: '<None>' }, ...Themes];
+  // Tracked so imported themes show up in the selector.
+  @tracked private themes: Theme[] = [{ name: '<None>' }, ...Themes];
   private usageComponents = ALL_USAGE_COMPONENTS.map(([name, c]) => {
     return {
       title: name,
@@ -424,10 +592,22 @@ class IndexComponent extends Component {
   }) as UsageComponent[];
 
   @service declare private router: RouterService;
+  @service('ember-freestyle') declare private emberFreestyle: EmberFreestyle;
 
   @tracked private theme?: Theme;
   @tracked private mode: 'light' | 'dark' = 'light';
   @tracked private isCycleThemesEnabled = false;
+  @tracked private isImportingTheme = false;
+  @tracked private importThemeName = '';
+  @tracked private importThemeCss = '';
+
+  private get importedThemeBlocks() {
+    return extractThemeBlocks(this.importThemeCss);
+  }
+
+  private get isImportedThemeCssEmpty() {
+    return this.importedThemeBlocks.length === 0;
+  }
 
   private get isDarkMode() {
     return this.mode === 'dark';
@@ -435,6 +615,16 @@ class IndexComponent extends Component {
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+
+    // On small screens the nav is a modal drawer: closed by default so the
+    // page lands on scrollable content, opened via the hamburger, dismissed
+    // by tapping the backdrop or choosing a menu entry.
+    if (window.matchMedia(SMALL_SCREEN).matches) {
+      this.emberFreestyle.set('showMenu', false);
+    }
+    document.addEventListener('click', this.handleNavClick);
+    this.syncNavToggleAria();
+
     let queryParams = this.router?.currentRoute?.queryParams;
     if (!queryParams) {
       return;
@@ -452,6 +642,81 @@ class IndexComponent extends Component {
       this.isCycleThemesEnabled = true;
       this.maybeCycleThemes();
     }
+  }
+
+  override willDestroy() {
+    super.willDestroy();
+    document.removeEventListener('click', this.handleNavClick);
+    clearInterval(this.intervalId);
+  }
+
+  // The hamburger, nav links, and backdrop all live in ember-freestyle's or
+  // the browser's markup, so drawer dismissal is handled with one delegated
+  // listener rather than per-element modifiers.
+  private handleNavClick = (ev: Event) => {
+    let target = ev.target as Element | null;
+    if (target?.closest?.('.FreestyleGuide-cta--nav')) {
+      // the hamburger already toggles showMenu; just reflect the new state
+      this.syncNavToggleAria();
+      return;
+    }
+    if (!window.matchMedia(SMALL_SCREEN).matches) {
+      return;
+    }
+    if (!this.emberFreestyle.showMenu) {
+      return;
+    }
+    let insideNav = target?.closest?.('.FreestyleGuide-nav');
+    let onMenuLink = target?.closest?.(
+      '.FreestyleMenu-itemLink, .FreestyleMenu-submenuItemLink',
+    );
+    // Close on any tap outside the drawer (the backdrop covers the rest of
+    // the viewport) or on a menu selection, so the chosen section is
+    // revealed immediately.
+    if (!insideNav || onMenuLink) {
+      this.emberFreestyle.set('showMenu', false);
+      this.syncNavToggleAria();
+    }
+  };
+
+  private syncNavToggleAria = () => {
+    requestAnimationFrame(() => {
+      document
+        .querySelector('.FreestyleGuide-cta--nav')
+        ?.setAttribute('aria-expanded', String(this.emberFreestyle.showMenu));
+    });
+  };
+
+  @action private toggleImportTheme() {
+    this.isImportingTheme = !this.isImportingTheme;
+  }
+
+  @action private updateImportThemeName(value: string) {
+    this.importThemeName = value;
+  }
+
+  @action private updateImportThemeCss(value: string) {
+    this.importThemeCss = value;
+  }
+
+  @action private importTheme() {
+    let cssVariables = this.importedThemeBlocks;
+    if (!cssVariables) {
+      return;
+    }
+    let base = this.importThemeName.trim() || 'Imported Theme';
+    let name = base;
+    for (let i = 2; this.themes.some((t) => t.name === name); i++) {
+      name = `${base} (${i})`;
+    }
+    let theme: Theme = { name, cssVariables };
+    // The static font link in index.html only covers the built-in themes.
+    loadThemeFonts(cssVariables);
+    this.themes = [...this.themes, theme];
+    this.isImportingTheme = false;
+    this.importThemeName = '';
+    this.importThemeCss = '';
+    this.selectTheme(theme);
   }
 
   @action private selectTheme(theme?: Theme) {

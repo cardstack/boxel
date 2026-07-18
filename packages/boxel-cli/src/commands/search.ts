@@ -7,6 +7,7 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { resourceIdentity } from '@cardstack/runtime-common/resource-identity';
+import { CARD_INSTANCE_FILE_KEY } from '@cardstack/runtime-common/search-doc-keys';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 
@@ -206,6 +207,95 @@ export function itemsFromSearchEntryDoc(
   return items;
 }
 
+// A mixed (`scope: 'all'`) entry search returns both rows of a dual-indexed
+// card `.json` — an `instance` row and a `file` row — so a card `.json` shows
+// up twice unless the filter discriminates. The dedup filter keeps card
+// instances and plain files but drops the redundant `.json` file row: the
+// `_isCardInstanceFile` key is stamped only on that file row, so `eq: false`
+// (which matches an absent key too) keeps every other row and drops it.
+//
+// Mirrors the host's search-sheet dedup (`excludeCardInstanceFileRows` /
+// `scopeFilters` in host `card-search/query-builder.ts`). The type-anchor
+// detection mirrors `getTypeRefsFromFilter` / `hasNarrowingPositiveTypeRef`
+// there, reimplemented locally — with the root refs as literals — because both
+// runtime-common modules pull the `@cardstack/base/*` graph into boxel-cli's
+// dependency-light build (the same boundary the wire-translation helpers above
+// note).
+
+// Root refs (BaseDef/CardDef/FieldDef/FileDef) span kinds rather than
+// narrowing to one — every file row carries `BaseDef` in its type chain, so a
+// `type: BaseDef` query matches both rows of a card `.json` and still needs
+// the dedup. The base-realm module can be spelled as its URL or its scoped
+// alias; both resolve to the same module server-side.
+const ROOT_TYPE_REF_MODULES = [
+  'https://cardstack.com/base/card-api',
+  '@cardstack/base/card-api',
+];
+const ROOT_TYPE_REF_NAMES = ['BaseDef', 'CardDef', 'FieldDef', 'FileDef'];
+
+function isRootTypeRef(ref: unknown): boolean {
+  if (typeof ref !== 'object' || ref == null) {
+    return false;
+  }
+  let { module, name } = ref as { module?: unknown; name?: unknown };
+  return (
+    typeof module === 'string' &&
+    typeof name === 'string' &&
+    ROOT_TYPE_REF_MODULES.includes(module) &&
+    ROOT_TYPE_REF_NAMES.includes(name)
+  );
+}
+
+// True when the filter carries a positive (non-negated), kind-narrowing
+// `type`/`on` anchor. A narrowing type discriminates the kind by itself — a
+// card type matches only instance rows (no dupe to drop), a file type must
+// stay free to surface a `.json` file row that legitimately matches it — so
+// the dedup is skipped. Polarity flips under each enclosing `not`, so a
+// negated anchor doesn't count — and neither does a kind-spanning root ref
+// (see `isRootTypeRef`).
+function hasNarrowingTypeAnchor(filter: unknown, negated = false): boolean {
+  if (typeof filter !== 'object' || filter == null || Array.isArray(filter)) {
+    return false;
+  }
+  let f = filter as Record<string, unknown>;
+  if (f.on != null || f.type != null) {
+    return !negated && !isRootTypeRef(f.on ?? f.type);
+  }
+  if (f.not != null) {
+    return hasNarrowingTypeAnchor(f.not, !negated);
+  }
+  if (Array.isArray(f.every)) {
+    return f.every.some((node) => hasNarrowingTypeAnchor(node, negated));
+  }
+  if (Array.isArray(f.any)) {
+    return f.any.some((node) => hasNarrowingTypeAnchor(node, negated));
+  }
+  return false;
+}
+
+/**
+ * Make a search query invariant to the mixed entry-search default: compose the
+ * `_isCardInstanceFile` dedup filter so each card `.json` surfaces once (via its
+ * instance row) while plain files stay listed.
+ *
+ * Skipped when the wire `scope` already pins a single kind (`'cards'`/`'files'`)
+ * or the filter carries a narrowing positive type anchor — the same rule the
+ * host applies. Exported for unit testing.
+ */
+export function composeMixedScopeDedup(
+  query: Record<string, unknown>,
+): Record<string, unknown> {
+  if (query.scope === 'cards' || query.scope === 'files') {
+    return query;
+  }
+  if (hasNarrowingTypeAnchor(query.filter)) {
+    return query;
+  }
+  let dedup = { eq: { [CARD_INSTANCE_FILE_KEY]: false } };
+  let filter = query.filter == null ? dedup : { every: [query.filter, dedup] };
+  return { ...query, filter };
+}
+
 /**
  * Federated search across one or more realms via the `_federated-search`
  * server endpoint.
@@ -232,6 +322,8 @@ export async function search(
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
   let searchUrl = `${realmServerUrl}/_federated-search`;
+
+  query = composeMixedScopeDedup(query);
 
   let realms: string[] = [];
   for (let realm of Array.isArray(realmUrls) ? realmUrls : [realmUrls]) {

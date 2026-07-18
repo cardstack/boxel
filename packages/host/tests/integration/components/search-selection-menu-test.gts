@@ -6,15 +6,15 @@ import { module, test } from 'qunit';
 import {
   SORT_OPTIONS,
   VIEW_OPTIONS,
-} from '@cardstack/host/components/card-search/constants';
-import SearchResultHeader from '@cardstack/host/components/card-search/search-result-header';
+} from '@cardstack/host/components/search/constants';
+import SearchResultHeader from '@cardstack/host/components/search/search-result-header';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
 const noop = () => {};
 
 module(
-  'Integration | card-search/search-result-header (selection menu)',
+  'Integration | search/search-result-header (selection menu)',
   function (hooks) {
     setupRenderingTest(hooks);
 
