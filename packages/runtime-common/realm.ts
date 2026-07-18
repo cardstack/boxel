@@ -4793,9 +4793,6 @@ export class Realm {
           id: instanceURL,
         });
       }
-      original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-      original.meta.adoptsFrom =
-        original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
       delete original.meta.lastModified;
       let originalClone = cloneDeep(original);
 

@@ -983,7 +983,6 @@ module(basename(import.meta.filename), function () {
                   attributes: {
                     field1: 'a',
                     field2a: 'c',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {

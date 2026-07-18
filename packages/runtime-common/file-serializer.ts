@@ -284,6 +284,13 @@ async function processAttributes({
 // that. Otherwise fall back to the field's declared `fieldOrCard`
 // type. Either source's CodeRef may be relative; resolve to absolute
 // before looking up.
+//
+// Returns undefined ONLY for a code ref that can't name an export (a
+// `fieldOf`/`ancestorOf` ref for an unexported class) — the callers'
+// preserve-verbatim handling is scoped to exactly that case. A
+// resolved ref whose definition is genuinely missing never gets here:
+// `lookupDefinition` throws for it, failing the write loudly instead
+// of silently preserving under a stale schema.
 async function resolveChildDef(
   fieldDefinition: FieldDefinition,
   polymorphicAdoptsFrom: CodeRef | undefined,
@@ -428,21 +435,25 @@ async function processRelationships({
       continue;
     }
 
-    const processedValue = normalizeRelationship(value);
-
     if (
       fieldDefinition.type === 'linksToMany' &&
       value.data &&
       Array.isArray(value.data)
     ) {
-      value.data.forEach((_, index) => {
-        result[`${relationshipKey}.${index}`] = {
-          links: processedValue.links,
-          meta: processedValue.meta,
-        };
+      // Fan the JSON:API to-many `data: [...]` form out into indexed
+      // keys, deriving each entry from its own resource identifier —
+      // normalizeRelationship only converts a single-resource `data`,
+      // so normalizing the array-valued relationship as one unit would
+      // lose every target that has no relationship-level links.
+      value.data.forEach((item, index) => {
+        result[`${relationshipKey}.${index}`] = normalizeRelationship({
+          ...(value.links ? { links: value.links } : {}),
+          ...(value.meta ? { meta: value.meta } : {}),
+          data: item,
+        });
       });
     } else {
-      result[relationshipKey] = processedValue;
+      result[relationshipKey] = normalizeRelationship(value);
     }
   }
 

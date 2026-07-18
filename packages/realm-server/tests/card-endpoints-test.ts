@@ -6,7 +6,8 @@ import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { existsSync, readJSONSync, statSync, writeFileSync } = fsExtra;
+const { existsSync, readFileSync, readJSONSync, statSync, writeFileSync } =
+  fsExtra;
 import type {
   Realm,
   Relationship,
@@ -4246,6 +4247,42 @@ module(basename(import.meta.filename), function () {
                 },
               ],
               'compound entries survive a PATCH of an unrelated field',
+            );
+          });
+
+          test('PATCH against a corrupt stored file fails without overwriting it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            let corruptContent = 'not a card document {';
+            writeFileSync(cardFile, corruptContent);
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Should not land',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 500, 'HTTP 500 status');
+            assert.strictEqual(
+              readFileSync(cardFile, 'utf8'),
+              corruptContent,
+              'the stored file is left untouched',
             );
           });
         },
