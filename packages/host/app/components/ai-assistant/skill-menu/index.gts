@@ -11,18 +11,16 @@ import pluralize from 'pluralize';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { baseRRI, skillCardRef } from '@cardstack/runtime-common';
-import { chooseCard, chooseFile } from '@cardstack/runtime-common';
+import { baseRRI, chooseCard, skillCardRef } from '@cardstack/runtime-common';
 
 import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type { FileDef } from '@cardstack/base/file-api';
-
 // A skill expressed as a markdown file is a `MarkdownDef` whose frontmatter
-// declares `boxel.kind: skill`. The file chooser is scoped to exactly those.
+// declares `boxel.kind: skill`. One branch of the mixed chooser's base filter
+// selects exactly those.
 const markdownDefRef = {
   module: baseRRI('markdown-file-def'),
   name: 'MarkdownDef',
@@ -75,8 +73,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           class='attach-button'
           @kind='primary'
           @size='extra-small'
-          {{on 'click' this.attachSkillCard}}
-          @disabled={{this.doAttachSkillCard.isRunning}}
+          {{on 'click' this.attachSkill}}
+          @disabled={{this.doAttachSkill.isRunning}}
           @loading={{this.isAttachingSkill}}
           data-test-pill-menu-add-button
         >
@@ -84,21 +82,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
             Adding Skill
           {{else}}
             Choose a Skill to add
-          {{/if}}
-        </Button>
-        <Button
-          class='attach-button'
-          @kind='primary'
-          @size='extra-small'
-          {{on 'click' this.attachSkillMarkdown}}
-          @disabled={{this.doAttachSkillMarkdown.isRunning}}
-          @loading={{this.isAttachingSkillMarkdown}}
-          data-test-pill-menu-add-markdown-button
-        >
-          {{#if this.isAttachingSkillMarkdown}}
-            Adding Skill
-          {{else}}
-            Choose a skill file to add
           {{/if}}
         </Button>
       </:footer>
@@ -153,7 +136,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   @tracked private isExpanded = false;
   @tracked private isAttachingSkill = false;
-  @tracked private isAttachingSkillMarkdown = false;
 
   private urlForRealmLookup(skill: RoomSkill) {
     return skill.fileDef.sourceUrl;
@@ -184,53 +166,50 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   }
 
   @action
-  private attachSkillCard() {
-    this.doAttachSkillCard.perform();
+  private attachSkill() {
+    this.doAttachSkill.perform();
   }
 
-  private doAttachSkillCard = restartableTask(async () => {
-    let selectedCardIds =
+  // One chooser attaches either kind of skill: a Skill card or a skill-bearing
+  // markdown file (a MarkdownDef with `boxel.kind: skill`). The mixed chooser
+  // (`includeFiles`) surfaces both in a single list and tags each pick with its
+  // kind, which routes the result to the matching attach callback.
+  private doAttachSkill = restartableTask(async () => {
+    // Exclude already-attached skills. The `not: { eq: { id } }` clauses are
+    // built client-side from the menu's own skill list, so card skills are
+    // excluded immediately; file skills are excluded once their rows carry
+    // `id` in the search doc (Phase 1 reindex), and the feature ships without
+    // waiting on that reindex.
+    let exclusions =
       this.args.skills?.map((skill: RoomSkill) => ({
         not: { eq: { id: skill.cardId } },
       })) ?? [];
-    // query for only displaying skill cards that are not already selected
     let query = {
       filter: {
-        every: [{ type: skillCardRef }, ...selectedCardIds],
+        every: [
+          {
+            any: [
+              { type: skillCardRef },
+              { on: markdownDefRef, eq: { kind: 'skill' } },
+            ],
+          },
+          ...exclusions,
+        ],
       },
     };
-    let cardId = await chooseCard(query);
-    if (cardId) {
-      try {
-        this.isAttachingSkill = true;
-        await this.args.onChooseCard?.(cardId);
-      } finally {
-        this.isAttachingSkill = false;
-      }
+    let chosen = await chooseCard(query, { includeFiles: true });
+    if (!chosen) {
+      return;
     }
-  });
-
-  @action
-  private attachSkillMarkdown() {
-    this.doAttachSkillMarkdown.perform();
-  }
-
-  // Parallel to doAttachSkillCard: pick a skill markdown file (a MarkdownDef
-  // with `boxel.kind: skill`) rather than a Skill card. The file chooser is
-  // scoped to skill markdown via the indexed `kind` field.
-  private doAttachSkillMarkdown = restartableTask(async () => {
-    let file = await chooseFile<FileDef>({
-      fileType: markdownDefRef,
-      fileTypeName: 'Skill',
-      fileFieldFilter: { kind: 'skill' },
-    });
-    if (file?.sourceUrl) {
-      try {
-        this.isAttachingSkillMarkdown = true;
-        await this.args.onChooseSkillMarkdown?.(file.sourceUrl);
-      } finally {
-        this.isAttachingSkillMarkdown = false;
+    try {
+      this.isAttachingSkill = true;
+      if (chosen.kind === 'file') {
+        await this.args.onChooseSkillMarkdown?.(chosen.id);
+      } else {
+        await this.args.onChooseCard?.(chosen.id);
       }
+    } finally {
+      this.isAttachingSkill = false;
     }
   });
 
