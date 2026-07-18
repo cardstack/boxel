@@ -6,8 +6,10 @@ import type { Filter } from '@cardstack/runtime-common';
 
 import SearchPanel from '@cardstack/host/components/card-search/panel';
 import {
+  isNewCardArgs,
   removeCardJsonExtension,
-  type NewCardArgs,
+  type SearchSelection,
+  type SelectedSearchItem,
 } from '@cardstack/host/utils/card-search/types';
 
 interface Signature {
@@ -29,8 +31,11 @@ export default class MiniCardChooser extends Component<Signature> {
   // SearchContent expects an array (it's the multi-select API plumbing).
   // Wrap the single-select `@selected` so the existing isCardSelected check
   // in SearchResultSection picks it up without any other changes.
-  private get selectedCards(): string[] | undefined {
-    return this.args.selected ? [this.args.selected] : undefined;
+  private get selectedCards(): SelectedSearchItem[] | undefined {
+    // The mini chooser is cards-only, so the selected id is always a card.
+    return this.args.selected
+      ? [{ id: this.args.selected, kind: 'card' }]
+      : undefined;
   }
 
   @action
@@ -39,11 +44,11 @@ export default class MiniCardChooser extends Component<Signature> {
   }
 
   @action
-  private handleSelect(selection: string | NewCardArgs) {
-    if (typeof selection !== 'string') {
+  private handleSelect(selection: SearchSelection) {
+    if (isNewCardArgs(selection)) {
       return;
     }
-    let normalized = removeCardJsonExtension(selection);
+    let normalized = removeCardJsonExtension(selection.id);
     if (normalized) {
       this.args.onSelect(normalized);
     }

@@ -253,6 +253,11 @@ module('Integration | search-entries resource', function (hooks) {
     for (let entry of search.entries) {
       assert.strictEqual(entry.realmUrl, testRealmURL);
       assert.strictEqual(
+        entry.kind,
+        'card',
+        'a card instance row is tagged kind=card',
+      );
+      assert.strictEqual(
         entry.html.length,
         1,
         'the default htmlQuery selects the fitted rendering',
@@ -335,6 +340,22 @@ module('Integration | search-entries resource', function (hooks) {
       assert.true(
         knownFileMetaUrls.has(htmlFileUrl),
         'the html-backed file row (no render type) is registered',
+      );
+
+      // Both file rows carry kind=file so a mixed card/file chooser can tag a
+      // selection by kind without inspecting the id — the item-only row off its
+      // `file-meta` item type, the html-backed row off its render-type-less
+      // rendering.
+      let byId = new Map(search.entries.map((e) => [e.id, e]));
+      assert.strictEqual(
+        byId.get(itemFileUrl)?.kind,
+        'file',
+        'the item-only file row is tagged kind=file',
+      );
+      assert.strictEqual(
+        byId.get(htmlFileUrl)?.kind,
+        'file',
+        'the html-backed file row is tagged kind=file',
       );
     } finally {
       storeService.searchEntries = originalSearchEntries;

@@ -26,7 +26,11 @@ import {
   type RecentsSection,
   type SearchSheetSection,
 } from '@cardstack/host/utils/card-search/sections';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type {
+  SearchSelection,
+  SelectedSearchItem,
+  SearchItemKind,
+} from '@cardstack/host/utils/card-search/types';
 
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import ResultSection from './result-section';
@@ -77,11 +81,11 @@ interface Signature {
     onChangeSort: (option: SortOption) => void;
 
     // Selection + submit.
-    handleSelect: (selection: string | NewCardArgs) => void;
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    handleSelect: (selection: SearchSelection) => void;
+    onSubmit?: (selection: SearchSelection) => void;
     multiSelect?: boolean;
-    selectedCards?: (string | NewCardArgs)[];
-    onSelectAll?: (cards: string[]) => void;
+    selectedCards?: SearchSelection[];
+    onSelectAll?: (cards: SelectedSearchItem[]) => void;
     onDeselectAll?: () => void;
 
     // Adorn treatment, threaded from the parent's <AdornContext>.
@@ -181,28 +185,34 @@ export default class SheetResults extends Component<Signature> {
     return this.args.variant === 'mini' ? 'mini' : this.args.activeViewId;
   }
 
-  private get allCards(): string[] {
-    const urls: string[] = [];
+  private get allCards(): SelectedSearchItem[] {
+    const byId = new Map<string, SelectedSearchItem>();
+    const add = (id: string, kind: SearchItemKind) => {
+      const normalized = id.replace(/\.json$/, '');
+      if (!byId.has(normalized)) {
+        byId.set(normalized, { id: normalized, kind });
+      }
+    };
     for (const entry of this.args.mainResults.entries) {
       if (entry.id) {
-        urls.push(entry.id.replace(/\.json$/, ''));
+        add(entry.id, entry.kind);
       }
     }
     if (this.args.liveRecentCards.length > 0) {
       for (const card of this.args.liveRecentCards) {
         if (card?.id) {
-          urls.push(card.id.replace(/\.json$/, ''));
+          add(card.id, 'card');
         }
       }
     } else {
       for (const entry of this.args.recentsResults.entries) {
-        urls.push(entry.id.replace(/\.json$/, ''));
+        add(entry.id, entry.kind);
       }
     }
     if (this.args.resolvedCard?.id) {
-      urls.push(this.args.resolvedCard.id.replace(/\.json$/, ''));
+      add(this.args.resolvedCard.id, 'card');
     }
-    return [...new Set(urls)];
+    return [...byId.values()];
   }
 
   // The global summary + Sort row. Hidden in the mini chooser's default

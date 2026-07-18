@@ -987,7 +987,7 @@ export interface RealmCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
-import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
+import type { CardTypeFilter, Query, EveryFilter, AnyFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './paths.ts';
@@ -1214,13 +1214,27 @@ interface CardChooserOpts {
    */
   lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
+  /**
+   * Run the chooser in mixed cards + files mode: file results appear alongside
+   * card instances, and the return value is tagged with each pick's `kind`
+   * ({@link ChosenItem}) instead of a bare card id. Defaults to false
+   * (cards-only, string ids) so existing callers are unaffected.
+   */
+  includeFiles?: boolean;
+}
+
+// A chosen result in mixed (includeFiles) mode: the id plus whether it is a card
+// instance or a file, so the caller can route each pick without inspecting the id.
+export interface ChosenItem {
+  id: string;
+  kind: 'card' | 'file';
 }
 
 export interface CardChooser {
   chooseCard(
     query: CardChooserQuery,
     opts?: CardChooserOpts & { multiSelect?: boolean },
-  ): Promise<undefined | string | string[]>;
+  ): Promise<undefined | string | string[] | ChosenItem | ChosenItem[]>;
 }
 
 export interface FileChooser {
@@ -1233,6 +1247,24 @@ export interface FileChooser {
   }): Promise<undefined | T>;
 }
 
+// Mixed mode (includeFiles) — returns kind-tagged ChosenItem(s).
+export async function chooseCard(
+  query: CardChooserQuery,
+  opts: CardChooserOpts & {
+    includeFiles: true;
+    multiSelect: true;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | ChosenItem[]>;
+export async function chooseCard(
+  query: CardChooserQuery,
+  opts: CardChooserOpts & {
+    includeFiles: true;
+    multiSelect?: false;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | ChosenItem>;
+// Cards-only (default) — returns bare card id string(s).
 export async function chooseCard(
   query: CardChooserQuery,
   opts: CardChooserOpts & {
@@ -1253,7 +1285,7 @@ export async function chooseCard(
     multiSelect?: boolean;
     preselectedCardTypeQuery?: Query;
   },
-): Promise<undefined | string | string[]> {
+): Promise<undefined | string | string[] | ChosenItem | ChosenItem[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
@@ -1391,7 +1423,7 @@ export interface Store {
 }
 
 export type CardChooserQuery = Query & {
-  filter?: CardTypeFilter | EveryFilter;
+  filter?: CardTypeFilter | EveryFilter | AnyFilter;
 };
 
 export interface CardCreator {

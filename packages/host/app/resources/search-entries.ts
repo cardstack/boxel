@@ -85,6 +85,10 @@ export interface SearchEntry {
   // reconstruct the composite validator it sends as `If-None-Match`.
   indexGeneration?: number;
   htmlGeneration?: number;
+  // Which kind of row this is — a card instance or a file. Derived from the
+  // `item` serialization type, or (for item-less rows) the html render-type
+  // heuristic (files render natively; card renderings always name a type).
+  kind: 'card' | 'file';
 }
 
 interface Args {
@@ -717,6 +721,7 @@ export class SearchEntriesResource extends Resource<Args> {
         id: entry.id,
         realmUrl: realmUrlFor(entry.id),
         html: renderings,
+        kind: isFile ? 'file' : 'card',
         ...(item ? { item } : {}),
         ...(icon
           ? {

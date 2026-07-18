@@ -1,4 +1,4 @@
-import { array, get } from '@ember/helper';
+import { get } from '@ember/helper';
 import { click, render, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
@@ -8,10 +8,16 @@ import {
   VIEW_OPTIONS,
 } from '@cardstack/host/components/card-search/constants';
 import SearchResultHeader from '@cardstack/host/components/card-search/search-result-header';
+import type { SelectedSearchItem } from '@cardstack/host/utils/card-search/types';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
 const noop = () => {};
+
+const card = (id: string): SelectedSearchItem => ({ id, kind: 'card' });
+const selectedTwo: SelectedSearchItem[] = [card('a'), card('b')];
+const allThree: SelectedSearchItem[] = [card('a'), card('b'), card('c')];
+const noSelection: SelectedSearchItem[] = [];
 
 module(
   'Integration | card-search/search-result-header (selection menu)',
@@ -30,8 +36,8 @@ module(
             @onChangeView={{noop}}
             @onChangeSort={{noop}}
             @multiSelect={{true}}
-            @selectedCards={{array 'a' 'b'}}
-            @allCards={{array 'a' 'b' 'c'}}
+            @selectedCards={{selectedTwo}}
+            @allCards={{allThree}}
             @onSelectAll={{noop}}
             @onDeselectAll={{noop}}
           />
@@ -54,9 +60,10 @@ module(
     });
 
     test('the selection menu opens with an inert "N Selected" header above Select/Deselect All', async function (assert) {
-      let selectAllArg: string[] | undefined;
+      let selectAllArg: SelectedSearchItem[] | undefined;
       let deselectedAll = false;
-      const onSelectAll = (cards: string[]) => (selectAllArg = cards);
+      const onSelectAll = (cards: SelectedSearchItem[]) =>
+        (selectAllArg = cards);
       const onDeselectAll = () => (deselectedAll = true);
 
       await render(
@@ -70,8 +77,8 @@ module(
             @onChangeView={{noop}}
             @onChangeSort={{noop}}
             @multiSelect={{true}}
-            @selectedCards={{array 'a' 'b'}}
-            @allCards={{array 'a' 'b' 'c'}}
+            @selectedCards={{selectedTwo}}
+            @allCards={{allThree}}
             @onSelectAll={{onSelectAll}}
             @onDeselectAll={{onDeselectAll}}
           />
@@ -97,7 +104,7 @@ module(
       await click('[data-test-boxel-menu-item-text="Select All"]');
       assert.deepEqual(
         selectAllArg,
-        ['a', 'b', 'c'],
+        [card('a'), card('b'), card('c')],
         'Select All forwards every card',
       );
 
@@ -119,8 +126,8 @@ module(
             @onChangeView={{noop}}
             @onChangeSort={{noop}}
             @multiSelect={{true}}
-            @selectedCards={{array}}
-            @allCards={{array 'a' 'b' 'c'}}
+            @selectedCards={{noSelection}}
+            @allCards={{allThree}}
             @onSelectAll={{noop}}
             @onDeselectAll={{noop}}
           />

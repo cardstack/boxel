@@ -1,11 +1,14 @@
-import { render } from '@ember/test-helpers';
+import { click, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import { rri, type RenderableSearchEntryLike } from '@cardstack/runtime-common';
 
 import SearchResultTile from '@cardstack/host/components/card-search/result-tile';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type {
+  NewCardArgs,
+  SearchSelection,
+} from '@cardstack/host/utils/card-search/types';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -26,6 +29,7 @@ function entry(
   return {
     id: 'http://test/Foo/1',
     realmUrl: 'http://test/',
+    kind: 'card',
     name: 'Foo/1',
     isError: false,
     component: StubComponent,
@@ -162,3 +166,66 @@ module('Integration | card-search/result-tile (adorn)', function (hooks) {
       .exists('the type icon is rendered in the label icon slot');
   });
 });
+
+// The tile is what stamps each pick's kind onto the selection payload: a mixed
+// card/file chooser reads `{ id, kind }` straight from the emitted selection
+// rather than inferring the kind from the id. The kind rides on the entry
+// view-model (`entry.kind`), so a card row emits `card` and a file row `file`.
+module(
+  'Integration | card-search/result-tile (selection payload kind)',
+  function (hooks) {
+    setupRenderingTest(hooks);
+
+    const cardEntry = entry({ id: 'http://test/Book/1', kind: 'card' });
+    const fileEntry = entry({
+      id: 'http://test/notes/readme.md',
+      kind: 'file',
+    });
+
+    test('a card row emits a kind=card selection payload', async function (assert) {
+      let selected: SearchSelection | undefined;
+      const onSelect = (selection: SearchSelection) => (selected = selection);
+
+      await render(
+        <template>
+          <SearchResultTile
+            @entry={{cardEntry}}
+            @isSelected={{false}}
+            @onSelect={{onSelect}}
+          />
+        </template>,
+      );
+
+      await click('[data-test-item-button="http://test/Book/1"]');
+      assert.deepEqual(
+        selected,
+        { id: 'http://test/Book/1', kind: 'card' },
+        'clicking a card row emits its id tagged kind=card',
+      );
+    });
+
+    test('a file row emits a kind=file selection payload', async function (assert) {
+      let selected: SearchSelection | undefined;
+      const onSelect = (selection: SearchSelection) => (selected = selection);
+
+      await render(
+        <template>
+          <SearchResultTile
+            @entry={{fileEntry}}
+            @isSelected={{false}}
+            @onSelect={{onSelect}}
+          />
+        </template>,
+      );
+
+      // A file id keeps its extension (only the card `.json` convention is
+      // stripped for the data-test hook), so the payload id is the file url.
+      await click('[data-test-item-button="http://test/notes/readme.md"]');
+      assert.deepEqual(
+        selected,
+        { id: 'http://test/notes/readme.md', kind: 'file' },
+        'clicking a file row emits its url tagged kind=file',
+      );
+    });
+  },
+);

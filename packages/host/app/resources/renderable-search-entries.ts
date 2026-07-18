@@ -103,6 +103,12 @@ export class RenderableSearchEntry {
     return this.raw.realmUrl;
   }
 
+  // Whether this result is a card instance or a file — lets a consumer (e.g. a
+  // mixed card/file chooser) tag a selection by kind without inspecting the id.
+  get kind(): 'card' | 'file' {
+    return this.raw.kind;
+  }
+
   // The result's realm-local path (e.g. `Person/error`), shown by the host
   // error tile to identify which result failed. Falls back to the bare id when
   // the id isn't under the entry's realm.
