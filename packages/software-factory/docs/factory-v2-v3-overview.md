@@ -53,8 +53,36 @@ templates, on a cheap HTML surface, is where taste lives.
 
 **How.** `issue-implement-v2` / `issue-design-v2` / `issue-build-v2` prompts; a
 `screenshot_html` tool that renders a workspace HTML file in headless Chromium
-and returns a PNG the agent then `Read`s and critiques; on-demand skill tools so
-the agent pulls only the design/format skills an issue actually touches.
+and returns a PNG the agent then `Read`s and critiques; on-demand skill loading
+(next section) so the agent pulls only the skills an issue actually touches.
+
+### On-demand skill discovery & loading
+
+**What.** The executor agent doesn't get every skill front-loaded. It
+**discovers and loads skills as it needs them** — the same way it would in a
+`boxel-workspaces` checkout — through two complementary paths:
+
+- **MCP tools.** `list_skills` returns every available skill as name +
+  one-line summary; `read_skill` pulls one on demand. The system prompt
+  front-loads only a core set; the agent reads the rest (design, fitted
+  formats, theming, file fields, queries…) as the task touches them.
+- **Native `.claude/skills` materialization** (`workspace-skills.ts`). Before a
+  run, the factory copies its skill catalog into
+  `<workspace>/.claude/skills/<name>/` — the exact layout Claude Code and the
+  `boxel-workspaces` repo use — and drops a factory-adapted `CLAUDE.md`. With
+  `settingSources: ['project']` on the agent (`claude-code.ts`), the SDK harness
+  discovers those skills natively, so the agent can `Grep 'fitted'
+  .claude/skills` and `Read` the standard it didn't know existed.
+
+**Why.** The MCP `read_skill` path is a bespoke lookup the model has no trained
+instinct for, and it can't *search* across skills — so an agent can't find a
+standard it doesn't already know the name of. That is the unknown-unknown
+failure mode that shipped a non-standard fitted view (wardrobe, 2026-07-17).
+Models are heavily conditioned to explore `.claude/*` with native Glob/Grep/Read;
+putting the catalog on disk leans into that instinct instead of fighting it. The
+realm sync skips every dotfile/dotdir, so `.claude/` never reaches the realm, and
+the `read_skill` tool stays available for backends that don't do native
+discovery.
 
 ## Area 2 — the run log (live activity feed)
 
@@ -233,8 +261,6 @@ with an explicit "do NOT run a design round" instruction.
   network/API blip is retried rather than failing the run.
 - **Instance discovery** (`instance-discovery.ts`) — newest product instances on
   disk, used as a render-gate fallback when a turn wrote no instances.
-- **Workspace skills** (`workspace-skills.ts`) — load workspace-authored skills
-  into the agent context.
 
 ---
 
@@ -252,6 +278,7 @@ touched suites, all green:
 | `factory-prompt-loader` | `isBugFixIssue`, fix-vs-design prompt routing |
 | `control-plane-sync` | hash-gated push, selective pull, stale-block refresh (run via `node --test`) |
 | `validation-run-cache` | content-hash fingerprint stability |
+| `workspace-skills` | `.claude/skills` materialization + factory `CLAUDE.md` |
 | `agent-tool-telemetry`, `instance-discovery`, `transient-agent-error`, `factory-context-builder`, `factory-agent-claude-code` | supporting infra |
 
 Note: `control-plane-sync.test.ts` uses the `node:test` runner; run it with
@@ -268,6 +295,7 @@ failure while node:test reports pass).
 | Scheduler, `readLocalStatus` | `src/issue-scheduler.ts` |
 | Run-log card + feed + BFM resolver | `src/run-log.ts` |
 | Agent invocation, forking, caching | `src/factory-agent/claude-code.ts` |
-| Tools (post_update BFM teaching, screenshot_html) | `src/factory-tool-builder.ts` |
+| Tools (post_update BFM teaching, screenshot_html, list_skills/read_skill) | `src/factory-tool-builder.ts` |
+| On-demand skill discovery (`.claude/skills` materialization) | `src/workspace-skills.ts`, `src/factory-skill-loader.ts`, `.agents/workspace-CLAUDE.md` |
 | Control/product split | `src/control-plane-sync.ts`, `src/factory-entrypoint.ts` |
 | Sync fingerprint | `src/validation-run-cache.ts` |
