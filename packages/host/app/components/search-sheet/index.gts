@@ -206,6 +206,9 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @action private handleSortChange(option: SortOption) {
+    // Unlike realm/type changes, no `onFilterChange` here: the sort control only
+    // exists in the results view, so there's never a prompt→results expansion to
+    // trigger — just record the choice for persistence.
     this.searchSheetState.activeSort = option;
   }
 

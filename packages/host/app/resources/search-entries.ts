@@ -1,4 +1,8 @@
-import { isDestroyed, registerDestructor } from '@ember/destroyable';
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
@@ -12,6 +16,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   subscribeToRealm,
+  Deferred,
   htmlQueryRenderingSelection,
   isCardResource,
   isCssResource,
@@ -318,7 +323,28 @@ export class SearchEntriesResource extends Resource<Args> {
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
-    this.#trackSearchLoad(this.search.perform());
+    // Start the search out of the render that triggered this modify. A consumer
+    // reads the task's `isRunning` (through `isLoading`) during render, so a
+    // synchronous `perform()` here — which flips `isRunning` — would mutate a
+    // value already consumed in the same computation, tripping Glimmer's
+    // backtracking assertion. This bites specifically when a `<SearchResults>`
+    // mounts with a query already set (e.g. the search sheet reopening with a
+    // restored query, or a chooser rendering recents), where the create + first
+    // `isRunning` read + `perform()` all land in one render. Register the load
+    // synchronously (via a Deferred) so a prerender still waits for the search,
+    // but defer the task start a microtask so its write lands after the render.
+    let loaded = new Deferred<void>();
+    this.#trackSearchLoad(loaded.promise);
+    void Promise.resolve().then(() => {
+      if (isDestroyed(this) || isDestroying(this)) {
+        loaded.fulfill();
+        return;
+      }
+      this.search.perform().then(
+        () => loaded.fulfill(),
+        () => loaded.fulfill(),
+      );
+    });
   }
 
   get isLoading() {

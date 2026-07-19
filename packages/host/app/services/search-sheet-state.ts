@@ -15,10 +15,15 @@ import type { SortOption } from '../components/search/constants';
 
 // A snapshot of the last main-search results, retained across a sheet
 // close/reopen so the sheet redisplays them immediately instead of flashing
-// blank while its recreated search resource re-runs. The view-models wrap plain
-// data + an inert HTML component, so they render safely after the resource that
-// produced them is torn down.
+// blank while its recreated search resource re-runs. An inert HTML row is fully
+// self-contained (its component renders a captured HTML string); an item-backed
+// row resolves through the still-alive session store, so both render safely
+// after the resource that produced them is torn down. `queryKey` is the
+// serialized wire query the snapshot was captured under, so the sheet only
+// redisplays it for the same search it belongs to (a different term never sees
+// stale rows).
 export interface MainResultsSnapshot {
+  queryKey: string;
   entries: RenderableSearchEntryLike[];
   meta: EntryCollectionDocument['meta'];
 }

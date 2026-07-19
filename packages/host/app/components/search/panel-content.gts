@@ -1,3 +1,4 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -29,6 +30,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 
+import { resolveMainResults } from '@cardstack/host/utils/search/main-results-snapshot';
 import {
   buildRecentsQuery,
   buildSearchQuery,
@@ -255,6 +257,15 @@ export default class PanelContent extends Component<Signature> {
     });
   }
 
+  // A stable identity for the current main search — the serialized wire query.
+  // Undefined when the search is idle (empty key or a URL paste, both skipped).
+  // The snapshot is keyed by this so a reopen only redisplays results for the
+  // same search, and an idle sheet never captures (or clobbers) a snapshot.
+  private get mainQueryKey(): string | undefined {
+    let query = this.mainSearchQuery;
+    return query ? JSON.stringify(query) : undefined;
+  }
+
   // In the mini card chooser every result row renders as the uniform CardDef
   // fitted tile instead of each card's own fitted template. Bind that
   // rendering through the wire filter's top-level `eq` htmlQuery — fitted
@@ -406,52 +417,78 @@ export default class PanelContent extends Component<Signature> {
     this.args.onSortChange(option);
   }
 
-  // The results to render for the main search. While persisting, if a snapshot
-  // from a previous open exists and the recreated live resource hasn't produced
-  // rows yet, show the snapshot (flagged loading, so the "refreshing" indicator
-  // shows) — a single clean handoff to the live results once they land.
+  // The results to render for the main search — the retained snapshot during the
+  // reopen handoff, otherwise the live results (see `resolveMainResults`). Only
+  // engaged while persisting; the card choosers always render live.
   mainResultsFor = (live: SearchResultsYield): SearchResultsYield => {
     if (!this.args.persist) {
       return live;
     }
-    let snapshot = this.searchSheetState.mainSnapshot;
-    if (snapshot && live.entries.length === 0 && live.isLoading) {
-      return {
-        entries: snapshot.entries,
-        meta: snapshot.meta,
-        isLoading: true,
-        errors: undefined,
-      };
-    }
-    return live;
+    return resolveMainResults(
+      live,
+      this.searchSheetState.mainSnapshot,
+      this.mainQueryKey,
+    );
   };
 
+  // The settled live results awaiting capture (coalesced across renders), paired
+  // with the query key they belong to. Captured synchronously in the modifier so
+  // the pair is always consistent; written to the service in a microtask.
+  #pendingSnapshot: { live: SearchResultsYield; queryKey: string } | undefined;
+  #snapshotCaptureScheduled = false;
+
   // Capture the live main results into the service whenever they settle, so a
-  // later reopen can redisplay them. Guarded on `!isLoading` so a transient
-  // empty loading state (e.g. the re-run on reopen) never clobbers the cache.
-  // `<SearchResults>` yields a fresh `results` object every render, so this
-  // modifier re-runs on every render; the content check keeps it from writing
-  // an equal-but-new snapshot each time, which — since `mainResultsFor` reads
-  // `mainSnapshot` during render — would otherwise feed back into a re-render
-  // loop.
+  // later reopen can redisplay them. The write must NOT happen in the modifier's
+  // own render transaction: `mainResultsFor` reads `mainSnapshot` during render,
+  // so a synchronous write here trips Glimmer's mutate-after-consume assertion.
+  // Instead defer the read-compare-write into a microtask (the same escape hatch
+  // `SearchEntriesResource.modify` uses), where mutating tracked state is safe.
+  // Guards: skip while loading (a transient empty re-run must not clobber the
+  // cache) and skip an idle/empty-key query (no key → nothing to key a snapshot
+  // by, and capturing would overwrite a still-valid one). The content check
+  // keeps an equal-but-new snapshot from writing, so the deferred write
+  // converges instead of looping.
   private captureMainSnapshot = modifier(
     (_element: Element, [live]: [SearchResultsYield]) => {
       if (live.isLoading) {
         return;
       }
-      let current = this.searchSheetState.mainSnapshot;
-      let unchanged =
-        current !== undefined &&
-        current.entries.length === live.entries.length &&
-        current.meta.page?.total === live.meta.page?.total &&
-        current.entries.every((entry, i) => entry.id === live.entries[i].id);
-      if (unchanged) {
+      let queryKey = this.mainQueryKey;
+      if (queryKey === undefined) {
         return;
       }
-      this.searchSheetState.mainSnapshot = {
-        entries: [...live.entries],
-        meta: live.meta,
-      };
+      this.#pendingSnapshot = { live, queryKey };
+      if (this.#snapshotCaptureScheduled) {
+        return;
+      }
+      this.#snapshotCaptureScheduled = true;
+      void Promise.resolve().then(() => {
+        this.#snapshotCaptureScheduled = false;
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
+        let pending = this.#pendingSnapshot;
+        this.#pendingSnapshot = undefined;
+        if (!pending) {
+          return;
+        }
+        let { live, queryKey } = pending;
+        let current = this.searchSheetState.mainSnapshot;
+        let unchanged =
+          current !== undefined &&
+          current.queryKey === queryKey &&
+          current.entries.length === live.entries.length &&
+          current.meta.page?.total === live.meta.page?.total &&
+          current.entries.every((entry, i) => entry.id === live.entries[i].id);
+        if (unchanged) {
+          return;
+        }
+        this.searchSheetState.mainSnapshot = {
+          queryKey,
+          entries: [...live.entries],
+          meta: live.meta,
+        };
+      });
     },
   );
 

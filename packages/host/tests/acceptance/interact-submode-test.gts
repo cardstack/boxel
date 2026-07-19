@@ -120,13 +120,101 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       await click('[data-test-open-search-field]');
-      assert.dom('[data-test-search-sheet]').hasClass('prompt');
+      // The search persists across close/reopen, so reopening restores the
+      // results view (with the URL search) rather than a blank prompt.
+      assert.dom('[data-test-search-sheet]').hasClass('results');
 
-      await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
+      await click(`[data-test-card="${testRealmURL}person-entry"]`);
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .exists();
+    });
+  });
+
+  module('search sheet persistence', function () {
+    test('restores the query, view, and results after a close/reopen', async function (assert) {
+      await visitOperatorMode({});
+
+      // Run a search and switch the results to the strip view.
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists('the search found the card');
+
+      await click('[data-test-search-result-header] [aria-label="strip"]');
+      assert
+        .dom('[data-test-search-result-header] [aria-label="strip"]')
+        .hasClass('is-selected', 'strip view is active');
+
+      // Close the sheet by clicking outside it (a plain close keeps the search).
+      await click('[data-test-submode-layout]');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      // Reopening restores the results view, the query text, the view toggle, and
+      // the results (shown immediately from the retained snapshot).
+      await click('[data-test-open-search-field]');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+      assert.dom('[data-test-search-field]').hasValue('Mango');
+      assert
+        .dom('[data-test-search-result-header] [aria-label="strip"]')
+        .hasClass('is-selected', 'strip view is restored');
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists('the results are restored');
+    });
+
+    test('the Cancel button clears the persisted search', async function (assert) {
+      await visitOperatorMode({});
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+
+      await click('[data-test-search-sheet-cancel-button]');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      await click('[data-test-open-search-field]');
+      assert
+        .dom('[data-test-search-sheet]')
+        .hasClass('prompt', 'reopens to a blank prompt, not the prior results');
+      assert.dom('[data-test-search-field]').hasValue('');
+    });
+
+    test('Escape clears the persisted search', async function (assert) {
+      await visitOperatorMode({});
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+
+      await triggerKeyEvent('[data-test-search-field]', 'keydown', 'Escape');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      await click('[data-test-open-search-field]');
+      assert.dom('[data-test-search-sheet]').hasClass('prompt');
+      assert.dom('[data-test-search-field]').hasValue('');
+    });
+
+    test('emptying the query then closing reopens to a blank prompt', async function (assert) {
+      await visitOperatorMode({});
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+
+      // Clear the query, then close by clicking outside.
+      await fillIn('[data-test-search-field]', '');
+      await click('[data-test-submode-layout]');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      await click('[data-test-open-search-field]');
+      assert
+        .dom('[data-test-search-sheet]')
+        .hasClass('prompt', 'an empty query reopens to the compact prompt');
+      assert.dom('[data-test-search-field]').hasValue('');
     });
   });
 
