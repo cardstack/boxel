@@ -57,7 +57,7 @@ exports.down = (pgm) => {
     `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_working_types_containment_idx;`,
   );
   // Restore under the original auto-generated names so the down migrations
-  // of 1735668047598 and 1735832183444 still find them. Same
+  // of 1735668047598 and 1735832183444 find them by name. Same
   // drop-then-create pattern as up() to clear INVALID leftovers on retry.
   pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS boxel_index_types_index;`);
   pgm.sql(
