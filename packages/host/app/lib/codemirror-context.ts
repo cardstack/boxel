@@ -45,8 +45,11 @@ import {
 } from '@codemirror/view';
 
 import {
+  type BfmRefFormat,
   type BfmRefRange,
+  bfmRefFormatAndSize,
   extractBfmRefRanges,
+  parseBfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
 
 // ── Card widget target interface ────────────────────────────────────────────
@@ -54,11 +57,15 @@ import {
 export interface CardWidgetTarget {
   element: HTMLElement;
   cardId: string;
-  format: 'atom' | 'embedded';
+  format: BfmRefFormat;
   kind: 'inline' | 'block';
   // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
   // (`:file[URL]`) resolve to FileDef instances.
   refType: 'card' | 'file';
+  // Inline sizing (`width`/`height`, plus `overflow: hidden` for fitted) derived
+  // from the directive's size specifier. Undefined for non-fitted formats.
+  // Mirrors the style the saved/preview markdown renderers apply.
+  style?: string;
 }
 
 // ── State effect for opening card search ────────────────────────────────────
@@ -140,6 +147,11 @@ class CardWidget extends WidgetType {
     readonly cardId: string,
     readonly kind: 'inline' | 'block',
     readonly refType: 'card' | 'file' = 'card',
+    // Size specifier fields (as strings, for a clean DOM data-attr round-trip),
+    // parsed from the directive's `| spec` segment. Undefined when absent.
+    readonly format?: string,
+    readonly width?: string,
+    readonly height?: string,
   ) {
     super();
   }
@@ -148,7 +160,12 @@ class CardWidget extends WidgetType {
     return (
       this.cardId === other.cardId &&
       this.kind === other.kind &&
-      this.refType === other.refType
+      this.refType === other.refType &&
+      // A size-only edit (e.g. `w:400` → `w:600`) must invalidate the widget so
+      // CM6 rebuilds the DOM with fresh data-attrs instead of reusing the old one.
+      this.format === other.format &&
+      this.width === other.width &&
+      this.height === other.height
     );
   }
 
@@ -158,6 +175,17 @@ class CardWidget extends WidgetType {
     el.setAttribute('data-card-id', this.cardId);
     el.setAttribute('data-card-kind', this.kind);
     el.setAttribute('data-bfm-ref-type', this.refType);
+    // Emit the size spec so `notifyTargets` can re-derive format + style off the
+    // DOM, using the same attribute names as the render-side BFM markup.
+    if (this.format !== undefined) {
+      el.setAttribute('data-boxel-bfm-format', this.format);
+    }
+    if (this.width !== undefined) {
+      el.setAttribute('data-boxel-bfm-width', this.width);
+    }
+    if (this.height !== undefined) {
+      el.setAttribute('data-boxel-bfm-height', this.height);
+    }
     el.className = `cm-card-widget cm-card-widget--${this.kind}`;
     el.contentEditable = 'false';
     return el;
@@ -639,6 +667,33 @@ function buildLinkDecorations(
 
 // ── Card decorations ───────────────────────────────────────────────────────
 
+// Parse a directive's inner content (between `[` and `]`) into the URL/id and
+// the CardWidget size args. Kept as strings so they round-trip cleanly through
+// DOM data-attrs, where `notifyTargets` re-derives format + style.
+function parseCardWidgetContent(content: string): {
+  cardId: string;
+  format?: string;
+  width?: string;
+  height?: string;
+} {
+  let trimmed = content.trim();
+  let pipeIdx = trimmed.indexOf('|');
+  if (pipeIdx < 0) {
+    return { cardId: trimmed };
+  }
+  let cardId = trimmed.substring(0, pipeIdx).trim();
+  let spec = parseBfmSizeSpec(trimmed.substring(pipeIdx + 1).trim());
+  if (!spec) {
+    return { cardId };
+  }
+  return {
+    cardId,
+    format: spec.format,
+    width: spec.width !== undefined ? String(spec.width) : undefined,
+    height: spec.height !== undefined ? String(spec.height) : undefined,
+  };
+}
+
 function buildCardDecorations(
   state: EditorState,
   cursorLine: number,
@@ -657,11 +712,7 @@ function buildCardDecorations(
       let to = from + match[0].length;
       if (isInsideCode(state, from, to)) continue;
 
-      let cardId = match[1].trim();
-      let pipeIdx = cardId.indexOf('|');
-      if (pipeIdx >= 0) {
-        cardId = cardId.substring(0, pipeIdx).trim();
-      }
+      let { cardId, format, width, height } = parseCardWidgetContent(match[1]);
 
       let line = doc.lineAt(from);
       let onCursor = livePreview && line.number === cursorLine;
@@ -684,7 +735,14 @@ function buildCardDecorations(
             class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
           }),
         });
-        let previewWidget = new CardWidget(cardId, 'block', refType);
+        let previewWidget = new CardWidget(
+          cardId,
+          'block',
+          refType,
+          format,
+          width,
+          height,
+        );
         decos.push({
           from: to,
           to: to,
@@ -692,7 +750,14 @@ function buildCardDecorations(
         });
       } else {
         // Replace source text with widget
-        let widget = new CardWidget(cardId, 'block', refType);
+        let widget = new CardWidget(
+          cardId,
+          'block',
+          refType,
+          format,
+          width,
+          height,
+        );
         decos.push({
           from,
           to,
@@ -708,7 +773,7 @@ function buildCardDecorations(
       let to = from + match[0].length;
       if (isInsideCode(state, from, to)) continue;
 
-      let cardId = match[1].trim();
+      let { cardId, format, width, height } = parseCardWidgetContent(match[1]);
       let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
 
       if (!livePreview) {
@@ -729,7 +794,14 @@ function buildCardDecorations(
             class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
           }),
         });
-        let previewWidget = new CardWidget(cardId, 'inline', refType);
+        let previewWidget = new CardWidget(
+          cardId,
+          'inline',
+          refType,
+          format,
+          width,
+          height,
+        );
         decos.push({
           from: to,
           to: to,
@@ -737,7 +809,14 @@ function buildCardDecorations(
         });
       } else {
         // Replace source text with inline widget
-        let widget = new CardWidget(cardId, 'inline', refType);
+        let widget = new CardWidget(
+          cardId,
+          'inline',
+          refType,
+          format,
+          width,
+          height,
+        );
         decos.push({
           from,
           to,
@@ -851,12 +930,30 @@ function createCardTargetNotifier(
               (el.getAttribute('data-bfm-ref-type') as 'card' | 'file') ??
               'card';
             if (cardId) {
+              // Re-derive format + sizing from the directive's size attributes,
+              // matching the saved/preview markdown renderers. Inline embeds
+              // default to atom, block embeds to embedded.
+              let { format, sizeStyle } = bfmRefFormatAndSize(
+                el.getAttribute('data-boxel-bfm-format') ?? undefined,
+                el.getAttribute('data-boxel-bfm-width') ?? undefined,
+                el.getAttribute('data-boxel-bfm-height') ?? undefined,
+                kind === 'inline' ? 'atom' : 'embedded',
+              );
+              // Fitted slots carry the width/height plus `overflow: hidden` so
+              // the resolved instance occupies the requested footprint.
+              let style =
+                format === 'fitted'
+                  ? sizeStyle
+                    ? `${sizeStyle}; overflow: hidden`
+                    : 'overflow: hidden'
+                  : undefined;
               targets.push({
                 element: el as HTMLElement,
                 cardId,
-                format: kind === 'inline' ? 'atom' : 'embedded',
+                format,
                 kind,
                 refType,
+                style,
               });
             }
           }
