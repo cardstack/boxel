@@ -1602,17 +1602,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           color: var(--boxel-400, #666);
         }
 
-        .codemirror-editor :deep(.cm-bfm-card-ref--block) {
-          display: inline-block;
-          font-size: 0.85em;
-          color: var(--boxel-400, #666);
-          padding: 2px 6px;
-        }
-
-        .codemirror-editor :deep(.cm-bfm-card-ref--active) {
-          background-color: var(--boxel-highlight-hover, #e8f0fe);
-        }
-
         /* ── Card widget containers ── */
         .codemirror-editor :deep(.cm-card-widget) {
           user-select: none;

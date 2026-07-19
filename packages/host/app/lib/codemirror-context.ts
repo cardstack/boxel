@@ -672,8 +672,7 @@ function buildCardDecorations(
           from,
           to,
           value: Decoration.mark({
-            class:
-              'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
           }),
         });
       } else if (onCursor) {
@@ -682,8 +681,7 @@ function buildCardDecorations(
           from,
           to,
           value: Decoration.mark({
-            class:
-              'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
           }),
         });
         let previewWidget = new CardWidget(cardId, 'block', refType);
