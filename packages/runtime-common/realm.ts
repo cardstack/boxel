@@ -1938,7 +1938,7 @@ export class Realm {
   //
   // HTTP route handlers in this file that need their READ to be inside the
   // same critical section as the write (the `/_atomic` precheck and
-  // `patchCardInstance`'s indexEntry read) take the lock themselves at the
+  // `patchCardInstance`'s existing-file read) take the lock themselves at the
   // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
   // through the public methods would deadlock (a second
   // `pg_advisory_xact_lock` on the same key would block on its own pinned
@@ -4757,35 +4757,42 @@ export class Realm {
       }
     }
 
-    // CS-11125: serialize concurrent PATCHes against the same realm so the
-    // indexEntry read, merge, and write are all inside one critical
+    // Serialize concurrent PATCHes against the same realm so the
+    // existing-file read, merge, and write are all inside one critical
     // section. Without the lock, two replicas could both read the same
-    // `original` from boxel_index, compute independent merges, and the
-    // second writer's merge would silently lose the first's changes.
-    // writeMany below uses the default `waitForIndex: true`, so once the
-    // lock releases the index reflects the just-committed state and the
-    // next waiter's `indexEntry` read sees it.
+    // `original`, compute independent merges, and the second writer's
+    // merge would silently lose the first's changes.
     //
     // Inside the lock we invoke `_batchWriteUnlocked` rather than the
     // public `writeMany` — re-entering the lock through the public method
     // would block on a different pinned pool connection.
     return await this.#dbAdapter.withWriteLock(this.url, async () => {
       let primarySerialization: LooseSingleCardDocument | undefined;
-      let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
-        includeErrors: true,
-      });
-      if (!indexEntry) {
+      // The merge base is the stored source file, not the index. The
+      // index is downstream of the file and can lag it — a backlogged or
+      // in-flight index job would hand us a stale `pristine_doc`, and
+      // merging the patch over stale state silently reverts every field
+      // the index hasn't caught up on. The file is written inside this
+      // same write lock, so it is always current.
+      let existingFile = await this.readFileAsText(`${localPath}.json`);
+      if (!existingFile) {
         return notFound(request, requestContext);
       }
-      let original = cloneDeep(
-        indexEntry.instance ?? {
-          type: 'card',
-          meta: { adoptsFrom: patch.meta.adoptsFrom },
-        },
-      ) as CardResource;
-      original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-      original.meta.adoptsFrom =
-        original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+      let original: CardResource;
+      try {
+        let existingDoc = JSON.parse(existingFile.content);
+        if (!isCardResource(existingDoc?.data)) {
+          throw new Error('stored file is not a card document');
+        }
+        original = cloneDeep(existingDoc.data) as CardResource;
+      } catch (err: any) {
+        return systemError({
+          requestContext,
+          message: `cannot apply patch, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
+          additionalError: err,
+          id: instanceURL,
+        });
+      }
       delete original.meta.lastModified;
       let originalClone = cloneDeep(original);
 

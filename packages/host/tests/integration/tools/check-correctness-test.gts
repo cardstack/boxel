@@ -147,11 +147,11 @@ module('Integration | tools | check-correctness', function (hooks) {
       fileIdentifier: `${cardId}.json`,
       codeBlocks: [
         `╔═══ SEARCH ════╗
+      "name": "Bill",
       "hasError": true,
-      "name": "Bill"
 ╠═══════════════╣
+      "name": "Billy",
       "hasError": false,
-      "name": "Billy"
 ╚═══ REPLACE ═══╝`,
       ],
       roomId,
