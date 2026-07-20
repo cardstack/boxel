@@ -60,12 +60,12 @@ function stripTypeFromFilter(filter: Filter): Filter | undefined {
     return on ? { every: children, on } : { every: children };
   }
   if (isAnyFilter(filter)) {
-    const children = filter.any
-      .map((f) => stripTypeFromFilter(f))
-      .filter((f): f is Filter => f !== undefined);
-    if (children.length === 0) return undefined;
-    if (children.length === 1) return on ? { ...children[0], on } : children[0];
-    return on ? { any: children, on } : { any: children };
+    // Never strip within an `any`: the branches are alternatives, so dropping
+    // a branch's type (or collapsing a stripped-empty branch) changes which
+    // rows match. e.g. the skill menu's `any: [{ type: skillCardRef }, { on:
+    // markdownDefRef, eq: { kind: 'skill' } }]` would collapse to the markdown
+    // branch alone, excluding skill cards. Keep the alternation intact.
+    return filter;
   }
   if (isNotFilter(filter)) {
     const inner = stripTypeFromFilter(filter.not);
@@ -210,18 +210,14 @@ export function buildSearchQuery(
   const searchTerm = searchKey?.trim() || undefined;
   let filters: Filter[];
   if (baseFilter) {
-    // When typeFilter is present, strip a *simple* baseFilter's type constraint
-    // as redundant — the picked subtype already implies it. Only safe for a
-    // single-type base filter. A compound base filter (e.g. the skill menu's
-    // `any: [{ type: skillCardRef }, { on: markdownDefRef, eq: { kind: 'skill' }
-    // }]`) must stay intact: stripping the type branch collapses the `any` and
-    // promotes the sibling field constraint into a required top-level `every`
-    // clause — which would wrongly exclude the other branch's kind (skill cards
-    // vanish, only markdown skills survive).
-    const effectiveBaseFilter =
-      typeFilter && isCardTypeFilter(baseFilter)
-        ? stripTypeFromFilter(baseFilter)
-        : baseFilter;
+    // When typeFilter is present, strip the baseFilter's (parent) type
+    // constraint as redundant — the picked subtype already implies it.
+    // `stripTypeFromFilter` only unwraps a top-level `{ type }` node and leaves
+    // any `any`-alternation intact, so a compound base filter passes through
+    // whole.
+    const effectiveBaseFilter = typeFilter
+      ? stripTypeFromFilter(baseFilter)
+      : baseFilter;
     filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
@@ -273,12 +269,9 @@ export function buildRecentsQuery(
     : undefined;
   let filters: Filter[];
   if (baseFilter) {
-    // Only strip a simple single-type base filter (see `buildSearchQuery`);
-    // a compound base filter must stay intact or the `any` collapses.
-    const effectiveBaseFilter =
-      typeFilter && isCardTypeFilter(baseFilter)
-        ? stripTypeFromFilter(baseFilter)
-        : baseFilter;
+    const effectiveBaseFilter = typeFilter
+      ? stripTypeFromFilter(baseFilter)
+      : baseFilter;
     filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),

@@ -179,14 +179,20 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   // (`includeFiles`) surfaces both in a single list and tags each pick with its
   // kind, which routes the result to the matching attach callback.
   private doAttachSkill = restartableTask(async () => {
-    // Exclude already-attached skills. The `not: { eq: { id } }` clauses are
-    // built client-side from the menu's own skill list, so card skills are
-    // excluded immediately; file skills are excluded once their rows carry
-    // `id` in the search doc (Phase 1 reindex), and the feature ships without
-    // waiting on that reindex.
+    // Exclude already-attached skills, matched client-side against the menu's
+    // own skill list by `id`. Card skills are excluded immediately; file skills
+    // once their rows carry `id` in the search doc (Phase 1 reindex), and the
+    // feature ships without waiting on that reindex.
+    //
+    // The exclusion must be NULL-safe: a bare `not: { eq: { id } }` drops any
+    // row whose `id` is absent, because negated `eq` compiles to `NOT (id = X)`
+    // and `NOT (NULL = X)` is NULL (excluded) under three-valued logic. On a
+    // realm not yet carrying the stamped `id`, every skill-file row lacks `id`,
+    // so that would hide *all* skill files whenever any skill is attached. The
+    // `{ eq: { id: null } }` branch (an `IS NULL` test) keeps those rows.
     let exclusions =
       this.args.skills?.map((skill: RoomSkill) => ({
-        not: { eq: { id: skill.cardId } },
+        any: [{ eq: { id: null } }, { not: { eq: { id: skill.cardId } } }],
       })) ?? [];
     let query = {
       filter: {
