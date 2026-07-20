@@ -55,6 +55,10 @@ export async function enqueueSyncOpenRouterModels({
     runAs: REALM_USERNAME,
     command: COMMAND_SPECIFIER,
     commandInput: { realmIdentifier: realmURL },
+    // System-initiated cron job: a command error must reject the job (Sentry +
+    // rejected status) rather than resolve silently, so a broken sync surfaces
+    // instead of quietly leaving the model realm stale.
+    alertOnError: true,
   };
 
   try {

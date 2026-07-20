@@ -109,6 +109,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '@cardstack/boxel-host/commands/show-card/default',
       commandInput: {},
+      alertOnError: false,
       jobInfo: { id: 1 } as any,
     });
 
@@ -150,6 +151,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '   ',
       commandInput: {},
+      alertOnError: false,
       jobInfo: { id: 2 } as any,
     });
 
@@ -201,6 +203,7 @@ const tests = Object.freeze({
       runAs: '@alice',
       command: 'http://localhost:4200/commands/create-submission',
       commandInput: null,
+      alertOnError: false,
       jobInfo: { id: 3 } as any,
     });
 
@@ -255,6 +258,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '@cardstack/catalog/commands/create-submission/default',
       commandInput: { listingId: 'http://localhost:4201/catalog/AppListing/1' },
+      alertOnError: false,
       jobInfo: { id: 4 } as any,
     });
 
@@ -266,6 +270,64 @@ const tests = Object.freeze({
       listingId: 'http://localhost:4201/catalog/AppListing/1',
       accessibleRealms: ['http://localhost:4201/experiments/'],
     });
+  },
+
+  'throws when alertOnError is set and the command returns an error': async (
+    assert,
+  ) => {
+    assert.expect(2);
+    let task = runCommand(
+      makeTaskArgs({
+        dbRows: [
+          {
+            username: '@alice:localhost',
+            realm_url: 'http://localhost:4201/experiments/',
+            read: true,
+            write: true,
+            realm_owner: false,
+          },
+        ],
+        prerenderResult: { status: 'error', error: 'boom' },
+      }),
+    );
+
+    // A thrown task lets the queue mark the job rejected and report it to
+    // Sentry, instead of resolving with the error swallowed in-band.
+    await assert.rejects(
+      task({
+        realmURL: 'http://localhost:4201/experiments/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/catalog/commands/sync-openrouter-models/default',
+        commandInput: {},
+        alertOnError: true,
+        jobInfo: { id: 5 } as any,
+      }),
+      /boom/,
+      'rejects with the command error when alertOnError is set',
+    );
+    assert.true(true, 'did not resolve in-band');
+  },
+
+  'throws when alertOnError is set and runAs lacks permissions': async (
+    assert,
+  ) => {
+    assert.expect(1);
+    let task = runCommand(makeTaskArgs({ dbRows: [] }));
+
+    await assert.rejects(
+      task({
+        realmURL: 'http://localhost:4201/experiments/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/catalog/commands/sync-openrouter-models/default',
+        commandInput: {},
+        alertOnError: true,
+        jobInfo: { id: 6 } as any,
+      }),
+      /does not have permissions in/,
+      'a permission failure rejects the job when alertOnError is set',
+    );
   },
 } as SharedTests<{}>);
 

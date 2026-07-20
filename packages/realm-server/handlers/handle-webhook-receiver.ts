@@ -157,6 +157,9 @@ export default function handleWebhookReceiverRequest({
             runAs,
             command: commandURL,
             commandInput,
+            // Webhook-triggered command: an error is handled per-command by the
+            // caller, not surfaced as a job failure.
+            alertOnError: false,
           },
           queue,
           dbAdapter,

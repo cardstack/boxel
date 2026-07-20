@@ -21,5 +21,13 @@ module(basename(import.meta.filename), function () {
     test('passes scoped command through unchanged', async function (assert) {
       await runSharedTest(runCommandTaskTests, assert, {});
     });
+
+    test('throws when alertOnError is set and the command returns an error', async function (assert) {
+      await runSharedTest(runCommandTaskTests, assert, {});
+    });
+
+    test('throws when alertOnError is set and runAs lacks permissions', async function (assert) {
+      await runSharedTest(runCommandTaskTests, assert, {});
+    });
   });
 });

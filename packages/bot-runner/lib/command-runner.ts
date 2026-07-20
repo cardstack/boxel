@@ -51,6 +51,9 @@ export function makeEnqueueRunCommand(
         runAs,
         command,
         commandInput,
+        // Interactive command: a command error is a normal result to hand back
+        // to the user, not a job failure.
+        alertOnError: false,
       },
       queuePublisher,
       dbAdapter,
