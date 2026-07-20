@@ -4,8 +4,8 @@ import { module, test } from 'qunit';
 
 import { rri, type RenderableSearchEntryLike } from '@cardstack/runtime-common';
 
-import SearchResultTile from '@cardstack/host/components/card-search/result-tile';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import SearchResultTile from '@cardstack/host/components/search/result-tile';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -47,7 +47,7 @@ const newCardItem: NewCardArgs = {
   realmURL: rri('http://test/'),
 };
 
-module('Integration | card-search/result-tile (adorn)', function (hooks) {
+module('Integration | search/result-tile (adorn)', function (hooks) {
   setupRenderingTest(hooks);
 
   test('passes through the adorn class when @adorn is true', async function (assert) {

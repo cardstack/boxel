@@ -21,7 +21,7 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 
-import HydratableCard from '@cardstack/host/components/card-search/hydratable-card';
+import HydratableCard from '@cardstack/host/components/search/hydratable-card';
 import { htmlComponent } from '@cardstack/host/lib/html-component';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import ElementTracker from '@cardstack/host/resources/element-tracker';

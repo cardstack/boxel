@@ -1,4 +1,26 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pnpm lint*)",
+      "Bash(npx eslint *)",
+      "Bash(aws --profile claude-staging *)",
+      "Bash(pnpm exec eslint *)",
+      "Bash(gh search *)",
+      "Bash(gh run download *)",
+      "Bash(mise tasks *)",
+      "Bash(npx tsc *)",
+      "Bash(node --check *)",
+      "Bash(npx vitest run *)",
+      "Bash(pnpm exec prettier *)",
+      "mcp__linear__list_comments",
+      "mcp__linear__get_issue",
+      "mcp__linear__get_project",
+      "mcp__linear__get_user",
+      "mcp__linear__list_projects",
+      "mcp__linear__list_issue_statuses",
+      "mcp__chrome-devtools__take_screenshot"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

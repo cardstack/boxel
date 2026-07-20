@@ -646,7 +646,12 @@ export class Prerenderer {
 
   async prerenderVisit(
     rawArgs: PrerenderVisitArgs & {
-      opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+      opts?: {
+        timeoutMs?: number;
+        simulateTimeoutMs?: number;
+        // Test-only: see the matching field on `prerenderVisitAttempt`.
+        simulateLegacyHost?: true;
+      };
       signal?: AbortSignal;
       // Test-only hook fired right after a page is acquired and its
       // bucket has been reset. Used by tests that need to seed the

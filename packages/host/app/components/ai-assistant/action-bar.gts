@@ -63,7 +63,7 @@ export default class AiAssistantActionBar extends Component<Signature> {
         </div>
       {{else if @acceptingAll}}
         <span class='accepting-all'>
-          <LoadingIndicator />
+          <LoadingIndicator @color='var(--boxel-highlight)' />
           {{if @acceptingAllLabel @acceptingAllLabel 'Apply Diff'}}
         </span>
       {{else}}
@@ -127,7 +127,6 @@ export default class AiAssistantActionBar extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxs);
         letter-spacing: 0.2px;
-        --icon-color: var(--boxel-teal);
       }
       .generating-results-container {
         display: flex;

@@ -20,7 +20,7 @@ import {
   getBaseFilterTypeKeys,
   getFilterTypeRefs,
   getRootTypeKeys,
-} from '../utils/card-search/type-filter';
+} from '../utils/search/type-filter';
 
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';

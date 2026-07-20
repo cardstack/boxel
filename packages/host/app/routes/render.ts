@@ -328,8 +328,12 @@ export default class RenderRoute extends Route<Model> {
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
       rootURL: id,
+      // A fused index render (cardRender + fileExtract in one pass) hydrates
+      // the card, so its session root is the instance; the file extract it
+      // performs runs in its own session (see the render.meta route).
       rootKind:
-        parsedOptions.fileExtract || parsedOptions.fileRender
+        !parsedOptions.cardRender &&
+        (parsedOptions.fileExtract || parsedOptions.fileRender)
           ? 'file'
           : 'instance',
     });
@@ -384,7 +388,11 @@ export default class RenderRoute extends Route<Model> {
         this.lastStoreResetKey = resetKey;
       }
     }
-    if (parsedOptions.fileExtract) {
+    // A fused index render carries both `fileExtract` and `cardRender`; the
+    // card branch below serves it (hydration + settle) and the render.meta
+    // route performs the extract against the hydrated model's file. Only a
+    // fileExtract-only render gets this trivial model.
+    if (parsedOptions.fileExtract && !parsedOptions.cardRender) {
       let state = new TrackedMap<string, unknown>();
       state.set('status', 'ready');
       let readyDeferred = new Deferred<void>();

@@ -554,6 +554,12 @@ export function expressionToSql(
           .map(renderElement)
           .join(' ');
       }
+      // The boxel_index_types_containment_idx GIN indexes (migration
+      // 1784272066344) cover this exact expression — Postgres only uses an
+      // expression index when the query's left operand structurally matches
+      // the indexed expression (aliasing and whitespace don't matter; any
+      // semantic change to the COALESCE wrapper does), so changing the SQL
+      // here un-indexes type filters unless the index expression moves with it.
       return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
         .map(renderElement)
         .join(' ');

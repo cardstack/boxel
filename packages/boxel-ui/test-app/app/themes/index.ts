@@ -1,33 +1,26 @@
-import { Bubblegum } from './bubblegum.ts';
-import { NeoBrutalism } from './neo-brutalism.ts';
-import { SoftPop } from './soft-pop.ts';
-import { Candyland } from './candyland.ts';
-import { Doom64 } from './doom64.ts';
-import { StarryNight } from './starry-night.ts';
-import { Boxel } from './boxel.ts';
-import { DarkStudio } from './dark-studio.ts';
+import * as CS_THEMES from './cs-themes.ts';
+import * as TCN_THEMES from './tcn-themes.ts';
+
+const THEMES = { ...TCN_THEMES, ...CS_THEMES };
 
 export interface Theme {
   cssVariables?: string;
   name: string;
 }
 
-export const THEMES = {
-  Bubblegum,
-  Doom64,
-  SoftPop,
-  NeoBrutalism,
-  StarryNight,
-  Candyland,
-  DarkStudio,
-  Boxel,
-};
-
 // adjust for freestyle doc styles overriding theme variables
 const FREESTYLE_ADJUSTMENTS = `\n\n:root {\n  --theme-radius: var(--radius);\n}`;
 
+// PascalCase export name -> display name, e.g.
+// "AmethystHaze" -> "Amethyst Haze", "Doom64" -> "Doom 64"
+function formatThemeName(name: string): string {
+  return name
+    .replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+    .replace(/(\d)([A-Za-z])/g, '$1 $2');
+}
+
 const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({
-  name,
+  name: formatThemeName(name),
   cssVariables: vars + FREESTYLE_ADJUSTMENTS,
 }));
 
