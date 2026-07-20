@@ -1,7 +1,23 @@
-import { setupTest } from 'ember-qunit';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import type RealmServerService from '@cardstack/host/services/realm-server';
+
+import {
+  testRealmURL,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+} from '../helpers';
+
+import { setupBaseRealm } from '../helpers/base-realm';
+
+import { setupMockMatrix } from '../helpers/mock-matrix';
+
+import { setupRenderingTest } from '../helpers/setup';
 
 // Bug 3 (CS-12207 family): event-subscriber *wiring* is app-scoped — services
 // call subscribeEvent() once in their constructor, for the app's lifetime.
@@ -10,14 +26,29 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 // billing-notification (and any future) push updates after a re-login. This
 // test locks in that resetState() preserves the wiring.
 module(
-  'Unit | Service | realm-server | subscriber preservation',
+  'Integration | realm-server | subscriber preservation',
   function (hooks) {
-    setupTest(hooks);
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, testRealmURL],
+      autostart: true,
+    });
+
+    setupBaseRealm(hooks);
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      });
+    });
 
     test('resetState() preserves event subscribers registered before logout', async function (assert) {
-      let realmServer = this.owner.lookup(
-        'service:realm-server',
-      ) as RealmServerService;
+      let realmServer = getService('realm-server') as RealmServerService;
+      await getService('matrix-service').ready;
 
       let received: unknown[] = [];
       realmServer.subscribeEvent('billing-notification', async (data) => {
@@ -28,7 +59,7 @@ module(
       realmServer.resetState();
 
       // Stub logged-in claims so handleEvent dispatches to subscribers without
-      // a real login round-trip.
+      // depending on the live session room id.
       let sessionRoom = 'test-session-room';
       (realmServer as any).auth = {
         type: 'logged-in',
