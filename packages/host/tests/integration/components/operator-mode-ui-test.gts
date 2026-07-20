@@ -683,7 +683,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       .doesNotExist('select-all checkbox is unchecked after selecting a realm');
   });
 
-  test('clicking outside search sheet resets search input and realm filter', async function (assert) {
+  test('clicking outside search sheet preserves the realm filter', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -722,22 +722,25 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
 
-    // Reopen search sheet
+    // Reopen search sheet — no search term was entered, so it returns to the
+    // compact prompt.
     await click(`[data-test-open-search-field]`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
-    // Assert search input is cleared
+    // The realm filter is preserved across a plain close/reopen (only an
+    // explicit Cancel or Escape clears it). Reopen the picker and confirm the
+    // realm is still checked.
+    let reopenedRealmTrigger =
+      document.querySelector(
+        '[data-test-realm-picker] .ember-power-select-trigger',
+      ) ?? document.querySelector('[data-test-realm-picker]');
+    await click(reopenedRealmTrigger as HTMLElement);
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
     assert
-      .dom('[data-test-search-field]')
-      .hasValue('', 'search input is cleared after clicking outside');
-
-    // Assert realm filter is reset — picker trigger should show "All"
-    assert
-      .dom('[data-test-realm-picker] [data-test-boxel-picker-selected-item]')
-      .hasText(
-        'All',
-        'realm filter is reset to select-all after clicking outside',
-      );
+      .dom(
+        `[data-test-boxel-picker-option-label="${ctx.realmName}"] .picker-option-row__checkbox--selected`,
+      )
+      .exists('realm selection is preserved after clicking outside');
   });
 
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
@@ -958,7 +961,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
   });
 
-  test('clicking outside search sheet resets type filter selection', async function (assert) {
+  test('clicking outside search sheet preserves the type filter selection', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -997,25 +1000,24 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
 
-    // Reopen search sheet
+    // Reopen — the persisted search term brings the sheet straight back to the
+    // results view with the type filter still applied (only an explicit Cancel
+    // or Escape clears it).
     await click(`[data-test-open-search-field]`);
-    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue('Mango', 'the search term is preserved after clicking outside');
 
-    // Type filter should be reset — "Any" (select-all) is the only active selection.
-    // The Picker auto-selects the select-all option when @selected is empty, but
-    // select-all items never render a remove button, so its absence confirms no
-    // specific type filter is active.
-    assert
-      .dom('[data-test-type-picker] [data-test-boxel-picker-remove-button]')
-      .doesNotExist(
-        'specific type filter is cleared after closing the search sheet',
-      );
-    assert
-      .dom('[data-test-type-picker] [data-test-boxel-picker-selected-item]')
-      .hasText(
-        'Any',
-        'type picker shows shortLabel "Any" after reset to select-all',
-      );
+    if (typeOptions.length > 0) {
+      // A specific type is still selected — its remove button is present (the
+      // select-all "Any" option never renders one).
+      assert
+        .dom('[data-test-type-picker] [data-test-boxel-picker-remove-button]')
+        .exists(
+          'the type filter selection is preserved after clicking outside',
+        );
+    }
   });
 
   test('type options derived from realm types when no search term, sorted alphabetically', async function (assert) {
