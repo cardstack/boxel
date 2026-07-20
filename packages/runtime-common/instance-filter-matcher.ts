@@ -129,7 +129,7 @@ function operatorPathsClientEvaluable(
 }
 
 export function matchInstanceAgainstFilter(
-  instance: CardDef,
+  instance: BaseDef,
   filter: Filter,
   api: CardAPIForMatching,
 ): MatchResult {

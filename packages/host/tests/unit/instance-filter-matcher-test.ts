@@ -21,7 +21,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { testRealmURL, p } from '../helpers';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardDef, FileDef } from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
 
@@ -33,6 +33,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
   let catRef: CodeRef;
   let eventRef: CodeRef;
   let cards: Record<string, CardDef> = {};
+  let fileDef: FileDef;
 
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
@@ -80,6 +81,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
       linksToMany,
       CardDef,
       FieldDef,
+      FileDef,
       setCardAsSavedForTest,
     } = cardApi;
     let { default: StringField } = string;
@@ -168,6 +170,15 @@ module('Unit | instance-filter-matcher', function (hooks) {
       card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
+
+    let fileURL = `${testRealmURL}files/hello.md`;
+    fileDef = new FileDef({
+      id: fileURL,
+      sourceUrl: fileURL,
+      url: fileURL,
+      name: 'hello.md',
+      contentType: 'text/markdown',
+    });
   });
 
   function match(card: CardDef, filter: Filter) {
@@ -719,9 +730,53 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
     assert.true(isClientEvaluable({ contains: { _title: 'x' } }));
     assert.true(isClientEvaluable({ eq: { name: 'Mango' } }), 'a real field');
+    assert.true(
+      isClientEvaluable({ eq: { id: 'x' } }),
+      'the id identity key is a real field and stays client-evaluable (so file id filters route through the matcher, not server-only)',
+    );
     assert.false(
       isClientEvaluable({ eq: { _mysteryServerKey: 1 } }),
       'an unshimmed underscore key forces server-only evaluation',
+    );
+  });
+
+  // -- file rows: the unified `id` identity key -------------------------------
+  // The file-indexer stamps `id` (= the file URL) into a file's search doc, so a
+  // mixed card/file query can address either kind by `eq: { id }`. `id` is a
+  // real FileDef field (not a synthetic key), so the client matcher resolves it
+  // via the normal field path — but guard it, because live reconciliation of a
+  // file id filter would drop correct rows if it ever diverged from the server.
+
+  test('eq on id matches a FileDef by its url', function (assert) {
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { eq: { id: `${testRealmURL}files/hello.md` } },
+        api,
+      ),
+      'match',
+      'a file matches its own id',
+    );
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { eq: { id: `${testRealmURL}files/other.md` } },
+        api,
+      ),
+      'no-match',
+      'a file does not match a different id',
+    );
+  });
+
+  test('not: eq on id excludes a FileDef by its url (the already-selected exclusion)', function (assert) {
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { not: { eq: { id: `${testRealmURL}files/hello.md` } } },
+        api,
+      ),
+      'no-match',
+      'excluding a file by its id removes it',
     );
   });
 });
