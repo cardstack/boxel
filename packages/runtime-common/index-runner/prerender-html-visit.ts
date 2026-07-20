@@ -568,9 +568,19 @@ async function visitForPrerenderedHtml({
 // nothing is persisted for the failed URL either, the reconcile sweep reads
 // it as "never attempted" and re-enqueues the identical batch every tick.
 // Persisting error rows contains the failure to this URL: they carry the
-// batch's generation, so the recorded failure reads as this generation's
-// outcome rather than as residue to repair, and the last-known-good HTML is
-// preserved beneath the error like any other render failure's row.
+// batch's generation and the last-known-good HTML is preserved beneath the
+// error like any other render failure's row.
+//
+// The error is marked `visitRequestFailure` because this failure describes
+// the request, not the content — the render never returned a verdict, so a
+// retry can legitimately succeed (e.g. an abort under temporary prerender
+// congestion). The reconcile sweep gives such rows a bounded retry lane:
+// re-rendered at most `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive
+// times, spaced by the sweep cadence, then terminal exactly like a
+// deterministic render error. The bound is what protects the fleet — each
+// retry of a genuinely pathological visit burns its realm's prerender
+// affinity lane for the full request timeout, so retries must converge to
+// "recorded error, move on" rather than repeat indefinitely.
 async function handleVisitFailure({
   url,
   err,
@@ -609,6 +619,7 @@ async function handleVisitFailure({
         }),
       );
   error.message = message;
+  error.visitRequestFailure = true;
   await batch.updatePrerenderedHtmlEntry(url, { type: 'file-error', error });
   stats.fileErrors++;
   // The up-front seeding tombstoned every type this URL previously had in

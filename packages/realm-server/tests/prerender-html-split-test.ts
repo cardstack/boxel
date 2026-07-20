@@ -473,6 +473,8 @@ module(basename(import.meta.filename), function () {
         error_doc: {
           message?: string;
           diagnostics?: Record<string, unknown>;
+          visitRequestFailure?: boolean;
+          consecutiveVisitFailures?: number;
         } | null;
         deps: string[] | null;
         last_known_good_deps: string[] | null;
@@ -1242,6 +1244,58 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(stats.instanceErrors, 1);
         assert.strictEqual(stats.fileErrors, 1);
+      });
+
+      test('consecutive visit-request failures extend the recorded run; a successful render clears it', async function (assert) {
+        let url = `${testRealm}mango.json`;
+        let passArgs = (
+          generation: number,
+          prerenderer: Prerenderer,
+        ): Parameters<typeof runPrerenderHtmlPass>[0] => ({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, cardJSON()]])),
+          prerenderer,
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        await runPrerenderHtmlPass(passArgs(1, abortingPrerenderer('mango')));
+        let row = await productionRow(url);
+        assert.true(Boolean(row.error_doc?.visitRequestFailure));
+        assert.strictEqual(
+          row.error_doc?.consecutiveVisitFailures,
+          1,
+          'the first failure starts a run of one',
+        );
+
+        await runPrerenderHtmlPass(passArgs(2, abortingPrerenderer('mango')));
+        row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc?.consecutiveVisitFailures,
+          2,
+          'a repeat failure extends the run',
+        );
+
+        let succeeding: Prerenderer = {
+          ...abortingPrerenderer('never-matches'),
+          async prerenderVisit() {
+            return renderedVisitResponse('recovered');
+          },
+        };
+        await runPrerenderHtmlPass(passArgs(3, succeeding));
+        row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'a successful render replaces the row and ends the run',
+        );
+        assert.strictEqual(row.isolated_html, '<h1>recovered</h1>');
       });
 
       test('a retry re-visits URLs whose prior attempt recorded a render failure', async function (assert) {

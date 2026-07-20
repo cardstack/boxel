@@ -33,6 +33,22 @@ export interface RealmGenerationInfo {
   loaderEpoch: string;
 }
 
+// How many consecutive visit-request failures a URL may record before the
+// sweep stops retrying it. The retry lane exists because a
+// `visitRequestFailure` error describes the request, not the content — the
+// render never returned a verdict, so a retry can legitimately succeed once
+// e.g. temporary prerender congestion clears. The cap is the fleet
+// protection: each retry of a genuinely pathological visit occupies its
+// realm's prerender affinity lane for the full request timeout, so after
+// this many consecutive failures the row is terminal — the recorded error
+// stands until the URL's next invalidation — rather than the sweep
+// re-burning that lane indefinitely.
+export const PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP = 3;
+// A failed row becomes retry-eligible only once its recorded rendering is
+// this old, so retries space out to the sweep's own cadence instead of a
+// sweep tick that lands just after the failure immediately re-rendering it.
+export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
+
 // Index rows whose prerendered HTML is behind the search-doc index, or absent
 // entirely, restricted to live, non-errored rows:
 //   - `is_deleted` rows are tombstones — a deletion's tombstone-render is not
@@ -43,6 +59,16 @@ export interface RealmGenerationInfo {
 // Staleness is measured per row against its own `boxel_index.generation`, not
 // against the realm's current generation: a row the latest pass did not revisit
 // keeps its own generation and its HTML at that generation is fresh for it.
+//
+// A third arm admits the bounded retry lane for visit-request failures: an
+// HTML row whose `error_doc` carries the `visitRequestFailure` marker is
+// repairable even at a current generation — the failure describes the
+// request rather than the content — until its consecutive-failure run
+// reaches `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`, after which it reads as
+// terminal exactly like a deterministic render error. The jsonb operators
+// here are Postgres-only, like the `jobs`-table scans in this module: the
+// reconcile task that issues this query runs solely behind the Postgres
+// queue.
 export async function findStalePrerenderedHtmlRows(
   dbAdapter: DBAdapter,
 ): Promise<StalePrerenderedHtmlRow[]> {
@@ -54,7 +80,14 @@ export async function findStalePrerenderedHtmlRows(
      WHERE i.is_deleted IS NOT TRUE
        AND i.has_error IS NOT TRUE
        AND i.error_doc IS NULL
-       AND (ph.url IS NULL OR ph.generation < i.generation)`,
+       AND (ph.url IS NULL
+         OR ph.generation < i.generation
+         OR ((ph.error_doc->>'visitRequestFailure')::boolean IS TRUE
+           AND COALESCE((ph.error_doc->>'consecutiveVisitFailures')::int, 1)
+             < ${PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;
@@ -82,10 +115,12 @@ export async function findStalePrerenderedHtmlRows(
 // sweep repairs; re-enqueuing renders the row once the transient cause clears,
 // and a realm whose jobs keep rejecting is retried on the rejection-streak
 // backoff schedule (`findPrerenderHtmlRejectionStreaks`) rather than at full
-// sweep frequency forever. A per-URL failure — a render error, or the visit's
-// own request failing outright — never reaches this path: the visit loop
-// records an `error_doc` row at the current generation, which reads as fresh
-// and so never appears stale. The per-row generation gate means an older job
+// sweep frequency forever. A deterministic per-URL render error never reaches
+// this path: the visit loop records an `error_doc` row at the current
+// generation, which reads as fresh and so never appears stale. A
+// visit-request failure records the same kind of row but re-enters the sweep
+// through the bounded retry lane in `findStalePrerenderedHtmlRows` until its
+// consecutive-failure cap. The per-row generation gate means an older job
 // never masks residue the index has moved past.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,

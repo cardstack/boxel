@@ -17,6 +17,7 @@ import {
   insertPermissions,
   logger,
   param,
+  PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP,
   prerenderHtmlRepairBackoffMs,
   prerenderHtmlReconcile,
   query,
@@ -137,6 +138,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation,
     isDeleted = false,
     errorDoc = null,
+    renderedMinutesAgo,
   }: {
     url: string;
     realmURL: string;
@@ -144,6 +146,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation: number;
     isDeleted?: boolean;
     errorDoc?: Record<string, unknown> | null;
+    renderedMinutesAgo?: number;
   }) {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
@@ -154,6 +157,9 @@ module(basename(import.meta.filename), function (hooks) {
         generation,
         is_deleted: isDeleted,
         error_doc: errorDoc,
+        ...(renderedMinutesAgo !== undefined
+          ? { rendered_at: Date.now() - renderedMinutesAgo * 60 * 1000 }
+          : {}),
       },
       { jsonFields: ['error_doc'] },
     );
@@ -935,7 +941,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a render-failure row at the current generation is the recorded outcome, not residue', async function (assert) {
+  test('a deterministic render-error row at the current generation is the recorded outcome, not residue', async function (assert) {
     const realmURL = 'http://example.com/recorded/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
@@ -944,16 +950,18 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
     });
-    // The row a failed visit persists: current generation, error doc. It
-    // reads as fresh, so the sweep never re-enqueues it — the retry lane for
-    // this row is its next invalidation (an edit or a full reindex).
+    // A render error without the visit-request-failure marker is a verdict
+    // about the content: it reads as fresh, so the sweep never re-enqueues
+    // it — the retry lane for this row is its next invalidation (an edit or
+    // a full reindex).
     await seedPrerenderedHtmlRow({
       url: `${realmURL}mango.json`,
       realmURL,
       generation: 5,
       errorDoc: {
-        message: 'Prerender request aborted after exceeding its timeout',
+        message: 'intentional render failure',
       },
+      renderedMinutesAgo: 120,
     });
 
     let result = await runReconcile();
@@ -967,5 +975,107 @@ module(basename(import.meta.filename), function (hooks) {
       0,
       'no repair job is enqueued for the recorded failure',
     );
+  });
+
+  test('a visit-request failure below the retry cap is retried once it ages past the minimum', async function (assert) {
+    const realmURL = 'http://example.com/retry-lane/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5, 'epoch-a');
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    // Current generation — fresh by the generation measure — but the error
+    // describes the visit's own request, the run is below the cap, and the
+    // rendering is old enough to be eligible.
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: 1,
+      },
+      renderedMinutesAgo: 60,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the failed visit gets another attempt',
+    );
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1);
+    assert.ok(
+      jobs[0].args.changes.some(
+        (change) =>
+          change.url === `${realmURL}mango.json` &&
+          change.operation === 'update',
+      ),
+      'the retry re-renders the failed URL',
+    );
+  });
+
+  test('a visit-request failure at the retry cap is terminal', async function (assert) {
+    const realmURL = 'http://example.com/retry-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a capped run stands as the recorded outcome — the sweep stops burning the affinity lane on it',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('a visit-request failure younger than the minimum age is not retried yet', async function (assert) {
+    const realmURL = 'http://example.com/retry-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: 1,
+      },
+      renderedMinutesAgo: 5,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a just-recorded failure waits out the minimum age before its retry',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 });

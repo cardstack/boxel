@@ -1345,6 +1345,17 @@ export class Batch {
           },
           url,
         );
+        if (errorDoc.visitRequestFailure) {
+          // Consecutive-failure bookkeeping for the reconcile sweep's
+          // bounded retry lane: extend the prior row's run when it was also
+          // a visit-request failure, otherwise this write starts a run of
+          // one. A successful render ends the run by replacing the row
+          // outright, so no explicit clear is needed.
+          let priorRun = production?.error_doc?.visitRequestFailure
+            ? (production.error_doc.consecutiveVisitFailures ?? 1)
+            : 0;
+          errorDoc.consecutiveVisitFailures = priorRun + 1;
+        }
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,

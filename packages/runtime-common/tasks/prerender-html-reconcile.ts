@@ -64,10 +64,13 @@ registerQueueJobDefinition({
 // the publish, or whose swap lost a race, leaves index rows stale with nothing
 // scheduled to repair them. Job death itself is the queue's problem (lease
 // expiry re-runs it), so this sweep only enqueues repair where no queued or
-// running job already covers the row — and a realm whose repair jobs keep
-// rejecting is deferred on the rejection-streak backoff schedule, so a
-// persistent whole-job failure is retried a few times a day instead of
-// burning a full render batch every scan. Purely additive: a sweep over a
+// running job already covers the row. Two bounds keep repeated failure from
+// poisoning the prerender fleet: a realm whose repair jobs keep rejecting is
+// deferred on the rejection-streak backoff schedule (a persistent whole-job
+// failure retries a few times a day instead of burning a render batch every
+// scan), and an individual URL whose visit requests keep failing is retried
+// only up to its consecutive-failure cap before its recorded error stands
+// (see `findStalePrerenderedHtmlRows`). Purely additive: a sweep over a
 // healthy system finds nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
