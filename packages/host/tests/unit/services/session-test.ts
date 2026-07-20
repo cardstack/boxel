@@ -65,12 +65,22 @@ module('Unit | Service | session', function (hooks) {
     session.register(thrower);
     session.register(after);
 
-    session.notifySessionStarted();
+    // In tests the participant error is rethrown (after the full broadcast)
+    // so a broken participant fails loudly instead of being swallowed.
+    assert.throws(
+      () => session.notifySessionStarted(),
+      /boom/,
+      'the participant error resurfaces in the test environment',
+    );
 
     assert.strictEqual(
       after.startedCount,
       1,
       'the participant after a throwing one still got sessionStarted',
+    );
+    assert.true(
+      session.isAuthenticated,
+      'the session is still marked established',
     );
   });
 
@@ -85,13 +95,21 @@ module('Unit | Service | session', function (hooks) {
     session.register(thrower);
     session.register(after);
 
-    session.notifySessionEnded();
+    // In tests the participant error is rethrown (after the full broadcast)
+    // so a broken resetState() fails the test that caused it instead of
+    // leaking state into a later, unrelated test.
+    assert.throws(
+      () => session.notifySessionEnded(),
+      /boom/,
+      'the participant error resurfaces in the test environment',
+    );
 
     assert.strictEqual(
       after.resetCount,
       1,
       'the participant after a throwing one still got resetState',
     );
+    assert.false(session.isAuthenticated, 'the session is still marked ended');
   });
 
   test('registering while a session is established replays sessionStarted() exactly once', function (assert) {
@@ -112,6 +130,24 @@ module('Unit | Service | session', function (hooks) {
       late.startedCount,
       2,
       'a subsequent broadcast fires it again (once per session)',
+    );
+  });
+
+  test('a throwing replay on late registration resurfaces in tests', function (assert) {
+    let session = getSession(this);
+    session.notifySessionStarted();
+
+    let thrower: SessionParticipant = {
+      resetState() {},
+      sessionStarted() {
+        throw new Error('boom');
+      },
+    };
+
+    assert.throws(
+      () => session.register(thrower),
+      /boom/,
+      'the replay error resurfaces in the test environment',
     );
   });
 

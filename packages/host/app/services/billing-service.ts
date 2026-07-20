@@ -138,7 +138,25 @@ export default class BillingService extends Service {
     });
   }
 
-  async loadSubscriptionData() {
+  private inFlightSubscriptionDataLoad: Promise<void> | undefined;
+
+  // Coalesce concurrent callers (the session-start hook, component mounts,
+  // billing-notification pushes) into a single /_user fetch — at boot the
+  // sessionStarted() load and <WithSubscriptionData/> mounts would otherwise
+  // stack duplicate requests. A push landing mid-flight shares the in-flight
+  // response; the server pushes again on the next billing change, so any
+  // staleness from that race self-heals.
+  loadSubscriptionData(): Promise<void> {
+    if (!this.inFlightSubscriptionDataLoad) {
+      this.inFlightSubscriptionDataLoad =
+        this.fetchAndStoreSubscriptionData().finally(() => {
+          this.inFlightSubscriptionDataLoad = undefined;
+        });
+    }
+    return this.inFlightSubscriptionDataLoad;
+  }
+
+  private async fetchAndStoreSubscriptionData() {
     this._loadingSubscriptionData = true;
     try {
       let response = await this.fetchSubscriptionData();
