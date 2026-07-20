@@ -154,7 +154,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('closed');
 
       // Reopening restores the results view, the query text, the view toggle, and
-      // the results (shown immediately from the retained snapshot).
+      // the results (adopted from the retained snapshot, with no re-run).
       await click('[data-test-open-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('results');
       assert.dom('[data-test-search-field]').hasValue('Mango');
@@ -164,6 +164,102 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
         .exists('the results are restored');
+    });
+
+    test('reopening an unchanged search does not re-run the query', async function (assert) {
+      await visitOperatorMode({});
+
+      let store = getService('store');
+      let originalSearchEntries = store.searchEntries.bind(store);
+      let mainSearchFetches = 0;
+      store.searchEntries = async (query, realms) => {
+        // Isolate the main search from the recents query (which is not seeded
+        // and does re-run on reopen) by keying on the search term.
+        if (JSON.stringify(query).toLowerCase().includes('mango')) {
+          mainSearchFetches++;
+        }
+        return originalSearchEntries(query, realms);
+      };
+
+      try {
+        await click('[data-test-open-search-field]');
+        await fillIn('[data-test-search-field]', 'Mango');
+        assert
+          .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+          .exists('the search found the card');
+        let fetchesAfterSearch = mainSearchFetches;
+        assert.ok(fetchesAfterSearch >= 1, 'the initial search fetched');
+
+        // Close and reopen with the query unchanged.
+        await click('[data-test-submode-layout]');
+        assert.dom('[data-test-search-sheet]').hasClass('closed');
+        await click('[data-test-open-search-field]');
+
+        assert
+          .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+          .exists('the results are shown immediately on reopen');
+        assert.strictEqual(
+          mainSearchFetches,
+          fetchesAfterSearch,
+          'the seeded reopen performs no additional main-search fetch',
+        );
+
+        // Changing the term still runs a fresh search (the seed only matches
+        // the unchanged query).
+        await fillIn('[data-test-search-field]', 'Van Gogh');
+        assert
+          .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+          .exists('a changed query re-runs the search');
+      } finally {
+        store.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('restores the results scroll position after a close/reopen', async function (assert) {
+      await visitOperatorMode({});
+
+      // A broad term returns enough results for the list to overflow.
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'ma');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+      await waitFor('[data-test-search-result]');
+
+      let scrollContainer = document.querySelector(
+        '[data-test-search-sheet] .search-sheet-content',
+      ) as HTMLElement;
+      assert.ok(
+        scrollContainer.scrollHeight > scrollContainer.clientHeight,
+        'the results list overflows and can scroll',
+      );
+
+      // Scroll partway down and fire the scroll event so the offset is recorded.
+      scrollContainer.scrollTop = 60;
+      let expected = scrollContainer.scrollTop;
+      assert.ok(expected > 0, 'the list was scrolled away from the top');
+      await triggerEvent(scrollContainer, 'scroll');
+
+      await click('[data-test-submode-layout]');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      await click('[data-test-open-search-field]');
+      let restoredContainer = document.querySelector(
+        '[data-test-search-sheet] .search-sheet-content',
+      ) as HTMLElement;
+      // Restore re-applies per frame until the seeded rows are laid out and the
+      // offset sticks; wait for that to settle.
+      for (
+        let i = 0;
+        i < 30 && Math.abs(restoredContainer.scrollTop - expected) > 1;
+        i++
+      ) {
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for the per-frame scroll restore
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      assert.strictEqual(
+        restoredContainer.scrollTop,
+        expected,
+        'the scroll position is restored on reopen',
+      );
     });
 
     test('the Cancel button clears the persisted search', async function (assert) {

@@ -27,9 +27,11 @@ import {
 import {
   getSearchEntriesResource,
   SearchEntriesResource,
+  type SearchEntry,
 } from '@cardstack/host/resources/search-entries';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type { MainResultsSnapshot } from '@cardstack/host/services/search-sheet-state';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -52,7 +54,12 @@ const testRealm2URL = 'http://test-realm/test2/';
 
 function getResourceForTest(
   parent: object,
-  args: () => { named: { query: SearchEntryWireQuery | undefined } },
+  args: () => {
+    named: {
+      query: SearchEntryWireQuery | undefined;
+      seed?: MainResultsSnapshot;
+    };
+  },
 ) {
   return SearchEntriesResource.from(parent, args) as unknown as Omit<
     SearchEntriesResource,
@@ -62,7 +69,10 @@ function getResourceForTest(
     loaded: Promise<void>;
     modify: (
       positional: never[],
-      named: { query: SearchEntryWireQuery | undefined },
+      named: {
+        query: SearchEntryWireQuery | undefined;
+        seed?: MainResultsSnapshot;
+      },
     ) => void;
   };
 }
@@ -1720,6 +1730,139 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  // Seed-and-skip: a snapshot handed in for the current query is adopted on the
+  // first modify instead of fetching, so the search sheet reopening with an
+  // unchanged search shows its prior rows with no re-run. One-shot per instance.
+  module('seed-and-skip', function () {
+    let queryA: SearchEntryWireQuery = {
+      filter: { 'item.on': bookRef },
+      realms: [testRealmURL],
+    };
+    let queryB: SearchEntryWireQuery = {
+      filter: { 'item.on': bookRef, eq: { 'item.status': 'ready' } },
+      realms: [testRealmURL],
+    };
+
+    function seedEntry(id: string): SearchEntry {
+      return { id, realmUrl: testRealmURL, html: [] };
+    }
+
+    function seedFor(
+      query: SearchEntryWireQuery,
+      ids: string[],
+    ): MainResultsSnapshot {
+      return {
+        queryKey: JSON.stringify(query),
+        entries: ids.map(seedEntry),
+        meta: { page: { total: ids.length } },
+      };
+    }
+
+    function countingSearchEntries() {
+      let count = 0;
+      let original = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async (query, realms) => {
+        count++;
+        return await original(query, realms);
+      };
+      return {
+        get count() {
+          return count;
+        },
+        restore() {
+          storeService.searchEntries = original;
+        },
+      };
+    }
+
+    test('a seed for the current query adopts its rows and skips the fetch', async function (assert) {
+      let fetches = countingSearchEntries();
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: queryA,
+            seed: seedFor(queryA, [`${testRealmURL}books/1`]),
+          },
+        }));
+        // Reading a property runs modify(), which schedules the seed; it lands
+        // on the following microtask (settle), before any paint.
+        void search.entries;
+        await settled();
+        assert.strictEqual(
+          search.entries.length,
+          1,
+          'the seeded row is adopted',
+        );
+        assert.strictEqual(
+          search.entries[0].id,
+          `${testRealmURL}books/1`,
+          'the adopted row is the seeded one',
+        );
+        assert.strictEqual(
+          search.meta.page.total,
+          1,
+          'the seeded meta is used',
+        );
+        assert.strictEqual(fetches.count, 0, 'no fetch is performed');
+      } finally {
+        fetches.restore();
+      }
+    });
+
+    test('a seed for a different query is ignored and the search fetches', async function (assert) {
+      let fetches = countingSearchEntries();
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: queryA,
+            // Snapshot belongs to queryB, so its key won't match queryA.
+            seed: seedFor(queryB, [`${testRealmURL}books/1`]),
+          },
+        }));
+        await search.loaded;
+        assert.strictEqual(fetches.count, 1, 'the mismatched seed is ignored');
+        assert.strictEqual(
+          search.entries.length,
+          2,
+          'the real search results are used',
+        );
+      } finally {
+        fetches.restore();
+      }
+    });
+
+    test('the seed is one-shot: a later query change re-fetches, even back to the seeded query', async function (assert) {
+      let fetches = countingSearchEntries();
+      try {
+        let seed = seedFor(queryA, [`${testRealmURL}books/1`]);
+        let search = getResourceForTest(storeService, () => ({
+          named: { query: queryA, seed },
+        }));
+        void search.entries;
+        await settled();
+        assert.strictEqual(search.entries.length, 1, 'seeded on the first run');
+        assert.strictEqual(fetches.count, 0, 'no fetch while seeded');
+
+        // Change to a different query — must fetch.
+        search.modify([], { query: queryB, seed });
+        await settled();
+        assert.strictEqual(fetches.count, 1, 'a changed query fetches');
+
+        // Back to the originally-seeded query — must fetch, not re-adopt the
+        // spent seed.
+        search.modify([], { query: queryA, seed });
+        await settled();
+        assert.strictEqual(
+          fetches.count,
+          2,
+          're-typing the seeded query re-fetches (the seed is spent)',
+        );
+      } finally {
+        fetches.restore();
+      }
+    });
+  });
+
   // modify() runs inside a tracked computation (property access on the
   // resource proxy during render), so these tests exercise the resource the
   // way a real component consumes it — any tracked read-then-write inside
@@ -1728,16 +1871,60 @@ module('Integration | search-entries resource', function (hooks) {
   module('rendered consumption', function () {
     class QueryState {
       @tracked query: SearchEntryWireQuery | undefined;
+      @tracked seed: MainResultsSnapshot | undefined;
     }
 
     class Harness extends GlimmerComponent<{
       Args: { state: QueryState };
     }> {
-      search = getSearchEntriesResource(this, () => this.args.state.query);
+      search = getSearchEntriesResource(
+        this,
+        () => this.args.state.query,
+        () => this.args.state.seed,
+      );
       <template>
         <div data-test-entry-count>{{this.search.entries.length}}</div>
       </template>
     }
+
+    test('a seeded query renders its rows immediately, with no fetch and no backtracking error', async function (assert) {
+      let fetchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async (query, realms) => {
+        fetchCount++;
+        return await originalSearchEntries(query, realms);
+      };
+
+      try {
+        let query: SearchEntryWireQuery = {
+          filter: { 'item.on': bookRef },
+          realms: [testRealmURL],
+        };
+        let state = new QueryState();
+        state.query = query;
+        state.seed = {
+          queryKey: JSON.stringify(query),
+          entries: [
+            { id: `${testRealmURL}books/1`, realmUrl: testRealmURL, html: [] },
+            { id: `${testRealmURL}books/2`, realmUrl: testRealmURL, html: [] },
+          ],
+          meta: { page: { total: 2 } },
+        };
+
+        await render(<template><Harness @state={{state}} /></template>);
+
+        assert
+          .dom('[data-test-entry-count]')
+          .hasText('2', 'the seeded rows render on first paint');
+        assert.strictEqual(
+          fetchCount,
+          0,
+          'a seeded query performs no fetch (and mounting threw no backtracking assertion)',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
 
     test('a rendered consumer activates from an idle query and clears back to idle', async function (assert) {
       let state = new QueryState();

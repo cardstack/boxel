@@ -48,6 +48,7 @@ import { searchErrorEntry } from '../lib/search-error-entry';
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
+import type { MainResultsSnapshot } from '../services/search-sheet-state';
 import type StoreService from '../services/store';
 import type {
   RealmEventContent,
@@ -95,6 +96,10 @@ export interface SearchEntry {
 interface Args {
   named: {
     query: SearchEntryWireQuery | undefined;
+    // A snapshot of a prior run's results to adopt on the first modify instead
+    // of fetching, when it belongs to this exact query. Used by the search
+    // sheet to rehydrate on reopen with no re-run; other consumers omit it.
+    seed?: MainResultsSnapshot;
   };
 }
 
@@ -145,6 +150,10 @@ export class SearchEntriesResource extends Resource<Args> {
 
   #previousQuery: SearchEntryWireQuery | undefined;
   #previousRealms: string[] | undefined;
+  // One-shot: a handed-in seed is adopted at most once, on the first modify of
+  // this instance. Once spent, every later query change — including re-typing a
+  // key that was used before — takes the normal fetch path, never the seed.
+  #seedConsumed = false;
   #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
@@ -205,7 +214,7 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query } = named;
+    let { query, seed } = named;
 
     if (query === undefined) {
       // Clear stale state so live subscriptions don't re-fire the old query.
@@ -323,6 +332,38 @@ export class SearchEntriesResource extends Resource<Args> {
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
+
+    // Seed-and-skip: on the first modify of a freshly-mounted resource, if a
+    // snapshot for this exact query was handed in (the search sheet reopening
+    // with an unchanged search), adopt its rows and skip the fetch — no re-run,
+    // no "Searching…" flash. Subscriptions were already (re)established above,
+    // so a live index event still refreshes these rows while the sheet is open.
+    // One-shot via `#seedConsumed`, and gated on the query match, so any later
+    // query change — including re-typing the same key after changing it — falls
+    // through to the fetch below. The result state is applied out of this render
+    // (a microtask, the same escape hatch the fetch path uses): mutating the
+    // tracked `_entries` / `_meta` synchronously here would trip Glimmer's
+    // backtracking assertion. The rows land right after this render, before
+    // paint, so there is no visible empty frame — and, crucially, no fetch.
+    if (
+      !this.#seedConsumed &&
+      seed !== undefined &&
+      seed.queryKey === JSON.stringify(query)
+    ) {
+      this.#seedConsumed = true;
+      let seeded = seed;
+      void Promise.resolve().then(() => {
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
+        this._entries.splice(0, this._entries.length, ...seeded.entries);
+        this._meta = seeded.meta;
+        this._errors = undefined;
+        this.hasCompletedFullRun = true;
+      });
+      return;
+    }
+
     // Start the search out of the render that triggered this modify. A consumer
     // reads the task's `isRunning` (through `isLoading`) during render, so a
     // synchronous `perform()` here — which flips `isRunning` — would mutate a
@@ -897,10 +938,12 @@ function memberValidator(member: SearchEntry): string {
 export function getSearchEntriesResource(
   parent: object,
   getQuery: () => SearchEntryWireQuery | undefined,
+  getSeed: () => MainResultsSnapshot | undefined = () => undefined,
 ) {
   return SearchEntriesResource.from(parent, () => ({
     named: {
       query: getQuery(),
+      seed: getSeed(),
     },
   })) as SearchEntriesResource;
 }

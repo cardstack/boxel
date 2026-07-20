@@ -1,4 +1,3 @@
-import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -15,7 +14,6 @@ import {
   type getCard,
   type SearchEntryWireFilter,
   type SearchEntryWireQuery,
-  type SearchResultsYield,
   baseCardRef,
   GetCardContextName,
   internalKeyFor,
@@ -29,8 +27,8 @@ import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
+import type { MainResultsSnapshot } from '@cardstack/host/services/search-sheet-state';
 
-import { resolveMainResults } from '@cardstack/host/utils/search/main-results-snapshot';
 import {
   buildRecentsQuery,
   buildSearchQuery,
@@ -417,80 +415,96 @@ export default class PanelContent extends Component<Signature> {
     this.args.onSortChange(option);
   }
 
-  // The results to render for the main search — the retained snapshot during the
-  // reopen handoff, otherwise the live results (see `resolveMainResults`). Only
-  // engaged while persisting; the card choosers always render live.
-  mainResultsFor = (live: SearchResultsYield): SearchResultsYield => {
+  // The snapshot to seed the fresh main-search resource with on reopen, so it
+  // adopts the prior rows and skips its fetch — no re-run, no "Searching…"
+  // flash. Only offered while persisting, and only when a captured snapshot
+  // belongs to the current query and actually has rows; the resource re-checks
+  // the query match before adopting it. A changed term/filter/sort has a
+  // different `mainQueryKey`, so the seed no longer matches and the search runs
+  // normally.
+  get mainSearchSeed(): MainResultsSnapshot | undefined {
     if (!this.args.persist) {
-      return live;
+      return undefined;
     }
-    return resolveMainResults(
-      live,
-      this.searchSheetState.mainSnapshot,
-      this.mainQueryKey,
-    );
+    let snapshot = this.searchSheetState.mainSnapshot;
+    if (
+      snapshot === undefined ||
+      snapshot.entries.length === 0 ||
+      snapshot.queryKey !== this.mainQueryKey
+    ) {
+      return undefined;
+    }
+    return snapshot;
+  }
+
+  // Persist a freshly-settled main-search snapshot for a later reopen. Skips a
+  // write that matches the stored one (same query, same rows) so a live re-run
+  // that changed nothing doesn't churn the seed identity.
+  persistMainSnapshot = (snapshot: MainResultsSnapshot) => {
+    let current = this.searchSheetState.mainSnapshot;
+    let unchanged =
+      current !== undefined &&
+      current.queryKey === snapshot.queryKey &&
+      current.entries.length === snapshot.entries.length &&
+      current.meta.page?.total === snapshot.meta.page?.total &&
+      current.entries.every((entry, i) => entry.id === snapshot.entries[i].id);
+    if (unchanged) {
+      return;
+    }
+    this.searchSheetState.mainSnapshot = snapshot;
   };
 
-  // The settled live results awaiting capture (coalesced across renders), paired
-  // with the query key they belong to. Captured synchronously in the modifier so
-  // the pair is always consistent; written to the service in a microtask.
-  #pendingSnapshot: { live: SearchResultsYield; queryKey: string } | undefined;
-  #snapshotCaptureScheduled = false;
+  // Restore and track the results-list scroll offset across a sheet
+  // close/reopen (only while persisting; the choosers keep their own scroll).
+  //
+  // Capture records the live offset on every scroll event, so the service
+  // always holds the current position. We deliberately don't capture on
+  // teardown: by the time the modifier's destructor runs the element is
+  // detached and reports `scrollTop === 0`, which would clobber the good value.
+  //
+  // Restore is a per-frame retry rather than a single rAF: the seeded rows land
+  // a microtask + render after mount, so on the first frame the list is usually
+  // not yet tall enough to accept the offset (setting it would clamp to 0).
+  // Re-apply each frame until it sticks (or the content settles shorter than
+  // the offset), then stop. The saved offset is read inside the frame, not in
+  // the modifier body, so recording new positions never re-runs this modifier.
+  // Runs AFTER `ScrollToFocusedSection` (placed earlier on the element), so a
+  // restored focused section can't leave the list scrolled to the top.
+  private persistScroll = modifier((element: HTMLElement) => {
+    if (!this.args.persist) {
+      return undefined;
+    }
+    let rafId: number | undefined;
+    let target: number | undefined;
+    let attempts = 0;
+    let restore = () => {
+      if (target === undefined) {
+        target = this.searchSheetState.resultsScrollTop;
+      }
+      if (target <= 0) {
+        return;
+      }
+      element.scrollTop = target;
+      attempts += 1;
+      if (Math.abs(element.scrollTop - target) > 1 && attempts < 30) {
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- awaiting post-seed layout
+        rafId = requestAnimationFrame(restore);
+      }
+    };
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- restore needs post-layout scroll height
+    rafId = requestAnimationFrame(restore);
 
-  // Capture the live main results into the service whenever they settle, so a
-  // later reopen can redisplay them. The write must NOT happen in the modifier's
-  // own render transaction: `mainResultsFor` reads `mainSnapshot` during render,
-  // so a synchronous write here trips Glimmer's mutate-after-consume assertion.
-  // Instead defer the read-compare-write into a microtask (the same escape hatch
-  // `SearchEntriesResource.modify` uses), where mutating tracked state is safe.
-  // Guards: skip while loading (a transient empty re-run must not clobber the
-  // cache) and skip an idle/empty-key query (no key → nothing to key a snapshot
-  // by, and capturing would overwrite a still-valid one). The content check
-  // keeps an equal-but-new snapshot from writing, so the deferred write
-  // converges instead of looping.
-  private captureMainSnapshot = modifier(
-    (_element: Element, [live]: [SearchResultsYield]) => {
-      if (live.isLoading) {
-        return;
+    let onScroll = () => {
+      this.searchSheetState.resultsScrollTop = element.scrollTop;
+    };
+    element.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (rafId !== undefined) {
+        cancelAnimationFrame(rafId);
       }
-      let queryKey = this.mainQueryKey;
-      if (queryKey === undefined) {
-        return;
-      }
-      this.#pendingSnapshot = { live, queryKey };
-      if (this.#snapshotCaptureScheduled) {
-        return;
-      }
-      this.#snapshotCaptureScheduled = true;
-      void Promise.resolve().then(() => {
-        this.#snapshotCaptureScheduled = false;
-        if (isDestroyed(this) || isDestroying(this)) {
-          return;
-        }
-        let pending = this.#pendingSnapshot;
-        this.#pendingSnapshot = undefined;
-        if (!pending) {
-          return;
-        }
-        let { live, queryKey } = pending;
-        let current = this.searchSheetState.mainSnapshot;
-        let unchanged =
-          current !== undefined &&
-          current.queryKey === queryKey &&
-          current.entries.length === live.entries.length &&
-          current.meta.page?.total === live.meta.page?.total &&
-          current.entries.every((entry, i) => entry.id === live.entries[i].id);
-        if (unchanged) {
-          return;
-        }
-        this.searchSheetState.mainSnapshot = {
-          queryKey,
-          entries: [...live.entries],
-          meta: live.meta,
-        };
-      });
-    },
-  );
+      element.removeEventListener('scroll', onScroll);
+    };
+  });
 
   <template>
     <div
@@ -498,6 +512,7 @@ export default class PanelContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
+      {{this.persistScroll}}
       class={{cn
         'search-sheet-content'
         compact=@isCompact
@@ -520,13 +535,10 @@ export default class PanelContent extends Component<Signature> {
         <SearchResults
           @query={{this.mainSearchQuery}}
           @mode='none'
+          @seed={{this.mainSearchSeed}}
+          @onSnapshot={{if @persist this.persistMainSnapshot}}
           as |mainResults|
         >
-          {{#if @persist}}
-            {{! Capture the settled main results so a reopen can redisplay them
-                instantly. }}
-            <span hidden {{this.captureMainSnapshot mainResults}}></span>
-          {{/if}}
           <SearchResults
             @query={{this.recentsSearchQuery}}
             @mode='none'
@@ -538,7 +550,7 @@ export default class PanelContent extends Component<Signature> {
               as |liveRecentCards|
             >
               <SheetResults
-                @mainResults={{this.mainResultsFor mainResults}}
+                @mainResults={{mainResults}}
                 @recentsResults={{recentsResults}}
                 @liveRecentCards={{liveRecentCards}}
                 @isCompact={{@isCompact}}

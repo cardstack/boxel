@@ -33,6 +33,7 @@ function populate(service: SearchSheetStateService) {
     entries: [],
     meta: { page: { total: 0 } },
   };
+  service.resultsScrollTop = 240;
 }
 
 function assertCleared(
@@ -70,6 +71,11 @@ function assertCleared(
     service.mainSnapshot,
     undefined,
     `${label}: mainSnapshot cleared`,
+  );
+  assert.strictEqual(
+    service.resultsScrollTop,
+    0,
+    `${label}: resultsScrollTop back to default`,
   );
 }
 

@@ -1,3 +1,4 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -16,7 +17,26 @@ import {
 
 import type { HydrationMode } from './hydratable-card';
 
+import type { MainResultsSnapshot } from '../../services/search-sheet-state';
 import type StoreService from '../../services/store';
+
+// The card-facing signature plus two host-only, optional extras used by the
+// search sheet to persist and rehydrate its results across a close/reopen.
+// They stay off the public `SearchResultsComponentSignature` (the `@context`
+// contract cards see) and are absent for every other consumer — the card
+// choosers, playground, and card authors — so their behavior is unchanged.
+interface HostSearchResultsSignature {
+  Element: SearchResultsComponentSignature['Element'];
+  Args: SearchResultsComponentSignature['Args'] & {
+    // A prior run's snapshot to adopt on mount instead of fetching, when it
+    // belongs to the current query (forwarded to the search resource).
+    seed?: MainResultsSnapshot;
+    // Invoked with a fresh snapshot whenever the results settle, so the caller
+    // can persist it for a later reopen.
+    onSnapshot?: (snapshot: MainResultsSnapshot) => void;
+  };
+  Blocks: SearchResultsComponentSignature['Blocks'];
+}
 
 // The one search component family. Consumes the heterogeneous `entry`
 // stream from `getSearchEntriesResource` (through the shared render-stable
@@ -26,7 +46,7 @@ import type StoreService from '../../services/store';
 // `errors`); used without one it renders the default stream of
 // `entry.component`s itself. Additive: it supersedes the `prerendered-card-search`
 // component and the live `SearchContent` tree as call sites migrate.
-export default class SearchResults extends Component<SearchResultsComponentSignature> {
+export default class SearchResults extends Component<HostSearchResultsSignature> {
   @service declare private store: StoreService;
   #log = runtimeLogger('search-results');
 
@@ -47,6 +67,7 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
     () => this.args.query,
     () => this.mode,
     () => this.overlays,
+    () => this.args.seed,
   );
 
   private get results(): SearchResultsYield {
@@ -82,10 +103,55 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
     },
   );
 
+  // Coalesces snapshot captures so a burst of renders schedules a single write.
+  #snapshotCaptureScheduled = false;
+
+  // When the caller opts in via `@onSnapshot`, hand it a snapshot of the raw
+  // rows every time the results settle, so it can persist them for a later
+  // reopen. Deferred into a microtask (like `SearchEntriesResource.modify`):
+  // the callback typically mutates tracked state the render just consumed, so a
+  // synchronous write would trip Glimmer's backtracking assertion. Guards: no
+  // callback (the choosers), still loading (a transient empty re-run must not
+  // be captured), or an idle query (no key to snapshot by). Re-runs when the
+  // loading state or the raw rows change.
+  private captureSnapshot = modifier(
+    (_element: Element, [_isLoading, _rawEntries]: [boolean, unknown]) => {
+      if (!this.args.onSnapshot || this.renderables.isLoading) {
+        return;
+      }
+      if (this.args.query === undefined) {
+        return;
+      }
+      if (this.#snapshotCaptureScheduled) {
+        return;
+      }
+      this.#snapshotCaptureScheduled = true;
+      void Promise.resolve().then(() => {
+        this.#snapshotCaptureScheduled = false;
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
+        let query = this.args.query;
+        if (!this.args.onSnapshot || this.renderables.isLoading || !query) {
+          return;
+        }
+        this.args.onSnapshot({
+          queryKey: JSON.stringify(query),
+          entries: [...this.renderables.rawEntries],
+          meta: this.renderables.meta,
+        });
+      });
+    },
+  );
+
   <template>
     <div
       class='search-results'
       {{this.inflateFullItems this.renderables.entries}}
+      {{this.captureSnapshot
+        this.renderables.isLoading
+        this.renderables.rawEntries
+      }}
       data-test-search-results
       ...attributes
     >

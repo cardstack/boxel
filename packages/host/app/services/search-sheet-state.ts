@@ -4,7 +4,6 @@ import { tracked } from '@glimmer/tracking';
 
 import type {
   EntryCollectionDocument,
-  RenderableSearchEntryLike,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -12,19 +11,20 @@ import { SectionPagination } from '../utils/search/section-pagination';
 
 import type ResetService from './reset';
 import type { SortOption } from '../components/search/constants';
+import type { SearchEntry } from '../resources/search-entries';
 
 // A snapshot of the last main-search results, retained across a sheet
-// close/reopen so the sheet redisplays them immediately instead of flashing
-// blank while its recreated search resource re-runs. An inert HTML row is fully
-// self-contained (its component renders a captured HTML string); an item-backed
-// row resolves through the still-alive session store, so both render safely
-// after the resource that produced them is torn down. `queryKey` is the
-// serialized wire query the snapshot was captured under, so the sheet only
-// redisplays it for the same search it belongs to (a different term never sees
-// stale rows).
+// close/reopen so the recreated search resource can be *seeded* with them and
+// skip its reopen fetch entirely — no blank "Searching…" flash, and no re-run
+// for an unchanged query. These are the resource's own raw `SearchEntry` rows
+// (prerendered HTML strings + the wire `item` serialization), so they are
+// self-contained and safe to hold across the sheet teardown, and feed straight
+// back into a fresh resource. `queryKey` is the serialized wire query the
+// snapshot was captured under, so the sheet only reuses it for the same search
+// it belongs to (a changed term/filter/sort re-runs normally).
 export interface MainResultsSnapshot {
   queryKey: string;
-  entries: RenderableSearchEntryLike[];
+  entries: SearchEntry[];
   meta: EntryCollectionDocument['meta'];
 }
 
@@ -46,6 +46,9 @@ export default class SearchSheetStateService extends Service {
   @tracked activeViewId = 'grid';
   @tracked pagination = new SectionPagination();
   @tracked mainSnapshot: MainResultsSnapshot | undefined;
+  // The results-list scroll offset, restored on reopen. Memory-only like the
+  // rest of this state — a page reload starts back at the top.
+  @tracked resultsScrollTop = 0;
 
   constructor(owner: Owner) {
     super(owner);
@@ -60,6 +63,7 @@ export default class SearchSheetStateService extends Service {
     this.activeViewId = 'grid';
     this.pagination = new SectionPagination();
     this.mainSnapshot = undefined;
+    this.resultsScrollTop = 0;
   }
 }
 

@@ -27,6 +27,7 @@ import {
 } from './search-entries';
 
 import type { HydrationMode } from '../components/search/hydratable-card';
+import type { MainResultsSnapshot } from '../services/search-sheet-state';
 
 // The diagnostic/labeling attributes the prerendered HTML carries so consumers
 // (e.g. the operator-mode overlay) can label and icon a card before its
@@ -292,6 +293,13 @@ export class RenderableSearchEntries {
     });
   }
 
+  // The underlying resource's raw `SearchEntry` rows — the shape a snapshot
+  // captures and later seeds a fresh resource with (the view-models above are
+  // derived and can't be fed back in).
+  get rawEntries(): SearchEntry[] {
+    return this.resource.entries;
+  }
+
   get isLoading(): boolean {
     return this.resource.isLoading;
   }
@@ -317,9 +325,10 @@ export function getRenderableSearchEntries(
   getQuery: () => SearchEntryWireQuery | undefined,
   getMode: () => HydrationMode,
   getOverlays: () => boolean = () => true,
+  getSeed: () => MainResultsSnapshot | undefined = () => undefined,
 ): RenderableSearchEntries {
   return new RenderableSearchEntries(
-    getSearchEntriesResource(owner, getQuery),
+    getSearchEntriesResource(owner, getQuery, getSeed),
     getMode,
     getOverlays,
   );
