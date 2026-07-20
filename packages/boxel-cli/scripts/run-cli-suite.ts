@@ -97,11 +97,33 @@ function packTarball(destDir: string): string {
   return join(destDir, tgz);
 }
 
+// A concrete semver (optionally with a prerelease tag), as opposed to a
+// dist-tag like `unstable` / `latest`.
+const CONCRETE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
 /**
- * Poll `npm view` until `version` (a concrete version or a dist-tag) is
- * resolvable, absorbing post-publish registry propagation delay.
+ * Poll `npm view` until `version` is resolvable, absorbing post-publish
+ * registry propagation delay.
+ *
+ * This only does something useful for a CONCRETE version: `npm view
+ * pkg@1.2.3` errors until that exact version exists, so the poll actually
+ * waits for it. A dist-tag (`unstable` / `latest`) already resolves to
+ * some prior release, so the poll returns on the first attempt and cannot
+ * tell whether the version just published has propagated — the verify
+ * job could then install and smoke-test the *previous* artifact. CI
+ * therefore passes the concrete published version (see the publish
+ * workflow's job outputs); a dist-tag is only for ad-hoc local runs and
+ * gets a loud warning here.
  */
 function waitForPublishedVersion(version: string): void {
+  if (!CONCRETE_VERSION.test(version)) {
+    console.warn(
+      `WARNING: "${version}" is a dist-tag, not a concrete version. This ` +
+        `cannot verify that a freshly published version has propagated — ` +
+        `npm may resolve it to an older release. Pass the exact version ` +
+        `(e.g. 0.5.0-unstable.4) for a trustworthy post-publish check.`,
+    );
+  }
   let deadline = Date.now() + 180_000;
   let attempt = 0;
   for (;;) {
