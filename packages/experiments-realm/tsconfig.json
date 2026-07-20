@@ -34,9 +34,10 @@
         "../base/*.d.ts",
         "../base/*"
       ],
+      "@cardstack/host/*": ["../host/app/*"],
       "@cardstack/host/tests/*": ["../host/tests/*"]
     },
-    "types": ["@cardstack/local-types"]
+    "types": ["@cardstack/local-types", "qunit", "qunit-dom"]
   },
   "include": ["**/*.ts", "**/*.gts"]
 }

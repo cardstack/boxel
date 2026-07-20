@@ -20,6 +20,8 @@
     "ember-concurrency": "catalog:",
     "ember-modifier": "^4.1.0",
     "ember-template-lint": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
     "tracked-built-ins": "catalog:"
   },
   "dependencies": {
