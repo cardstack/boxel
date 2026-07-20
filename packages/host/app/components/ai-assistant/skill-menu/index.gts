@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -17,6 +18,7 @@ import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skil
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 // A skill expressed as a markdown file is a `MarkdownDef` whose frontmatter
 // declares `boxel.kind: skill`. One branch of the mixed chooser's base filter
@@ -134,6 +136,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </style>
   </template>
 
+  @service declare private realmServer: RealmServerService;
+
   @tracked private isExpanded = false;
   @tracked private isAttachingSkill = false;
 
@@ -196,6 +200,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           ...exclusions,
         ],
       },
+      // Scope to the user's own workspaces. The mixed chooser (`includeFiles`)
+      // renders a tile per matching row; without a realm scope it fans out
+      // across every server realm — including large shared realms — and the
+      // intended skills may never finish rendering. Skills a user attaches
+      // come from their workspaces.
+      realms: this.realmServer.userRealmIdentifiers,
     };
     let chosen = await chooseCard(query, { includeFiles: true });
     if (!chosen) {
