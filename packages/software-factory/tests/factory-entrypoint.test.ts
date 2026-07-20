@@ -66,16 +66,16 @@ module('factory-entrypoint', function (hooks) {
       'https://realms.example.test/',
     ]);
 
-    assert.deepEqual(options, {
+    // Round-trip through JSON to drop undefined-valued optional flags, so
+    // this assertion pins the defined defaults without re-enumerating every
+    // optional flag the parser knows about.
+    assert.deepEqual(JSON.parse(JSON.stringify(options)), {
       briefUrl,
       targetRealm,
+      controlRealm: null,
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
-      openRouterModel: undefined,
-      openRouterApiKey: undefined,
-      debug: undefined,
       retryBlocked: true,
-      enableBoxelUiDiscovery: undefined,
     });
   });
 
@@ -213,7 +213,9 @@ module('factory-entrypoint', function (hooks) {
       () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --brief-url',
+        /Missing required input: pass --brief-url .* or --repo-url/.test(
+          error.message,
+        ),
     );
   });
 
