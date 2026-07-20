@@ -1,10 +1,62 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+  getRelationshipMembershipState,
+  linksToMany,
+} from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
+import {
+  BrokenLinkTemplate,
+  FittedCardContainer,
+} from '@cardstack/boxel-ui/components';
+import { fittedFormatById } from '@cardstack/boxel-ui/helpers';
 import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { RigState, SurfaceRig, type PanSession } from './rig';
+
+// Tiles use the shared cardsgrid-tile fitted size so boards show cards at a
+// size their fitted views are designed for. FittedCardContainer applies the
+// dimensions; these constants drive the grid placement math.
+const cardsgridTile = fittedFormatById.get('cardsgrid-tile')!;
+const TILE_WIDTH = cardsgridTile.width;
+const TILE_HEIGHT = cardsgridTile.height;
+const TILE_GAP = 32;
+const GRID_COLUMNS = 4;
+// Breathing room between the world origin and the default grid (~--boxel-sp-xs)
+const GRID_PADDING = 10;
+
+interface TilePlacement {
+  index: number;
+  x: number;
+  y: number;
+}
+
+// Cards without a persisted frame setting flow into a fixed grid.
+function defaultPlacement(index: number): TilePlacement {
+  return {
+    index,
+    x: GRID_PADDING + (index % GRID_COLUMNS) * (TILE_WIDTH + TILE_GAP),
+    y:
+      GRID_PADDING +
+      Math.floor(index / GRID_COLUMNS) * (TILE_HEIGHT + TILE_GAP),
+  };
+}
+
+export class FrameSettingsField extends FieldDef {
+  static displayName = 'Frame Settings';
+
+  @field cardIndex = contains(NumberField);
+  @field x = contains(NumberField);
+  @field y = contains(NumberField);
+}
 
 interface OnInsertSignature {
   Element: HTMLElement;
@@ -44,6 +96,46 @@ class Isolated extends Component<typeof PosterBoard> {
     return htmlSafe(`cursor: ${this.isPanning ? 'grabbing' : 'grab'};`);
   }
 
+  // ── Tile placement ─────────────────────────────────────
+
+  get tilePlacements(): TilePlacement[] {
+    let cards = this.args.model?.cards ?? [];
+    let settings = this.args.model?.frameSettings ?? [];
+    return cards.map((_card, index) => {
+      let setting = settings.find((s) => Number(s.cardIndex) === index);
+      // Number() guards against non-numeric values in hand-edited JSON
+      let x = Number(setting?.x);
+      let y = Number(setting?.y);
+      if (setting && Number.isFinite(x) && Number.isFinite(y)) {
+        return { index, x, y };
+      }
+      return defaultPlacement(index);
+    });
+  }
+
+  get hasCards() {
+    return this.tilePlacements.length > 0;
+  }
+
+  // Terminal failures (error / not-found) per cards slot, index-aligned with
+  // tilePlacements. Indexed access via (get @fields.cards i) bypasses the
+  // linksToMany renderer's broken-slot branch, so the board renders the
+  // placeholder itself instead of a blank tile.
+  brokenSlotAt = (index: number) => {
+    let owner = this.args.model as unknown as PosterBoard | undefined;
+    if (!owner) {
+      return undefined;
+    }
+    let { membership } = getRelationshipMembershipState(owner, 'cards');
+    let rel = (membership ?? [])[index];
+    return rel && (rel.kind === 'error' || rel.kind === 'not-found')
+      ? rel
+      : undefined;
+  };
+
+  tileStyle = (tile: TilePlacement) =>
+    htmlSafe(`left: ${tile.x}px; top: ${tile.y}px;`);
+
   // ── Wheel ──────────────────────────────────────────────
 
   handleWheel = (event: Event) => {
@@ -64,7 +156,10 @@ class Isolated extends Component<typeof PosterBoard> {
       return;
     }
     const target = event.target as HTMLElement;
-    if (target.closest('[data-poster-board-hud]')) {
+    // Pointers that start on the HUD or inside a card tile are not pans:
+    // capturing them would break the tile's own focus/selection behavior
+    // (and tile pointerdown becomes drag-to-move in step 3)
+    if (target.closest('[data-poster-board-hud], [data-poster-board-tile]')) {
       return;
     }
     this.panSession = this.surfaceRig.startPan(event.clientX, event.clientY);
@@ -180,11 +275,38 @@ class Isolated extends Component<typeof PosterBoard> {
     >
       <div class='poster-board-plane' style={{this.planeStyle}}>
         <div class='poster-board-grid' aria-hidden='true'></div>
-        <header class='poster-board-hint'>
-          <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
-          <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
-            Shift + / Shift - to zoom</p>
-        </header>
+        {{#each this.tilePlacements key='index' as |tile|}}
+          <FittedCardContainer
+            @size='cardsgrid-tile'
+            @style={{this.tileStyle tile}}
+            class='poster-board-tile'
+            data-poster-board-tile
+            data-test-poster-board-tile={{tile.index}}
+          >
+            {{#let (this.brokenSlotAt tile.index) as |broken|}}
+              {{#if broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format='fitted'
+                  data-test-poster-board-broken-tile={{tile.index}}
+                />
+              {{else}}
+                {{#let (get @fields.cards tile.index) as |LinkedCard|}}
+                  <LinkedCard @format='fitted' />
+                {{/let}}
+              {{/if}}
+            {{/let}}
+          </FittedCardContainer>
+        {{/each}}
+        {{#unless this.hasCards}}
+          <header class='poster-board-hint'>
+            <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
+            <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
+              Shift + / Shift - to zoom</p>
+          </header>
+        {{/unless}}
       </div>
 
       <div
@@ -248,6 +370,10 @@ class Isolated extends Component<typeof PosterBoard> {
 
       .poster-board-plane {
         will-change: transform;
+      }
+
+      .poster-board-tile {
+        position: absolute;
       }
 
       .poster-board-grid {
@@ -349,6 +475,9 @@ export class PosterBoard extends CardDef {
   static displayName = 'Poster Board';
   static icon = LayoutDashboardIcon;
   static prefersWideFormat = true;
+
+  @field cards = linksToMany(() => CardDef);
+  @field frameSettings = containsMany(FrameSettingsField);
 
   static isolated = Isolated;
 }
