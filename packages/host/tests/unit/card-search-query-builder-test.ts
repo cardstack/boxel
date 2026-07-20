@@ -189,6 +189,39 @@ module('Unit | card-search/query-builder', function () {
       });
     });
 
+    test('a compound `any` base filter stays intact when types are selected (not collapsed)', function (assert) {
+      // The skill menu's base filter spans a card type and a file-field
+      // constraint. Regression: stripping the type branch collapsed the `any`
+      // to just the `{ on, eq }` branch and promoted it into a required `every`
+      // clause, so skill cards were excluded (only markdown skills survived).
+      let authorRef = {
+        module: 'http://test-realm/test/author' as RealmResourceIdentifier,
+        name: 'Author',
+      };
+      let markdownRef = {
+        module:
+          'https://cardstack.com/base/markdown-file-def' as RealmResourceIdentifier,
+        name: 'MarkdownDef',
+      };
+      let baseFilter: Filter = {
+        any: [{ type: authorRef }, { on: markdownRef, eq: { kind: 'skill' } }],
+      };
+      let query = buildSearchQuery('', SORT_AZ, baseFilter, [
+        `${authorRef.module}/${authorRef.name}`,
+        `${markdownRef.module}/${markdownRef.name}`,
+      ]);
+      assert.deepEqual(query, {
+        filter: {
+          every: [
+            // Kept whole — both branches survive so cards AND files match.
+            baseFilter,
+            { any: [{ type: authorRef }, { type: markdownRef }] },
+          ],
+        },
+        sort: SORT_AZ.sort,
+      });
+    });
+
     test('cardsOnly adds no filter anchor — the card scope is pinned on the wire', function (assert) {
       let query = buildSearchQuery('', SORT_AZ, undefined, undefined, {
         cardsOnly: true,

@@ -210,12 +210,18 @@ export function buildSearchQuery(
   const searchTerm = searchKey?.trim() || undefined;
   let filters: Filter[];
   if (baseFilter) {
-    // When typeFilter is present, strip the baseFilter's (parent) type
-    // constraint as redundant — the picked subtype already implies it. Safe
-    // because the type picker only offers subtypes of the baseFilter type.
-    const effectiveBaseFilter = typeFilter
-      ? stripTypeFromFilter(baseFilter)
-      : baseFilter;
+    // When typeFilter is present, strip a *simple* baseFilter's type constraint
+    // as redundant — the picked subtype already implies it. Only safe for a
+    // single-type base filter. A compound base filter (e.g. the skill menu's
+    // `any: [{ type: skillCardRef }, { on: markdownDefRef, eq: { kind: 'skill' }
+    // }]`) must stay intact: stripping the type branch collapses the `any` and
+    // promotes the sibling field constraint into a required top-level `every`
+    // clause — which would wrongly exclude the other branch's kind (skill cards
+    // vanish, only markdown skills survive).
+    const effectiveBaseFilter =
+      typeFilter && isCardTypeFilter(baseFilter)
+        ? stripTypeFromFilter(baseFilter)
+        : baseFilter;
     filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
@@ -267,9 +273,12 @@ export function buildRecentsQuery(
     : undefined;
   let filters: Filter[];
   if (baseFilter) {
-    const effectiveBaseFilter = typeFilter
-      ? stripTypeFromFilter(baseFilter)
-      : baseFilter;
+    // Only strip a simple single-type base filter (see `buildSearchQuery`);
+    // a compound base filter must stay intact or the `any` collapses.
+    const effectiveBaseFilter =
+      typeFilter && isCardTypeFilter(baseFilter)
+        ? stripTypeFromFilter(baseFilter)
+        : baseFilter;
     filters = [
       ...(effectiveBaseFilter ? [effectiveBaseFilter] : []),
       ...(typeFilter ? [typeFilter] : []),
