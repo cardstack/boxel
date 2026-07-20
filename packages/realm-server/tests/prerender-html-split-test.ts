@@ -1206,6 +1206,63 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(stats.instanceErrors, 1);
         assert.strictEqual(stats.fileErrors, 2);
       });
+
+      test('the tombstoned-live-types oracle protects a card whose source no longer parses as one', async function (assert) {
+        let url = `${testRealm}mango.json`;
+        await writeInstance(1, url, '<h1>good</h1>');
+
+        // The source served at failure time is JSON but not a card resource,
+        // so the re-parse fallback cannot classify the URL — the instance
+        // error can only come from the batch's record of the live production
+        // row types its tombstone seeding overwrote.
+        let { stats } = await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, '{"hello":"world"}']])),
+          prerenderer: abortingPrerenderer('mango'),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        let instanceRow = await productionRow(url);
+        assert.ok(
+          instanceRow.error_doc?.message?.includes('aborted after'),
+          'the previously-live instance row records the failure instead of staying tombstoned',
+        );
+        assert.false(Boolean(instanceRow.is_deleted));
+        assert.strictEqual(
+          instanceRow.isolated_html,
+          '<h1>good</h1>',
+          'the last-known-good HTML survives',
+        );
+        assert.strictEqual(stats.instanceErrors, 1);
+        assert.strictEqual(stats.fileErrors, 1);
+      });
+
+      test('a retry re-visits URLs whose prior attempt recorded a render failure', async function (assert) {
+        let url = `${testRealm}1.json`;
+        let info = jobInfo();
+        let attempt1 = await makeBatch(3, info);
+        await attempt1.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await attempt1.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: { message: 'boom', status: 500, additionalErrors: null },
+        });
+        // No done() — the attempt dies before its swap.
+
+        let attempt2 = await makeBatch(3, { ...info, reservationId: 2 });
+        assert.false(
+          attempt2.resumedRows.has(url),
+          'an error row is not resumed — the retry gives the URL a second chance to render',
+        );
+      });
     });
 
     module('progress reporting', function () {
