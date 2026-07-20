@@ -42,6 +42,7 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import Folder from '@cardstack/boxel-icons/folder';
 import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-right-collapse';
+import Link2 from '@cardstack/boxel-icons/link-2';
 import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
 import MessageSquare from '@cardstack/boxel-icons/message-square';
 import Settings from '@cardstack/boxel-icons/settings';
@@ -1188,7 +1189,11 @@ export class Issue extends CardDef {
                   'A dependency is blocked — this issue cannot proceed until it unblocks'
                 }}
               >
-                <CircleAlert class='meta-link-icon' />
+                {{#if this.hasBlockedDependency}}
+                  <CircleAlert class='meta-link-icon' />
+                {{else}}
+                  <Link2 class='meta-link-icon' />
+                {{/if}}
                 <span data-test-dependency-label={{@model.issueId}}>
                   {{this.dependencyLabel}}
                 </span>
