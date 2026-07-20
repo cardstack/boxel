@@ -975,6 +975,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id: string,
   ): CardDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
+    // Key card instances by canonical RRI so a lookup lands regardless of the
+    // caller's spelling — a card's own `id` is canonical, while `store.asURL`
+    // hands us the resolved URL. `unresolveURL` is a no-op for a local id or an
+    // unmapped realm. File-meta buckets keep URL keys (handled separately).
+    id = this.#virtualNetwork.unresolveURL(id);
     let { item, localId } = this.tryFindingCardItem(type, id);
 
     if (!item && isLocalId(id)) {
@@ -1072,6 +1077,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
+    // Match the canonical-RRI keying used by getCardItem so set/get agree.
+    id = this.#virtualNetwork.unresolveURL(id);
     let cardBucket = notTracked
       ? this.#nonTrackedCardInstances
       : this.#cardInstances;
