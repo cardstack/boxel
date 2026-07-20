@@ -26,8 +26,10 @@ import type {
 } from '@cardstack/host/utils/card-search/sections';
 
 import {
+  isNewCardArgs,
   removeCardJsonExtension,
   type NewCardArgs,
+  type SearchSelection,
 } from '@cardstack/host/utils/card-search/types';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
@@ -69,19 +71,19 @@ interface Signature {
     section: SearchSheetSection;
     viewOption?: string;
     isCompact?: boolean;
-    handleSelect: (selection: string | NewCardArgs) => void;
+    handleSelect: (selection: SearchSelection) => void;
     isFocused?: boolean;
     isCollapsed?: boolean;
     onFocusSection?: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
-    selectedCards?: (string | NewCardArgs)[];
+    selectedCards?: SearchSelection[];
     multiSelect?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    onSubmit?: (selection: SearchSelection) => void;
     // When true, the tiles render the Adorn visual treatment (teal hover
     // type-label tab + selection chip) rather than the plain grey
     // hover/selection visuals.
@@ -280,9 +282,9 @@ export default class ResultSection extends Component<Signature> {
   isCardSelected = (cardUrl: string): boolean => {
     const selected = this.args.selectedCards;
     if (!selected) return false;
-    const normalized = cardUrl.replace(/\.json$/, '');
+    const normalized = removeCardJsonExtension(cardUrl);
     return selected.some(
-      (s) => typeof s === 'string' && s.replace(/\.json$/, '') === normalized,
+      (s) => !isNewCardArgs(s) && removeCardJsonExtension(s.id) === normalized,
     );
   };
 
@@ -296,8 +298,7 @@ export default class ResultSection extends Component<Signature> {
       return false;
     }
     return selected.some(
-      (s) =>
-        typeof s !== 'string' && s.realmURL === this.realmSection!.realmUrl,
+      (s) => isNewCardArgs(s) && s.realmURL === this.realmSection!.realmUrl,
     );
   }
 

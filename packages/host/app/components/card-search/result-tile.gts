@@ -24,6 +24,8 @@ import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
   removeCardJsonExtension,
   type NewCardArgs,
+  type SearchSelection,
+  type SearchItemKind,
 } from '@cardstack/host/utils/card-search/types';
 
 import CardRenderer from '../card-renderer';
@@ -54,8 +56,8 @@ interface Signature {
     newCard?: NewCardArgs;
     isSelected: boolean;
     multiSelect?: boolean;
-    onSelect: (selection: string | NewCardArgs) => void;
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    onSelect: (selection: SearchSelection) => void;
+    onSubmit?: (selection: SearchSelection) => void;
     // When true, render the Adorn visual treatment: a teal hover type-label
     // tab, teal hover/selection outline, and a teal selection chip in place of
     // the plain grey selection circle.
@@ -149,11 +151,18 @@ export default class SearchResultTile extends Component<Signature> {
     return this.args.entry?.id ?? this.args.card?.id;
   }
 
-  private get selectPayload(): string | NewCardArgs {
+  // Files render natively (no render type); an entry carries its kind directly.
+  // The URL-paste live card (`@card`) resolves through `getCard`, so it's a
+  // card.
+  private get selectKind(): SearchItemKind {
+    return this.args.entry?.kind ?? 'card';
+  }
+
+  private get selectPayload(): SearchSelection {
     if (this.args.newCard) {
       return this.args.newCard;
     }
-    return this.resolvedItemId as string;
+    return { id: this.resolvedItemId as string, kind: this.selectKind };
   }
 
   @action handleClick() {

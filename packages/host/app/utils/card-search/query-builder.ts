@@ -231,7 +231,8 @@ export function buildSearchQuery(
   filters = scopeFilters(
     filters,
     opts,
-    Boolean(typeFilter) || hasNarrowingPositiveTypeRef(baseFilter),
+    hasNarrowingPositiveTypeRef(typeFilter) ||
+      hasNarrowingPositiveTypeRef(baseFilter),
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
@@ -284,7 +285,8 @@ export function buildRecentsQuery(
   filters = scopeFilters(
     filters,
     opts,
-    Boolean(typeFilter) || hasNarrowingPositiveTypeRef(baseFilter),
+    hasNarrowingPositiveTypeRef(typeFilter) ||
+      hasNarrowingPositiveTypeRef(baseFilter),
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },

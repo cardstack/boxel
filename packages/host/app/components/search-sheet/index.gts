@@ -32,6 +32,10 @@ import {
   resolveSearchKeyAsURL,
 } from '@cardstack/host/utils/card-search/url';
 
+import {
+  isNewCardArgs,
+  type SearchSelection,
+} from '../../utils/card-search/types';
 import SearchPanel from '../card-search/panel';
 
 import type StoreService from '../../services/store';
@@ -147,12 +151,12 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  @action private handleCardSelect(selection: string | { realmURL: string }) {
-    if (typeof selection !== 'string') {
+  @action private handleCardSelect(selection: SearchSelection) {
+    if (isNewCardArgs(selection)) {
       return;
     }
     this.resetState();
-    this.args.onCardSelect(selection);
+    this.args.onCardSelect(selection.id);
   }
 
   @action

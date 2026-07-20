@@ -17,7 +17,11 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
-import type { Loader, CardChooserQuery } from '@cardstack/runtime-common';
+import type {
+  Loader,
+  CardChooserQuery,
+  ChosenItem,
+} from '@cardstack/runtime-common';
 import {
   type CodeRef,
   type CreateNewCard,
@@ -31,7 +35,12 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 
 import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import {
+  isNewCardArgs,
+  removeCardJsonExtension,
+  type SearchSelection,
+  type SelectedSearchItem,
+} from '@cardstack/host/utils/card-search/types';
 
 import {
   suggestCardChooserTitle,
@@ -56,7 +65,7 @@ interface Signature {
 }
 
 type Request = {
-  deferred: Deferred<string[] | undefined>;
+  deferred: Deferred<ChosenItem[] | undefined>;
   opts?: {
     offerToCreate?: {
       ref: CodeRef;
@@ -69,34 +78,38 @@ type Request = {
 type State = {
   id: number;
   request: Request;
-  selectedCards: (string | NewCardArgs)[];
+  selectedCards: SearchSelection[];
   multiSelect: boolean;
+  includeFiles?: boolean;
   searchKey: string;
   chooseCardTitle: string;
   dismissModal: boolean;
   errorMessage?: string;
   baseFilter?: Filter;
   availableRealmUrls: string[];
+  // The realm scope from the `chooseCard` query. When present, the search is
+  // pinned to these realms (see `initialSelectedRealmsForPanel` /
+  // `lockSelectedRealmsForPanel`) instead of fanning out across every
+  // available realm — which, in mixed mode, would render a tile for every
+  // file in every realm.
+  requestedRealms?: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
   lockConsumingRealm?: boolean;
 };
 
-function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
-  return typeof item !== 'string' && 'realmURL' in item;
-}
-
-function normalizeCardUrl(url: string): string {
-  return url.replace(/\.json$/, '');
-}
-
-function selectionEquals(
-  a: string | NewCardArgs,
-  b: string | NewCardArgs,
-): boolean {
-  if (typeof a === 'string' && typeof b === 'string') {
-    return normalizeCardUrl(a) === normalizeCardUrl(b);
+function selectionEquals(a: SearchSelection, b: SearchSelection): boolean {
+  if (!isNewCardArgs(a) && !isNewCardArgs(b)) {
+    if (a.kind !== b.kind) {
+      // A card instance and its backing `.json` file share a normalized id but
+      // are distinct picks; kind keeps them from toggling each other.
+      return false;
+    }
+    // `.json` stripping is a card-id convention; a file id is already canonical.
+    return a.kind === 'file'
+      ? a.id === b.id
+      : removeCardJsonExtension(a.id) === removeCardJsonExtension(b.id);
   }
   if (isNewCardArgs(a) && isNewCardArgs(b)) {
     return a.realmURL === b.realmURL;
@@ -117,8 +130,8 @@ export default class CardChooserModal extends Component<Signature> {
             @baseFilter={{state.baseFilter}}
             @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
-            @lockSelectedRealms={{state.lockConsumingRealm}}
-            @cardsOnly={{true}}
+            @lockSelectedRealms={{this.lockSelectedRealmsForPanel}}
+            @cardsOnly={{not state.includeFiles}}
             as |Bar Content|
           >
             <ModalContainer
@@ -147,7 +160,7 @@ export default class CardChooserModal extends Component<Signature> {
               <:content>
                 <Content
                   @isCompact={{false}}
-                  @cardsOnly={{true}}
+                  @cardsOnly={{not state.includeFiles}}
                   @handleSelect={{this.selectFromSearch}}
                   @onSubmit={{this.submitFromSearch}}
                   @selectedCards={{state.selectedCards}}
@@ -249,6 +262,10 @@ export default class CardChooserModal extends Component<Signature> {
   }
 
   private get initialSelectedRealmsForPanel(): URL[] | undefined {
+    // A query-provided realm scope pins the search to exactly those realms.
+    if (this.state?.requestedRealms?.length) {
+      return this.state.requestedRealms.map((r) => new URL(r));
+    }
     if (!this.state?.consumingRealm) {
       return undefined;
     }
@@ -256,6 +273,14 @@ export default class CardChooserModal extends Component<Signature> {
       return undefined;
     }
     return [this.state.consumingRealm];
+  }
+
+  // Pin the realm filter (no widening) whenever the search is scoped — either
+  // to a consuming realm or to the query's requested realms.
+  private get lockSelectedRealmsForPanel(): boolean {
+    return Boolean(
+      this.state?.lockConsumingRealm || this.state?.requestedRealms?.length,
+    );
   }
 
   private get initialSelectedTypesForPanel(): ResolvedCodeRef[] | undefined {
@@ -307,8 +332,9 @@ export default class CardChooserModal extends Component<Signature> {
       preselectConsumingRealm?: boolean;
       lockConsumingRealm?: boolean;
       preselectedCardUrls?: string[];
+      includeFiles?: boolean;
     },
-  ): Promise<undefined | string | string[]> {
+  ): Promise<undefined | string | string[] | ChosenItem | ChosenItem[]> {
     let result = await this._chooseCard.perform(
       {
         // default to cardTitle sort so that we can maintain stability in
@@ -327,10 +353,15 @@ export default class CardChooserModal extends Component<Signature> {
       },
       opts,
     );
-    if (opts?.multiSelect) {
-      return result;
+    // Mixed mode returns kind-tagged items; cards-only projects to bare ids so
+    // existing callers keep getting a string / string[].
+    if (opts?.includeFiles) {
+      return opts?.multiSelect ? result : result?.[0];
     }
-    return result?.[0];
+    if (opts?.multiSelect) {
+      return result?.map((item) => item.id);
+    }
+    return result?.[0]?.id;
   }
 
   private _chooseCard = task(
@@ -348,6 +379,7 @@ export default class CardChooserModal extends Component<Signature> {
         preselectConsumingRealm?: boolean;
         lockConsumingRealm?: boolean;
         preselectedCardUrls?: string[];
+        includeFiles?: boolean;
       } = {},
     ) => {
       await this.realmServer.ready;
@@ -402,6 +434,10 @@ export default class CardChooserModal extends Component<Signature> {
             ? [preselectedCardUrl]
             : []
       ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
+      // Preselected items are always card instances.
+      let preselectedItems: SelectedSearchItem[] = preselectedCardUrls.map(
+        (id) => ({ id, kind: 'card' }),
+      );
 
       let cardChooserState = new TrackedObject<State>({
         id: this.stateId,
@@ -411,12 +447,14 @@ export default class CardChooserModal extends Component<Signature> {
         dismissModal: false,
         baseFilter: query.filter,
         availableRealmUrls: this.realmServer.availableRealmIdentifiers,
-        selectedCards: preselectedCardUrls,
+        requestedRealms: query.realms,
+        selectedCards: preselectedItems,
         multiSelect: opts?.multiSelect ?? false,
-        hasPreselectedCard: preselectedCardUrls.length > 0,
+        hasPreselectedCard: preselectedItems.length > 0,
         consumingRealm: opts.consumingRealm,
         preselectConsumingRealm: opts.preselectConsumingRealm,
         lockConsumingRealm: opts.lockConsumingRealm,
+        includeFiles: opts.includeFiles,
       });
       this.stateStack.push(cardChooserState);
       return await request.deferred.promise;
@@ -435,7 +473,7 @@ export default class CardChooserModal extends Component<Signature> {
     }
   }
 
-  @action private selectFromSearch(selection: string | NewCardArgs): void {
+  @action private selectFromSearch(selection: SearchSelection): void {
     if (!this.state || !selection) {
       return;
     }
@@ -458,12 +496,13 @@ export default class CardChooserModal extends Component<Signature> {
     this.state.hasPreselectedCard = false;
   }
 
-  @action private submitFromSearch(selection: string | NewCardArgs): void {
+  @action private submitFromSearch(selection: SearchSelection): void {
     if (!this.state) {
       return;
     }
-    if (this.state.multiSelect && typeof selection === 'string') {
-      // In multi-select, double-click on existing cards just toggles (don't submit)
+    if (this.state.multiSelect && !isNewCardArgs(selection)) {
+      // In multi-select, double-click on an existing item just toggles (don't
+      // submit); only the "create new" affordance submits immediately.
       this.selectFromSearch(selection);
       return;
     }
@@ -471,7 +510,7 @@ export default class CardChooserModal extends Component<Signature> {
     this.pickCards(this.state);
   }
 
-  @action private selectAll(cards: string[]): void {
+  @action private selectAll(cards: SelectedSearchItem[]): void {
     if (!this.state) {
       return;
     }
@@ -495,12 +534,10 @@ export default class CardChooserModal extends Component<Signature> {
       return;
     }
 
-    let cardIds: string[] = [];
+    let chosen: ChosenItem[] = [];
     for (let selectedItem of currentState.selectedCards) {
-      if (typeof selectedItem === 'string') {
-        cardIds.push(selectedItem.replace(/\.json$/, ''));
-      } else {
-        // NewCardArgs — create the card
+      if (isNewCardArgs(selectedItem)) {
+        // NewCardArgs — create the card (always a card instance)
         let newCardId = await this.createNewTask.perform(
           selectedItem.ref,
           selectedItem.relativeTo
@@ -509,14 +546,28 @@ export default class CardChooserModal extends Component<Signature> {
           new URL(selectedItem.realmURL),
         );
         if (newCardId) {
-          cardIds.push(newCardId.replace(/\.json$/, ''));
+          chosen.push({
+            id: removeCardJsonExtension(newCardId)!,
+            kind: 'card',
+          });
         }
+      } else {
+        chosen.push({
+          // `.json` stripping is a card-id convention; a file id (e.g. a card's
+          // backing `Foo/1.json`) is already its canonical id — stripping it
+          // would yield the card-instance id under a `file` kind.
+          id:
+            selectedItem.kind === 'file'
+              ? selectedItem.id
+              : removeCardJsonExtension(selectedItem.id)!,
+          kind: selectedItem.kind,
+        });
       }
     }
 
     let request = currentState.request;
     if (request) {
-      request.deferred.fulfill(cardIds.length > 0 ? cardIds : undefined);
+      request.deferred.fulfill(chosen.length > 0 ? chosen : undefined);
     }
 
     // Remove state from stack

@@ -11,7 +11,10 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type {
+  SearchSelection,
+  SelectedSearchItem,
+} from '@cardstack/host/utils/card-search/types';
 
 import type { SortOption } from './constants';
 import type { ViewOption } from './constants';
@@ -27,9 +30,9 @@ interface Signature {
     onChangeView: (id: string) => void;
     onChangeSort: (option: SortOption) => void;
     multiSelect?: boolean;
-    selectedCards?: (string | NewCardArgs)[];
-    allCards?: string[];
-    onSelectAll?: (cards: string[]) => void;
+    selectedCards?: SearchSelection[];
+    allCards?: SelectedSearchItem[];
+    onSelectAll?: (cards: SelectedSearchItem[]) => void;
     onDeselectAll?: () => void;
     hideViewSelector?: boolean;
   };

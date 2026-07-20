@@ -44,6 +44,9 @@ export interface RenderableSearchEntryLike {
   id: string;
   // The URL of the realm hosting this result — used to group results by realm.
   realmUrl: string;
+  // Whether this result is a card instance or a file — lets a consumer (e.g. a
+  // mixed card/file chooser) tag a selection by kind without inspecting the id.
+  kind: 'card' | 'file';
   // The result's realm-local path (e.g. `Person/error`) — a readable label a
   // consumer shows on an error tile to identify which result failed. Falls back
   // to the bare id when the id isn't under the entry's realm.

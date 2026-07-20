@@ -34,7 +34,10 @@ import {
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/card-search/query-builder';
 import { SectionPagination } from '@cardstack/host/utils/card-search/section-pagination';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import type {
+  SearchSelection,
+  SelectedSearchItem,
+} from '@cardstack/host/utils/card-search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
@@ -117,16 +120,16 @@ interface Signature {
     // by default; the card choosers set this so file rows never surface.
     cardsOnly?: boolean;
     isCompact: boolean;
-    handleSelect: (selection: string | NewCardArgs) => void;
-    selectedCards?: (string | NewCardArgs)[];
+    handleSelect: (selection: SearchSelection) => void;
+    selectedCards?: SearchSelection[];
     multiSelect?: boolean;
-    onSelectAll?: (cards: string[]) => void;
+    onSelectAll?: (cards: SelectedSearchItem[]) => void;
     onDeselectAll?: () => void;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    onSubmit?: (selection: SearchSelection) => void;
     showHeader?: boolean;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
