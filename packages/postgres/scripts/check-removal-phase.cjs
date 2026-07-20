@@ -131,7 +131,10 @@ for (const file of files) {
     src,
     ts.ScriptTarget.Latest,
     /* setParentNodes */ true,
-    ts.ScriptKind.JS,
+    // Parse .ts migrations as TypeScript so TS-only syntax doesn't produce a
+    // malformed tree that hides a destructive call (createSourceFile doesn't
+    // throw on parse errors). Matches the .js|.ts file filter above.
+    /\.ts$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS,
   );
   const upFn = findUpFunction(sourceFile);
   if (!upFn) {
