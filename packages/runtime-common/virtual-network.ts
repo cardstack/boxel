@@ -35,10 +35,11 @@ export class VirtualNetwork {
   // mapping is added or removed (both clear the cache).
   private toURLHrefCache = new Map<string, string>();
 
-  // Notified whenever a realm-prefix mapping is added or removed. Consumers
-  // that key caches by the RRI form a mapping produces (e.g. the Loader's
-  // module cache) subscribe here to discard those entries when the mapping
-  // set changes — the RRI→URL relationship is only stable between changes.
+  // Notified whenever a realm-prefix mapping changes — added, removed, or
+  // re-registered against a new target. Consumers that key caches by the RRI
+  // form a mapping produces (e.g. the Loader's module cache) subscribe here to
+  // discard those entries when the mapping set changes — the RRI→URL
+  // relationship is only stable between changes.
   private mappingChangeListeners = new Set<() => void>();
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
