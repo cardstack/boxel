@@ -324,6 +324,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
+  canonicalizeId(id: string): string {
+    return this.#virtualNetwork.unresolveURL(id);
+  }
+
   getCard(id: string): CardDef | undefined {
     return this.getCardItem('instance', id) as CardDef | undefined;
   }

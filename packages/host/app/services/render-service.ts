@@ -75,6 +75,10 @@ export class CardStoreWithErrors implements CardStore {
     }
   }
 
+  canonicalizeId(id: string): string {
+    return this.#virtualNetwork.unresolveURL(id);
+  }
+
   getCard(id: string): CardDef | undefined {
     id = this.normalizeKey(id);
     return this.#cards.get(id);
