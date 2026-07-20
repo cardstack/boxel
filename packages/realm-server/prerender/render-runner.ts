@@ -22,7 +22,11 @@ import {
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { toAffinityKey } from './affinity.ts';
-import { abortable, throwIfAborted } from './prerender-cancel.ts';
+import {
+  abortable,
+  PrerenderCancelledError,
+  throwIfAborted,
+} from './prerender-cancel.ts';
 import {
   captureResult,
   captureModule,
@@ -485,6 +489,13 @@ export class RenderRunner {
         pool: poolInfo,
       };
     } catch (e) {
+      // Cancellations must reach the Prerenderer's cancel handler —
+      // converting one into an error response here would return the
+      // abandoned (possibly wedged) tab to the pool with no disposal,
+      // and there is no caller left to read the response anyway.
+      if (e instanceof PrerenderCancelledError) {
+        throw e;
+      }
       log.error('Error running command in headless chrome:', e);
       let response: RunCommandResponse = {
         status: 'error',
@@ -2010,13 +2021,24 @@ export class RenderRunner {
       );
     } finally {
       if (didStashFileRenderData) {
-        await page
-          .evaluate(() => {
-            delete (globalThis as any).__boxelFileRenderData;
-          })
-          .catch(() => {
-            /* best-effort cleanup */
-          });
+        // The stash only matters to a page that will render again, and
+        // against a wedged page this evaluate can hang until the
+        // protocol timeout — so race it against the signal and swallow
+        // the cancellation: a cancelled visit's page is about to be
+        // disposed, and holding up `release()` (and the disposal
+        // behind it) for cosmetic cleanup would pin the affinity for
+        // exactly the window this cancellation exists to reclaim.
+        await abortable(signal, () =>
+          page
+            .evaluate(() => {
+              delete (globalThis as any).__boxelFileRenderData;
+            })
+            .catch(() => {
+              /* best-effort cleanup */
+            }),
+        ).catch(() => {
+          /* caller gone — the page is being disposed, stash and all */
+        });
       }
       release();
     }
