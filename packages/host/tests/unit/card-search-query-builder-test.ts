@@ -153,6 +153,21 @@ module('Unit | card-search/query-builder', function () {
       );
     });
 
+    test('a picked ROOT type keeps the card-json dedup', function (assert) {
+      // The chooser seeds the type picker from its base filter, so a root base
+      // filter (BaseDef) becomes a *selected* root type. A root selection still
+      // spans both kinds, so — unlike a narrowing type pick — the card-`.json`
+      // dedup must remain. Regression: treating any selected type as narrowing
+      // dropped the dedup here, leaking a card's `.json` file row into the
+      // mixed chooser (a duplicate of the card's instance row).
+      let typeKey = `${baseRef.module}/${baseRef.name}`;
+      let query = buildSearchQuery('', SORT_AZ, { type: baseRef }, [typeKey]);
+      assert.deepEqual(query, {
+        filter: { every: [{ type: baseRef }, DEDUP_FILTER] },
+        sort: SORT_AZ.sort,
+      });
+    });
+
     test('search with a selected type produces a type filter alongside the search-term filter', function (assert) {
       let authorRef = {
         module: 'http://test-realm/test/author' as RealmResourceIdentifier,
