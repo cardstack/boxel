@@ -161,9 +161,16 @@ function installTimeoutDiagnosticsOnce() {
       ) {
         return;
       }
-      let label = `${details.module ?? '<unknown module>'} > ${
-        details.name ?? '<unknown test>'
-      }`;
+      // Fall back to the testStart-maintained label when the log payload
+      // carries neither module nor name — otherwise two different tests
+      // whose payloads both lack metadata would collapse into one label and
+      // the second test's full dump would be suppressed as a repeat.
+      let label =
+        details.module || details.name
+          ? `${details.module ?? '<unknown module>'} > ${
+              details.name ?? '<unknown test>'
+            }`
+          : currentTestLabel;
       if (lastTimeoutMomentTestLabel === label) {
         console.error(
           [
