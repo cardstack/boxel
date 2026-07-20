@@ -138,6 +138,19 @@ export function runTests() {
       assert
         .dom('[data-test-poster-board] h1')
         .doesNotExist('hint header is hidden when the board has cards');
+
+      await triggerEvent('[data-test-poster-board-tile="0"]', 'pointerdown', {
+        button: 0,
+        pointerId: 7,
+        clientX: 20,
+        clientY: 20,
+      });
+      assert
+        .dom('[data-test-poster-board]')
+        .hasStyle(
+          { cursor: 'grab' },
+          'pointerdown on a card tile does not start a board pan',
+        );
     });
 
     test('poster-board zoom reset is not undone by pending pinch momentum', async function (assert) {

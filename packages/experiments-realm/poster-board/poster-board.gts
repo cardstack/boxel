@@ -136,7 +136,10 @@ class Isolated extends Component<typeof PosterBoard> {
       return;
     }
     const target = event.target as HTMLElement;
-    if (target.closest('[data-poster-board-hud]')) {
+    // Pointers that start on the HUD or inside a card tile are not pans:
+    // capturing them would break the tile's own focus/selection behavior
+    // (and tile pointerdown becomes drag-to-move in step 3)
+    if (target.closest('[data-poster-board-hud], [data-poster-board-tile]')) {
       return;
     }
     this.panSession = this.surfaceRig.startPan(event.clientX, event.clientY);
@@ -257,6 +260,7 @@ class Isolated extends Component<typeof PosterBoard> {
             @size='cardsgrid-tile'
             @style={{this.tileStyle tile}}
             class='poster-board-tile'
+            data-poster-board-tile
             data-test-poster-board-tile={{tile.index}}
           >
             {{#let (get @fields.cards tile.index) as |LinkedCard|}}
