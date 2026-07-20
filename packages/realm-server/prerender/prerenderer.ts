@@ -247,7 +247,20 @@ export class Prerenderer {
     );
     if (err.state === 'rendering') {
       try {
-        await this.#pagePool.disposeAffinity(affinityKey);
+        // Same disposal envelope as the render-error eviction path:
+        // mark the entries closing synchronously (so a queued waiter
+        // for this affinity is routed to a fresh page instead of
+        // adopting the abandoned — possibly wedged — one), close them
+        // in the background (a wedged tab's teardown must not
+        // serialize this cancel handler), and keep the shared
+        // BrowserContext so the next visit reuses its warm HTTP
+        // cache instead of paying the cold module-source waterfall.
+        // Closing the page is also what interrupts any CDP call the
+        // cancelled render abandoned mid-flight.
+        await this.#pagePool.disposeAffinity(affinityKey, {
+          awaitIdle: false,
+          retainSharedContext: true,
+        });
         this.#renderRunner.clearAuthCache(affinityKey);
       } catch (disposeErr: any) {
         log.warn(

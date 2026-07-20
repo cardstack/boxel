@@ -6,8 +6,11 @@
 // that signal from its Koa handler and threads it down through
 // `Prerenderer` → `RenderRunner` → `PagePool.getPage` so queued
 // waits (render semaphore, per-affinity tab queue) can bail out
-// without entering render, and an in-flight render can be torn
-// down cleanly via `#maybeEvict`.
+// without entering render, and in-flight render steps race the
+// signal (`withTimeout` / `abortable`) so a mid-render abort
+// interrupts the step immediately — even against a wedged renderer
+// whose CDP calls would otherwise pin the visit until a protocol
+// timeout — and the Prerenderer tears the tab down.
 //
 // `PrerenderCancelledError` is the distinct-named rejection
 // callers look for to decide "this is a user cancel, route the tab
@@ -57,5 +60,48 @@ export function throwIfAborted(
       state,
       reason: typeof signal.reason === 'string' ? signal.reason : undefined,
     });
+  }
+}
+
+// Races `run()` against the signal so a page operation that can't
+// observe cancellation itself (a CDP evaluate against a wedged
+// renderer never returns) is abandoned the moment the caller goes
+// away, throwing `PrerenderCancelledError` instead of waiting on the
+// operation's own (protocol-level) timeout. The abandoned promise
+// keeps running until the cancel handler disposes the page — its
+// eventual rejection is absorbed by the race, never surfacing as an
+// unhandled rejection.
+export async function abortable<T>(
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+  state: PrerenderCancelState = 'rendering',
+): Promise<T> {
+  if (!signal) {
+    return run();
+  }
+  throwIfAborted(signal, state);
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () =>
+          reject(
+            new PrerenderCancelledError({
+              state,
+              reason:
+                typeof signal.reason === 'string' ? signal.reason : undefined,
+            }),
+          );
+        signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    // The signal outlives any one operation (it spans the whole
+    // request), so every race must detach its listener or a visit's
+    // worth of steps accumulates listeners on the shared signal.
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 }

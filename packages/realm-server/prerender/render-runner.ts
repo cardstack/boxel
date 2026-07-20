@@ -22,7 +22,7 @@ import {
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { toAffinityKey } from './affinity.ts';
-import { throwIfAborted } from './prerender-cancel.ts';
+import { abortable, throwIfAborted } from './prerender-cancel.ts';
 import {
   captureResult,
   captureModule,
@@ -347,27 +347,31 @@ export class RenderRunner {
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
-      await page.evaluate(
-        (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-          localStorage.setItem(
-            key,
-            JSON.stringify({
-              command: commandToRun,
-              input,
-              nonce: requestNonce,
-              createdAt,
-            }),
-          );
-        },
-        auth,
-        storageKey,
-        command,
-        commandInput ?? null,
-        nonce,
-        Date.now(),
+      await abortable(signal, () =>
+        page.evaluate(
+          (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            localStorage.setItem(
+              key,
+              JSON.stringify({
+                command: commandToRun,
+                input,
+                nonce: requestNonce,
+                createdAt,
+              }),
+            );
+          },
+          auth,
+          storageKey,
+          command,
+          commandInput ?? null,
+          nonce,
+          Date.now(),
+        ),
       );
-      await transitionTo(page, 'command-runner', requestId, nonce);
+      await abortable(signal, () =>
+        transitionTo(page, 'command-runner', requestId, nonce),
+      );
       log.info(
         'command-runner url: %s',
         buildCommandRunnerURL(page, nonce, requestId),
@@ -433,6 +437,7 @@ export class RenderRunner {
         },
         opts?.timeoutMs,
         this.#profileContext(affinityKey, command, 'command-runner'),
+        signal,
       );
 
       if (isRenderError(waitResult)) {
@@ -554,9 +559,11 @@ export class RenderRunner {
       // try so `finally { release() }` frees the tab slot if the caller
       // aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
+      await abortable(signal, () =>
+        page.evaluate((sessionAuth) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+        }, auth),
+      );
 
       let renderStart = Date.now();
       let nonce = String(this.#nonce);
@@ -585,6 +592,7 @@ export class RenderRunner {
         },
         opts?.timeoutMs,
         this.#profileContext(affinityKey, url, `screenshot ${format}`),
+        signal,
       );
 
       let response: ScreenshotPrerenderResponse;
@@ -694,9 +702,11 @@ export class RenderRunner {
       // inside the try so `finally { release() }` frees the tab slot
       // if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
+      await abortable(signal, () =>
+        page.evaluate((sessionAuth) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+        }, auth),
+      );
 
       let renderStart = Date.now();
       let options = renderOptions ?? {};
@@ -722,6 +732,7 @@ export class RenderRunner {
         },
         opts?.timeoutMs,
         this.#profileContext(affinityKey, url, 'module'),
+        signal,
       );
 
       let response: ModuleRenderResponse;
@@ -971,29 +982,31 @@ export class RenderRunner {
       // host deploys independently of this server, so render strategies the
       // host must understand are gated per page on its advertised
       // `__boxelHostCapabilities`.
-      let hostCapabilities = await page.evaluate(
-        (
-          sessionAuth: string,
-          id: string | undefined,
-          jobPriority: number | undefined,
-        ) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-          (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
-            id;
+      let hostCapabilities = await abortable(signal, () =>
+        page.evaluate(
           (
-            globalThis as unknown as { __boxelJobPriority?: number }
-          ).__boxelJobPriority = jobPriority;
-          return (
+            sessionAuth: string,
+            id: string | undefined,
+            jobPriority: number | undefined,
+          ) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
+              id;
             (
-              globalThis as unknown as {
-                __boxelHostCapabilities?: Record<string, boolean>;
-              }
-            ).__boxelHostCapabilities ?? {}
-          );
-        },
-        auth,
-        jobId,
-        priority,
+              globalThis as unknown as { __boxelJobPriority?: number }
+            ).__boxelJobPriority = jobPriority;
+            return (
+              (
+                globalThis as unknown as {
+                  __boxelHostCapabilities?: Record<string, boolean>;
+                }
+              ).__boxelHostCapabilities ?? {}
+            );
+          },
+          auth,
+          jobId,
+          priority,
+        ),
       );
       // A card-instance index visit fuses the file extract into the
       // render.meta transition — one transition + settle for both the
@@ -1016,13 +1029,15 @@ export class RenderRunner {
       }
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
-      await page
-        .evaluate(() => {
-          delete (globalThis as any).__boxelFileRenderData;
-        })
-        .catch(() => {
-          /* best-effort */
-        });
+      await abortable(signal, () =>
+        page
+          .evaluate(() => {
+            delete (globalThis as any).__boxelFileRenderData;
+          })
+          .catch(() => {
+            /* best-effort */
+          }),
+      );
 
       // Serialized options carry the pass flags into the route — the host
       // render/module routes consume these to decide which mode to run. The
@@ -1092,6 +1107,7 @@ export class RenderRunner {
           },
           opts?.timeoutMs,
           this.#profileContext(affinityKey, url, 'file-extract', jobId),
+          signal,
         );
         recordIndexRouteMs('file', 'fileExtract', Date.now() - extractStart);
         let extractResponse: FileExtractResponse;
@@ -1273,6 +1289,7 @@ export class RenderRunner {
               fn,
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, step, jobId),
+              signal,
             ),
           );
           let elapsed = Date.now() - stepStart;
@@ -1316,6 +1333,7 @@ export class RenderRunner {
             },
             opts?.timeoutMs,
             this.#profileContext(affinityKey, url, 'card isolated/0', jobId),
+            signal,
           );
           recordFormatMs('card', 'isolated', Date.now() - isolatedStart);
           if (isRenderError(isolatedResult)) {
@@ -1337,7 +1355,9 @@ export class RenderRunner {
             // read it here so the HTML rendering still reports what it
             // pulled in — the indexing job unions this with the index
             // visit's meta deps.
-            capturedDeps = await this.#readCapturedDeps(page);
+            capturedDeps = await abortable(signal, () =>
+              this.#readCapturedDeps(page),
+            );
           }
         } else {
           // An index visit never touches the html route, so render.meta is
@@ -1713,9 +1733,11 @@ export class RenderRunner {
 
           if (memoizedIconHTML === undefined) {
             // stash file data for the render route model hook to consume
-            await page.evaluate((data) => {
-              (globalThis as any).__boxelFileRenderData = data;
-            }, effectiveFileData);
+            await abortable(signal, () =>
+              page.evaluate((data) => {
+                (globalThis as any).__boxelFileRenderData = data;
+              }, effectiveFileData),
+            );
             didStashFileRenderData = true;
           }
 
@@ -1759,6 +1781,7 @@ export class RenderRunner {
               },
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, 'file isolated/0', jobId),
+              signal,
             );
             recordFormatMs('file', 'isolated', Date.now() - isolatedStart);
             if (isRenderError(isolatedResult)) {
@@ -1810,6 +1833,7 @@ export class RenderRunner {
               },
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, 'file icon', jobId),
+              signal,
             );
             recordIndexRouteMs('file', 'icon', Date.now() - iconStart);
             if (isRenderError(iconResult)) {
@@ -1840,6 +1864,7 @@ export class RenderRunner {
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, 'file head/0', jobId),
+                  signal,
                 ),
             );
             recordFormatMs('file', 'head', Date.now() - headStart);
@@ -1934,6 +1959,7 @@ export class RenderRunner {
                   step.cb,
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, step.name, jobId),
+                  signal,
                 ),
               );
               let elapsed = Date.now() - stepStart;
