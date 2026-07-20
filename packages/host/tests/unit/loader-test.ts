@@ -281,7 +281,7 @@ module('Unit | loader', function (hooks) {
     try {
       assert.false(
         loader.isModuleLoaded(`${testRealmURL}f`),
-        'adding a realm mapping discards the module cache',
+        'module is not visible under its pre-mapping spelling after a mapping add',
       );
     } finally {
       virtualNetwork.removeRealmMapping('@test-loader-discard/');
