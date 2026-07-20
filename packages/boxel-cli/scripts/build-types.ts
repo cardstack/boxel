@@ -370,6 +370,9 @@ function skipMonorepoArtifacts(src: string): boolean {
 
 const HOST_APP_REACHABLE_SUBDIRS = new Set([
   'commands',
+  // Host tools live under `host/app/tools` and are imported by card code as
+  // `@cardstack/boxel-host/tools/*` (the post-rename home of `commands/*`).
+  'tools',
   'components',
   'config',
   'lib',

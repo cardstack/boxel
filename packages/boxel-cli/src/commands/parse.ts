@@ -109,17 +109,41 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 
 // Node modules: in-monorepo, host has every transitive dep glint needs
 // already installed. In a published install we don't ship host's
-// node_modules, so we fall back to boxel-cli's own node_modules. That
-// means a third-party import in card code only type-checks if the
-// package is a runtime dependency of boxel-cli: `@glint/ember-tsc`,
-// `typescript`, and `content-tag` (CS-11165), plus the packages card
-// code itself commonly imports — `@glimmer/component` and
-// `@glimmer/tracking` (CS-11509). Imports outside that set surface as
-// "Cannot find module …" parse errors; the fix is adding the package
+// node_modules, so we resolve against the CLI's own runtime deps:
+// `@glint/ember-tsc`, `typescript`, and `content-tag` (CS-11165), plus
+// the packages card code itself commonly imports — `@glimmer/component`
+// and `@glimmer/tracking` (CS-11509). Imports outside that set surface
+// as "Cannot find module …" parse errors; the fix is adding the package
 // as a boxel-cli dependency, not shimming it.
-const NODE_MODULES_PATH = BUNDLED_TYPES_DIR
-  ? join(BOXEL_CLI_PATH, 'node_modules')
-  : join(PACKAGES_PATH, 'host', 'node_modules');
+//
+// Where those deps live depends on the install layout, and picking the
+// wrong dir is what broke `boxel parse` for npm installs (CS-12083):
+//   - pnpm keeps them in the CLI's own nested `node_modules`
+//     (`<cli>/node_modules`).
+//   - npm hoists them to the install root's `node_modules`, leaving the
+//     CLI's nested dir empty/absent — so the old unconditional nested
+//     path resolved nothing, `qunit-dom` (and every template's
+//     `@glint/ember-tsc/-private/dsl` import) failed, and glint reported
+//     "no diagnostics" while having type-checked nothing.
+// Prefer the nested dir when it actually carries the deps; otherwise use
+// the `node_modules` Node's own resolver finds `@glint/ember-tsc` in,
+// which is the hoisted root under npm. Both cases then resolve the CLI's
+// runtime deps identically.
+const NODE_MODULES_PATH = (() => {
+  if (!BUNDLED_TYPES_DIR) {
+    return join(PACKAGES_PATH, 'host', 'node_modules');
+  }
+  let nested = join(BOXEL_CLI_PATH, 'node_modules');
+  if (existsSync(join(nested, '@glint', 'ember-tsc'))) {
+    return nested;
+  }
+  // `<node_modules>/@glint/ember-tsc/lib/index.js` → walk back to the
+  // `node_modules` that contains it (three levels up from the lib dir).
+  let mainEntry = require.resolve('@glint/ember-tsc', {
+    paths: [BOXEL_CLI_PATH],
+  });
+  return resolve(dirname(mainEntry), '..', '..', '..');
+})();
 
 let cachedTsconfigContent: string | undefined;
 
@@ -555,16 +579,23 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
-          // `@cardstack/local-types` is workspace-only — fed via `include`
-          // below instead of `types` so the published CLI doesn't need a
-          // resolvable `@cardstack/local-types` package in node_modules.
-          types: ['qunit-dom'],
+          // No global type libraries: card code is application code, not
+          // a test, so it never needs an ambient `@types/*` package. The
+          // previous `types: ['qunit-dom']` forced a test-helper type lib
+          // that isn't shipped in a published install — under npm's
+          // hoisted layout it couldn't resolve and glint aborted before
+          // type-checking anything (CS-12083). `@cardstack/local-types`
+          // is workspace-only and fed via `include` below instead.
+          types: [],
           paths: {
             '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
+            // Host tools moved from `commands/*` to `tools/*`; current card
+            // code imports `@cardstack/boxel-host/tools/<name>` (CS-12083).
+            '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
             '*': [`${HOST_TYPES_PATH}/*`],
           },
