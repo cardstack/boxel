@@ -7534,6 +7534,69 @@ module(basename(import.meta.filename), function () {
       assert.notOk(result.response.fileRender, 'fileRender skipped');
     });
 
+    test('client abort mid-render interrupts the in-flight visit and frees the affinity', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let ac = new AbortController();
+      let start = Date.now();
+      try {
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardFileURL,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+          // The simulated delay holds the render step in-flight so the
+          // abort lands mid-step; the matching timeout means the only
+          // way this visit ends early is the abort being observed
+          // inside the step, not at a pass boundary after the step has
+          // burned its full budget.
+          opts: { timeoutMs: 15_000, simulateTimeoutMs: 15_000 },
+          signal: ac.signal,
+          onTabAcquired: () => {
+            setTimeout(() => ac.abort('client disconnected'), 250);
+          },
+        });
+        assert.ok(false, 'visit should have been cancelled');
+      } catch (e: any) {
+        assert.strictEqual(
+          e?.name,
+          'PrerenderCancelledError',
+          'visit rejects with the cancellation error',
+        );
+        assert.strictEqual(
+          e?.state,
+          'rendering',
+          'tagged as a mid-render cancel',
+        );
+      }
+      let elapsedMs = Date.now() - start;
+      assert.ok(
+        elapsedMs < 10_000,
+        `cancelled promptly (${elapsedMs}ms) instead of waiting out the render step`,
+      );
+
+      // The cancel handler disposes the abandoned tab; the affinity
+      // itself must stay usable — the next visit gets a fresh page and
+      // renders normally.
+      let followUp = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+      assert.ok(
+        followUp.response.card?.isolatedHTML?.includes('Maple'),
+        'follow-up visit on the same affinity renders normally',
+      );
+      assert.notOk(
+        followUp.response.pageUnusableError,
+        'follow-up visit is not poisoned by the cancelled render',
+      );
+    });
+
     test('fileExtract-only visit returns only the extract', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
       let result = await prerenderer.prerenderVisit({
