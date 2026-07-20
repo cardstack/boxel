@@ -63,6 +63,11 @@ module(basename(import.meta.filename), function () {
         'prerender cancelled: req-closed',
         'reason in message',
       );
+      assert.strictEqual(
+        err.reason,
+        'req-closed',
+        'reason exposed as its own field for log lines',
+      );
     });
 
     test('isPrerenderCancellation matches only this error', function (assert) {

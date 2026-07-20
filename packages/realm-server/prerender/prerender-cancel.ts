@@ -31,6 +31,10 @@ export type PrerenderCancelState = 'queued' | 'rendering' | 'releasing';
 export class PrerenderCancelledError extends Error {
   name = 'PrerenderCancelledError';
   state: PrerenderCancelState;
+  // Why the caller aborted (e.g. the close listener's disconnect
+  // reason). Carried as its own field — not only embedded in the
+  // message — so log lines can print it without re-parsing.
+  reason?: string;
   constructor(
     opts?: { state?: PrerenderCancelState; reason?: string } | string,
   ) {
@@ -44,6 +48,7 @@ export class PrerenderCancelledError extends Error {
     }
     super(reason ? `prerender cancelled: ${reason}` : 'prerender cancelled');
     this.state = state;
+    this.reason = reason;
   }
 }
 

@@ -61,6 +61,11 @@ export class Prerenderer {
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
   #restartInFlight: Promise<void> | null = null;
+  // Count of actual browser restarts performed (coalesced callers share
+  // one). Read by tests to assert a flow did NOT pay a restart — e.g. a
+  // visit following a cancelled render must acquire a fresh page rather
+  // than detour through the restart recovery lane.
+  #browserRestartCount = 0;
   // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
   // `{ batchId, since }` for the batch that currently owns the affinity's
   // warm loader. See `#gateClearCache` for the full policy. Populated on
@@ -243,7 +248,8 @@ export class Prerenderer {
     let elapsed = Date.now() - startedAt;
     log.info(
       `render cancelled after ${elapsed}ms in state=${err.state} ` +
-        `affinity=${affinityKey} target=${target}`,
+        `affinity=${affinityKey} target=${target} ` +
+        `reason=${err.reason ?? '<none>'}`,
     );
     if (err.state === 'rendering') {
       try {
@@ -256,9 +262,13 @@ export class Prerenderer {
         // instead of racing a background close at the pool ceiling
         // (which reads as "no standby available" and needlessly
         // routes that visit through the browser-restart recovery
-        // lane). The shared BrowserContext is retained so that next
-        // visit reuses the warm HTTP cache rather than paying the
-        // cold module-source waterfall.
+        // lane). That guarantee is scoped to visits arriving after
+        // this disposal: a waiter already holding the tab-queue
+        // lease when the cancel lands still receives the doomed
+        // page, since the lease handoff carries no revalidation.
+        // The shared BrowserContext is retained so the next visit
+        // reuses the warm HTTP cache rather than paying the cold
+        // module-source waterfall.
         await this.#pagePool.disposeAffinity(affinityKey, {
           retainSharedContext: true,
         });
@@ -293,6 +303,13 @@ export class Prerenderer {
       this.#renderRunner.clearIconMemo(affinityKey);
       log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
     }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this; it's a debugging surface, not a
+  // stable API.
+  getBrowserRestartCount(): number {
+    return this.#browserRestartCount;
   }
 
   // Read-only observability accessor used by tests. Callers outside of
@@ -909,6 +926,7 @@ export class Prerenderer {
 
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
+    this.#browserRestartCount++;
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
     await this.#pagePool.warmStandbys().catch((e) => {

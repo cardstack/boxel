@@ -7537,6 +7537,7 @@ module(basename(import.meta.filename), function () {
     test('client abort mid-render interrupts the in-flight visit and frees the affinity', async function (assert) {
       const cardFileURL = `${realmURL}maple.json`;
       let ac = new AbortController();
+      let restartsBefore = prerenderer.getBrowserRestartCount();
       let start = Date.now();
       try {
         await prerenderer.prerenderVisit({
@@ -7594,6 +7595,16 @@ module(basename(import.meta.filename), function () {
       assert.notOk(
         followUp.response.pageUnusableError,
         'follow-up visit is not poisoned by the cancelled render',
+      );
+      // A restart-lane detour would also render normally (restart →
+      // retry succeeds), so the success assertions alone can't tell a
+      // clean fresh-page acquisition from recovery. The counter can:
+      // the awaited cancel disposal means the follow-up acquires a
+      // page without a browser restart.
+      assert.strictEqual(
+        prerenderer.getBrowserRestartCount(),
+        restartsBefore,
+        'follow-up visit did not pay a browser restart',
       );
     });
 
