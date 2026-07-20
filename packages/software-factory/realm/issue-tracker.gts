@@ -1183,6 +1183,10 @@ export class Issue extends CardDef {
               <div
                 class='meta-link-item meta-depends-on
                   {{if this.hasBlockedDependency "has-blocked-dependency"}}'
+                title={{if
+                  this.hasBlockedDependency
+                  'A dependency is blocked — this issue cannot proceed until it unblocks'
+                }}
               >
                 <CircleAlert class='meta-link-icon' />
                 <span data-test-dependency-label={{@model.issueId}}>
@@ -1191,9 +1195,8 @@ export class Issue extends CardDef {
                 {{#if this.hasBlockedDependency}}
                   <span
                     class='blocked-dependency-dot'
-                    data-test-blocked-dependency-dot={{@model.issueId}}
-                    title='A dependency is blocked — this issue cannot proceed until it unblocks'
                     aria-hidden='true'
+                    data-test-blocked-dependency-dot={{@model.issueId}}
                   ></span>
                 {{/if}}
               </div>
@@ -1359,14 +1362,14 @@ export class Issue extends CardDef {
           overflow: hidden;
         }
         .meta-depends-on.has-blocked-dependency {
-          color: var(--destructive, #b91c1c);
+          color: var(--destructive, var(--boxel-danger));
         }
         .blocked-dependency-dot {
           display: inline-block;
           width: 0.375rem;
           height: 0.375rem;
           border-radius: 50%;
-          background: var(--destructive, #dc2626);
+          background: var(--destructive, var(--boxel-danger));
           margin-left: 0.125rem;
           flex-shrink: 0;
         }
