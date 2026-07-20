@@ -1020,7 +1020,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Published realms the selected Matrix user (**Browse user** variable) can access, joined from realm_user_permissions to the kind='published' rows in realm_registry. `origin_realm` links to the source realm in the Realms dashboard.",
+        "description": "Published realms the selected Matrix user (**Browse user** variable) can access — via an explicit realm_user_permissions row OR the public-read wildcard (`*`) that publishing grants (handle-publish-realm.ts). The `access` column shows which applies; read/write/owner reflect the explicit row when present, otherwise the wildcard. `origin_realm` links to the source realm in the Realms dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1113,6 +1113,18 @@
             {
               "matcher": {
                 "id": "byName",
+                "options": "access"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Access"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
                 "options": "last_published"
               },
               "properties": [
@@ -1163,7 +1175,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  rr.url AS published_realm,\n  rr.source_url AS origin_realm,\n  p.read,\n  p.write,\n  p.realm_owner,\n  to_timestamp(rr.last_published_at / 1000.0) AS last_published\nFROM realm_user_permissions p\nJOIN realm_registry rr\n  ON rr.url = p.realm_url\n AND rr.kind = 'published'\nWHERE p.username = ${browse_user:sqlstring}\nORDER BY rr.last_published_at DESC NULLS LAST\nLIMIT 500;",
+            "rawSql": "SELECT\n  rr.url AS published_realm,\n  rr.source_url AS origin_realm,\n  COALESCE(own.read, pub.read) AS read,\n  COALESCE(own.write, pub.write, false) AS write,\n  COALESCE(own.realm_owner, false) AS realm_owner,\n  CASE WHEN own.username IS NOT NULL THEN 'explicit' ELSE 'public (*)' END AS access,\n  to_timestamp(rr.last_published_at / 1000.0) AS last_published\nFROM realm_registry rr\nLEFT JOIN realm_user_permissions own\n  ON own.realm_url = rr.url\n AND own.username = ${browse_user:sqlstring}\nLEFT JOIN realm_user_permissions pub\n  ON pub.realm_url = rr.url\n AND pub.username = '*'\n AND pub.read IS TRUE\nWHERE rr.kind = 'published'\n  AND (own.username IS NOT NULL OR pub.username IS NOT NULL)\nORDER BY rr.last_published_at DESC NULLS LAST\nLIMIT 500;",
             "refId": "A"
           }
         ],
