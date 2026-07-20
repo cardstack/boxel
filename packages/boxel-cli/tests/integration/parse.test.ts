@@ -52,6 +52,20 @@ describe('boxel parse (against the installed CLI)', () => {
   );
 
   it(
+    'type-checks a .test.gts using assert.dom clean (qunit-dom augmentation)',
+    async () => {
+      // parse checks every discovered `.gts`, including `.test.gts`. Those
+      // call `assert.dom(...)` without importing qunit-dom, so the type
+      // lib must be loaded or the test file fails to type-check.
+      let result = await parseFixture('qunit-dom-test');
+      expect(result.errors).toEqual([]);
+      expect(result.status).toBe('passed');
+      expect(result.filesChecked).toBeGreaterThanOrEqual(1);
+    },
+    { timeout: 180_000 },
+  );
+
+  it(
     'surfaces a real diagnostic for a genuine type error (proves glint ran)',
     async () => {
       let result = await parseFixture('deliberate-type-error');

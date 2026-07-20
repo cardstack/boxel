@@ -117,7 +117,7 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // as a boxel-cli dependency, not shimming it.
 //
 // Where those deps live depends on the install layout, and picking the
-// wrong dir is what broke `boxel parse` for npm installs (CS-12083):
+// wrong dir is what broke `boxel parse` for npm installs:
 //   - pnpm keeps them in the CLI's own nested `node_modules`
 //     (`<cli>/node_modules`).
 //   - npm hoists them to the install root's `node_modules`, leaving the
@@ -579,14 +579,17 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
-          // No global type libraries: card code is application code, not
-          // a test, so it never needs an ambient `@types/*` package. The
-          // previous `types: ['qunit-dom']` forced a test-helper type lib
-          // that isn't shipped in a published install — under npm's
-          // hoisted layout it couldn't resolve and glint aborted before
-          // type-checking anything (CS-12083). `@cardstack/local-types`
-          // is workspace-only and fed via `include` below instead.
-          types: [],
+          // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
+          // Workspaces routinely include `.test.gts` files that call
+          // `assert.dom(...)` without importing qunit-dom directly (they
+          // rely on the ambient augmentation), and parse type-checks every
+          // discovered `.gts` — so the type lib has to be loaded here or
+          // those tests fail with "Property 'dom' does not exist on type
+          // 'Assert'". It resolves because qunit-dom is a runtime
+          // dependency of boxel-cli, reachable via the node_modules
+          // resolution above. `@cardstack/local-types` is workspace-only
+          // and fed via `include` below instead of here.
+          types: ['qunit-dom'],
           paths: {
             '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
@@ -594,7 +597,7 @@ async function runGlintCheck(
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
             // Host tools moved from `commands/*` to `tools/*`; current card
-            // code imports `@cardstack/boxel-host/tools/<name>` (CS-12083).
+            // code imports `@cardstack/boxel-host/tools/<name>`.
             '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
             '*': [`${HOST_TYPES_PATH}/*`],
