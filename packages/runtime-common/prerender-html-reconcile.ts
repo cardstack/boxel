@@ -1,6 +1,13 @@
 import type { DBAdapter } from './db.ts';
-import { query, type Expression } from './expression.ts';
+import {
+  addExplicitParens,
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+} from './expression.ts';
 import type { IncrementalChange } from './tasks/indexer.ts';
+import { prerenderHtmlConcurrencyGroup } from './jobs/prerender-html.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -73,12 +80,13 @@ export async function findStalePrerenderedHtmlRows(
 // failure: the handler threw — a transient upstream outage, a job timeout —
 // before the swap, so its HTML never landed. That is exactly the residue this
 // sweep repairs; re-enqueuing renders the row once the transient cause clears,
-// and a job that keeps failing simply re-rejects at the background tier rather
-// than pinning the row stale forever. A per-URL render that deterministically
-// fails never reaches this path: it records an `error_doc` row at the current
-// generation, which reads as fresh and so never appears stale. The per-row
-// generation gate means an older job never masks residue the index has moved
-// past.
+// and a realm whose jobs keep rejecting is retried on the rejection-streak
+// backoff schedule (`findPrerenderHtmlRejectionStreaks`) rather than at full
+// sweep frequency forever. A per-URL failure — a render error, or the visit's
+// own request failing outright — never reaches this path: the visit loop
+// records an `error_doc` row at the current generation, which reads as fresh
+// and so never appears stale. The per-row generation gate means an older job
+// never masks residue the index has moved past.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, Map<string, number>>> {
@@ -198,4 +206,111 @@ export function planPrerenderHtmlRepairs(
     plan.set(realmURL, [...urls]);
   }
   return plan;
+}
+
+export interface PrerenderHtmlRejectionStreak {
+  // Rejected `prerender_html` jobs for the realm with no resolved job in
+  // between, newest first, within the scan's lookback window.
+  consecutiveRejections: number;
+  // Milliseconds since the newest rejection finished, measured on the
+  // database clock (the same clock that stamped `finished_at`) so callers
+  // never compare across clock domains.
+  msSinceLastRejection: number;
+}
+
+// The backoff schedule for repairing a realm whose prerender_html jobs keep
+// rejecting: one rejection retries at the sweep's own cadence (whole-job
+// failures are usually transient — an upstream outage, a job timeout — and a
+// single one warrants a prompt retry), and each further consecutive rejection
+// doubles the wait, capped so a persistently failing realm still gets a few
+// renders a day rather than none. Every retry that fails extends the streak,
+// so the interval keeps its shape however often the sweep itself runs; the
+// first resolved job resets the realm to full frequency.
+export const PRERENDER_HTML_REPAIR_BACKOFF_BASE_MS = 60 * 60 * 1000;
+export const PRERENDER_HTML_REPAIR_BACKOFF_CAP_MS = 8 * 60 * 60 * 1000;
+
+export function prerenderHtmlRepairBackoffMs(
+  consecutiveRejections: number,
+): number {
+  if (consecutiveRejections <= 1) {
+    return 0;
+  }
+  return Math.min(
+    PRERENDER_HTML_REPAIR_BACKOFF_BASE_MS * 2 ** (consecutiveRejections - 1),
+    PRERENDER_HTML_REPAIR_BACKOFF_CAP_MS,
+  );
+}
+
+// Bounded lookback for the streak scan: long enough to hold a
+// several-rejection streak even at the capped retry interval, short enough
+// that the scan never trawls the full jobs history. A streak whose older
+// rejections fall outside the window just under-counts — the backoff is
+// already at (or near) its cap by then, so the clamp costs nothing.
+const REJECTION_STREAK_LOOKBACK_HOURS = 48;
+
+// Consecutive-rejection streaks for the given realms' prerender_html jobs,
+// keyed by realm. A realm appears only when its most recent finished job
+// within the lookback window was rejected; a newest-first walk stops at the
+// first resolved job. Only finished jobs participate — an unfulfilled job is
+// active coverage, which `findActivePrerenderHtmlJobCoverage` already
+// accounts for.
+export async function findPrerenderHtmlRejectionStreaks(
+  dbAdapter: DBAdapter,
+  realmURLs: string[],
+): Promise<Map<string, PrerenderHtmlRejectionStreak>> {
+  let streaks = new Map<string, PrerenderHtmlRejectionStreak>();
+  if (realmURLs.length === 0) {
+    return streaks;
+  }
+  let realmByGroup = new Map(
+    realmURLs.map((realmURL) => [
+      prerenderHtmlConcurrencyGroup(realmURL),
+      realmURL,
+    ]),
+  );
+  let rows = (await query(dbAdapter, [
+    `SELECT concurrency_group, status,
+       (EXTRACT(EPOCH FROM (NOW() - finished_at)) * 1000)::bigint AS ms_since_finished
+     FROM jobs
+     WHERE job_type = 'prerender_html'
+       AND status IN ('resolved', 'rejected')
+       AND finished_at IS NOT NULL
+       AND finished_at > NOW() - INTERVAL '${REJECTION_STREAK_LOOKBACK_HOURS} hours'
+       AND concurrency_group IN`,
+    ...addExplicitParens(
+      separatedByCommas(
+        [...realmByGroup.keys()].map((group) => [param(group)]),
+      ),
+    ),
+    `ORDER BY finished_at DESC`,
+  ] as Expression)) as {
+    concurrency_group: string;
+    status: string;
+    ms_since_finished: number | string;
+  }[];
+
+  // Rows arrive newest-first across all realms; filtering per realm
+  // preserves each realm's newest-first order, so a streak is the run of
+  // rejections before that realm's first non-rejected row.
+  let settled = new Set<string>();
+  for (let row of rows) {
+    let realmURL = realmByGroup.get(row.concurrency_group);
+    if (!realmURL || settled.has(realmURL)) {
+      continue;
+    }
+    if (row.status !== 'rejected') {
+      settled.add(realmURL);
+      continue;
+    }
+    let streak = streaks.get(realmURL);
+    if (streak) {
+      streak.consecutiveRejections++;
+    } else {
+      streaks.set(realmURL, {
+        consecutiveRejections: 1,
+        msSinceLastRejection: Number(row.ms_since_finished),
+      });
+    }
+  }
+  return streaks;
 }

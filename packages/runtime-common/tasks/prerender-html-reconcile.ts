@@ -15,8 +15,10 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './indexer.ts';
 import {
   fetchRealmGenerations,
   findActivePrerenderHtmlJobCoverage,
+  findPrerenderHtmlRejectionStreaks,
   findStalePrerenderedHtmlRows,
   planPrerenderHtmlRepairs,
+  prerenderHtmlRepairBackoffMs,
 } from '../prerender-html-reconcile.ts';
 
 // The cron enqueues this job with no arguments; it scans every realm.
@@ -25,6 +27,10 @@ type PrerenderHtmlReconcileArgs = JSONTypes.Object;
 export interface PrerenderHtmlReconcileResult extends JSONTypes.Object {
   realmsRepaired: number;
   urlsEnqueued: number;
+  // Realms with repairable residue that were skipped this scan because their
+  // prerender_html jobs' rejection streak has them waiting out a backoff
+  // interval (see `prerenderHtmlRepairBackoffMs`).
+  realmsInBackoff: number;
 }
 
 export { prerenderHtmlReconcile };
@@ -58,8 +64,11 @@ registerQueueJobDefinition({
 // the publish, or whose swap lost a race, leaves index rows stale with nothing
 // scheduled to repair them. Job death itself is the queue's problem (lease
 // expiry re-runs it), so this sweep only enqueues repair where no queued or
-// running job already covers the row. Purely additive: a sweep over a healthy
-// system finds nothing and enqueues nothing.
+// running job already covers the row — and a realm whose repair jobs keep
+// rejecting is deferred on the rejection-streak backoff schedule, so a
+// persistent whole-job failure is retried a few times a day instead of
+// burning a full render batch every scan. Purely additive: a sweep over a
+// healthy system finds nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
   PrerenderHtmlReconcileResult
@@ -74,7 +83,7 @@ const prerenderHtmlReconcile: Task<
         `${jobIdentity(jobInfo)} prerender-html reconcile: no stale rows`,
       );
       reportStatus(jobInfo, 'finish');
-      return { realmsRepaired: 0, urlsEnqueued: 0 };
+      return { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 };
     }
 
     let coverage = await findActivePrerenderHtmlJobCoverage(dbAdapter);
@@ -84,9 +93,12 @@ const prerenderHtmlReconcile: Task<
         `${jobIdentity(jobInfo)} prerender-html reconcile: ${staleRows.length} stale row(s), all covered by active prerender_html jobs`,
       );
       reportStatus(jobInfo, 'finish');
-      return { realmsRepaired: 0, urlsEnqueued: 0 };
+      return { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 };
     }
 
+    let rejectionStreaks = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
+      ...plan.keys(),
+    ]);
     let generations = await fetchRealmGenerations(dbAdapter);
     let realmOwners = await fetchAllRealmsWithOwners(dbAdapter);
     let ownerByRealm = new Map(
@@ -95,6 +107,7 @@ const prerenderHtmlReconcile: Task<
 
     let realmsRepaired = 0;
     let urlsEnqueued = 0;
+    let realmsInBackoff = 0;
     for (let [realmURL, urls] of plan) {
       // Render as the realm's owner, mirroring how an index pass spawns the
       // prerender job. Realms owned only by a bot (`realm/…`) are re-enqueued
@@ -116,6 +129,25 @@ const prerenderHtmlReconcile: Task<
           `${jobIdentity(jobInfo)} prerender-html reconcile: skipping realm without a generation row: ${realmURL} (${urls.length} stale url(s))`,
         );
         continue;
+      }
+      let streak = rejectionStreaks.get(realmURL);
+      if (streak) {
+        let backoffMs = prerenderHtmlRepairBackoffMs(
+          streak.consecutiveRejections,
+        );
+        if (streak.msSinceLastRejection < backoffMs) {
+          realmsInBackoff++;
+          // Info, not debug: this is the operator's signal that a realm's
+          // HTML repair keeps failing wholesale — the per-URL error rows
+          // cover render failures, so a streak here points at something
+          // job-level (upstream outage, job timeout).
+          log.info(
+            `${jobIdentity(jobInfo)} prerender-html reconcile: deferring repair for ${realmURL} (${urls.length} stale url(s)): ` +
+              `${streak.consecutiveRejections} consecutive rejected prerender_html job(s), ` +
+              `next attempt eligible in ${Math.ceil((backoffMs - streak.msSinceLastRejection) / 60_000)} minute(s)`,
+          );
+          continue;
+        }
       }
       try {
         await enqueuePrerenderHtmlJob(queuePublisher, {
@@ -146,8 +178,8 @@ const prerenderHtmlReconcile: Task<
     }
 
     log.info(
-      `${jobIdentity(jobInfo)} prerender-html reconcile: enqueued repair for ${urlsEnqueued} url(s) across ${realmsRepaired} realm(s) (from ${staleRows.length} stale row(s))`,
+      `${jobIdentity(jobInfo)} prerender-html reconcile: enqueued repair for ${urlsEnqueued} url(s) across ${realmsRepaired} realm(s) (from ${staleRows.length} stale row(s), ${realmsInBackoff} realm(s) in backoff)`,
     );
     reportStatus(jobInfo, 'finish');
-    return { realmsRepaired, urlsEnqueued };
+    return { realmsRepaired, urlsEnqueued, realmsInBackoff };
   };
