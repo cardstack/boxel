@@ -250,8 +250,9 @@ export class Loader {
   }
 
   // Release the realm-mapping-change subscription so this loader can be
-  // garbage-collected once discarded. Only detaches the listener — it does not
-  // clear the caches, since a clone made from this loader carries them forward.
+  // garbage-collected once discarded. Only detaches the listener — the caches
+  // are left intact because a discarded loader may still be draining in-flight
+  // imports, and once nothing references it the maps are collected wholesale.
   dispose() {
     this.unsubscribeMappingChange?.();
     this.unsubscribeMappingChange = undefined;
