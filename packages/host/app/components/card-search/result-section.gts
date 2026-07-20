@@ -282,9 +282,9 @@ export default class ResultSection extends Component<Signature> {
   isCardSelected = (cardUrl: string): boolean => {
     const selected = this.args.selectedCards;
     if (!selected) return false;
-    const normalized = cardUrl.replace(/\.json$/, '');
+    const normalized = removeCardJsonExtension(cardUrl);
     return selected.some(
-      (s) => !isNewCardArgs(s) && s.id.replace(/\.json$/, '') === normalized,
+      (s) => !isNewCardArgs(s) && removeCardJsonExtension(s.id) === normalized,
     );
   };
 

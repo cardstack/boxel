@@ -38,8 +38,18 @@ const README_MD = `# Readme
 Some notes.
 `;
 
+// A standalone `.json` file whose contents are NOT a card resource. It indexes
+// as a plain file row (not a card instance), so — unlike a card's dual-indexed
+// backing `.json` — it survives the mixed-search dedup and surfaces as a
+// `kind: 'file'` row whose id carries the `.json` extension.
+const CONFIG_JSON = `{
+  "featureFlags": { "beta": true }
+}
+`;
+
 const authorInstanceId = `${testRealmURL}Author/1`;
 const fileId = `${testRealmURL}notes/readme.md`;
+const jsonFileId = `${testRealmURL}settings/config.json`;
 
 module(
   'Integration | card-chooser (mixed cards + files mode)',
@@ -78,6 +88,7 @@ module(
           'author.gts': { Author },
           'Author/1.json': new Author({ firstName: 'Alice' }),
           'notes/readme.md': README_MD,
+          'settings/config.json': CONFIG_JSON,
           'realm.json': realmConfigCardJSON({
             name: 'Local Workspace',
             iconURL: 'https://example-icon.test',
@@ -136,6 +147,54 @@ module(
         result?.length,
         2,
         'exactly the two picks are returned',
+      );
+    });
+
+    // Regression (CS-12205): a file pick must keep its own id. The `.json`
+    // extension is a card-id convention — stripping it from a `kind: 'file'`
+    // row would rewrite `settings/config.json` to `settings/config` (a
+    // card-instance id shape) under a file kind, so the caller would resolve
+    // the wrong resource. "Select All" is the sharp case: it routes every row
+    // through the sheet's dedup + the modal's pick projection, both of which
+    // previously stripped `.json` for all kinds.
+    test('Select All preserves a file pick’s `.json` id and kind', async function (assert) {
+      let pending = chooseCard(
+        { filter: { type: baseRef }, realms: [testRealmURL] },
+        { includeFiles: true, multiSelect: true },
+      );
+
+      await waitFor('[data-test-card-chooser-modal]');
+      // The standalone `.json` file surfaces as a file row (its tile's test id
+      // is `.json`-stripped, but the resolved pick must not be).
+      await waitFor(`[data-test-item-button="${testRealmURL}settings/config"]`);
+      await waitFor(`[data-test-item-button="${authorInstanceId}"]`);
+
+      // Select one item so the multi-select menu appears, then Select All to
+      // pull every row (card + files) into the selection.
+      await click(`[data-test-item-button="${authorInstanceId}"]`);
+      await click('[data-test-selection-dropdown-trigger]');
+      await waitFor('[data-test-boxel-menu-item-text="Select All"]');
+      await click('[data-test-boxel-menu-item-text="Select All"]');
+      await click('[data-test-card-chooser-go-button]');
+
+      let result = await pending;
+      assert.ok(result, 'the chooser resolves with the Select All picks');
+
+      let jsonPick = (result ?? []).find(
+        (item) => item.kind === 'file' && item.id === jsonFileId,
+      );
+      assert.ok(
+        jsonPick,
+        'the standalone `.json` file is returned with its `.json` id intact and kind=file',
+      );
+
+      let cardPick = (result ?? []).find(
+        (item) => item.id === authorInstanceId,
+      );
+      assert.strictEqual(
+        cardPick?.kind,
+        'card',
+        'the card instance keeps its extensionless id and kind=card',
       );
     });
   },

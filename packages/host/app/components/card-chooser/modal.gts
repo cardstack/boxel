@@ -37,6 +37,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
 import {
   isNewCardArgs,
+  removeCardJsonExtension,
   type SearchSelection,
   type SelectedSearchItem,
 } from '@cardstack/host/utils/card-search/types';
@@ -92,13 +93,17 @@ type State = {
   lockConsumingRealm?: boolean;
 };
 
-function normalizeCardUrl(url: string): string {
-  return url.replace(/\.json$/, '');
-}
-
 function selectionEquals(a: SearchSelection, b: SearchSelection): boolean {
   if (!isNewCardArgs(a) && !isNewCardArgs(b)) {
-    return normalizeCardUrl(a.id) === normalizeCardUrl(b.id);
+    if (a.kind !== b.kind) {
+      // A card instance and its backing `.json` file share a normalized id but
+      // are distinct picks; kind keeps them from toggling each other.
+      return false;
+    }
+    // `.json` stripping is a card-id convention; a file id is already canonical.
+    return a.kind === 'file'
+      ? a.id === b.id
+      : removeCardJsonExtension(a.id) === removeCardJsonExtension(b.id);
   }
   if (isNewCardArgs(a) && isNewCardArgs(b)) {
     return a.realmURL === b.realmURL;
@@ -522,11 +527,20 @@ export default class CardChooserModal extends Component<Signature> {
           new URL(selectedItem.realmURL),
         );
         if (newCardId) {
-          chosen.push({ id: newCardId.replace(/\.json$/, ''), kind: 'card' });
+          chosen.push({
+            id: removeCardJsonExtension(newCardId)!,
+            kind: 'card',
+          });
         }
       } else {
         chosen.push({
-          id: selectedItem.id.replace(/\.json$/, ''),
+          // `.json` stripping is a card-id convention; a file id (e.g. a card's
+          // backing `Foo/1.json`) is already its canonical id — stripping it
+          // would yield the card-instance id under a `file` kind.
+          id:
+            selectedItem.kind === 'file'
+              ? selectedItem.id
+              : removeCardJsonExtension(selectedItem.id)!,
           kind: selectedItem.kind,
         });
       }

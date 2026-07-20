@@ -26,6 +26,7 @@ import {
   type RecentsSection,
   type SearchSheetSection,
 } from '@cardstack/host/utils/card-search/sections';
+import { removeCardJsonExtension } from '@cardstack/host/utils/card-search/types';
 import type {
   SearchSelection,
   SelectedSearchItem,
@@ -188,7 +189,11 @@ export default class SheetResults extends Component<Signature> {
   private get allCards(): SelectedSearchItem[] {
     const byId = new Map<string, SelectedSearchItem>();
     const add = (id: string, kind: SearchItemKind) => {
-      const normalized = id.replace(/\.json$/, '');
+      // `.json` stripping is a card-id convention; a file id is already its
+      // canonical id (stripping it would corrupt a `.json`-backed file row that
+      // flows into the "Select All" selection). Cross-kind ids can't collide:
+      // card ids are extensionless, file ids carry their extension.
+      const normalized = kind === 'file' ? id : removeCardJsonExtension(id)!;
       if (!byId.has(normalized)) {
         byId.set(normalized, { id: normalized, kind });
       }
