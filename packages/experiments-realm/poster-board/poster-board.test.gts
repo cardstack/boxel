@@ -4,11 +4,15 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { setupBaseRealm } from '@cardstack/host/tests/helpers/base-realm';
+import { saveCard, testRealmURL } from '@cardstack/host/tests/helpers';
+import {
+  CardDef,
+  setupBaseRealm,
+} from '@cardstack/host/tests/helpers/base-realm';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
-import { PosterBoard } from './poster-board';
+import { FrameSettingsField, PosterBoard } from './poster-board';
 
 async function renderPosterBoard() {
   let loader = getService('loader-service').loader;
@@ -93,6 +97,47 @@ export function runTests() {
         shiftKey: true,
       });
       assert.dom('[data-test-zoom-level]').hasText('83%', 'Shift+- zooms out');
+    });
+
+    test('poster-board renders linked cards at persisted and grid-default positions', async function (assert) {
+      let loader = getService('loader-service').loader;
+
+      class Note extends CardDef {
+        static displayName = 'Note';
+      }
+      loader.shimModule(`${testRealmURL}note`, { Note });
+
+      let note1 = new Note();
+      let note2 = new Note();
+      await saveCard(note1, `${testRealmURL}Note/1`, loader);
+      await saveCard(note2, `${testRealmURL}Note/2`, loader);
+
+      let board = new PosterBoard({
+        cards: [note1, note2],
+        frameSettings: [
+          new FrameSettingsField({ cardIndex: 1, x: 500, y: 120 }),
+        ],
+      });
+      await renderCard(loader, board, 'isolated');
+
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 2 }, 'a tile renders per linked card');
+      assert
+        .dom('[data-test-poster-board-tile="0"]')
+        .hasStyle(
+          { left: '10px', top: '10px' },
+          'card without settings lands at its padded grid-default slot',
+        );
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .hasStyle(
+          { left: '500px', top: '120px' },
+          'card with frame settings renders at its persisted position',
+        );
+      assert
+        .dom('[data-test-poster-board] h1')
+        .doesNotExist('hint header is hidden when the board has cards');
     });
 
     test('poster-board zoom reset is not undone by pending pinch momentum', async function (assert) {

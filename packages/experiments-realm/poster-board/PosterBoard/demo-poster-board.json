@@ -1,15 +1,57 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PosterBoard",
+        "module": "../poster-board"
+      }
+    },
     "type": "card",
     "attributes": {
       "cardInfo": {
-        "name": "Demo Poster Board"
-      }
+        "name": "Demo Poster Board",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "frameSettings": [
+        {
+          "cardIndex": 3,
+          "x": 460,
+          "y": 340
+        },
+        {
+          "cardIndex": 4,
+          "x": 680,
+          "y": 90
+        }
+      ]
     },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../poster-board",
-        "name": "PosterBoard"
+    "relationships": {
+      "cards.0": {
+        "links": {
+          "self": "../../Pet/1"
+        }
+      },
+      "cards.1": {
+        "links": {
+          "self": "../../Pet/2"
+        }
+      },
+      "cards.2": {
+        "links": {
+          "self": "../../IkeaProduct/ljus-arc-floor-lamp"
+        }
+      },
+      "cards.3": {
+        "links": {
+          "self": "../../IkeaProduct/norra-oak-dining-table"
+        }
+      },
+      "cards.4": {
+        "links": {
+          "self": "../../Pet/3"
+        }
       }
     }
   }
