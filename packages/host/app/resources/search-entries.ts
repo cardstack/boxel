@@ -352,6 +352,14 @@ export class SearchEntriesResource extends Resource<Args> {
     ) {
       this.#seedConsumed = true;
       let seeded = seed;
+      // Mark the run complete synchronously (a plain field, so no tracked
+      // mutation mid-render) so `isLoading` reads false immediately — the
+      // seeded rows are presented as settled, not loading. The tracked result
+      // state itself must still be applied out of this render (a microtask, the
+      // same escape hatch the fetch path uses): mutating `_entries` / `_meta`
+      // synchronously here would trip Glimmer's backtracking assertion. The
+      // rows land right after this render, before paint — no fetch, no flash.
+      this.hasCompletedFullRun = true;
       void Promise.resolve().then(() => {
         if (isDestroyed(this) || isDestroying(this)) {
           return;
@@ -359,7 +367,6 @@ export class SearchEntriesResource extends Resource<Args> {
         this._entries.splice(0, this._entries.length, ...seeded.entries);
         this._meta = seeded.meta;
         this._errors = undefined;
-        this.hasCompletedFullRun = true;
       });
       return;
     }
@@ -368,12 +375,11 @@ export class SearchEntriesResource extends Resource<Args> {
     // reads the task's `isRunning` (through `isLoading`) during render, so a
     // synchronous `perform()` here — which flips `isRunning` — would mutate a
     // value already consumed in the same computation, tripping Glimmer's
-    // backtracking assertion. This bites specifically when a `<SearchResults>`
-    // mounts with a query already set (e.g. the search sheet reopening with a
-    // restored query, or a chooser rendering recents), where the create + first
-    // `isRunning` read + `perform()` all land in one render. Register the load
+    // backtracking assertion (a `<SearchResults>` mounting with a query already
+    // set — a chooser or the playground — hits this). Register the load
     // synchronously (via a Deferred) so a prerender still waits for the search,
-    // but defer the task start a microtask so its write lands after the render.
+    // but defer the task start a microtask so its `isRunning` write lands after
+    // the render. `isLoading` below still reports loading across that gap.
     let loaded = new Deferred<void>();
     this.#trackSearchLoad(loaded.promise);
     void Promise.resolve().then(() => {
@@ -389,7 +395,18 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   get isLoading() {
-    return this.search.isRunning;
+    // In flight when the task is running, and also across the microtask gap
+    // between a query being set in modify() and the deferred task actually
+    // starting — otherwise a just-set query briefly reads as
+    // settled-with-no-results (which e.g. makes the playground autogenerate a
+    // blank instance). `#previousQuery` / `hasCompletedFullRun` are plain
+    // fields — reading them here, and writing them in modify(), never mutates
+    // tracked state mid-render (that would backtrack); the tracked `isRunning`
+    // dependency drives recomputation.
+    return (
+      this.search.isRunning ||
+      (this.#previousQuery !== undefined && !this.hasCompletedFullRun)
+    );
   }
 
   get entries(): SearchEntry[] {
