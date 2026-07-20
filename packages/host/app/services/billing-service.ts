@@ -57,7 +57,7 @@ export default class BillingService extends Service {
     // an explicit catch: the SessionService broadcast's try/catch only guards
     // synchronous throws, so an unhandled fetch rejection would otherwise
     // escape here.
-    this.loadSubscriptionData().catch((e) => {
+    this.initializeSubscriptionData().catch((e) => {
       console.error('Failed to load subscription data on session start', e);
     });
   }
@@ -121,11 +121,17 @@ export default class BillingService extends Service {
     return this._loadingSubscriptionData;
   }
 
+  // "Ensure loaded" semantics: callers that just need subscription data to be
+  // present (the session-start hook, <WithSubscriptionData/> mounts) coalesce
+  // here — already-loaded data or an in-flight load satisfies them, so
+  // concurrent mounts at boot share one /_user fetch. Callers reacting to a
+  // change (billing-notification pushes, explicit reloads) must use
+  // loadSubscriptionData(), which always fetches fresh.
   async initializeSubscriptionData() {
     if (this.subscriptionData) {
       return;
     }
-    await this.loadSubscriptionData();
+    await (this.inFlightSubscriptionDataLoad ?? this.loadSubscriptionData());
   }
 
   async fetchSubscriptionData() {
@@ -140,20 +146,25 @@ export default class BillingService extends Service {
 
   private inFlightSubscriptionDataLoad: Promise<void> | undefined;
 
-  // Coalesce concurrent callers (the session-start hook, component mounts,
-  // billing-notification pushes) into a single /_user fetch — at boot the
-  // sessionStarted() load and <WithSubscriptionData/> mounts would otherwise
-  // stack duplicate requests. A push landing mid-flight shares the in-flight
-  // response; the server pushes again on the next billing change, so any
-  // staleness from that race self-heals.
+  // "Fetch fresh now" semantics: always starts a new /_user request, so a
+  // caller reacting to a server-side change (a billing-notification push, a
+  // reload after an out-of-credits message) never gets satisfied by a response
+  // that predates the change. Callers that only need the data present should
+  // use initializeSubscriptionData(), which coalesces onto the load tracked
+  // here.
   loadSubscriptionData(): Promise<void> {
-    if (!this.inFlightSubscriptionDataLoad) {
-      this.inFlightSubscriptionDataLoad =
-        this.fetchAndStoreSubscriptionData().finally(() => {
-          this.inFlightSubscriptionDataLoad = undefined;
-        });
-    }
-    return this.inFlightSubscriptionDataLoad;
+    let load = this.fetchAndStoreSubscriptionData();
+    this.inFlightSubscriptionDataLoad = load;
+    // Not .finally(): that would derive a second, unhandled promise that
+    // rejects alongside a failed load. The guard keeps a slow older load from
+    // clearing a newer one's registration.
+    let clear = () => {
+      if (this.inFlightSubscriptionDataLoad === load) {
+        this.inFlightSubscriptionDataLoad = undefined;
+      }
+    };
+    load.then(clear, clear);
+    return load;
   }
 
   private async fetchAndStoreSubscriptionData() {
