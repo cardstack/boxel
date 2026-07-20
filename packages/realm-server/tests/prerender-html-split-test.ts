@@ -473,6 +473,8 @@ module(basename(import.meta.filename), function () {
         error_doc: {
           message?: string;
           diagnostics?: Record<string, unknown>;
+          visitRequestFailure?: boolean;
+          consecutiveVisitFailures?: number;
         } | null;
         deps: string[] | null;
         last_known_good_deps: string[] | null;
@@ -1030,6 +1032,293 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    module('per-URL failure isolation', function () {
+      function renderedVisitResponse(tag: string) {
+        return {
+          card: {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: [],
+            types: null,
+            isolatedHTML: `<h1>${tag}</h1>`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            markdown: null,
+          },
+          fileRender: {
+            isolatedHTML: `<pre>${tag}</pre>`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            markdown: null,
+          },
+        };
+      }
+
+      // A transport-level failure — the visit's prerender request rejecting
+      // before any response document exists — can only be simulated at the
+      // Prerenderer seam; the in-band error paths all require a response.
+      function abortingPrerenderer(failUrlSubstring: string): Prerenderer {
+        return {
+          async prerenderVisit(args) {
+            if (args.url.includes(failUrlSubstring)) {
+              throw new Error(
+                'Prerender request to http://prerender-manager/prerender-visit aborted after 120000ms (requestId=test-abort)',
+              );
+            }
+            return renderedVisitResponse('rendered');
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        };
+      }
+
+      function cardJSON() {
+        return JSON.stringify({
+          data: {
+            type: 'card',
+            meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+          },
+        });
+      }
+
+      test('a failed visit request lands error rows at the batch generation and the rest of the batch still swaps', async function (assert) {
+        let failedURL = `${testRealm}mango.json`;
+        let healthyURL = `${testRealm}pine.json`;
+        await writeInstance(1, failedURL, '<h1>good</h1>', {
+          deps: [`${testRealm}dep.gts`],
+        });
+
+        let { stats } = await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [
+            { url: failedURL, operation: 'update' },
+            { url: healthyURL, operation: 'update' },
+          ],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(
+            new Map([
+              [failedURL, cardJSON()],
+              [healthyURL, cardJSON()],
+            ]),
+          ),
+          prerenderer: abortingPrerenderer('mango'),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        let instanceRow = await productionRow(failedURL);
+        assert.strictEqual(
+          instanceRow.generation,
+          2,
+          'the error row carries the batch generation, so the reconcile sweep reads the failure as this generation’s recorded outcome',
+        );
+        assert.ok(
+          instanceRow.error_doc?.message?.includes('aborted after 120000ms'),
+          'the instance error doc carries the underlying request failure',
+        );
+        assert.strictEqual(
+          instanceRow.isolated_html,
+          '<h1>good</h1>',
+          'the last-known-good HTML is preserved beneath the error',
+        );
+        assert.false(Boolean(instanceRow.is_deleted));
+
+        let fileRow = await productionRow(failedURL, 'file');
+        assert.strictEqual(fileRow.generation, 2);
+        assert.ok(
+          fileRow.error_doc?.message?.includes('aborted after 120000ms'),
+          'the file rendering records the same failure',
+        );
+
+        let healthyRow = await productionRow(healthyURL);
+        assert.strictEqual(
+          healthyRow.isolated_html,
+          '<h1>rendered</h1>',
+          'the failure does not discard the rest of the batch',
+        );
+        assert.strictEqual(healthyRow.error_doc, null);
+
+        assert.strictEqual(stats.instanceErrors, 1);
+        assert.strictEqual(stats.fileErrors, 1);
+        assert.strictEqual(stats.instancesIndexed, 1);
+        assert.strictEqual(stats.filesIndexed, 1);
+      });
+
+      test('a failed visit of a URL with no prior rendering still records which rows it owes', async function (assert) {
+        let newCardURL = `${testRealm}brand-new.json`;
+        let plainFileURL = `${testRealm}notes.txt`;
+
+        let { stats } = await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [
+            { url: newCardURL, operation: 'update' },
+            { url: plainFileURL, operation: 'update' },
+          ],
+          generation: 1,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(
+            new Map([
+              [newCardURL, cardJSON()],
+              [plainFileURL, 'plain text'],
+            ]),
+          ),
+          // Every visit fails: there is no last-known-good rendering to
+          // protect, so instance-ness comes from re-parsing the source.
+          prerenderer: abortingPrerenderer(''),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        let cardInstanceRow = await productionRow(newCardURL);
+        assert.ok(
+          cardInstanceRow.error_doc?.message?.includes('aborted after'),
+          'a card resource surfaces its failure as an instance error even with no prior row to protect',
+        );
+        assert.strictEqual(cardInstanceRow.isolated_html, null);
+        let cardFileRow = await productionRow(newCardURL, 'file');
+        assert.ok(cardFileRow.error_doc?.message?.includes('aborted after'));
+
+        let plainInstanceRow = await productionRow(plainFileURL);
+        assert.strictEqual(
+          plainInstanceRow,
+          undefined,
+          'a non-card file owes no instance rendering',
+        );
+        let plainFileRow = await productionRow(plainFileURL, 'file');
+        assert.ok(plainFileRow.error_doc?.message?.includes('aborted after'));
+
+        assert.strictEqual(stats.instanceErrors, 1);
+        assert.strictEqual(stats.fileErrors, 2);
+      });
+
+      test('the tombstoned-live-types oracle protects a card whose source no longer parses as one', async function (assert) {
+        let url = `${testRealm}mango.json`;
+        await writeInstance(1, url, '<h1>good</h1>');
+
+        // The source served at failure time is JSON but not a card resource,
+        // so the re-parse fallback cannot classify the URL — the instance
+        // error can only come from the batch's record of the live production
+        // row types its tombstone seeding overwrote.
+        let { stats } = await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, '{"hello":"world"}']])),
+          prerenderer: abortingPrerenderer('mango'),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        let instanceRow = await productionRow(url);
+        assert.ok(
+          instanceRow.error_doc?.message?.includes('aborted after'),
+          'the previously-live instance row records the failure instead of staying tombstoned',
+        );
+        assert.false(Boolean(instanceRow.is_deleted));
+        assert.strictEqual(
+          instanceRow.isolated_html,
+          '<h1>good</h1>',
+          'the last-known-good HTML survives',
+        );
+        assert.strictEqual(stats.instanceErrors, 1);
+        assert.strictEqual(stats.fileErrors, 1);
+      });
+
+      test('consecutive visit-request failures extend the recorded run; a successful render clears it', async function (assert) {
+        let url = `${testRealm}mango.json`;
+        let passArgs = (
+          generation: number,
+          prerenderer: Prerenderer,
+        ): Parameters<typeof runPrerenderHtmlPass>[0] => ({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation,
+          loaderEpoch: 'epoch-a',
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, cardJSON()]])),
+          prerenderer,
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+
+        await runPrerenderHtmlPass(passArgs(1, abortingPrerenderer('mango')));
+        let row = await productionRow(url);
+        assert.true(Boolean(row.error_doc?.visitRequestFailure));
+        assert.strictEqual(
+          row.error_doc?.consecutiveVisitFailures,
+          1,
+          'the first failure starts a run of one',
+        );
+
+        await runPrerenderHtmlPass(passArgs(2, abortingPrerenderer('mango')));
+        row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc?.consecutiveVisitFailures,
+          2,
+          'a repeat failure extends the run',
+        );
+
+        let succeeding: Prerenderer = {
+          ...abortingPrerenderer('never-matches'),
+          async prerenderVisit() {
+            return renderedVisitResponse('recovered');
+          },
+        };
+        await runPrerenderHtmlPass(passArgs(3, succeeding));
+        row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'a successful render replaces the row and ends the run',
+        );
+        assert.strictEqual(row.isolated_html, '<h1>recovered</h1>');
+      });
+
+      test('a retry re-visits URLs whose prior attempt recorded a render failure', async function (assert) {
+        let url = `${testRealm}1.json`;
+        let info = jobInfo();
+        let attempt1 = await makeBatch(3, info);
+        await attempt1.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await attempt1.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: { message: 'boom', status: 500, additionalErrors: null },
+        });
+        // No done() — the attempt dies before its swap.
+
+        let attempt2 = await makeBatch(3, { ...info, reservationId: 2 });
+        assert.false(
+          attempt2.resumedRows.has(url),
+          'an error row is not resumed — the retry gives the URL a second chance to render',
+        );
+      });
+    });
+
     module('progress reporting', function () {
       function stubPrerenderer(
         visit: (url: string) => void = () => {},
@@ -1130,7 +1419,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a visit failure still emits indexing-finished so consumers clear the job', async function (assert) {
+      test('a visit failure is isolated to its URL and the stream still reaches indexing-finished', async function (assert) {
         let events: IndexingProgressEvent[] = [];
         let prerenderer: Prerenderer = {
           ...stubPrerenderer(),
@@ -1138,27 +1427,34 @@ module(basename(import.meta.filename), function () {
             throw new Error('renderer died');
           },
         };
-        await assert.rejects(
-          runPrerenderHtmlPass({
-            realmURL: new URL(testRealm),
-            changes: [{ url: `${testRealm}a.txt`, operation: 'update' }],
-            generation: 1,
-            loaderEpoch: 'epoch-a',
-            indexWriter,
-            virtualNetwork,
-            reader: stubReader(new Map([[`${testRealm}a.txt`, 'alpha']])),
-            prerenderer,
-            auth: 'test-auth',
-            jobInfo: jobInfo(),
-            onProgress: (event) => events.push(event),
-            ...noPreWarmDeps,
-          }),
-          /renderer died/,
-        );
+        let { stats } = await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [{ url: `${testRealm}a.txt`, operation: 'update' }],
+          generation: 1,
+          loaderEpoch: 'epoch-a',
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[`${testRealm}a.txt`, 'alpha']])),
+          prerenderer,
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+          onProgress: (event) => events.push(event),
+          ...noPreWarmDeps,
+        });
         assert.deepEqual(
           events.map((e) => e.type),
-          ['indexing-started', 'indexing-finished'],
-          'the stream terminates even when the pass dies mid-visit',
+          ['indexing-started', 'file-visited', 'indexing-finished'],
+          'the failed URL still advances the stream to completion',
+        );
+        assert.strictEqual(
+          stats.fileErrors,
+          1,
+          'the failure is recorded as a file error rather than rejecting the pass',
+        );
+        let row = await productionRow(`${testRealm}a.txt`, 'file');
+        assert.ok(
+          row.error_doc?.message?.includes('renderer died'),
+          'the failure is persisted as an error row so the batch swap still lands',
         );
       });
     });

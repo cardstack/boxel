@@ -12,9 +12,13 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   asExpressions,
+  findPrerenderHtmlRejectionStreaks,
   insert,
   insertPermissions,
   logger,
+  param,
+  PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP,
+  prerenderHtmlRepairBackoffMs,
   prerenderHtmlReconcile,
   query,
 } from '@cardstack/runtime-common';
@@ -134,6 +138,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation,
     isDeleted = false,
     errorDoc = null,
+    renderedMinutesAgo,
   }: {
     url: string;
     realmURL: string;
@@ -141,6 +146,7 @@ module(basename(import.meta.filename), function (hooks) {
     generation: number;
     isDeleted?: boolean;
     errorDoc?: Record<string, unknown> | null;
+    renderedMinutesAgo?: number;
   }) {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
@@ -151,6 +157,9 @@ module(basename(import.meta.filename), function (hooks) {
         generation,
         is_deleted: isDeleted,
         error_doc: errorDoc,
+        ...(renderedMinutesAgo !== undefined
+          ? { rendered_at: Date.now() - renderedMinutesAgo * 60 * 1000 }
+          : {}),
       },
       { jsonFields: ['error_doc'] },
     );
@@ -166,14 +175,16 @@ module(basename(import.meta.filename), function (hooks) {
     urls,
     status = 'unfulfilled',
     operation = 'update',
+    finishedMinutesAgo,
   }: {
     realmURL: string;
     generation: number;
     urls: string[];
     status?: string;
     operation?: string;
+    finishedMinutesAgo?: number;
   }) {
-    return insertJob(dbAdapter, {
+    let job = await insertJob(dbAdapter, {
       job_type: 'prerender_html',
       concurrency_group: prerenderHtmlConcurrencyGroup(realmURL),
       status,
@@ -187,6 +198,15 @@ module(basename(import.meta.filename), function (hooks) {
         changes: urls.map((url) => ({ url, operation })),
       },
     });
+    if (finishedMinutesAgo !== undefined) {
+      // Stamped on the database clock, the same clock the queue's own
+      // finalize uses and the rejection-streak scan measures against.
+      await query(dbAdapter, [
+        `UPDATE jobs SET finished_at = NOW() - INTERVAL '${finishedMinutesAgo} minutes' WHERE id =`,
+        param(job.id),
+      ] as Expression);
+    }
+    return job;
   }
 
   async function prerenderHtmlJobs(
@@ -264,7 +284,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 1, urlsEnqueued: 2 },
+      { realmsRepaired: 1, urlsEnqueued: 2, realmsInBackoff: 0 },
       'only the stale and absent rows were repaired',
     );
 
@@ -325,7 +345,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'nothing is enqueued when an active job already covers the row',
     );
 
@@ -354,20 +374,23 @@ module(basename(import.meta.filename), function (hooks) {
     });
     // A rejected job is a whole-job failure (the handler threw — often a
     // transient upstream outage) whose HTML never landed. That is the residue
-    // the sweep exists to repair, so it must not count as coverage. A per-URL
-    // deterministic render error is different: it records a current-generation
-    // error_doc row that reads as fresh and never appears stale here.
+    // the sweep exists to repair, so it must not count as coverage, and a
+    // single rejection retries at the sweep's own cadence with no backoff. A
+    // per-URL deterministic render error is different: it records a
+    // current-generation error_doc row that reads as fresh and never appears
+    // stale here.
     await seedPrerenderHtmlJob({
       realmURL,
       generation: 5,
       urls: [`${realmURL}mango.json`],
       status: 'rejected',
+      finishedMinutesAgo: 10,
     });
 
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 1, urlsEnqueued: 1 },
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
       'the rejected job does not suppress repair of its stale row',
     );
 
@@ -412,7 +435,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 1, urlsEnqueued: 1 },
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
       'the row is repaired despite the stale lower-generation job',
     );
 
@@ -451,7 +474,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'bot-owned realms are left to the deploy-time from-scratch reindex',
     );
     assert.strictEqual(
@@ -481,7 +504,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'a system whose HTML is current finds nothing to repair',
     );
     assert.strictEqual(
@@ -509,7 +532,7 @@ module(basename(import.meta.filename), function (hooks) {
     let first = await runReconcile();
     assert.deepEqual(
       first,
-      { realmsRepaired: 1, urlsEnqueued: 1 },
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
       'the first sweep enqueues the repair',
     );
     assert.strictEqual(
@@ -521,7 +544,7 @@ module(basename(import.meta.filename), function (hooks) {
     let second = await runReconcile();
     assert.deepEqual(
       second,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'the second sweep finds the row already covered by the queued repair',
     );
     assert.strictEqual(
@@ -566,7 +589,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 2, urlsEnqueued: 2 },
+      { realmsRepaired: 2, urlsEnqueued: 2, realmsInBackoff: 0 },
       'both realms were repaired in one sweep',
     );
     let jobsA = await prerenderHtmlJobs(realmA);
@@ -617,7 +640,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 1, urlsEnqueued: 1 },
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
       'the live row is repaired despite the pending delete job',
     );
     // The repair enqueue coalesces with the pending delete (update wins per URL).
@@ -651,7 +674,7 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0 },
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
       'a realm without a generation row is skipped rather than crashing',
     );
     assert.strictEqual(
@@ -659,5 +682,400 @@ module(basename(import.meta.filename), function (hooks) {
       0,
       'no repair job is enqueued',
     );
+  });
+
+  test('the repair backoff schedule doubles per consecutive rejection and caps', function (assert) {
+    const HOUR = 60 * 60 * 1000;
+    assert.strictEqual(
+      prerenderHtmlRepairBackoffMs(0),
+      0,
+      'no rejections, no backoff',
+    );
+    assert.strictEqual(
+      prerenderHtmlRepairBackoffMs(1),
+      0,
+      'a single rejection retries at the sweep’s own cadence',
+    );
+    assert.strictEqual(prerenderHtmlRepairBackoffMs(2), 2 * HOUR);
+    assert.strictEqual(prerenderHtmlRepairBackoffMs(3), 4 * HOUR);
+    assert.strictEqual(prerenderHtmlRepairBackoffMs(4), 8 * HOUR);
+    assert.strictEqual(
+      prerenderHtmlRepairBackoffMs(10),
+      8 * HOUR,
+      'the schedule caps rather than growing without bound',
+    );
+  });
+
+  test('a rejection streak counts newest-first and stops at the first resolved job', async function (assert) {
+    const realmURL = 'http://example.com/streak/';
+    // Oldest → newest: rejected, resolved, rejected, rejected. The streak is
+    // the two newest rejections; the resolved job fences off the older one.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 1,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 40,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 2,
+      urls: [`${realmURL}mango.json`],
+      status: 'resolved',
+      finishedMinutesAgo: 30,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 3,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 20,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 4,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 10,
+    });
+
+    let streaks = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
+      realmURL,
+    ]);
+    let streak = streaks.get(realmURL);
+    assert.strictEqual(streak?.consecutiveRejections, 2);
+    let msSinceLastRejection = streak?.msSinceLastRejection ?? -1;
+    assert.true(
+      msSinceLastRejection >= 9 * 60 * 1000,
+      `the streak is measured from the newest rejection (got ${msSinceLastRejection}ms)`,
+    );
+    assert.true(
+      msSinceLastRejection <= 11 * 60 * 1000,
+      `the newest rejection is the ten-minute-old one (got ${msSinceLastRejection}ms)`,
+    );
+
+    let unrelated = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
+      'http://example.com/other/',
+    ]);
+    assert.strictEqual(
+      unrelated.size,
+      0,
+      'realms outside the requested set are not scanned',
+    );
+  });
+
+  test('a realm whose newest finished job resolved has no streak', async function (assert) {
+    const realmURL = 'http://example.com/reset/';
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 1,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 20,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 2,
+      urls: [`${realmURL}mango.json`],
+      status: 'resolved',
+      finishedMinutesAgo: 10,
+    });
+
+    let streaks = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
+      realmURL,
+    ]);
+    assert.strictEqual(
+      streaks.size,
+      0,
+      'a resolved job resets the realm to full repair frequency',
+    );
+  });
+
+  test('defers repair while a realm is inside its rejection-streak backoff window', async function (assert) {
+    const realmURL = 'http://example.com/backoff/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+    // Two consecutive rejections, the newest ten minutes ago: the realm owes
+    // a two-hour wait before its next repair attempt.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 5,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 70,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 5,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 10,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 1 },
+      'the realm’s residue is deferred, not repaired',
+    );
+    let unfulfilled = (await prerenderHtmlJobs(realmURL)).filter(
+      (job) => job.status === 'unfulfilled',
+    );
+    assert.strictEqual(
+      unfulfilled.length,
+      0,
+      'no repair job is enqueued while the backoff window is open',
+    );
+  });
+
+  test('repairs once the backoff window has elapsed', async function (assert) {
+    const realmURL = 'http://example.com/backoff-done/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+    // The same two-rejection streak, but the newest rejection is three hours
+    // old — past the two-hour interval the streak owes.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 5,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 240,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 5,
+      urls: [`${realmURL}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 180,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the deferred repair goes out once the window has elapsed',
+    );
+    let unfulfilled = (await prerenderHtmlJobs(realmURL)).filter(
+      (job) => job.status === 'unfulfilled',
+    );
+    assert.strictEqual(
+      unfulfilled.length,
+      1,
+      'the repair job is enqueued once the realm is eligible',
+    );
+  });
+
+  test('one realm in backoff does not defer another realm’s repair in the same sweep', async function (assert) {
+    const deferredRealm = 'http://example.com/mixed-deferred/';
+    const healthyRealm = 'http://example.com/mixed-healthy/';
+    for (let realmURL of [deferredRealm, healthyRealm]) {
+      await seedOwner(realmURL);
+      await seedRealmGeneration(realmURL, 5);
+      await seedIndexRow({
+        url: `${realmURL}mango.json`,
+        realmURL,
+        generation: 5,
+      });
+      await seedPrerenderedHtmlRow({
+        url: `${realmURL}mango.json`,
+        realmURL,
+        generation: 4,
+      });
+    }
+    await seedPrerenderHtmlJob({
+      realmURL: deferredRealm,
+      generation: 5,
+      urls: [`${deferredRealm}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 70,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL: deferredRealm,
+      generation: 5,
+      urls: [`${deferredRealm}mango.json`],
+      status: 'rejected',
+      finishedMinutesAgo: 10,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 1 },
+      'the sweep defers only the realm that owes a backoff wait',
+    );
+    let deferredJobs = (await prerenderHtmlJobs(deferredRealm)).filter(
+      (job) => job.status === 'unfulfilled',
+    );
+    assert.strictEqual(
+      deferredJobs.length,
+      0,
+      'the deferred realm gets no job',
+    );
+    let healthyJobs = (await prerenderHtmlJobs(healthyRealm)).filter(
+      (job) => job.status === 'unfulfilled',
+    );
+    assert.strictEqual(
+      healthyJobs.length,
+      1,
+      'the healthy realm is repaired in the same sweep',
+    );
+  });
+
+  test('a deterministic render-error row at the current generation is the recorded outcome, not residue', async function (assert) {
+    const realmURL = 'http://example.com/recorded/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    // A render error without the visit-request-failure marker is a verdict
+    // about the content: it reads as fresh, so the sweep never re-enqueues
+    // it — the retry lane for this row is its next invalidation (an edit or
+    // a full reindex).
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'intentional render failure',
+      },
+      renderedMinutesAgo: 120,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the recorded failure is not repairable residue',
+    );
+    assert.strictEqual(
+      (await prerenderHtmlJobs(realmURL)).length,
+      0,
+      'no repair job is enqueued for the recorded failure',
+    );
+  });
+
+  test('a visit-request failure below the retry cap is retried once it ages past the minimum', async function (assert) {
+    const realmURL = 'http://example.com/retry-lane/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5, 'epoch-a');
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    // Current generation — fresh by the generation measure — but the error
+    // describes the visit's own request, the run is below the cap, and the
+    // rendering is old enough to be eligible.
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: 1,
+      },
+      renderedMinutesAgo: 60,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the failed visit gets another attempt',
+    );
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1);
+    assert.ok(
+      jobs[0].args.changes.some(
+        (change) =>
+          change.url === `${realmURL}mango.json` &&
+          change.operation === 'update',
+      ),
+      'the retry re-renders the failed URL',
+    );
+  });
+
+  test('a visit-request failure at the retry cap is terminal', async function (assert) {
+    const realmURL = 'http://example.com/retry-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a capped run stands as the recorded outcome — the sweep stops burning the affinity lane on it',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+
+  test('a visit-request failure younger than the minimum age is not retried yet', async function (assert) {
+    const realmURL = 'http://example.com/retry-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      errorDoc: {
+        message: 'Prerender request aborted after exceeding its timeout',
+        visitRequestFailure: true,
+        consecutiveVisitFailures: 1,
+      },
+      renderedMinutesAgo: 5,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a just-recorded failure waits out the minimum age before its retry',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 });

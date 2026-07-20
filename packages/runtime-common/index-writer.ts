@@ -273,6 +273,10 @@ export class Batch {
   // with stale content.
   #resumedRows = new Map<string, number | null>();
   #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
+  #prerenderedHtmlTombstonedLiveTypes = new Map<
+    string,
+    PrerenderedHtmlTable['type'][]
+  >();
   // Correlation ID minted once per Batch and stamped into every row's
   // `diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE diagnostics->>'invalidationId' = '...'`
@@ -534,6 +538,21 @@ export class Batch {
    */
   tombstonedLiveTypes(url: string): BoxelIndexTable['type'][] | undefined {
     return this.#tombstonedLiveTypes.get(url);
+  }
+
+  /**
+   * The prerendered_html analog of `tombstonedLiveTypes`: row types
+   * `tombstonePrerenderedHtmlEntries` overwrote with tombstones this pass,
+   * restricted to rows that were live in production `prerendered_html`.
+   * The prerender-html visit loop's per-URL failure isolation consults
+   * this to decide whether a failed URL had a card instance to protect —
+   * the rendered table is a more reliable oracle than re-reading the
+   * file, since the read path may be exactly what failed.
+   */
+  prerenderedHtmlTombstonedLiveTypes(
+    url: string,
+  ): PrerenderedHtmlTable['type'][] | undefined {
+    return this.#prerenderedHtmlTombstonedLiveTypes.get(url);
   }
 
   /**
@@ -1326,6 +1345,17 @@ export class Batch {
           },
           url,
         );
+        if (errorDoc.visitRequestFailure) {
+          // Consecutive-failure bookkeeping for the reconcile sweep's
+          // bounded retry lane: extend the prior row's run when it was also
+          // a visit-request failure, otherwise this write starts a run of
+          // one. A successful render ends the run by replacing the row
+          // outright, so no explicit clear is needed.
+          let priorRun = production?.error_doc?.visitRequestFailure
+            ? (production.error_doc.consecutiveVisitFailures ?? 1)
+            : 0;
+          errorDoc.consecutiveVisitFailures = priorRun + 1;
+        }
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,
@@ -1402,13 +1432,17 @@ export class Batch {
 
   private async existingPrerenderedHtmlTypes(
     invalidations: string[],
-  ): Promise<Map<string, PrerenderedHtmlTable['type'][]>> {
+  ): Promise<
+    Map<string, { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]>
+  > {
     if (invalidations.length === 0) {
       return new Map();
     }
     let uniqueInvalidations = [...new Set(invalidations)];
+    // One row per (url, type) — the table's primary key is
+    // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT DISTINCT url, type FROM prerendered_html WHERE',
+      'SELECT url, type, is_deleted FROM prerendered_html WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -1418,14 +1452,21 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<PrerenderedHtmlTable, 'url' | 'type'>[];
-    let typesByUrl = new Map<string, PrerenderedHtmlTable['type'][]>();
+    ] as Expression)) as Pick<
+      PrerenderedHtmlTable,
+      'url' | 'type' | 'is_deleted'
+    >[];
+    let typesByUrl = new Map<
+      string,
+      { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]
+    >();
     for (let row of rows) {
+      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
       let existing = typesByUrl.get(row.url);
       if (existing) {
-        existing.push(row.type);
+        existing.push(entry);
       } else {
-        typesByUrl.set(row.url, [row.type]);
+        typesByUrl.set(row.url, [entry]);
       }
     }
     return typesByUrl;
@@ -1876,6 +1917,14 @@ export class Batch {
   // through the swap.
   private async tombstonePrerenderedHtmlEntries(urls: string[]): Promise<void> {
     let existingTypes = await this.existingPrerenderedHtmlTypes(urls);
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#prerenderedHtmlTombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
     let columns = [
       'url',
       'file_alias',
@@ -1895,7 +1944,7 @@ export class Batch {
       if (!types || types.length === 0) {
         return [];
       }
-      return types.map((type) =>
+      return types.map(({ type }) =>
         [
           id,
           // The same file_alias form the live prerendered_html writes use, so
