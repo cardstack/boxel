@@ -10,6 +10,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
+  ensureTrailingSlash,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -22,6 +23,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -56,6 +58,8 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
+const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
+
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
@@ -79,6 +83,11 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
+    // Populate the user's realm list so `realmServer.userRealmIdentifiers` is
+    // non-empty — the skill menu scopes its mixed chooser to those realms, and
+    // without this the search fans out across every server realm (the large
+    // shared skills realm included) and the intended tiles never render.
+    activeRealmServers: [testRealmServerURL],
     autostart: true,
     now: (() => {
       // deterministic clock so that, for example, screenshots
