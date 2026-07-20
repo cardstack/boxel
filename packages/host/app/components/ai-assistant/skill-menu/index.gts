@@ -17,6 +17,8 @@ import { baseRRI, chooseCard, skillCardRef } from '@cardstack/runtime-common';
 import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
+import { skillsRealmURL } from '@cardstack/host/lib/utils';
+
 import type { RoomSkill } from '@cardstack/host/resources/room';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -206,12 +208,13 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           ...exclusions,
         ],
       },
-      // Scope to the user's own workspaces. The mixed chooser (`includeFiles`)
-      // renders a tile per matching row; without a realm scope it fans out
-      // across every server realm — including large shared realms — and the
-      // intended skills may never finish rendering. Skills a user attaches
-      // come from their workspaces.
-      realms: this.realmServer.userRealmIdentifiers,
+      // Scope to the user's own workspaces plus the shared Boxel Skills realm,
+      // where most attachable skills live. A bounded scope keeps the mixed
+      // chooser (`includeFiles`) from fanning out across every server realm
+      // (base, catalog, …) and stalling on their contents.
+      realms: [
+        ...new Set([...this.realmServer.userRealmIdentifiers, skillsRealmURL]),
+      ],
     };
     let chosen = await chooseCard(query, { includeFiles: true });
     if (!chosen) {
