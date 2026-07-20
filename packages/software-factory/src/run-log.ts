@@ -47,8 +47,9 @@ const CARD_PATH = String.raw`(Knowledge Articles|[A-Z][A-Za-z0-9]+)\/([A-Za-z0-9
 /**
  * Resolve a workspace card path (`<dir>/<name>`, no `.json`) to its full
  * card URL. Control-plane paths (Knowledge Articles, Issues, Projects,
- * Boards, Spec, …) resolve against the control realm; built product cards
- * (Garment, Outfit, …) against the product realm.
+ * Boards, …) resolve against the control realm; product cards — built
+ * cards (Garment, Outfit, …) and their Catalog Specs — against the
+ * product realm.
  */
 function resolveCardUrl(
   dir: string,
@@ -1510,6 +1511,7 @@ export class RunLogEntry extends CardDef {
 class RunLogIsolated extends Component<typeof RunLog> {
   @tracked nowMs = Date.now();
   #ticker: ReturnType<typeof setInterval>;
+  #destroyed = false;
 
   // The feed renders a stable window of the fetched tail (newest-first,
   // capped at FEED_CAP). Two independent edges bound it:
@@ -1536,7 +1538,10 @@ class RunLogIsolated extends Component<typeof RunLog> {
     this.#ticker = setInterval(() => {
       this.nowMs = Date.now();
     }, 1000);
-    registerDestructor(this, () => clearInterval(this.#ticker));
+    registerDestructor(this, () => {
+      this.#destroyed = true;
+      clearInterval(this.#ticker);
+    });
   }
 
   // End index of the rendered window (exclusive).
@@ -1561,34 +1566,57 @@ class RunLogIsolated extends Component<typeof RunLog> {
     this.topSentinel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  // Reconcile the head buffer against the live entry stream. Runs after
-  // render (modifiers are render-safe for tracked writes). When the reader
+  // Reconcile the head buffer against the live entry stream. When the reader
   // is at the top, stay caught up — acknowledge the newest and buffer
   // nothing, so a live watcher sees updates immediately. When scrolled away,
   // hold every entry newer than the anchor (the newest they've seen) so the
   // visible rows never move; newCount drives the pill.
+  //
+  // Modifier bodies run inside the render transaction, and this state feeds
+  // values the template consumed earlier in the same pass (newCount,
+  // windowEnd) — a synchronous tracked write here trips Glimmer's
+  // backtracking assertion and error-tiles the prerendered card. So the
+  // reconcile is deferred to a microtask (outside the render), and every
+  // write is change-guarded so a re-run with identical values settles
+  // instead of revalidating forever.
   captureFeed = modifier(
     (_el: HTMLElement, [entries]: [{ id: string }[]]) => {
-      this.feedFetched = entries.length;
-      if (entries.length === 0) {
-        this.newCount = 0;
-        return;
-      }
-      let newestId = entries[0].id;
-      if (this.anchorId === null || this.atTop) {
-        this.anchorId = newestId;
-        this.newCount = 0;
-        return;
-      }
-      let idx = entries.findIndex((e) => e.id === this.anchorId);
-      // Anchor still present → entries before it are new. Anchor fell off the
-      // capped window → can't hold what we can't show; re-anchor to newest.
-      if (idx < 0) {
-        this.anchorId = newestId;
-        this.newCount = 0;
-      } else {
-        this.newCount = idx;
-      }
+      void Promise.resolve().then(() => {
+        if (this.#destroyed) {
+          return;
+        }
+        if (this.feedFetched !== entries.length) {
+          this.feedFetched = entries.length;
+        }
+        if (entries.length === 0) {
+          if (this.newCount !== 0) {
+            this.newCount = 0;
+          }
+          return;
+        }
+        let newestId = entries[0].id;
+        if (this.anchorId === null || this.atTop) {
+          if (this.anchorId !== newestId) {
+            this.anchorId = newestId;
+          }
+          if (this.newCount !== 0) {
+            this.newCount = 0;
+          }
+          return;
+        }
+        let idx = entries.findIndex((e) => e.id === this.anchorId);
+        // Anchor still present → entries before it are new. Anchor fell off
+        // the capped window → can't hold what we can't show; re-anchor to
+        // newest.
+        if (idx < 0) {
+          this.anchorId = newestId;
+          if (this.newCount !== 0) {
+            this.newCount = 0;
+          }
+        } else if (this.newCount !== idx) {
+          this.newCount = idx;
+        }
+      });
     },
   );
 

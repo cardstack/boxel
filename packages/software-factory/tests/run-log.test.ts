@@ -670,12 +670,12 @@ module('run-log > autolinkCardReferences', function () {
     );
   });
 
-  test('links Specs against the control realm', function (assert) {
+  test('links Specs against the product realm', function (assert) {
     let out = autolinkCardReferences('See `Spec/Garment.json`.', {
       controlRealm: CONTROL,
       productRealm: PRODUCT,
     });
-    assert.strictEqual(out, `See :card[${CONTROL}Spec/Garment].`);
+    assert.strictEqual(out, `See :card[${PRODUCT}Spec/Garment].`);
   });
 
   test('leaves non-card and lowercase paths untouched', function (assert) {

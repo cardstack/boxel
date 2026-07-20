@@ -46,13 +46,17 @@ const log = logger('control-plane-sync');
 /**
  * Workspace directories owned by the control plane. Everything under these
  * goes to the control realm; everything else is product.
+ *
+ * `Spec/` is deliberately NOT here: Catalog Spec cards are part of the
+ * product (they make the built cards catalog-discoverable), and the
+ * instantiate validation's spec discovery searches the product realm — a
+ * control-routed Spec is invisible to it, so validation can never pass.
  */
 export const CONTROL_DIRS = [
   'Issues',
   'Projects',
   'Boards',
   'Knowledge Articles',
-  'Spec',
   'Validations',
   'Runs',
   'RunLogEntries',
