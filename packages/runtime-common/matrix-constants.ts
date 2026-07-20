@@ -135,6 +135,31 @@ export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
   'app.boxel.has-continuation';
 export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
+
+// To-device event type carrying live streaming previews of the bot's response.
+// Emitted by ai-bot to the originating device only so the browser can render
+// the in-flight state without landing a Matrix room edit for every ~250 ms of
+// tokens; the final consolidated state still lands as a room event because
+// to-device messages are ephemeral and not persisted.
+export const APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE = 'app.boxel.response-stream';
+
+export interface AppBoxelResponseStreamContent {
+  roomId: string;
+  // Event id of the thinking placeholder this stream will eventually replace;
+  // keys the client's preview state so concurrent turns don't collide.
+  parentEventId: string;
+  // Monotonic per turn. Payload carries the full accumulated state (not
+  // deltas), so gaps or reordering are non-fatal — last-writer-wins by sequence.
+  sequence: number;
+  body: string;
+  reasoning: string;
+  // Same wire shape as APP_BOXEL_TOOL_REQUESTS_KEY on the room event, though
+  // each request's `arguments` JSON may still be partial during streaming.
+  toolRequests: unknown[];
+  // Set on the final preview immediately before ai-bot flushes the room edit;
+  // lets the client discard preview state promptly.
+  isFinal: boolean;
+}
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
 export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
