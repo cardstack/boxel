@@ -58,6 +58,7 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
@@ -1844,11 +1845,15 @@ export default class MatrixService extends Service {
       attachedFiles,
     );
 
+    let originatingDeviceId = this.client.getDeviceId() ?? undefined;
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: body || '',
       format: 'org.matrix.custom.html',
       clientGeneratedId,
+      ...(originatingDeviceId
+        ? { [APP_BOXEL_ORIGINATING_DEVICE_ID_KEY]: originatingDeviceId }
+        : {}),
       data: {
         attachedFiles: contentData.attachedFiles,
         attachedCards: contentData.attachedCards,

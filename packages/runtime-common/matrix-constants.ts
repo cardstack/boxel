@@ -160,6 +160,13 @@ export interface AppBoxelResponseStreamContent {
   // lets the client discard preview state promptly.
   isFinal: boolean;
 }
+
+// Device id (from matrixClient.getDeviceId()) of the client that composed a
+// user-prompt event, stamped so ai-bot knows which device to target with
+// app.boxel.response-stream to-device previews for that turn.
+export const APP_BOXEL_ORIGINATING_DEVICE_ID_KEY =
+  'app.boxel.originating-device-id';
+
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
 export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
