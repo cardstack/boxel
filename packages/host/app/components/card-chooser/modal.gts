@@ -87,6 +87,12 @@ type State = {
   errorMessage?: string;
   baseFilter?: Filter;
   availableRealmUrls: string[];
+  // The realm scope from the `chooseCard` query. When present, the search is
+  // pinned to these realms (see `initialSelectedRealmsForPanel` /
+  // `lockSelectedRealmsForPanel`) instead of fanning out across every
+  // available realm — which, in mixed mode, would render a tile for every
+  // file in every realm.
+  requestedRealms?: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
@@ -124,7 +130,7 @@ export default class CardChooserModal extends Component<Signature> {
             @baseFilter={{state.baseFilter}}
             @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
-            @lockSelectedRealms={{state.lockConsumingRealm}}
+            @lockSelectedRealms={{this.lockSelectedRealmsForPanel}}
             @cardsOnly={{not state.includeFiles}}
             as |Bar Content|
           >
@@ -256,6 +262,10 @@ export default class CardChooserModal extends Component<Signature> {
   }
 
   private get initialSelectedRealmsForPanel(): URL[] | undefined {
+    // A query-provided realm scope pins the search to exactly those realms.
+    if (this.state?.requestedRealms?.length) {
+      return this.state.requestedRealms.map((r) => new URL(r));
+    }
     if (!this.state?.consumingRealm) {
       return undefined;
     }
@@ -263,6 +273,14 @@ export default class CardChooserModal extends Component<Signature> {
       return undefined;
     }
     return [this.state.consumingRealm];
+  }
+
+  // Pin the realm filter (no widening) whenever the search is scoped — either
+  // to a consuming realm or to the query's requested realms.
+  private get lockSelectedRealmsForPanel(): boolean {
+    return Boolean(
+      this.state?.lockConsumingRealm || this.state?.requestedRealms?.length,
+    );
   }
 
   private get initialSelectedTypesForPanel(): ResolvedCodeRef[] | undefined {
@@ -429,6 +447,7 @@ export default class CardChooserModal extends Component<Signature> {
         dismissModal: false,
         baseFilter: query.filter,
         availableRealmUrls: this.realmServer.availableRealmIdentifiers,
+        requestedRealms: query.realms,
         selectedCards: preselectedItems,
         multiSelect: opts?.multiSelect ?? false,
         hasPreselectedCard: preselectedItems.length > 0,
