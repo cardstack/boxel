@@ -13,7 +13,7 @@ import {
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 interface SubscriptionData {
   plan: string | null;
@@ -34,7 +34,7 @@ export default class BillingService extends Service {
 
   @service declare private realmServer: RealmServerService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner) {
@@ -43,11 +43,23 @@ export default class BillingService extends Service {
       'billing-notification',
       this.loadSubscriptionData.bind(this),
     );
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
     this._subscriptionData = null;
+  }
+
+  sessionStarted() {
+    // resetState() clears the session-scoped subscription data on logout.
+    // Repopulate it eagerly on re-login rather than waiting for the next
+    // billing-notification push or a component re-mount. Fire-and-forget with
+    // an explicit catch: the SessionService broadcast's try/catch only guards
+    // synchronous throws, so an unhandled fetch rejection would otherwise
+    // escape here.
+    this.loadSubscriptionData().catch((e) => {
+      console.error('Failed to load subscription data on session start', e);
+    });
   }
 
   get extraCreditsPricingFormatted() {

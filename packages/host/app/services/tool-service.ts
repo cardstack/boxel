@@ -43,7 +43,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
@@ -80,7 +80,7 @@ export default class ToolService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   executedToolRequestIds = new TrackedSet<string>();
@@ -121,7 +121,7 @@ export default class ToolService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

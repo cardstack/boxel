@@ -38,7 +38,7 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type RealmService from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type { IEvent } from 'matrix-js-sdk';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
@@ -100,7 +100,7 @@ type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
 export default class RealmServerService extends Service {
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   private auth: AuthStatus = { type: 'anonymous' };
@@ -121,7 +121,7 @@ export default class RealmServerService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
     this.fetchCatalogRealms();
   }
 
@@ -151,7 +151,12 @@ export default class RealmServerService extends Service {
       0,
       this.unreachableRealmServersList.length,
     );
-    this.eventSubscribers = new Map();
+    // Do NOT clear eventSubscribers here: subscriber *wiring* is app-scoped.
+    // Services (e.g. BillingService) call subscribeEvent() once in their
+    // constructor, for the app's lifetime. Logout is an in-app reset, not a
+    // page reload, so those constructors never re-run — wiping the map here
+    // would silently drop billing-notification (and any future) push updates
+    // for the rest of the page's life after a re-login.
     this._ready = new Deferred<void>();
     this._ready.fulfill();
   }

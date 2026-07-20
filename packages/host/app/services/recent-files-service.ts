@@ -13,7 +13,7 @@ import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { RecentFiles } from '../utils/local-storage-keys';
 
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 type SerialRecentFile = [URL, string, CursorPosition, number];
 
@@ -32,14 +32,14 @@ export default class RecentFilesService extends Service {
   // we shouldn't be making assumptions about what realm the files are coming
   // from, the caller should just tell us
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
 
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
     this.extractRecentFilesFromStorage();
   }
 

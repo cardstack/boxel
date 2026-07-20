@@ -36,7 +36,7 @@ import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
@@ -59,7 +59,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
@@ -74,11 +74,26 @@ export default class AiAssistantPanelService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
     this.resetState();
-    if (this.isOpen) {
-      this.loadRoomsTask.perform();
+    // No arming here: register() replays sessionStarted() if a session is
+    // already established, and MatrixService's notifySessionStarted() broadcast
+    // covers boot ordering (the service is usually constructed before start()
+    // completes).
+  }
+
+  sessionStarted() {
+    this.ensureRoomsLoaded();
+  }
+
+  private ensureRoomsLoaded() {
+    if (!this.isOpen) {
+      return;
     }
+    if (!this.matrixService.currentRoomId && !this.loadRoomsTask.isRunning) {
+      return this.loadRoomsTask.perform();
+    }
+    return undefined;
   }
 
   resetState() {
@@ -211,7 +226,7 @@ export default class AiAssistantPanelService extends Service {
   @action
   openPanel() {
     this.operatorModeStateService.openAiAssistant();
-    return this.loadRoomsTask.perform();
+    return this.ensureRoomsLoaded();
   }
 
   @action
