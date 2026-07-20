@@ -5,6 +5,7 @@ import {
   field,
   contains,
   containsMany,
+  getRelationshipMembershipState,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
@@ -13,7 +14,10 @@ import { htmlSafe } from '@ember/template';
 import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
-import { FittedCardContainer } from '@cardstack/boxel-ui/components';
+import {
+  BrokenLinkTemplate,
+  FittedCardContainer,
+} from '@cardstack/boxel-ui/components';
 import { fittedFormatById } from '@cardstack/boxel-ui/helpers';
 import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { RigState, SurfaceRig, type PanSession } from './rig';
@@ -112,6 +116,22 @@ class Isolated extends Component<typeof PosterBoard> {
   get hasCards() {
     return this.tilePlacements.length > 0;
   }
+
+  // Terminal failures (error / not-found) per cards slot, index-aligned with
+  // tilePlacements. Indexed access via (get @fields.cards i) bypasses the
+  // linksToMany renderer's broken-slot branch, so the board renders the
+  // placeholder itself instead of a blank tile.
+  brokenSlotAt = (index: number) => {
+    let owner = this.args.model as unknown as PosterBoard | undefined;
+    if (!owner) {
+      return undefined;
+    }
+    let { membership } = getRelationshipMembershipState(owner, 'cards');
+    let rel = (membership ?? [])[index];
+    return rel && (rel.kind === 'error' || rel.kind === 'not-found')
+      ? rel
+      : undefined;
+  };
 
   tileStyle = (tile: TilePlacement) =>
     htmlSafe(`left: ${tile.x}px; top: ${tile.y}px;`);
@@ -263,8 +283,20 @@ class Isolated extends Component<typeof PosterBoard> {
             data-poster-board-tile
             data-test-poster-board-tile={{tile.index}}
           >
-            {{#let (get @fields.cards tile.index) as |LinkedCard|}}
-              <LinkedCard @format='fitted' />
+            {{#let (this.brokenSlotAt tile.index) as |broken|}}
+              {{#if broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format='fitted'
+                  data-test-poster-board-broken-tile={{tile.index}}
+                />
+              {{else}}
+                {{#let (get @fields.cards tile.index) as |LinkedCard|}}
+                  <LinkedCard @format='fitted' />
+                {{/let}}
+              {{/if}}
             {{/let}}
           </FittedCardContainer>
         {{/each}}
