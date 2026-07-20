@@ -45,15 +45,17 @@ before adding click-through.
 When you write `<@fields.featured @format='<F>' />`, the rendered DOM is:
 
 ```html
-<div class="boxel-card-container
+<div
+  class="boxel-card-container
             field-component-card
             <F>-format                          /* isolated-format | embedded-format | fitted-format | atom-format */
             display-container-<true|false>      /* depends on @displayContainer arg */
             boxel-card-container--boundaries    /* present unless @displayContainer={{false}} */
-            boxel-card-container--themed"       /* present if the linked card has cardInfo.theme */
-     data-boxel-card-container
-     data-boxel-card-id="…"
-     data-boxel-card-format="<F>">
+            boxel-card-container--themed"
+  data-boxel-card-container
+  data-boxel-card-id="…"
+  data-boxel-card-format="<F>"
+>
   <!-- the linked card's static <F> template renders here -->
 </div>
 ```
@@ -83,7 +85,8 @@ When you write `<@fields.featured @format='<F>' />`, the rendered DOM is:
   overflow: hidden;
 }
 .field-component-card.fitted-format {
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   min-height: 40px;
   max-height: 600px;
   container-name: fitted-card;
@@ -92,21 +95,22 @@ When you write `<@fields.featured @format='<F>' />`, the rendered DOM is:
 }
 .field-component-card.atom-format.display-container-true {
   display: inline-block;
-  width: auto; height: auto;
+  width: auto;
+  height: auto;
   padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
 }
 .field-component-card.atom-format.display-container-false {
-  display: contents;          /* no chrome at all */
+  display: contents; /* no chrome at all */
 }
 .field-component-card.atom-format > :deep(*) {
-  vertical-align: middle;     /* baseline default for inline children */
+  vertical-align: middle; /* baseline default for inline children */
 }
 ```
 
 **The five most common consequences:**
 
 1. **Rounded corners on every embedded child** — `border-radius:
-   var(--_boxel-radius)` is the Boxel default (`0.5rem`-ish). Sharp-corner
+var(--_boxel-radius)` is the Boxel default (`0.5rem`-ish). Sharp-corner
    designs need to override this.
 2. **A 1px halo around the chrome** — `box-shadow: 0 0 0 1px var(--border)`
    when `--boundaries` is on (default).
@@ -126,15 +130,15 @@ When you write `<@fields.featured @format='<F>' />`, the rendered DOM is:
 If the linked card has `cardInfo.theme` AND the theme sets the variables,
 the cascade carries values into the wrapper without `:deep()`:
 
-| Token the theme sets | Effect on the wrapper |
-|---|---|
-| `--background` | wrapper background |
-| `--foreground` | text color inside |
-| `--border` | the 1px halo color (only visible if `--boundaries` is on) |
-| `--radius` | cascades into `--_boxel-radius` IF the card has `--themed` class |
+| Token the theme sets | Effect on the wrapper                                            |
+| -------------------- | ---------------------------------------------------------------- |
+| `--background`       | wrapper background                                               |
+| `--foreground`       | text color inside                                                |
+| `--border`           | the 1px halo color (only visible if `--boundaries` is on)        |
+| `--radius`           | cascades into `--_boxel-radius` IF the card has `--themed` class |
 
 Caveat: the wrapper's `--themed` class is only added when `hasTheme(card)`
-is true on the *linked* card. If your performer / venue / listing instances
+is true on the _linked_ card. If your performer / venue / listing instances
 DON'T have `cardInfo.theme`, the wrapper won't pick up your `--radius: 0`
 from the parent.
 
@@ -164,7 +168,7 @@ elements. The CardContainer is `:global(.boxel-card-container)`, so
 }
 
 /* Target by format via data-attribute (more readable for some) */
-.prg-listings-grid :deep([data-boxel-card-format="embedded"]) {
+.prg-listings-grid :deep([data-boxel-card-format='embedded']) {
   border-radius: 0;
   box-shadow: none;
 }
@@ -200,11 +204,11 @@ chip:
   align-items: baseline;
   padding: 4px 10px;
   border: 1px solid var(--ink);
-  border-radius: 0;        /* sharp corners */
+  border-radius: 0; /* sharp corners */
   background: transparent;
 }
 .prg-bill-chip :deep(*) {
-  vertical-align: baseline;  /* override the host's vertical-align: middle */
+  vertical-align: baseline; /* override the host's vertical-align: middle */
 }
 ```
 
@@ -218,7 +222,7 @@ When the parent renders a plural field with one tag —
 `<@fields.topSwimmers @format='fitted' />`,
 `<@fields.participatingClubs @format='embedded' />`,
 `<@fields.recentResults @format='embedded' />` — the host inserts a wrapper
-*between* your grid container and each card. Your `display: grid` sees ONE
+_between_ your grid container and each card. Your `display: grid` sees ONE
 child (the wrapper), the wrapper contains all the cards, and the layout
 collapses to a single column.
 
@@ -229,7 +233,9 @@ collapses to a single column.
 <div class="plural-field linksToMany-field <format>-format">
   <div class="linksToMany-itemContainer">
     <div class="linksToMany-item">
-      <div class="boxel-card-container field-component-card <format>-format …">…</div>
+      <div class="boxel-card-container field-component-card <format>-format …">
+        …
+      </div>
     </div>
   </div>
   <div class="linksToMany-itemContainer">…</div>
@@ -292,13 +298,17 @@ Use CSS custom-property inheritance — values pass through
 
 ```css
 .swm-stagger :deep(.linksToMany-itemContainer:nth-child(1)),
-.swm-stagger :deep(.containsMany-item:nth-child(1)) { --stagger-d: 80ms; }
+.swm-stagger :deep(.containsMany-item:nth-child(1)) {
+  --stagger-d: 80ms;
+}
 .swm-stagger :deep(.linksToMany-itemContainer:nth-child(2)),
-.swm-stagger :deep(.containsMany-item:nth-child(2)) { --stagger-d: 160ms; }
+.swm-stagger :deep(.containsMany-item:nth-child(2)) {
+  --stagger-d: 160ms;
+}
 /* …etc, or use :nth-child(n+8) to cap the cascade */
 
 .swm-stagger {
-  --stagger-d: 0ms;   /* base value — items past the stagger cap animate immediately */
+  --stagger-d: 0ms; /* base value — items past the stagger cap animate immediately */
 }
 .swm-stagger :deep(.field-component-card) {
   opacity: 0;
@@ -363,7 +373,7 @@ The default atom render is `inline-block` with `padding`, the global
 — a near-white), AND a `--boundaries` box-shadow ring. Inside the chrome,
 `DefaultAtomViewTemplate` renders the linked card's `cardTitle` as a
 `<span>`. If your parent context has a dark background and you set
-`color: inherit` on the atom chip, the chip's *own* near-white background
+`color: inherit` on the atom chip, the chip's _own_ near-white background
 still wins — and you get a gray pill with invisible text.
 
 **Two fixes, pick one:**
@@ -379,12 +389,12 @@ still wins — and you get a gray pill with invisible text.
 ```css
 /* If you went with (B), inside the parent's scoped style: */
 .dark-header :deep(.field-component-card.atom-format) {
-  background: transparent;     /* drop the near-white surface */
-  box-shadow: none;            /* drop the boundaries ring */
-  color: var(--accent);        /* and set foreground explicitly */
+  background: transparent; /* drop the near-white surface */
+  box-shadow: none; /* drop the boundaries ring */
+  color: var(--accent); /* and set foreground explicitly */
 }
 .dark-header :deep(.boxel-card-container--boundaries) {
-  box-shadow: none;            /* in case --boundaries is the variant in use */
+  box-shadow: none; /* in case --boundaries is the variant in use */
 }
 ```
 
@@ -396,7 +406,7 @@ visible chip — you just want it to match your dark surface.
 
 The second-most-common bug after "wrong format for the cell size" is the
 **double-rule trap**: the parent adds its own divider lines between cards
-(`border-bottom`, `border-right`, an outer `border` on a grid), and *also*
+(`border-bottom`, `border-right`, an outer `border` on a grid), and _also_
 leaves the host's default `.boxel-card-container--boundaries`
 `box-shadow: 0 0 0 1px var(--border)` in place. At every boundary, two lines
 render at slightly different weights or colors — the user sees this as a
@@ -410,14 +420,14 @@ You always have to pick one of two strategies. There is no in-between.
 .event-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0;                                          /* no gap — rows touch */
-  border-top: 1px solid var(--ink);                /* parent owns the rules */
+  gap: 0; /* no gap — rows touch */
+  border-top: 1px solid var(--ink); /* parent owns the rules */
 }
 .event-list :deep(.boxel-card-container--boundaries) {
-  box-shadow: none;                                /* MUST kill the child halo */
+  box-shadow: none; /* MUST kill the child halo */
 }
 .event-list :deep(.field-component-card.embedded-format) {
-  border-bottom: 1px solid var(--rule-soft);       /* parent draws between */
+  border-bottom: 1px solid var(--rule-soft); /* parent draws between */
 }
 ```
 
@@ -430,10 +440,10 @@ anywhere the design is "cards as data rows separated by hairlines."
 .event-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;                                       /* gap is the breathing room */
+  gap: 16px; /* gap is the breathing room */
 }
 .event-grid :deep(.boxel-card-container--boundaries) {
-  box-shadow: 0 0 0 1px var(--ink);                /* keep / recolor the child halo */
+  box-shadow: 0 0 0 1px var(--ink); /* keep / recolor the child halo */
 }
 /* DON'T add border-bottom / border-right on the cards — that's the double rule */
 ```
@@ -443,12 +453,12 @@ each card should feel like a separate UI element with airspace around it.
 
 ### Decision
 
-| What you want | Strategy |
-|---|---|
-| Rows touching, single 1px line between them | A — parent draws, kill child halo |
-| Tiles with gaps and their own visible boundary | B — keep child halo, no parent borders |
-| Tiles with gaps and NO boundaries (cards on paper) | B — but `box-shadow: none` on `--boundaries` too |
-| Heavy outer frame + inner thin dividers | A — both outer border AND inner divider on parent, child halo OFF |
+| What you want                                      | Strategy                                                          |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| Rows touching, single 1px line between them        | A — parent draws, kill child halo                                 |
+| Tiles with gaps and their own visible boundary     | B — keep child halo, no parent borders                            |
+| Tiles with gaps and NO boundaries (cards on paper) | B — but `box-shadow: none` on `--boundaries` too                  |
+| Heavy outer frame + inner thin dividers            | A — both outer border AND inner divider on parent, child halo OFF |
 
 ### Switching strategies mid-build
 
@@ -461,11 +471,11 @@ rule further down wins, and your "fix" silently does nothing.
 ```css
 /* ❌ Two rules, same selector — the LAST one wins. Your fix is invisible. */
 .event-list :deep(.boxel-card-container--boundaries) {
-  box-shadow: none;                                /* line 200 */
+  box-shadow: none; /* line 200 */
 }
 /* … 30 lines of unrelated rules … */
 .event-list :deep(.boxel-card-container--boundaries) {
-  box-shadow: 0 0 0 1px var(--ink);                /* line 230 — stale, but wins */
+  box-shadow: 0 0 0 1px var(--ink); /* line 230 — stale, but wins */
 }
 
 /* ✅ Delete the stale rule entirely. One source of truth per selector. */
@@ -486,6 +496,7 @@ It's NOT a shadow vs. border — it's the host's `--boundaries` 1px shadow
 rendered on top of (or under) the parent's own 1px border.
 
 Other tell-tales:
+
 - Top and bottom of the list look "doubled" — the parent's `border-top`
   lands at the same pixel as the first card's halo.
 - A horizontal rule at the boundary is darker / lighter in two places
@@ -498,23 +509,24 @@ Other tell-tales:
 
 The single most common rendering bug: the parent picks `@format='fitted'`
 for a list of cards, the cards have short content, and each cell becomes a
-huge box with empty space below the content. The user calls it out: *"the
-box is bigger than the actual format."*
+huge box with empty space below the content. The user calls it out: _"the
+box is bigger than the actual format."_
 
 The fix is upstream of CSS — it's the format choice. The two formats have
 fundamentally different layout contracts:
 
-| Format | Who controls the box size? | Use when |
-|---|---|---|
-| `embedded` | **The child.** `container-type: inline-size` only — width is fluid, height is whatever the card's content + padding adds up to. | A vertical list (event lineup, results feed, clubs roster), variable-height items, anything where the card's natural content should dictate the row height. |
-| `fitted` | **The parent.** `width: 100%; height: 100%; container-type: size`. The card fills whatever box you give it. Inside, the card's own `static fitted` uses container queries to pick a layout based on the box dimensions you supplied. | A uniform tile grid (calendar cells, swimmer portraits, badge strip), thumbnail toolbar, anywhere you've *deliberately set the cell size* and want every card to fill it identically. |
+| Format     | Who controls the box size?                                                                                                                                                                                                           | Use when                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `embedded` | **The child.** `container-type: inline-size` only — width is fluid, height is whatever the card's content + padding adds up to.                                                                                                      | A vertical list (event lineup, results feed, clubs roster), variable-height items, anything where the card's natural content should dictate the row height.                           |
+| `fitted`   | **The parent.** `width: 100%; height: 100%; container-type: size`. The card fills whatever box you give it. Inside, the card's own `static fitted` uses container queries to pick a layout based on the box dimensions you supplied. | A uniform tile grid (calendar cells, swimmer portraits, badge strip), thumbnail toolbar, anywhere you've _deliberately set the cell size_ and want every card to fill it identically. |
 
 ### The decision rule
 
 **Did you set the cell size?**
-- *Yes — I want all cells the same height/aspect for visual rhythm* →
+
+- _Yes — I want all cells the same height/aspect for visual rhythm_ →
   `fitted`, and set `min-height` / `aspect-ratio` on the cell.
-- *No — let the content decide* → `embedded`, and don't set `min-height` on
+- _No — let the content decide_ → `embedded`, and don't set `min-height` on
   the cell.
 
 ### Anti-patterns
@@ -525,13 +537,14 @@ fundamentally different layout contracts:
   <@fields.events @format='fitted' />
 </div>
 ```
+
 ```css
 .event-list {
   display: flex;
   flex-direction: column;
 }
 .event-list :deep(.fitted-format) {
-  min-height: 160px;    /* fitted now forces 160px; short content leaves 80px empty */
+  min-height: 160px; /* fitted now forces 160px; short content leaves 80px empty */
 }
 ```
 
@@ -541,6 +554,7 @@ fundamentally different layout contracts:
   <@fields.events @format='embedded' />
 </div>
 ```
+
 ```css
 .event-list {
   display: grid;
@@ -548,7 +562,7 @@ fundamentally different layout contracts:
   border-top: 1px solid var(--ink);
 }
 .event-list :deep(.field-component-card.embedded-format) {
-  border-bottom: 1px solid var(--rule-soft);  /* divider, not a forced height */
+  border-bottom: 1px solid var(--rule-soft); /* divider, not a forced height */
 }
 ```
 
@@ -557,7 +571,7 @@ fundamentally different layout contracts:
 If the `Event` card's `static embedded` is designed as a one-line list row
 (icon + name + meta), use it for lists. If its `static fitted` is designed
 as a 220×160 calendar-style tile, use it for calendar grids. Don't pick the
-format you *want* the layout to be — pick the format the child *implements*
+format you _want_ the layout to be — pick the format the child _implements_
 as that layout.
 
 When in doubt, read the child's `static embedded` and `static fitted`
@@ -584,10 +598,10 @@ source — they advertise their intended sizes.
 .prg-listings-grid :deep(.boxel-card-container) {
   border-radius: 0;
   background: transparent;
-  box-shadow: none;        /* if the parent owns the divider rules */
+  box-shadow: none; /* if the parent owns the divider rules */
 }
 .prg-listings-grid :deep(.field-component-card.embedded-format) {
-  overflow: visible;       /* if image bleeds matter */
+  overflow: visible; /* if image bleeds matter */
 }
 ```
 
@@ -648,7 +662,10 @@ Prefer:
 
 ```css
 .prg-listings-grid {
-  --child-radius: var(--radius, 0);   /* one declaration: theme wins, sharp fallback */
+  --child-radius: var(
+    --radius,
+    0
+  ); /* one declaration: theme wins, sharp fallback */
 }
 .prg-listings-grid :deep(.boxel-card-container) {
   border-radius: var(--child-radius);
@@ -657,23 +674,23 @@ Prefer:
 
 ## Quick-reference cheat sheet
 
-| Need | Tool |
-|---|---|
-| Vertical list of cards with natural row heights | `@format='embedded'`, NOT fitted |
-| Uniform tile grid where every card fills a fixed box | `@format='fitted'` + parent sets `min-height` / `aspect-ratio` |
-| Plural grid (linksToMany or containsMany) lays out correctly | `:deep(> .plural-field) { display: contents; }` + `:deep(.linksToMany-itemContainer), :deep(.containsMany-item) { display: contents; }` |
-| Stagger per-item animation delays | Set `--stagger-d` on `:deep(.linksToMany-itemContainer:nth-child(N))`; read `animation-delay: var(--stagger-d)` on `.field-component-card` |
-| Override embedded child's `border-radius` | `:deep(.boxel-card-container) { border-radius: 0; }` |
-| Override embedded child's `background` | `:deep(.boxel-card-container) { background: var(--paper); }` |
-| Kill the 1px halo | `:deep(.boxel-card-container--boundaries) { box-shadow: none; }` |
-| Let images bleed past corners | `:deep(.field-component-card.embedded-format) { overflow: visible; }` |
-| Target by format | `:deep([data-boxel-card-format="embedded"]) { ... }` |
-| Kill chrome entirely (atom) | `<@fields.X @format='atom' @displayContainer={{false}} />` |
-| Atom visible on dark background | `@displayContainer={{false}}`, OR `:deep(.field-component-card.atom-format) { background: transparent; box-shadow: none; }` |
-| Atom baseline-align with prose | `:deep(.field-component-card.atom-format) { vertical-align: baseline; }` |
-| Atom padding match parent's chip | `:deep(.field-component-card.atom-format) { padding: 0; }` |
-| Override atom child element alignment | `:deep(.field-component-card.atom-format > *) { vertical-align: baseline; }` |
-| Preserve an interactive embedded task while allowing stack inspection | Leave the child unobstructed and add an explicit `Open ↗`; use stretched overlays only for read-only previews |
+| Need                                                                  | Tool                                                                                                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Vertical list of cards with natural row heights                       | `@format='embedded'`, NOT fitted                                                                                                           |
+| Uniform tile grid where every card fills a fixed box                  | `@format='fitted'` + parent sets `min-height` / `aspect-ratio`                                                                             |
+| Plural grid (linksToMany or containsMany) lays out correctly          | `:deep(> .plural-field) { display: contents; }` + `:deep(.linksToMany-itemContainer), :deep(.containsMany-item) { display: contents; }`    |
+| Stagger per-item animation delays                                     | Set `--stagger-d` on `:deep(.linksToMany-itemContainer:nth-child(N))`; read `animation-delay: var(--stagger-d)` on `.field-component-card` |
+| Override embedded child's `border-radius`                             | `:deep(.boxel-card-container) { border-radius: 0; }`                                                                                       |
+| Override embedded child's `background`                                | `:deep(.boxel-card-container) { background: var(--paper); }`                                                                               |
+| Kill the 1px halo                                                     | `:deep(.boxel-card-container--boundaries) { box-shadow: none; }`                                                                           |
+| Let images bleed past corners                                         | `:deep(.field-component-card.embedded-format) { overflow: visible; }`                                                                      |
+| Target by format                                                      | `:deep([data-boxel-card-format="embedded"]) { ... }`                                                                                       |
+| Kill chrome entirely (atom)                                           | `<@fields.X @format='atom' @displayContainer={{false}} />`                                                                                 |
+| Atom visible on dark background                                       | `@displayContainer={{false}}`, OR `:deep(.field-component-card.atom-format) { background: transparent; box-shadow: none; }`                |
+| Atom baseline-align with prose                                        | `:deep(.field-component-card.atom-format) { vertical-align: baseline; }`                                                                   |
+| Atom padding match parent's chip                                      | `:deep(.field-component-card.atom-format) { padding: 0; }`                                                                                 |
+| Override atom child element alignment                                 | `:deep(.field-component-card.atom-format > *) { vertical-align: baseline; }`                                                               |
+| Preserve an interactive embedded task while allowing stack inspection | Leave the child unobstructed and add an explicit `Open ↗`; use stretched overlays only for read-only previews                              |
 
 ## What NOT to override
 
@@ -742,16 +759,16 @@ card templates MAY make that switch (e.g. `background-color: var(--card);
 color: var(--card-foreground)`); `isolated` and CardDef `edit` templates
 keep the theme's pair.
 
-| Format | OK on outermost | NOT OK on outermost (host/parent owns) |
-|---|---|---|
-| `isolated` | inner padding, inner grid/flex layout, `min-height` for content | `border-radius`, `border`, `box-shadow`, `overflow`, background/foreground overrides (use the theme's) |
-| `embedded` | same as isolated — plus MAY use a different background/foreground pairing from the theme (e.g. `--card` + `--card-foreground`) | `border-radius`, `border`, `box-shadow`, `overflow`, `width`/`height`/`max-width` |
-| `fitted` | a background/foreground pairing different from the theme's (e.g. `--card` + `--card-foreground`), inner padding, inner grid template, inner gap | `border-radius`, `border`, `box-shadow`, `width`, `height`, `min-height`, `max-height`, `container-type`, `container-name` (the host sets these) |
-| `atom` | inline content only (text node, small inline icon) | `padding` (host provides), `border`, `border-radius`, `background`, any `display` other than inline-by-default |
-| `edit` | form field spacing, internal stack/grid layout | outer chrome same as isolated (keep the theme's background/foreground) |
+| Format     | OK on outermost                                                                                                                                 | NOT OK on outermost (host/parent owns)                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `isolated` | inner padding, inner grid/flex layout, `min-height` for content                                                                                 | `border-radius`, `border`, `box-shadow`, `overflow`, background/foreground overrides (use the theme's)                                           |
+| `embedded` | same as isolated — plus MAY use a different background/foreground pairing from the theme (e.g. `--card` + `--card-foreground`)                  | `border-radius`, `border`, `box-shadow`, `overflow`, `width`/`height`/`max-width`                                                                |
+| `fitted`   | a background/foreground pairing different from the theme's (e.g. `--card` + `--card-foreground`), inner padding, inner grid template, inner gap | `border-radius`, `border`, `box-shadow`, `width`, `height`, `min-height`, `max-height`, `container-type`, `container-name` (the host sets these) |
+| `atom`     | inline content only (text node, small inline icon)                                                                                              | `padding` (host provides), `border`, `border-radius`, `background`, any `display` other than inline-by-default                                   |
+| `edit`     | form field spacing, internal stack/grid layout                                                                                                  | outer chrome same as isolated (keep the theme's background/foreground)                                                                           |
 
 **Compound-field templates are the exception to the edit/embedded rows:** a
-FieldDef's `embedded` and `edit` templates render nested *inside* a card
+FieldDef's `embedded` and `edit` templates render nested _inside_ a card
 surface, so they may choose a different background/foreground combo to
 distinguish themselves from the surrounding card — `--card` +
 `--card-foreground` is the usual choice.
@@ -781,7 +798,7 @@ background + ink halo, automatically. No format CSS needed.
 When the parent (e.g., a showcase card) embeds your card:
 
 - **Contract honored:** parent's `:deep(.boxel-card-container) {
-  border-radius: 0; background: var(--paper); }` overrides cleanly. Sharp
+border-radius: 0; background: var(--paper); }` overrides cleanly. Sharp
   corners, brand paper, no double-borders.
 - **Contract violated:** child's own `border-radius: 12px` on
   `.news-isolated` competes with parent's `:deep` override. Specificity
@@ -810,9 +827,9 @@ considered complete:
    (`background-color` paired with `color` is fine on a fitted root —
    boxel-ui's `FittedCard` sets both.)
 3. For `atom`: is the outermost element doing anything more than inline text
-   + maybe one inline icon? If yes — restructure. Atoms are inline content,
-   not chips. (Chips are the parent's job; see `@displayContainer={{false}}`
-   recipes.)
+   - maybe one inline icon? If yes — restructure. Atoms are inline content,
+     not chips. (Chips are the parent's job; see `@displayContainer={{false}}`
+     recipes.)
 4. Open the card both standalone (in the stack) and embedded inside another
    card. Does it look right in BOTH contexts? If only one, the child is
    decorating the outer.

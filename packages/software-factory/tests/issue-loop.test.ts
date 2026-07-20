@@ -512,7 +512,11 @@ module('issue-loop > validation failure', function () {
 
     let agent = new MockLoopAgent(
       [
-        { toolCalls: [{ tool: 'write_file', args: { path: 'c.gts', content: 'v1' } }] },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'c.gts', content: 'v1' } },
+          ],
+        },
         {
           toolCalls: [
             { tool: 'write_file', args: { path: 'c.gts', content: 'v2' } },
@@ -1433,7 +1437,9 @@ function failing(steps: Record<string, number>): ValidationResults {
         step,
         passed: !names.has(step),
         errors: names.has(step)
-          ? Array.from({ length: steps[step] }, () => ({ message: `${step} err` }))
+          ? Array.from({ length: steps[step] }, () => ({
+              message: `${step} err`,
+            }))
           : [],
       }),
     ),
@@ -1442,7 +1448,10 @@ function failing(steps: Record<string, number>): ValidationResults {
 
 module('issue-loop > failureFingerprint', function () {
   test('empty for passing or missing results', function (assert) {
-    assert.deepEqual(failureFingerprint(undefined), { steps: '', errorCount: 0 });
+    assert.deepEqual(failureFingerprint(undefined), {
+      steps: '',
+      errorCount: 0,
+    });
     assert.deepEqual(failureFingerprint(makePassingValidation()), {
       steps: '',
       errorCount: 0,

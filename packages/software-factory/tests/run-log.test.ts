@@ -1,7 +1,14 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  rm,
+  stat,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,12 +66,18 @@ module('run-log > cardPathsFromToolCalls', function () {
       ),
     ]);
 
-    assert.deepEqual(paths, [], 'a %20-encoded "Knowledge Articles/" path is excluded too');
+    assert.deepEqual(
+      paths,
+      [],
+      'a %20-encoded "Knowledge Articles/" path is excluded too',
+    );
   });
 
   test('still includes ordinary product-realm instance paths', function (assert) {
     let paths = cardPathsFromToolCalls([
-      writeCall('/tmp/boxel-factory-workspaces/wardrobe/Garment/red-jacket.json'),
+      writeCall(
+        '/tmp/boxel-factory-workspaces/wardrobe/Garment/red-jacket.json',
+      ),
     ]);
 
     assert.deepEqual(
@@ -76,18 +89,28 @@ module('run-log > cardPathsFromToolCalls', function () {
 
   test('excludes other control-plane dirs (Issues, Projects, Boards, Spec, Validations, Runs, design)', function (assert) {
     let paths = cardPathsFromToolCalls([
-      writeCall('/tmp/boxel-factory-workspaces/wardrobe/Issues/bootstrap-seed.json'),
-      writeCall('/tmp/boxel-factory-workspaces/wardrobe/Projects/wardrobe.json'),
+      writeCall(
+        '/tmp/boxel-factory-workspaces/wardrobe/Issues/bootstrap-seed.json',
+      ),
+      writeCall(
+        '/tmp/boxel-factory-workspaces/wardrobe/Projects/wardrobe.json',
+      ),
       writeCall('/tmp/boxel-factory-workspaces/wardrobe/Boards/main.json'),
       writeCall('/tmp/boxel-factory-workspaces/wardrobe/Spec/garment.json'),
       writeCall(
         '/tmp/boxel-factory-workspaces/wardrobe/Validations/lint_issue-1-1.json',
       ),
       writeCall('/tmp/boxel-factory-workspaces/wardrobe/Runs/wardrobe.json'),
-      writeCall('/tmp/boxel-factory-workspaces/wardrobe/design/song-isolated.json'),
+      writeCall(
+        '/tmp/boxel-factory-workspaces/wardrobe/design/song-isolated.json',
+      ),
     ]);
 
-    assert.deepEqual(paths, [], 'none of the control-plane dirs are treated as ship-moment cards');
+    assert.deepEqual(
+      paths,
+      [],
+      'none of the control-plane dirs are treated as ship-moment cards',
+    );
   });
 });
 
@@ -108,7 +131,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
 
   test('copies design/*.png into design-history/ and returns the new path', async function (assert) {
     await mkdir(join(workspaceDir, 'design'), { recursive: true });
-    await writeFile(join(workspaceDir, 'design', 'garment-isolated.png'), 'fake-png-bytes');
+    await writeFile(
+      join(workspaceDir, 'design', 'garment-isolated.png'),
+      'fake-png-bytes',
+    );
 
     let result = await persistDesignScreenshot(
       workspaceDir,
@@ -124,7 +150,11 @@ module('run-log > persistDesignScreenshot', function (hooks) {
       join(workspaceDir, 'design-history', 'garment-isolated.png'),
       'utf8',
     );
-    assert.strictEqual(copied, 'fake-png-bytes', 'the copy has the same bytes as the source');
+    assert.strictEqual(
+      copied,
+      'fake-png-bytes',
+      'the copy has the same bytes as the source',
+    );
   });
 
   test('also preserves the sibling HTML mockup source in design-history/', async function (assert) {
@@ -150,7 +180,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
 
   test('tolerates a PNG with no sibling HTML (render-gate capture)', async function (assert) {
     await mkdir(join(workspaceDir, 'design', 'render'), { recursive: true });
-    await writeFile(join(workspaceDir, 'design', 'render', 'Garment-x-embedded.png'), 'png');
+    await writeFile(
+      join(workspaceDir, 'design', 'render', 'Garment-x-embedded.png'),
+      'png',
+    );
 
     // Must not throw when there is no matching .html.
     let result = await persistDesignScreenshot(
@@ -162,7 +195,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
 
   test('a later deletion of design/ does not remove the design-history/ copy', async function (assert) {
     await mkdir(join(workspaceDir, 'design'), { recursive: true });
-    await writeFile(join(workspaceDir, 'design', 'garment-isolated.png'), 'fake-png-bytes');
+    await writeFile(
+      join(workspaceDir, 'design', 'garment-isolated.png'),
+      'fake-png-bytes',
+    );
 
     await persistDesignScreenshot(workspaceDir, 'design/garment-isolated.png');
 
@@ -173,7 +209,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
     let historyStat = await stat(
       join(workspaceDir, 'design-history', 'garment-isolated.png'),
     );
-    assert.ok(historyStat.isFile(), 'design-history/ copy survives design/ being deleted');
+    assert.ok(
+      historyStat.isFile(),
+      'design-history/ copy survives design/ being deleted',
+    );
   });
 
   test('falls back to the original path when the source file is missing', async function (assert) {
@@ -201,7 +240,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
       'design/render/Garment-tee-isolated.png',
     );
 
-    assert.strictEqual(result, 'design-history/render/Garment-tee-isolated.png');
+    assert.strictEqual(
+      result,
+      'design-history/render/Garment-tee-isolated.png',
+    );
   });
 
   test('does not let two different design/ subpaths with the same basename collide', async function (assert) {
@@ -212,7 +254,10 @@ module('run-log > persistDesignScreenshot', function (hooks) {
       'render-bytes',
     );
 
-    let rootResult = await persistDesignScreenshot(workspaceDir, 'design/isolated.png');
+    let rootResult = await persistDesignScreenshot(
+      workspaceDir,
+      'design/isolated.png',
+    );
     let renderResult = await persistDesignScreenshot(
       workspaceDir,
       'design/render/isolated.png',
@@ -270,7 +315,9 @@ module('run-log > summarizeCheckFailure', function () {
   test('falls back to cardName when a bare-instantiation failure has no path', function (assert) {
     let body = summarizeCheckFailure({
       status: 'failed',
-      failures: [{ path: '', cardName: 'Garment', error: 'instantiation failed' }],
+      failures: [
+        { path: '', cardName: 'Garment', error: 'instantiation failed' },
+      ],
     });
 
     assert.strictEqual(body, 'Garment: instantiation failed');
@@ -288,10 +335,7 @@ module('run-log > summarizeCheckFailure', function () {
       ],
     });
 
-    assert.strictEqual(
-      body,
-      'a.gts: e1\nb.gts: e2\nc.gts: e3 (+2 more)',
-    );
+    assert.strictEqual(body, 'a.gts: e1\nb.gts: e2\nc.gts: e3 (+2 more)');
   });
 
   test('falls back to errorMessage when there is no violations/errors/failures list', function (assert) {
@@ -355,7 +399,9 @@ module('run-log > RunLogWriter', function (hooks) {
   test('each append writes ONE new entry card — never rewrites prior entries', async function (assert) {
     let { writer } = makeWriter();
     await writer.start(); // creates index + "Run started" entry (seq 1)
-    await writer.append([{ kind: 'design', headline: 'Design round: garment' }]);
+    await writer.append([
+      { kind: 'design', headline: 'Design round: garment' },
+    ]);
 
     let entries = await listEntries();
     assert.deepEqual(
@@ -397,8 +443,15 @@ module('run-log > RunLogWriter', function (hooks) {
     );
     assert.strictEqual(a.cardsReadyCount, 1, 'one card ready');
     assert.strictEqual(a.issuesDoneCount, 1, 'one issue done');
-    assert.strictEqual(a.runId, 'wardrobe', 'index card carries runId for the feed query');
-    assert.notOk('entries' in a, 'the index card has NO containsMany entries array');
+    assert.strictEqual(
+      a.runId,
+      'wardrobe',
+      'index card carries runId for the feed query',
+    );
+    assert.notOk(
+      'entries' in a,
+      'the index card has NO containsMany entries array',
+    );
   });
 
   test('buildLegacyMigration converts a containsMany index into entry cards', function (assert) {
@@ -412,11 +465,33 @@ module('run-log > RunLogWriter', function (hooks) {
           startedAt: '2026-07-17T12:00:00.000Z',
           cardInfo: { name: 'Run log — Port: Wardrobe' },
           entries: [
-            { kind: 'phase', at: '2026-07-17T12:00:00.000Z', headline: 'Run started' },
-            { kind: 'design', at: '2026-07-17T12:02:00.000Z', headline: 'Design round: garment', body: 'crit pass', who: 'executor' },
-            { kind: 'validation', at: '2026-07-17T12:03:00.000Z', headline: 'lint passed' },
-            { kind: 'validation', at: '2026-07-17T12:04:00.000Z', headline: 'parse failed' },
-            { kind: 'card-ready', at: '2026-07-17T12:05:00.000Z', headline: 'Garment shipped' },
+            {
+              kind: 'phase',
+              at: '2026-07-17T12:00:00.000Z',
+              headline: 'Run started',
+            },
+            {
+              kind: 'design',
+              at: '2026-07-17T12:02:00.000Z',
+              headline: 'Design round: garment',
+              body: 'crit pass',
+              who: 'executor',
+            },
+            {
+              kind: 'validation',
+              at: '2026-07-17T12:03:00.000Z',
+              headline: 'lint passed',
+            },
+            {
+              kind: 'validation',
+              at: '2026-07-17T12:04:00.000Z',
+              headline: 'parse failed',
+            },
+            {
+              kind: 'card-ready',
+              at: '2026-07-17T12:05:00.000Z',
+              headline: 'Garment shipped',
+            },
           ],
         },
         relationships: {
@@ -430,11 +505,18 @@ module('run-log > RunLogWriter', function (hooks) {
     assert.ok(plan, 'legacy doc produces a migration plan');
     assert.strictEqual(plan!.entries.length, 5, 'one card per legacy entry');
     assert.strictEqual(plan!.seq, 5, 'seq continues from the migrated tail');
-    assert.strictEqual(plan!.entries[0].relPath, 'RunLogEntries/wardrobe-000001.json');
+    assert.strictEqual(
+      plan!.entries[0].relPath,
+      'RunLogEntries/wardrobe-000001.json',
+    );
 
     let e2: any = plan!.entries[1].doc;
     assert.strictEqual(e2.data.attributes.seq, 2);
-    assert.strictEqual(e2.data.attributes.postedAt, '2026-07-17T12:02:00.000Z', 'at → postedAt');
+    assert.strictEqual(
+      e2.data.attributes.postedAt,
+      '2026-07-17T12:02:00.000Z',
+      'at → postedAt',
+    );
     assert.strictEqual(e2.data.attributes.who, 'executor');
     assert.strictEqual(e2.data.meta.adoptsFrom.name, 'RunLogEntry');
 
@@ -447,39 +529,74 @@ module('run-log > RunLogWriter', function (hooks) {
 
     let idx: any = plan!.index;
     assert.strictEqual(idx.data.attributes.designRoundsCount, 1);
-    assert.strictEqual(idx.data.attributes.validationsGreenCount, 1, 'only the passing validation is green');
+    assert.strictEqual(
+      idx.data.attributes.validationsGreenCount,
+      1,
+      'only the passing validation is green',
+    );
     assert.strictEqual(idx.data.attributes.cardsReadyCount, 1);
     assert.strictEqual(idx.data.attributes.entryCount, 5);
     assert.strictEqual(idx.data.attributes.runId, 'wardrobe');
-    assert.notOk('entries' in idx.data.attributes, 'the rewritten index drops the containsMany array');
-    assert.deepEqual(idx.data.relationships, {}, 'legacy entries.N.* relationships are dropped from the index');
+    assert.notOk(
+      'entries' in idx.data.attributes,
+      'the rewritten index drops the containsMany array',
+    );
+    assert.deepEqual(
+      idx.data.relationships,
+      {},
+      'legacy entries.N.* relationships are dropped from the index',
+    );
   });
 
   test('buildLegacyMigration drops status/iteration churn but counts them for totals', function (assert) {
     let entries = [];
     // 3 real design rounds interleaved with lots of status churn.
     for (let i = 0; i < 3; i++) {
-      entries.push({ kind: 'status', at: '2026-07-17T12:00:00.000Z', headline: 'Issue status: backlog → in progress' });
-      entries.push({ kind: 'iteration', at: '2026-07-17T12:00:00.000Z', headline: 'Inner iteration 1/8' });
-      entries.push({ kind: 'design', at: '2026-07-17T12:00:00.000Z', headline: 'Design round ' + i });
+      entries.push({
+        kind: 'status',
+        at: '2026-07-17T12:00:00.000Z',
+        headline: 'Issue status: backlog → in progress',
+      });
+      entries.push({
+        kind: 'iteration',
+        at: '2026-07-17T12:00:00.000Z',
+        headline: 'Inner iteration 1/8',
+      });
+      entries.push({
+        kind: 'design',
+        at: '2026-07-17T12:00:00.000Z',
+        headline: 'Design round ' + i,
+      });
     }
     let plan = buildLegacyMigration(
       { data: { attributes: { runTitle: 'X', entries }, relationships: {} } },
       'wardrobe',
     )!;
     // 9 legacy entries → only the 3 design entries survive as cards.
-    assert.strictEqual(plan.entries.length, 3, 'status + iteration churn dropped');
+    assert.strictEqual(
+      plan.entries.length,
+      3,
+      'status + iteration churn dropped',
+    );
     assert.ok(
       plan.entries.every((e: any) => e.doc.data.attributes.kind === 'design'),
       'only meaningful kinds become cards',
     );
-    assert.strictEqual((plan.index as any).data.attributes.designRoundsCount, 3, 'counter still reflects all 3 rounds');
+    assert.strictEqual(
+      (plan.index as any).data.attributes.designRoundsCount,
+      3,
+      'counter still reflects all 3 rounds',
+    );
   });
 
   test('buildLegacyMigration caps the carried tail to the recent window', function (assert) {
     let entries = [];
     for (let i = 0; i < 200; i++) {
-      entries.push({ kind: 'comment', at: '2026-07-17T12:00:00.000Z', headline: 'note ' + i });
+      entries.push({
+        kind: 'comment',
+        at: '2026-07-17T12:00:00.000Z',
+        headline: 'note ' + i,
+      });
     }
     let plan = buildLegacyMigration(
       { data: { attributes: { entries }, relationships: {} } },
@@ -488,7 +605,11 @@ module('run-log > RunLogWriter', function (hooks) {
     assert.ok(plan.entries.length <= 60, 'carried tail is capped (<=60)');
     // The kept entries are the MOST RECENT ones.
     let last: any = plan.entries[plan.entries.length - 1].doc;
-    assert.strictEqual(last.data.attributes.headline, 'note 199', 'newest entry is kept');
+    assert.strictEqual(
+      last.data.attributes.headline,
+      'note 199',
+      'newest entry is kept',
+    );
   });
 
   test('buildLegacyMigration returns null for an already-migrated index', function (assert) {
@@ -535,10 +656,13 @@ module('run-log > autolinkCardReferences', function () {
   });
 
   test('routes a product card ref to the product realm', function (assert) {
-    let out = autolinkCardReferences('Shipped Garment/orange-football-kit.json today.', {
-      controlRealm: CONTROL,
-      productRealm: PRODUCT,
-    });
+    let out = autolinkCardReferences(
+      'Shipped Garment/orange-football-kit.json today.',
+      {
+        controlRealm: CONTROL,
+        productRealm: PRODUCT,
+      },
+    );
     assert.strictEqual(
       out,
       `Shipped :card[${PRODUCT}Garment/orange-football-kit] today.`,
@@ -555,9 +679,13 @@ module('run-log > autolinkCardReferences', function () {
   });
 
   test('leaves non-card and lowercase paths untouched', function (assert) {
-    let body = 'Tokens in design/tokens.css and the mockup design/family-sheet.html.';
+    let body =
+      'Tokens in design/tokens.css and the mockup design/family-sheet.html.';
     assert.strictEqual(
-      autolinkCardReferences(body, { controlRealm: CONTROL, productRealm: PRODUCT }),
+      autolinkCardReferences(body, {
+        controlRealm: CONTROL,
+        productRealm: PRODUCT,
+      }),
       body,
       'no .json card dirs → unchanged',
     );
@@ -637,7 +765,10 @@ module('run-log > autolinkCardReferences directives', function () {
 
   test('resolves a markdown-link path target, keeping the link text', function (assert) {
     assert.strictEqual(
-      autolinkCardReferences('[the brief](Knowledge Articles/brief.json)', realms),
+      autolinkCardReferences(
+        '[the brief](Knowledge Articles/brief.json)',
+        realms,
+      ),
       `[the brief](${CONTROL}Knowledge%20Articles/brief)`,
     );
   });

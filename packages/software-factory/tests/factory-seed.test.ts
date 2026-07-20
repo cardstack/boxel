@@ -156,7 +156,10 @@ function doneSeed(issueId: string, identityToken: string) {
   );
 }
 
-function statusOf(workspace: ReturnType<typeof createTestWorkspace>, file: string) {
+function statusOf(
+  workspace: ReturnType<typeof createTestWorkspace>,
+  file: string,
+) {
   return JSON.parse(workspace.read(file)).data.attributes.status;
 }
 

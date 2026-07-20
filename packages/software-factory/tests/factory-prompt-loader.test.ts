@@ -856,7 +856,11 @@ module('factory-prompt-loader > bug-fix routing', function () {
     let prompt = assembleImplementPrompt({
       context: makeMinimalContext({
         v2: true,
-        issue: { id: 'Issues/crash', issueType: 'defect', summary: 'x crashes' },
+        issue: {
+          id: 'Issues/crash',
+          issueType: 'defect',
+          summary: 'x crashes',
+        },
       }),
       loader,
     });

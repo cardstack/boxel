@@ -48,7 +48,7 @@ translates the accepted mockup into a `.gts` card. v2 also drops the QUnit/test
 requirement from the build loop (tests are a later hardening phase).
 
 **Why.** The pre-v2 loop produced schema-correct but pedestrian cards — fitted
-views drowning in chrome, weak hierarchy. Deciding the look *before* writing
+views drowning in chrome, weak hierarchy. Deciding the look _before_ writing
 templates, on a cheap HTML surface, is where taste lives.
 
 **How.** `issue-implement-v2` / `issue-design-v2` / `issue-build-v2` prompts; a
@@ -72,10 +72,10 @@ and returns a PNG the agent then `Read`s and critiques; on-demand skill loading
   `boxel-workspaces` repo use — and drops a factory-adapted `CLAUDE.md`. With
   `settingSources: ['project']` on the agent (`claude-code.ts`), the SDK harness
   discovers those skills natively, so the agent can `Grep 'fitted'
-  .claude/skills` and `Read` the standard it didn't know existed.
+.claude/skills` and `Read` the standard it didn't know existed.
 
 **Why.** The MCP `read_skill` path is a bespoke lookup the model has no trained
-instinct for, and it can't *search* across skills — so an agent can't find a
+instinct for, and it can't _search_ across skills — so an agent can't find a
 standard it doesn't already know the name of. That is the unknown-unknown
 failure mode that shipped a non-standard fitted view (wardrobe, 2026-07-17).
 Models are heavily conditioned to explore `.claude/*` with native Glob/Grep/Read;
@@ -107,7 +107,7 @@ a long agent turn never leaves the operator staring at silence.
   re-query per reveal.
 - **Non-shifting live updates.** New entries arrive at the head of a live run;
   rendering them would shove the reader's content down. Instead they are
-  *buffered* (held out of the DOM) behind a subtle sticky "↑ N new" pill and
+  _buffered_ (held out of the DOM) behind a subtle sticky "↑ N new" pill and
   only revealed on click (or automatically when the reader is already at the
   top). Because buffered entries are never rendered, nothing on screen moves.
 - **Comment + status-change entries.** In the `containsMany` days, issue
@@ -115,7 +115,7 @@ a long agent turn never leaves the operator staring at silence.
   model's equivalent is to **emit one `RunLogEntry` per event** — so agent
   comments (`post_update`), orchestrator/reviewer comments (`emitComment`), and
   every state transition (`emitStatusChange`, plus the bespoke `issue-picked` /
-  `issue-done` / `blocked` milestones) show in the feed. Status *history* has to
+  `issue-done` / `blocked` milestones) show in the feed. Status _history_ has to
   be captured at emit time because the Issue card stores only its current
   status.
 - **Rich links.** `post_update` bodies render as Boxel Flavored Markdown; the
@@ -130,7 +130,7 @@ a long agent turn never leaves the operator staring at silence.
 ## Area 3 — per-turn model/effort budget + phase-split
 
 **What.** An orchestrator-owned policy that assigns a model + reasoning-effort
-budget per turn *type*, and a phase-split that runs the DESIGN turn on the
+budget per turn _type_, and a phase-split that runs the DESIGN turn on the
 flagship model and the BUILD (translation) turn on a cheaper one, forked from
 the design session.
 
@@ -146,11 +146,11 @@ session so the accepted design carries over without re-reading.
 **What.** A run primes one session (skills + design language + precedent) and
 **forks** it for every implementation turn, so the expensive static context is
 read once and served from the provider prompt cache. On top of that, the inner
-fix loop **chains**: after iteration 1, a fix turn resumes the *prior
-iteration's* session instead of re-forking prime.
+fix loop **chains**: after iteration 1, a fix turn resumes the _prior
+iteration's_ session instead of re-forking prime.
 
 **Why.** Two different wins. Forking prime shares the cached static prefix.
-Chaining keeps the *working* files the agent already read in context, so a fix
+Chaining keeps the _working_ files the agent already read in context, so a fix
 iteration is "here's what validation flagged, fix it" — no re-read, no
 re-orient. That was the dominant cost in the 3–4-minute fix turns.
 
@@ -182,7 +182,7 @@ managed block when the control-path set changes).
 ## Area 6 — v3: GitHub-repo port flow
 
 **What.** `--repo-url` points the factory at a real GitHub app instead of a
-brief card. A **PORT-ANALYSIS** issue runs *before* bootstrap: it clones the
+brief card. A **PORT-ANALYSIS** issue runs _before_ bootstrap: it clones the
 repo, reads its README/media **and its code**, and writes two Knowledge
 Articles — a product view (features, screens, flows, a "better than the
 original" rubric, proposed card-family mapping) and an engineering view
@@ -222,13 +222,13 @@ the agent's voice.
 redoing finished work.
 
 - **Seed resume guard.** On restart the control realm is pulled first, so seeds
-  a prior run completed are present as `done`. The seeder now *leaves a done
-  seed intact* when it belongs to the current brief (matched by the brief's
+  a prior run completed are present as `done`. The seeder now _leaves a done
+  seed intact_ when it belongs to the current brief (matched by the brief's
   source/repo URL), instead of re-arming it to `backlog`. A changed brief still
   re-arms (the sequential multi-brief pass). This stopped the factory from
   re-running the PORT-ANALYSIS repo study on every restart.
 - **Authoritative-status reconciliation.** The scheduler picks from the realm
-  *index*, which lags the control-plane's raw writes. Before running a picked
+  _index_, which lags the control-plane's raw writes. Before running a picked
   issue, the loop re-reads its status from the authoritative local workspace
   file (`readLocalStatus`); if the file says `done`, the index was stale — skip
   it. A genuinely interrupted issue reads `in_progress` locally too, so real
@@ -251,7 +251,7 @@ with an explicit "do NOT run a design round" instruction.
 
 - **Content-hash workspace fingerprint** (`validation-run-cache.ts`). The sync
   gate keyed on `size|mtime`; a bidirectional pull rewrites identical files with
-  a fresh mtime, so every run did full no-op syncs. Hashing file *content*
+  a fresh mtime, so every run did full no-op syncs. Hashing file _content_
   instead gives a stable fingerprint → unchanged content skips the sync.
 - **Per-turn agent tool telemetry** (`agent-tool-telemetry.ts`). One terse line
   per tool call plus a per-turn waste summary (duplicate reads, whole-file
@@ -269,17 +269,17 @@ with an explicit "do NOT run a design round" instruction.
 Every area ships unit tests (node's test runner / QUnit). Current status of the
 touched suites, all green:
 
-| Suite | Focus |
-|---|---|
-| `issue-loop` | session chaining, `decideSessionStrategy`, reconciliation, bug-fix gating |
-| `factory-seed` | resume guard (fresh / same-brief / changed-brief) |
-| `issue-scheduler` | `readLocalStatus`, blockedBy resolution, type filter |
-| `run-log` | Posts model, migration/pruning, BFM directive resolution, HTML preservation |
-| `factory-prompt-loader` | `isBugFixIssue`, fix-vs-design prompt routing |
-| `control-plane-sync` | hash-gated push, selective pull, stale-block refresh (run via `node --test`) |
-| `validation-run-cache` | content-hash fingerprint stability |
-| `workspace-skills` | `.claude/skills` materialization + factory `CLAUDE.md` |
-| `agent-tool-telemetry`, `instance-discovery`, `transient-agent-error`, `factory-context-builder`, `factory-agent-claude-code` | supporting infra |
+| Suite                                                                                                                         | Focus                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `issue-loop`                                                                                                                  | session chaining, `decideSessionStrategy`, reconciliation, bug-fix gating    |
+| `factory-seed`                                                                                                                | resume guard (fresh / same-brief / changed-brief)                            |
+| `issue-scheduler`                                                                                                             | `readLocalStatus`, blockedBy resolution, type filter                         |
+| `run-log`                                                                                                                     | Posts model, migration/pruning, BFM directive resolution, HTML preservation  |
+| `factory-prompt-loader`                                                                                                       | `isBugFixIssue`, fix-vs-design prompt routing                                |
+| `control-plane-sync`                                                                                                          | hash-gated push, selective pull, stale-block refresh (run via `node --test`) |
+| `validation-run-cache`                                                                                                        | content-hash fingerprint stability                                           |
+| `workspace-skills`                                                                                                            | `.claude/skills` materialization + factory `CLAUDE.md`                       |
+| `agent-tool-telemetry`, `instance-discovery`, `transient-agent-error`, `factory-context-builder`, `factory-agent-claude-code` | supporting infra                                                             |
 
 Note: `control-plane-sync.test.ts` uses the `node:test` runner; run it with
 `node --test` (running it under the qunit harness reports a spurious global
@@ -287,15 +287,15 @@ failure while node:test reports pass).
 
 ## Where things live
 
-| Concern | File(s) |
-|---|---|
-| Loop, phase-split, session reuse, bug-fix gating, comment/status emit | `src/issue-loop.ts` |
-| Prompt routing, `isBugFixIssue` | `src/factory-prompt-loader.ts`, `prompts/*` |
-| Seed resume guard | `src/factory-seed.ts` |
-| Scheduler, `readLocalStatus` | `src/issue-scheduler.ts` |
-| Run-log card + feed + BFM resolver | `src/run-log.ts` |
-| Agent invocation, forking, caching | `src/factory-agent/claude-code.ts` |
-| Tools (post_update BFM teaching, screenshot_html, list_skills/read_skill) | `src/factory-tool-builder.ts` |
-| On-demand skill discovery (`.claude/skills` materialization) | `src/workspace-skills.ts`, `src/factory-skill-loader.ts`, `.agents/workspace-CLAUDE.md` |
-| Control/product split | `src/control-plane-sync.ts`, `src/factory-entrypoint.ts` |
-| Sync fingerprint | `src/validation-run-cache.ts` |
+| Concern                                                                   | File(s)                                                                                 |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Loop, phase-split, session reuse, bug-fix gating, comment/status emit     | `src/issue-loop.ts`                                                                     |
+| Prompt routing, `isBugFixIssue`                                           | `src/factory-prompt-loader.ts`, `prompts/*`                                             |
+| Seed resume guard                                                         | `src/factory-seed.ts`                                                                   |
+| Scheduler, `readLocalStatus`                                              | `src/issue-scheduler.ts`                                                                |
+| Run-log card + feed + BFM resolver                                        | `src/run-log.ts`                                                                        |
+| Agent invocation, forking, caching                                        | `src/factory-agent/claude-code.ts`                                                      |
+| Tools (post_update BFM teaching, screenshot_html, list_skills/read_skill) | `src/factory-tool-builder.ts`                                                           |
+| On-demand skill discovery (`.claude/skills` materialization)              | `src/workspace-skills.ts`, `src/factory-skill-loader.ts`, `.agents/workspace-CLAUDE.md` |
+| Control/product split                                                     | `src/control-plane-sync.ts`, `src/factory-entrypoint.ts`                                |
+| Sync fingerprint                                                          | `src/validation-run-cache.ts`                                                           |

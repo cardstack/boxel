@@ -86,7 +86,8 @@ export function autolinkCardReferences(
   body: string,
   realms: { controlRealm?: string; productRealm: string },
 ): string {
-  let resolve = (dir: string, name: string) => resolveCardUrl(dir, name, realms);
+  let resolve = (dir: string, name: string) =>
+    resolveCardUrl(dir, name, realms);
   let segments = body.split(/(```[\s\S]*?```)/g);
   return segments
     .map((segment) => {
@@ -100,7 +101,10 @@ export function autolinkCardReferences(
           )
           // 2. Block directives with an optional `| spec` — preserve the spec.
           .replace(
-            new RegExp(String.raw`::card\[\s*${CARD_PATH}\s*(\|[^\]]*?)?\s*\]`, 'g'),
+            new RegExp(
+              String.raw`::card\[\s*${CARD_PATH}\s*(\|[^\]]*?)?\s*\]`,
+              'g',
+            ),
             (_m, dir, name, spec) =>
               `::card[${resolve(dir, name)}${spec ? ` ${spec.trim()}` : ''}]`,
           )
@@ -439,13 +443,20 @@ export class RunLogWriter {
             null,
             2,
           );
-          await writeFile(join(this.opts.workspaceDir, relPath), content, 'utf8');
+          await writeFile(
+            join(this.opts.workspaceDir, relPath),
+            content,
+            'utf8',
+          );
           // Streamed (mid-turn) entries raw-write straight to the realm so
           // the indexer surfaces them in the live feed without waiting for a
           // full workspace sync.
           if (opts?.stream && this.opts.rawWriteFile) {
             let w = await this.opts.rawWriteFile(relPath, content);
-            if (!w.ok) log.warn(`run-log entry raw-write failed: ${w.error ?? 'unknown'}`);
+            if (!w.ok)
+              log.warn(
+                `run-log entry raw-write failed: ${w.error ?? 'unknown'}`,
+              );
           }
         }
 
@@ -455,9 +466,7 @@ export class RunLogWriter {
         // the "setup phase" hint. Plain comments after warm-up touch nothing
         // but their own entry card.
         let needIndexWrite =
-          milestoneBumped ||
-          updates !== undefined ||
-          this.counts.entry <= 5;
+          milestoneBumped || updates !== undefined || this.counts.entry <= 5;
         if (needIndexWrite) {
           await this.writeIndex(updates, opts?.stream === true);
         }
@@ -561,13 +570,18 @@ export class RunLogWriter {
     attrs.designRoundsCount = this.counts.designRounds;
     attrs.validationsGreenCount = this.counts.validationsGreen;
     attrs.issuesDoneCount = this.counts.issuesDone;
-    if (updates?.nowWorkingOn !== undefined) attrs.nowWorkingOn = updates.nowWorkingOn;
+    if (updates?.nowWorkingOn !== undefined)
+      attrs.nowWorkingOn = updates.nowWorkingOn;
     if (updates?.upNext !== undefined) attrs.upNext = updates.upNext;
     let content = JSON.stringify(doc, null, 2);
     await writeFile(this.instancePath, content, 'utf8');
     if (stream && this.opts.rawWriteFile) {
-      let w = await this.opts.rawWriteFile(`Runs/${this.opts.runSlug}.json`, content);
-      if (!w.ok) log.warn(`run-log index raw-write failed: ${w.error ?? 'unknown'}`);
+      let w = await this.opts.rawWriteFile(
+        `Runs/${this.opts.runSlug}.json`,
+        content,
+      );
+      if (!w.ok)
+        log.warn(`run-log index raw-write failed: ${w.error ?? 'unknown'}`);
     }
   }
 

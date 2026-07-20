@@ -74,7 +74,11 @@ module('validation-run-cache', function (hooks) {
       // A real content edit at the same size still changes the fingerprint.
       writeFileSync(target, Buffer.alloc(bytes.length, 0x59));
       let c = await computeWorkspaceFingerprint(workspaceDir);
-      assert.notStrictEqual(a, c, 'same-size content edit → different fingerprint');
+      assert.notStrictEqual(
+        a,
+        c,
+        'same-size content edit → different fingerprint',
+      );
     });
 
     test('ignores sync bookkeeping (.boxel-history, .boxel-sync.json)', async function (assert) {

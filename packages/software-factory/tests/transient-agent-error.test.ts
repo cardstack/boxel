@@ -65,7 +65,11 @@ module('transient-agent-error > retryTransientAgentError', function () {
 
     assert.strictEqual(result, 'recovered');
     assert.strictEqual(calls, 3);
-    assert.deepEqual(retryLog, [1, 2], 'onRetry fired once per retry, in order');
+    assert.deepEqual(
+      retryLog,
+      [1, 2],
+      'onRetry fired once per retry, in order',
+    );
   });
 
   test('rethrows immediately on a non-transient error without retrying', async function (assert) {
@@ -81,7 +85,11 @@ module('transient-agent-error > retryTransientAgentError', function () {
       ),
       /no linked project/,
     );
-    assert.strictEqual(calls, 1, 'no retry attempted for a non-transient error');
+    assert.strictEqual(
+      calls,
+      1,
+      'no retry attempted for a non-transient error',
+    );
   });
 
   test('gives up and rethrows after exhausting maxRetries', async function (assert) {
@@ -118,6 +126,10 @@ module('transient-agent-error > retryTransientAgentError', function () {
       },
     );
 
-    assert.deepEqual(delays, [100, 200], 'delay doubles each retry from the base');
+    assert.deepEqual(
+      delays,
+      [100, 200],
+      'delay doubles each retry from the base',
+    );
   });
 });

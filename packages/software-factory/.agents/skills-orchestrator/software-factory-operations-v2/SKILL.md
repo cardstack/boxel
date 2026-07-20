@@ -27,20 +27,20 @@ Load what the current work touches, nothing more.
 
 ## When you need X, read Y
 
-| Need | read_skill |
-| --- | --- |
-| Card/field authoring, CardDef/FieldDef syntax, formats | `boxel-development` (then specific `dev-*.md` references) |
-| Fitted-format layout rules | `boxel-development` reference `dev-fitted-formats.md` |
-| Theme tokens / design-system CSS | `boxel-development` reference `dev-theme-design-system.md` |
-| Search query syntax (`boxel search --query`) | `boxel-api` |
-| Host commands via `boxel run-command` | `boxel-command` |
-| File-backed fields (images, files, csv) | `boxel-file-def` |
-| Catalog Spec conventions | `boxel-development` reference `dev-spec-usage.md` |
-| Reusable UI components before hand-rolling any UI | `boxel-ui-component-discovery` |
-| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces` |
-| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds | `boxel-live-surfaces` |
-| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome | `boxel-delegated-render-control` |
-| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy) | `boxel-fetch-contexts` |
+| Need                                                                                        | read_skill                                                 |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Card/field authoring, CardDef/FieldDef syntax, formats                                      | `boxel-development` (then specific `dev-*.md` references)  |
+| Fitted-format layout rules                                                                  | `boxel-development` reference `dev-fitted-formats.md`      |
+| Theme tokens / design-system CSS                                                            | `boxel-development` reference `dev-theme-design-system.md` |
+| Search query syntax (`boxel search --query`)                                                | `boxel-api`                                                |
+| Host commands via `boxel run-command`                                                       | `boxel-command`                                            |
+| File-backed fields (images, files, csv)                                                     | `boxel-file-def`                                           |
+| Catalog Spec conventions                                                                    | `boxel-development` reference `dev-spec-usage.md`          |
+| Reusable UI components before hand-rolling any UI                                           | `boxel-ui-component-discovery`                             |
+| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces`                                   |
+| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds      | `boxel-live-surfaces`                                      |
+| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome          | `boxel-delegated-render-control`                           |
+| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy)                | `boxel-fetch-contexts`                                     |
 
 Host-tool imports: the authoritative catalogue is the generated
 `host-tools-import-manifest` skill already in your context — never guess
@@ -62,7 +62,7 @@ an import path; the `imports` validation step fails phantom ones.
    `https://cardstack.com/base/spec#Spec`, `linkedExamples` →
    instances). **MANDATORY before writing any fitted template:
    `read_skill({ name: 'boxel-development', reference:
-   'dev-fitted-formats.md' })`** — it is the container-query standard
+'dev-fitted-formats.md' })`** — it is the container-query standard
    (host `fitted-card` container, height quanta h40→h445, FittedCard
    component, overflow discipline). A fitted view that ignores it — one
    layout for all sizes, a local container on the root — fails review. The Spec MUST populate its catalog-facing `title` (display

@@ -404,8 +404,13 @@ export function decideSessionStrategy(params: {
   previousFailure?: FailureFingerprint;
   currentFailure?: FailureFingerprint;
 }): { strategy: SessionStrategy; reason: string } {
-  let { iteration, hasPriorSession, chainDepth, previousFailure, currentFailure } =
-    params;
+  let {
+    iteration,
+    hasPriorSession,
+    chainDepth,
+    previousFailure,
+    currentFailure,
+  } = params;
   if (iteration <= 1 || !hasPriorSession) {
     return { strategy: 'fresh', reason: 'first turn' };
   }
@@ -427,7 +432,10 @@ export function decideSessionStrategy(params: {
       reason: 'same failures, no progress — fresh context to break the frame',
     };
   }
-  return { strategy: 'continue', reason: 'converging — keep the working context' };
+  return {
+    strategy: 'continue',
+    reason: 'converging — keep the working context',
+  };
 }
 
 /** Human-facing issue title for the run log (no quoting/id noise). */
@@ -1460,7 +1468,11 @@ export async function runIssueLoop(
         // entry body, so both the state change and the comment show in the feed.
         await emitStatusChange(issue, 'in_progress', 'review', reworkFeedback);
         await syncWorkspace();
-      } else if (agentSignaledDone && validationResults?.passed && !syncFailed) {
+      } else if (
+        agentSignaledDone &&
+        validationResults?.passed &&
+        !syncFailed
+      ) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
           // The `issue-done` milestone entry (emitted below on exitReason

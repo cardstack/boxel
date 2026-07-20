@@ -170,11 +170,17 @@ test('ensureControlPlaneIgnoreFile refreshes a STALE managed block', async () =>
     let refreshed = await readFile(join(workspaceDir, '.boxelignore'), 'utf8');
 
     // The current CONTROL_DIRS set is now present…
-    assert.match(refreshed, /^\/RunLogEntries\/$/m, 'stale block refreshed to include RunLogEntries');
+    assert.match(
+      refreshed,
+      /^\/RunLogEntries\/$/m,
+      'stale block refreshed to include RunLogEntries',
+    );
     // …the user content is preserved…
     assert.match(refreshed, /^\/scratch\/$/m, 'user-authored lines kept');
     // …and the marker appears exactly once (no duplicate stacked block).
-    let markerCount = (refreshed.match(/# software-factory control-plane split/g) || []).length;
+    let markerCount = (
+      refreshed.match(/# software-factory control-plane split/g) || []
+    ).length;
     assert.equal(markerCount, 1, 'no duplicate control-plane marker block');
   } finally {
     await rm(workspaceDir, { recursive: true, force: true });

@@ -54,12 +54,12 @@ against the host when browser automation needs an authenticated session.
 
 ## Rule of thumb
 
-| Situation | Use |
-|---|---|
-| I'm in card code and need cards | CardContext store APIs (`store.search`, `getCard`) |
-| Card code needs an external API | The request-forward proxy, via a host tool (`send-request-via-proxy`) or `authed-fetch` |
-| Card code needs file bytes from the realm | The file card's own component / host APIs — never raw `fetch` to the URL |
-| Orchestrator / tooling | The boxel-cli client (profile JWT) |
+| Situation                                 | Use                                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| I'm in card code and need cards           | CardContext store APIs (`store.search`, `getCard`)                                      |
+| Card code needs an external API           | The request-forward proxy, via a host tool (`send-request-via-proxy`) or `authed-fetch` |
+| Card code needs file bytes from the realm | The file card's own component / host APIs — never raw `fetch` to the URL                |
+| Orchestrator / tooling                    | The boxel-cli client (profile JWT)                                                      |
 
 ## Binary media — never inline it
 

@@ -156,7 +156,8 @@ export async function loadGitHubBrief(
     description ? `\n${description}\n` : '',
     '## Repository README',
     '',
-    readme || '(README could not be fetched — the port-analysis issue must recover it.)',
+    readme ||
+      '(README could not be fetched — the port-analysis issue must recover it.)',
   ].join('\n');
 
   return {

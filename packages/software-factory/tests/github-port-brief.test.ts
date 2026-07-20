@@ -12,8 +12,7 @@ import {
 } from '../src/factory-brief.ts';
 import { createSeedIssue } from '../src/factory-seed.ts';
 
-const DARKFACTORY_MODULE =
-  'https://example.com/software-factory/darkfactory';
+const DARKFACTORY_MODULE = 'https://example.com/software-factory/darkfactory';
 
 function githubFetchStub(): typeof globalThis.fetch {
   return (async (input: string | URL | Request) => {
@@ -146,10 +145,7 @@ test('non-GitHub briefs seed no analysis issue', async () => {
     assert.equal(bootstrap.data.relationships, undefined);
     assert.equal(bootstrap.data.attributes.order, 0);
     await assert.rejects(
-      readFile(
-        join(workspaceDir, 'Issues', 'port-analysis-seed.json'),
-        'utf8',
-      ),
+      readFile(join(workspaceDir, 'Issues', 'port-analysis-seed.json'), 'utf8'),
     );
   } finally {
     await rm(workspaceDir, { recursive: true, force: true });

@@ -20,7 +20,11 @@ import {
   linkRelationshipToCard,
   toRealmRelativePath,
 } from './realm-operations.ts';
-import { readCard, writeCard, type WorkspaceReadResult } from './workspace-fs.ts';
+import {
+  readCard,
+  writeCard,
+  type WorkspaceReadResult,
+} from './workspace-fs.ts';
 
 /**
  * Infer the darkfactory module URL from a target realm URL.
@@ -515,7 +519,7 @@ function buildDesignFoundationSeedIssueDocument(
   ].join('\n');
 
   let acceptanceCriteria = [
-    '- [ ] Brand guide Knowledge Article written: guiding words, palette, typography, spacing, dos/don\'ts',
+    "- [ ] Brand guide Knowledge Article written: guiding words, palette, typography, spacing, dos/don'ts",
     '- [ ] design/tokens.css written: the CSS custom properties (--*) all future mockups and templates use',
     '- [ ] design/family-sheet.html: a simple rendering of EVERY card in the domain on one sheet, using tokens.css',
     '- [ ] Family sheet screenshotted, critiqued for coherence, and revised at least once',
@@ -526,7 +530,8 @@ function buildDesignFoundationSeedIssueDocument(
       type: 'card' as const,
       attributes: {
         issueId: 'DESIGN-0',
-        summary: 'Establish the design language: brand guide, tokens, family sheet',
+        summary:
+          'Establish the design language: brand guide, tokens, family sheet',
         description,
         issueType: 'design',
         status: 'backlog',

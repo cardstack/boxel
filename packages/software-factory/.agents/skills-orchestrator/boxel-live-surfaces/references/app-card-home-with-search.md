@@ -7,12 +7,13 @@ Project / etc. in the realm. `prefersWideFormat = true` so it opens
 edge-to-edge. The user lands on it, sees the realm at a glance, drills in
 from there.
 
-**When to use:** Whenever you build a card *family* — 2+ related CardDefs
+**When to use:** Whenever you build a card _family_ — 2+ related CardDefs
 (Meet + Swimmer + Club, Project + Task + Person, Show + Listing + Venue,
 etc.). Building a single utility card? Skip this pattern. Building anything
 where the user will accumulate instances over time? Build the home.
 
 **Why it matters:**
+
 - **Discoverability.** A realm with 5 CardDefs and no home shows users an
   `index.json` `CardsGrid` of mixed cards in adoption order. A home puts the
   brand voice up front and arranges the suite the way the designer intended.
@@ -27,7 +28,13 @@ where the user will accumulate instances over time? Build the home.
 
 ```gts
 // surge.gts (or whatever the brand demands)
-import { CardDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  Component,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import {
@@ -46,11 +53,11 @@ const here: string = import.meta.url;
 export class Surge extends CardDef {
   static displayName = 'Surge';
   static icon = BoltIcon;
-  static prefersWideFormat = true;             // ← edge-to-edge home
+  static prefersWideFormat = true; // ← edge-to-edge home
 
   @field welcome = contains(StringField);
   @field tagline = contains(TextAreaField);
-  @field headlineMeet = linksTo(() => Meet);   // optional spotlight pin
+  @field headlineMeet = linksTo(() => Meet); // optional spotlight pin
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Surge) {
@@ -62,8 +69,12 @@ export class Surge extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Surge> {
     // codeRef(here, relPath, ExportName) returns { module, name } — the canonical CodeRef
-    get meetRef() { return codeRef(here, './meet', 'Meet'); }
-    get swimmerRef() { return codeRef(here, './swimmer', 'Swimmer'); }
+    get meetRef() {
+      return codeRef(here, './meet', 'Meet');
+    }
+    get swimmerRef() {
+      return codeRef(here, './swimmer', 'Swimmer');
+    }
     get realms(): string[] {
       const url = this.args.model?.[realmURL];
       return url ? [url.href] : [];
@@ -115,18 +126,24 @@ export class Surge extends CardDef {
     <template>
       <article class='sg'>
         <header class='sg-mast'>
-          <h1 class='sg-wordmark'>{{if @model.welcome @model.welcome 'SURGE'}}</h1>
-          {{#if @model.tagline}}<p class='sg-tagline'>{{@model.tagline}}</p>{{/if}}
+          <h1 class='sg-wordmark'>{{if
+              @model.welcome
+              @model.welcome
+              'SURGE'
+            }}</h1>
+          {{#if @model.tagline}}<p
+              class='sg-tagline'
+            >{{@model.tagline}}</p>{{/if}}
         </header>
 
-        {{!-- Singular spotlight — no plural-field wrapper, simple :deep override --}}
+        {{! Singular spotlight — no plural-field wrapper, simple :deep override }}
         {{#if @model.headlineMeet}}
           <section class='sg-featured'>
             <@fields.headlineMeet @format='embedded' />
           </section>
         {{/if}}
 
-        {{!-- Dynamic section: every Meet in the realm, fitted, live --}}
+        {{! Dynamic section: every Meet in the realm, fitted, live }}
         <section class='sg-section'>
           <h2 class='sg-section-title'>The calendar</h2>
           <ul class='sg-meets'>
@@ -149,14 +166,14 @@ export class Surge extends CardDef {
           </ul>
         </section>
 
-        {{!-- Add one @context.searchResultsComponent section per CardDef in the family --}}
+        {{! Add one @context.searchResultsComponent section per CardDef in the family }}
       </article>
 
       <style scoped>
         /* Outer chrome — leave radius / border / shadow / opaque bg to the host */
         .sg {
-          background: var(--paper, #F5F8FA);
-          color: var(--ink, #0B1320);
+          background: var(--paper, #f5f8fa);
+          color: var(--ink, #0b1320);
           font-family: var(--font-body, system-ui, sans-serif);
           min-height: 100%;
         }
@@ -168,21 +185,27 @@ export class Surge extends CardDef {
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
           gap: 14px;
         }
-        .sg-meets-cell { min-height: 200px; }
+        .sg-meets-cell {
+          min-height: 200px;
+        }
         /* Chrome override on the prerendered cards */
         .sg-section :deep(.boxel-card-container) {
           border-radius: 0;
-          background: var(--card, #FFFFFF);
+          background: var(--card, #ffffff);
         }
         .sg-section :deep(.boxel-card-container--boundaries) {
-          box-shadow: 0 0 0 1px var(--ink, #0B1320);
+          box-shadow: 0 0 0 1px var(--ink, #0b1320);
         }
       </style>
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof Surge> { /* brand card */ };
-  static fitted   = class Fitted   extends Component<typeof Surge> { /* mini wordmark */ };
+  static embedded = class Embedded extends Component<typeof Surge> {
+    /* brand card */
+  };
+  static fitted = class Fitted extends Component<typeof Surge> {
+    /* mini wordmark */
+  };
 }
 ```
 
@@ -197,7 +220,9 @@ export class Surge extends CardDef {
       "cardInfo": { "name": "SURGE — Home", "summary": "Realm home." }
     },
     "relationships": {
-      "headlineMeet": { "links": { "self": "../Meet/mid-atlantic-senior-sectionals-2026" } },
+      "headlineMeet": {
+        "links": { "self": "../Meet/mid-atlantic-senior-sectionals-2026" }
+      },
       "cardInfo.theme": { "links": { "self": "../Theme/surge" } }
     },
     "meta": { "adoptsFrom": { "module": "../surge", "name": "Surge" } }
@@ -218,7 +243,7 @@ autosave on each keystroke, this can make unrelated edit forms feel sluggish
 because the Home tab is consuming CPU on every reindex.
 
 There is no snapshot/live toggle to reach for — the surface is live by
-default. The lever you *do* have is `@mode`: `'hover'` (default) hydrates
+default. The lever you _do_ have is `@mode`: `'hover'` (default) hydrates
 each result so it can respond to hover; `'none'` renders the prerendered
 HTML with no per-result interactivity, which is cheaper for dense read-only
 sections.
@@ -241,11 +266,11 @@ Keep the number of live sections on a single Home modest, and prefer
 **Why `@context.searchResultsComponent` (display) instead of `getCards`
 (instances):**
 
-| Use case | Pick |
-|---|---|
-| Showing the cards as themselves (fitted/embedded HTML) | `@context.searchResultsComponent` |
-| Reading model values to compute aggregates (counts, sums, charts) | `getCards` |
-| Both — list and aggregate | `getCards`, then render with `<@fields ...>` |
+| Use case                                                          | Pick                                         |
+| ----------------------------------------------------------------- | -------------------------------------------- |
+| Showing the cards as themselves (fitted/embedded HTML)            | `@context.searchResultsComponent`            |
+| Reading model values to compute aggregates (counts, sums, charts) | `getCards`                                   |
+| Both — list and aggregate                                         | `getCards`, then render with `<@fields ...>` |
 
 The home almost always wants the first. The host pre-renders each result on
 the realm side, so the home doesn't pay the cost of loading every model into
@@ -289,6 +314,7 @@ Query type definitions live at `packages/runtime-common/query.ts` in the
 Boxel monorepo.
 
 **Other gotchas:**
+
 - `import.meta.url` works in `.gts` at runtime but TS complains — declare
   `const here: string = import.meta.url;` once at top with
   `@ts-expect-error` on the line above.
@@ -331,11 +357,13 @@ CSS:
 ```css
 .project-cell {
   position: relative;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 .project-cell:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
 }
 .card-link {
   position: absolute;
@@ -364,10 +392,10 @@ Use the overlay pattern.
 
 ### The mode matrix
 
-| Mode | What enables click | Mechanism |
-|---|---|---|
+| Mode                         | What enables click                                            | Mechanism                                       |
+| ---------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
 | **Interact / Code** (in-app) | `{{@context.cardComponentModifier ...}}` on a `CardContainer` | Pushes the card onto the Boxel app's card stack |
-| **Host** (published site) | `<a href={{entry.id}}>` overlay | Plain browser navigation to the card's URL |
+| **Host** (published site)    | `<a href={{entry.id}}>` overlay                               | Plain browser navigation to the card's URL      |
 
 Complementary, not redundant. An app card that publishes AND is browsable
 in-app can stack both: the overlay anchor for Host clicks, the modifier on

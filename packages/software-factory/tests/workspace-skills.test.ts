@@ -1,7 +1,14 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
-import { mkdtemp, mkdir, writeFile, readFile, rm, readdir } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  rm,
+  readdir,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,7 +57,13 @@ module('workspace-skills > materializeWorkspaceSkills', function (hooks) {
     assert.strictEqual(count, 1);
     assert.strictEqual(
       await readFile(
-        join(workspaceDir, '.claude', 'skills', 'boxel-development', 'SKILL.md'),
+        join(
+          workspaceDir,
+          '.claude',
+          'skills',
+          'boxel-development',
+          'SKILL.md',
+        ),
         'utf8',
       ),
       '# dev skill',

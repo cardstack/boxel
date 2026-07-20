@@ -15,15 +15,15 @@ recipes, and the child-side contract — live in
 
 ## Format choice = who owns the cell size (decide BEFORE styling)
 
-| Format | Who controls the box size? | Use when |
-|---|---|---|
-| `embedded` | **The child.** Width fluid, height = the card's natural content. | Vertical lists, feeds, roster rows, variable-height items. |
-| `fitted` | **The parent.** Child fills the box you give it (`width/height: 100%`, `container-type: size`). | Uniform tile grids (calendar cells, portraits, badge strips) where you deliberately set the cell size. |
+| Format     | Who controls the box size?                                                                      | Use when                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `embedded` | **The child.** Width fluid, height = the card's natural content.                                | Vertical lists, feeds, roster rows, variable-height items.                                             |
+| `fitted`   | **The parent.** Child fills the box you give it (`width/height: 100%`, `container-type: size`). | Uniform tile grids (calendar cells, portraits, badge strips) where you deliberately set the cell size. |
 
 **The single most common rendering bug:** picking `fitted` for a list of
 variable-height cards — short content leaves a big empty box below each row.
-The fix is the format choice, upstream of any CSS. Decision rule: *did you
-set the cell size?* Yes → `fitted` (+ `min-height`/`aspect-ratio` on the
+The fix is the format choice, upstream of any CSS. Decision rule: _did you
+set the cell size?_ Yes → `fitted` (+ `min-height`/`aspect-ratio` on the
 cell). No → `embedded`.
 
 ## Who owns the chrome — three override layers (pick the lowest that works)
@@ -44,13 +44,13 @@ cell). No → `embedded`.
    grid and the cards — the grid sees ONE child and collapses to a single
    column. Fix: `:deep(> .plural-field) { display: contents; }` plus
    `:deep(.linksToMany-itemContainer), :deep(.containsMany-item) { display:
-   contents; }`. Targeting only `.containsMany-field` is the most common
+contents; }`. Targeting only `.containsMany-field` is the most common
    bug — `linksToMany` ships `.linksToMany-field`, which never matches.
 2. **Atoms on dark backgrounds disappear.** The atom chip's own near-white
    background + halo win over your `color: inherit`. Fix: either
    `@displayContainer={{false}}` (plain inline text), or keep the chip and
    recolor via `:deep(.field-component-card.atom-format) { background:
-   transparent; box-shadow: none; color: var(--accent); }`.
+transparent; box-shadow: none; color: var(--accent); }`.
 3. **Stagger through `display: contents`.** `:nth-child` on the cards
    themselves always resolves to 1 (each is the only child of its wrapper).
    Set `--stagger-d` on `:deep(.linksToMany-itemContainer:nth-child(N))` /

@@ -28,7 +28,7 @@ run-log live blog card.
    `.feed > :last-child` (DOM-last = newest).
 3. **Ticking clocks**: `@tracked nowMs = Date.now()` + `setInterval` in the
    component constructor + `registerDestructor(this, () =>
-   clearInterval(...))`. Elapsed label derives from `startedAt` vs `nowMs`
+clearInterval(...))`. Elapsed label derives from `startedAt` vs `nowMs`
    while running, frozen at the last entry's timestamp when done. Per-entry
    relative labels ("3m ago") use a 30s interval per entry component.
 4. **One `linksTo`, three renders.** The same `card` field renders

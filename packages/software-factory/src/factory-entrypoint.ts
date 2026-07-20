@@ -448,7 +448,9 @@ export function parseFactoryEntrypointArgs(
   }
 
   return {
-    briefUrl: rawBriefUrl ? normalizeUrl(rawBriefUrl, '--brief-url') : undefined,
+    briefUrl: rawBriefUrl
+      ? normalizeUrl(rawBriefUrl, '--brief-url')
+      : undefined,
     repoUrl: rawRepoUrl ? normalizeUrl(rawRepoUrl, '--repo-url') : undefined,
     targetRealm: normalizeUrl(targetRealm, '--target-realm'),
     controlRealm:
@@ -555,8 +557,8 @@ export function buildModelPolicy(options: {
   phaseSplit?: boolean;
   buildModel?: string;
   buildEffort?: string;
-}): // eslint-disable-next-line prettier/prettier
-| {
+}):
+  | {
       design?: TurnBudget;
       build?: TurnBudget;
       fix?: TurnBudget;

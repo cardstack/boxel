@@ -18,7 +18,14 @@
  * (other backends, and the resolver's always-on injection path).
  */
 
-import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { skillSearchDirs } from './factory-skill-loader.ts';

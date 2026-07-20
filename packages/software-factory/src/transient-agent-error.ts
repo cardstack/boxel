@@ -61,7 +61,8 @@ export async function retryTransientAgentError<T>(
 ): Promise<T> {
   let maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
   let baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-  let sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  let sleep =
+    options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 
   let attemptNumber = 0;
   for (;;) {

@@ -115,10 +115,10 @@ subscription per section instead of resubscribing on every re-render.
 
 ## Making tiles clickable
 
-| Mode | What enables click | Mechanism |
-|---|---|---|
-| **Interact / Code** (in-app) | `{{@context.cardComponentModifier ...}}` on the tile's container | Pushes the card onto the Boxel app's card stack |
-| **Host** (published site) | `<a href={{entry.id}}>` transparent overlay inside a `position: relative` cell | Plain browser navigation |
+| Mode                         | What enables click                                                             | Mechanism                                       |
+| ---------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
+| **Interact / Code** (in-app) | `{{@context.cardComponentModifier ...}}` on the tile's container               | Pushes the card onto the Boxel app's card stack |
+| **Host** (published site)    | `<a href={{entry.id}}>` transparent overlay inside a `position: relative` cell | Plain browser navigation                        |
 
 Always wire one of these — otherwise the tiles render beautifully and do
 nothing on click. Use the **overlay** pattern for Host mode, never

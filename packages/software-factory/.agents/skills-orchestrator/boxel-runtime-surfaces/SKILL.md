@@ -100,13 +100,13 @@ in a comment — there is no reproducible build.
 
 ## Quick triage
 
-| I need to… | Reach for |
-|---|---|
-| Define schema / fields | Base card API (§1) |
-| Query or load cards from card code | CardContext store APIs / `getCards` (§2, §5) — never raw fetch |
-| Run an app-level action (save, show, search, reindex) | Host tools (§3) |
-| Build UI | boxel-ui (§4) + Glimmer/Ember primitives (see references/libraries.md) |
-| Live, self-updating card lists | `@context.searchResultsComponent` — load the `boxel-live-surfaces` skill |
-| Call an LLM / generate an image / hit an external API | AI services (§6) |
-| Rich text content | BFM (§7) |
-| A third-party JS library | ESM CDN (§8), pinned |
+| I need to…                                            | Reach for                                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| Define schema / fields                                | Base card API (§1)                                                       |
+| Query or load cards from card code                    | CardContext store APIs / `getCards` (§2, §5) — never raw fetch           |
+| Run an app-level action (save, show, search, reindex) | Host tools (§3)                                                          |
+| Build UI                                              | boxel-ui (§4) + Glimmer/Ember primitives (see references/libraries.md)   |
+| Live, self-updating card lists                        | `@context.searchResultsComponent` — load the `boxel-live-surfaces` skill |
+| Call an LLM / generate an image / hit an external API | AI services (§6)                                                         |
+| Rich text content                                     | BFM (§7)                                                                 |
+| A third-party JS library                              | ESM CDN (§8), pinned                                                     |

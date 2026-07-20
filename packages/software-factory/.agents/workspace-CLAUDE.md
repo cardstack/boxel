@@ -22,7 +22,7 @@ derive formats), `boxel-ui-guidelines/references/delegated-render-control.md`
   host-provided `fitted-card` size container — never create your own
   container on the root. Single root `.fit` grid at 100%×100%, content
   matrix per height quantum, `minmax(0, 1fr)` body rows, `overflow:
-  hidden` discipline. Prefer the `FittedCard` component from
+hidden` discipline. Prefer the `FittedCard` component from
   `@cardstack/boxel-ui/components` for standard compositions. Read the
   container-query-fitted-layout reference before writing fitted CSS.
 - **Theme variables only** — templates reference `var(--*)` tokens; no

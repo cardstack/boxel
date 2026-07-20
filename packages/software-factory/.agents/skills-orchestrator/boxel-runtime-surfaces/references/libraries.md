@@ -12,18 +12,24 @@ URL-pinned imports from the Boxel base realm. Always available, no install.
 ```ts
 // Core API — CardDef, FieldDef, field decorators, Component, contains, linksTo
 import {
-  CardDef, FieldDef,
-  field, contains, containsMany, linksTo, linksToMany,
-  Component, Box,
+  CardDef,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+  Component,
+  Box,
 } from 'https://cardstack.com/base/card-api';
 
 // Built-in field types — each in its own module (DEFAULT exports)
-import StringField    from 'https://cardstack.com/base/string';
-import NumberField    from 'https://cardstack.com/base/number';
-import BooleanField   from 'https://cardstack.com/base/boolean';
-import DateField      from 'https://cardstack.com/base/date';
-import DatetimeField  from 'https://cardstack.com/base/datetime';
-import MarkdownField  from 'https://cardstack.com/base/markdown';
+import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import DateField from 'https://cardstack.com/base/date';
+import DatetimeField from 'https://cardstack.com/base/datetime';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 
 // Code reference field (for codeRef-typed values)
 import { CodeRefField } from 'https://cardstack.com/base/code-ref';
@@ -47,14 +53,14 @@ Standard Ember / Glimmer ecosystem. No special setup needed.
 ### `@cardstack/runtime-common` — runtime APIs
 
 ```ts
-import { getCards, getCard }            from '@cardstack/runtime-common';
-import { getField, getFieldIcon }       from '@cardstack/runtime-common';
-import { cardDefComputedFields }        from '@cardstack/runtime-common';
-import { Command }                      from '@cardstack/runtime-common/commands';
+import { getCards, getCard } from '@cardstack/runtime-common';
+import { getField, getFieldIcon } from '@cardstack/runtime-common';
+import { cardDefComputedFields } from '@cardstack/runtime-common';
+import { Command } from '@cardstack/runtime-common/commands';
 // Preferred result-list surface for new work — build its query with searchEntryWireQueryFromQuery,
 // then render via @context.searchResultsComponent.
 import { searchEntryWireQueryFromQuery } from '@cardstack/runtime-common';
-import type { SearchEntryWireQuery }     from '@cardstack/runtime-common';
+import type { SearchEntryWireQuery } from '@cardstack/runtime-common';
 // Older surface, superseded by the above (still available via @context.prerenderedCardSearchComponent):
 import { prerenderedCardSearchComponent } from '@cardstack/runtime-common/prerendered-card-search';
 ```
@@ -64,20 +70,49 @@ import { prerenderedCardSearchComponent } from '@cardstack/runtime-common/preren
 ```ts
 // Components
 import {
-  Button, Pill, Avatar, BoxelSelect, ColorPalette, ColorPicker,
-  Header, FieldContainer, CardContainer,
-  Modal, Drawer, Toast,
-  KanbanPlane, autoPlaceKanban,
-  type KanbanColumnConfig, type KanbanPlacement,
+  Button,
+  Pill,
+  Avatar,
+  BoxelSelect,
+  ColorPalette,
+  ColorPicker,
+  Header,
+  FieldContainer,
+  CardContainer,
+  Modal,
+  Drawer,
+  Toast,
+  KanbanPlane,
+  autoPlaceKanban,
+  type KanbanColumnConfig,
+  type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 
 // Helpers (template helpers — used as {{eq ...}}, {{cn ...}}, etc.)
-import { eq, cn, gt, gte, lt, lte, not, and, or, multiply, add } from '@cardstack/boxel-ui/helpers';
-import { formatDateTime, formatNumber, formatCurrency, formatDuration, formatRelativeTime } from '@cardstack/boxel-ui/helpers';
+import {
+  eq,
+  cn,
+  gt,
+  gte,
+  lt,
+  lte,
+  not,
+  and,
+  or,
+  multiply,
+  add,
+} from '@cardstack/boxel-ui/helpers';
+import {
+  formatDateTime,
+  formatNumber,
+  formatCurrency,
+  formatDuration,
+  formatRelativeTime,
+} from '@cardstack/boxel-ui/helpers';
 
 // Icons (drop into templates as <IconName />)
-import IconCheck    from '@cardstack/boxel-ui/icons/check';
-import IconArrowUp  from '@cardstack/boxel-ui/icons/arrow-up';
+import IconCheck from '@cardstack/boxel-ui/icons/check';
+import IconArrowUp from '@cardstack/boxel-ui/icons/arrow-up';
 ```
 
 Formatter helpers in `@cardstack/boxel-ui/helpers`: `formatDateTime`,
@@ -104,26 +139,26 @@ code.
 > on sight.
 
 ```ts
-import UseAiAssistantCommand    from '@cardstack/boxel-host/tools/ai-assistant';
-import SetActiveLLMCommand      from '@cardstack/boxel-host/tools/set-active-llm';
-import SwitchSubmodeCommand     from '@cardstack/boxel-host/tools/switch-submode';
-import ShowCardCommand          from '@cardstack/boxel-host/tools/show-card';
-import SearchCardsByQueryCommand        from '@cardstack/boxel-host/tools/search-cards';
+import UseAiAssistantCommand from '@cardstack/boxel-host/tools/ai-assistant';
+import SetActiveLLMCommand from '@cardstack/boxel-host/tools/set-active-llm';
+import SwitchSubmodeCommand from '@cardstack/boxel-host/tools/switch-submode';
+import ShowCardCommand from '@cardstack/boxel-host/tools/show-card';
+import SearchCardsByQueryCommand from '@cardstack/boxel-host/tools/search-cards';
 import SearchCardsByTypeAndTitleCommand from '@cardstack/boxel-host/tools/search-cards';
-import ReadFileForAiAssistantCommand    from '@cardstack/boxel-host/tools/read-file-for-ai-assistant';
-import PatchFieldsCommand               from '@cardstack/boxel-host/tools/patch-fields';
-import ApplyMarkdownEditCommand         from '@cardstack/boxel-host/tools/apply-markdown-edit';
-import WriteTextFileCommand             from '@cardstack/boxel-host/tools/write-text-file';
-import CopyCardCommand                  from '@cardstack/boxel-host/tools/copy-card';
-import CopySourceCommand                from '@cardstack/boxel-host/tools/copy-source';
-import TransformCardsCommand            from '@cardstack/boxel-host/tools/transform-cards';
-import UpdateRoomSkillsCommand          from '@cardstack/boxel-host/tools/update-room-skills';
-import OpenWorkspaceCommand             from '@cardstack/boxel-host/tools/open-workspace';
-import PreviewFormatCommand             from '@cardstack/boxel-host/tools/preview-format';
+import ReadFileForAiAssistantCommand from '@cardstack/boxel-host/tools/read-file-for-ai-assistant';
+import PatchFieldsCommand from '@cardstack/boxel-host/tools/patch-fields';
+import ApplyMarkdownEditCommand from '@cardstack/boxel-host/tools/apply-markdown-edit';
+import WriteTextFileCommand from '@cardstack/boxel-host/tools/write-text-file';
+import CopyCardCommand from '@cardstack/boxel-host/tools/copy-card';
+import CopySourceCommand from '@cardstack/boxel-host/tools/copy-source';
+import TransformCardsCommand from '@cardstack/boxel-host/tools/transform-cards';
+import UpdateRoomSkillsCommand from '@cardstack/boxel-host/tools/update-room-skills';
+import OpenWorkspaceCommand from '@cardstack/boxel-host/tools/open-workspace';
+import PreviewFormatCommand from '@cardstack/boxel-host/tools/preview-format';
 import UpdateCodePathWithSelectionCommand from '@cardstack/boxel-host/tools/update-code-path-with-selection';
-import ReindexRealmCommand              from '@cardstack/boxel-host/tools/reindex-realm';
-import FullReindexRealmCommand          from '@cardstack/boxel-host/tools/full-reindex-realm';
-import CancelIndexingJobCommand         from '@cardstack/boxel-host/tools/cancel-indexing-job';
+import ReindexRealmCommand from '@cardstack/boxel-host/tools/reindex-realm';
+import FullReindexRealmCommand from '@cardstack/boxel-host/tools/full-reindex-realm';
+import CancelIndexingJobCommand from '@cardstack/boxel-host/tools/cancel-indexing-job';
 import InvalidateRealmIdentifiersCommand from '@cardstack/boxel-host/tools/invalidate-realm-identifiers';
 ```
 
@@ -131,12 +166,12 @@ import InvalidateRealmIdentifiersCommand from '@cardstack/boxel-host/tools/inval
 
 ```ts
 import GlimmerComponent from '@glimmer/component';
-import { tracked }      from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import { on }           from '@ember/modifier';
+import { on } from '@ember/modifier';
 import { fn, hash, array, get, concat } from '@ember/helper';
-import { action }       from '@ember/object';
-import { htmlSafe }     from '@ember/template';
+import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { setComponentTemplate } from '@ember/component';
 import { precompileTemplate } from '@ember/template-compilation';
@@ -145,7 +180,13 @@ import { precompileTemplate } from '@ember/template-compilation';
 ### Async / Resources / Modifiers
 
 ```ts
-import { task, restartableTask, dropTask, enqueueTask, keepLatestTask } from 'ember-concurrency';
+import {
+  task,
+  restartableTask,
+  dropTask,
+  enqueueTask,
+  keepLatestTask,
+} from 'ember-concurrency';
 import { Resource, resource, use } from 'ember-resources';
 import { modifier } from 'ember-modifier';
 ```
@@ -183,18 +224,18 @@ directly — no library load required (drums, tones, UI sound feedback via
 
 ## Lookup index
 
-| I want to use… | Tier | Import |
-|---|---|---|
-| `CardDef`, `FieldDef`, `Component` | 1 | `https://cardstack.com/base/card-api` |
-| `StringField`, `NumberField`, etc. | 1 | `https://cardstack.com/base/<type>` |
-| `getCards`, `Command` | 2 | `@cardstack/runtime-common` |
-| `Button`, `Pill`, helpers, icons | 2 | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
-| `KanbanPlane`, `KanbanPlacement`, drag/drop board helpers | 2 | `@cardstack/boxel-ui/components` |
-| Any host tool (`ai-assistant`, `switch-submode`, etc.) | 2 | `@cardstack/boxel-host/tools/<name>` |
-| `restartableTask` | 2 | `ember-concurrency` |
-| `Resource`, `resource()` | 2 | `ember-resources` |
-| `modifier()` | 2 | `ember-modifier` |
-| `tracked`, `GlimmerComponent` | 2 | `@glimmer/*` |
-| Three.js, chess.js, etc. | 3 | `https://esm.run/<pkg>` |
-| Tone.js (music toolkit) | 3 | `https://esm.run/tone@14` (pin major) |
-| Raw `AudioContext` (no library) | n/a | Built-in browser API |
+| I want to use…                                            | Tier | Import                                             |
+| --------------------------------------------------------- | ---- | -------------------------------------------------- |
+| `CardDef`, `FieldDef`, `Component`                        | 1    | `https://cardstack.com/base/card-api`              |
+| `StringField`, `NumberField`, etc.                        | 1    | `https://cardstack.com/base/<type>`                |
+| `getCards`, `Command`                                     | 2    | `@cardstack/runtime-common`                        |
+| `Button`, `Pill`, helpers, icons                          | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
+| `KanbanPlane`, `KanbanPlacement`, drag/drop board helpers | 2    | `@cardstack/boxel-ui/components`                   |
+| Any host tool (`ai-assistant`, `switch-submode`, etc.)    | 2    | `@cardstack/boxel-host/tools/<name>`               |
+| `restartableTask`                                         | 2    | `ember-concurrency`                                |
+| `Resource`, `resource()`                                  | 2    | `ember-resources`                                  |
+| `modifier()`                                              | 2    | `ember-modifier`                                   |
+| `tracked`, `GlimmerComponent`                             | 2    | `@glimmer/*`                                       |
+| Three.js, chess.js, etc.                                  | 3    | `https://esm.run/<pkg>`                            |
+| Tone.js (music toolkit)                                   | 3    | `https://esm.run/tone@14` (pin major)              |
+| Raw `AudioContext` (no library)                           | n/a  | Built-in browser API                               |
