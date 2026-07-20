@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type {
   BrokenLinkErrorDoc,
   BrokenLinkItemType,
@@ -41,6 +41,18 @@ import TabPills from './tab-pills';
 
 import type EmbedFormatSelection from './format-selection';
 import type { CardDef, FileDef } from '@cardstack/base/card-api';
+
+// The current-target tile renders the placed card/file as a compact fitted
+// chip — a fixed Double Strip (250×65), independent of the format the user
+// picks for the actual embed in the preview pane. It's an identity marker for
+// "what's placed here now", not the embed being configured. Frozen module
+// constant so the tile hands `MarkdownEmbedPreview` a stable object identity
+// across renders rather than a fresh one each time.
+const CURRENT_TILE_SIZE: BfmSizeSpec = Object.freeze<BfmSizeSpec>({
+  format: 'fitted',
+  width: 250,
+  height: 65,
+});
 
 interface Signature {
   Element: HTMLDivElement;
@@ -125,14 +137,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     if (!this.isEditMode) return undefined;
     let dirty = this.args.selection.isDirty || this.targetChanged;
     return dirty ? 'Accept' : 'Done';
-  }
-
-  // The current-target tile renders the placed card/file as a compact fitted
-  // chip — a fixed Double Strip (250×65), independent of the format the user
-  // picks for the actual embed in the preview pane. It's an identity marker for
-  // "what's placed here now", not the embed being configured.
-  private get currentTileSize(): BfmSizeSpec {
-    return { format: 'fitted', width: 250, height: 65 };
   }
 
   @action
@@ -251,19 +255,30 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             class='markdown-embed-chooser-tab-panel__current'
             data-test-markdown-embed-chooser-current
           >
-            <MarkdownEmbedPreview
-              class='markdown-embed-chooser-tab-panel__current-preview'
-              @target={{this.selectedTarget}}
-              @format='fitted'
-              @sizeSpec={{this.currentTileSize}}
-              @kind='block'
-              @brokenUrl={{this.brokenUrl}}
-              @brokenState={{this.brokenState}}
-              @brokenDisplayName={{this.brokenDisplayName}}
-              @brokenItemType={{this.brokenItemType}}
-              @errorDoc={{this.brokenErrorDoc}}
-              data-test-markdown-embed-chooser-current-preview
-            />
+            {{#if this.hasPreview}}
+              <MarkdownEmbedPreview
+                class='markdown-embed-chooser-tab-panel__current-preview'
+                @target={{this.selectedTarget}}
+                @format='fitted'
+                @sizeSpec={{CURRENT_TILE_SIZE}}
+                @kind='block'
+                @brokenUrl={{this.brokenUrl}}
+                @brokenState={{this.brokenState}}
+                @brokenDisplayName={{this.brokenDisplayName}}
+                @brokenItemType={{this.brokenItemType}}
+                @errorDoc={{this.brokenErrorDoc}}
+                data-test-markdown-embed-chooser-current-preview
+              />
+            {{else}}
+              {{! Hold the tile's 250×65 footprint while the preload resolves so
+                the Replace / Remove buttons don't jump when the chip arrives. }}
+              <div
+                class='markdown-embed-chooser-tab-panel__current-loading'
+                data-test-markdown-embed-chooser-current-loading
+              >
+                <LoadingIndicator />
+              </div>
+            {{/if}}
             <div class='markdown-embed-chooser-tab-panel__current-actions'>
               <BoxelButton
                 {{on 'click' this.startReplace}}
@@ -402,10 +417,24 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         padding: var(--boxel-sp);
         text-align: center;
       }
-      /* The fitted chip carries its own fixed footprint; keep it from
-         stretching to the centered column's cross axis. */
-      .markdown-embed-chooser-tab-panel__current-preview {
+      /* The fitted chip (and its loading stand-in) carries its own fixed
+         footprint; the column centers it, so keep flex from shrinking it on the
+         main axis. `align-items: center` already prevents cross-axis stretch. */
+      .markdown-embed-chooser-tab-panel__current-preview,
+      .markdown-embed-chooser-tab-panel__current-loading {
         flex: 0 0 auto;
+      }
+      /* Same 250×65 footprint as the resolved fitted chip so Replace / Remove
+         hold their position while the preload resolves. */
+      .markdown-embed-chooser-tab-panel__current-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 250px;
+        height: 65px;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
       }
       .markdown-embed-chooser-tab-panel__current-actions {
         display: flex;
