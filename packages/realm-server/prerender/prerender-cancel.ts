@@ -93,7 +93,17 @@ export async function abortable<T>(
                 typeof signal.reason === 'string' ? signal.reason : undefined,
             }),
           );
-        signal.addEventListener('abort', onAbort, { once: true });
+        // AbortSignal never replays `abort` for listeners attached
+        // after the fact, so re-check before attaching. No await
+        // separates the entry check above from this attach, so no
+        // abort can land between them — the re-check keeps the
+        // no-missed-abort guarantee local instead of resting on that
+        // ordering.
+        if (signal.aborted) {
+          onAbort();
+        } else {
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
       }),
     ]);
   } finally {
