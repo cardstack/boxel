@@ -207,11 +207,8 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     ];
   }
 
-  // Mounts only need the data present — coalesce with any in-flight load
-  // (billing-notification pushes keep it fresh thereafter) instead of issuing
-  // a duplicate /_user fetch per mount.
   private loadSubscriptionData = task(async () => {
-    await this.billingService.initializeSubscriptionData();
+    await this.billingService.loadSubscriptionData();
   });
 
   <template>
