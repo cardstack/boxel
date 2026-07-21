@@ -7,6 +7,7 @@ import {
   type Loader,
   MAX_MARKDOWN_RENDER_LENGTH,
 } from '@cardstack/runtime-common';
+import { OVERSIZED_MARKDOWN_PREVIEW_LENGTH } from '@cardstack/runtime-common/marked-sync';
 
 import {
   CardDef,
@@ -58,6 +59,8 @@ module('Integration | field markdown oversize', function (hooks) {
     assert
       .dom('.markdown-oversized-notice')
       .hasTextContaining('too large to render as Markdown');
+    // The size label is derived from the content length (~512 KB here).
+    assert.dom('.markdown-oversized-notice').hasTextContaining('KB');
     assert
       .dom('.markdown-oversized-preview')
       .hasTextContaining(
@@ -84,9 +87,13 @@ module('Integration | field markdown oversize', function (hooks) {
     assert
       .dom('.markdown-oversized-preview script')
       .doesNotExist('raw script tag is escaped, not injected as an element');
-    assert.true(
-      (preview?.textContent?.length ?? 0) < body.length,
-      'preview is a truncated slice, not the entire field',
+    // The preview is the leading OVERSIZED_MARKDOWN_PREVIEW_LENGTH characters
+    // plus a trailing ellipsis, decoded back to text — not the whole field.
+    let previewLength = preview?.textContent?.length ?? 0;
+    assert.strictEqual(
+      previewLength,
+      OVERSIZED_MARKDOWN_PREVIEW_LENGTH + 1,
+      'preview is truncated to the preview length plus an ellipsis',
     );
   });
 
@@ -104,5 +111,30 @@ module('Integration | field markdown oversize', function (hooks) {
       .doesNotExist('in-bounds content is not clamped');
     assert.dom('.markdown-content h1').hasText('Heading');
     assert.dom('.markdown-content strong').hasText('bold');
+  });
+
+  test('content exactly at the bound still renders as markdown', async function (this: RenderingTestContext, assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    // The clamp is strict `>`, so content of exactly the bound length parses.
+    // `# ` + filler adds up to exactly MAX_MARKDOWN_RENDER_LENGTH characters.
+    let heading = '# Heading\n\n';
+    let body =
+      heading + 'a'.repeat(MAX_MARKDOWN_RENDER_LENGTH - heading.length);
+    assert.strictEqual(
+      body.length,
+      MAX_MARKDOWN_RENDER_LENGTH,
+      'test content is exactly at the bound',
+    );
+    let doc = new Doc({ body });
+
+    await renderCard(loader, doc, 'isolated');
+
+    assert
+      .dom('[data-test-markdown-oversized]')
+      .doesNotExist('content exactly at the bound is not clamped');
+    assert.dom('.markdown-content h1').hasText('Heading');
   });
 });

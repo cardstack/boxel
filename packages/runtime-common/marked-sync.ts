@@ -1,4 +1,5 @@
 import { sanitizeHtml } from './dompurify-runtime.ts';
+import { MAX_MARKDOWN_RENDER_LENGTH } from './constants.ts';
 import { escapeHtml } from './helpers/html.ts';
 import {
   bfmCardReferenceExtensions,
@@ -202,6 +203,44 @@ export function markdownToHtml(
     html = sanitizeHtml(html);
   }
   return html;
+}
+
+// How many leading characters of over-limit content to show as an escaped
+// plain-text preview, so the field is not opaque without parsing all of it.
+export const OVERSIZED_MARKDOWN_PREVIEW_LENGTH = 2000;
+
+// Whether content is past the render bound and should skip the synchronous
+// markdown pipeline. Compares character length (a cheap proxy for the byte
+// length the card size limit bounds); see MAX_MARKDOWN_RENDER_LENGTH.
+export function isMarkdownOverRenderLimit(
+  content: string | null | undefined,
+): content is string {
+  return (
+    typeof content === 'string' && content.length > MAX_MARKDOWN_RENDER_LENGTH
+  );
+}
+
+// Approximate a content length (in string characters) as a human-readable size.
+function markdownContentSizeLabel(length: number): string {
+  if (length >= 1024 * 1024) {
+    return `${(length / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.round(length / 1024)} KB`;
+}
+
+// The fallback rendered for over-limit content in place of the parsed markdown:
+// a short notice plus an escaped, truncated plain-text preview. Returns an HTML
+// string; callers wrap it in their framework's html-safe marker. The preview is
+// escaped so the raw content is never interpreted as HTML.
+export function markdownOversizedNoticeHtml(content: string): string {
+  let preview = escapeHtml(content.slice(0, OVERSIZED_MARKDOWN_PREVIEW_LENGTH));
+  let sizeLabel = markdownContentSizeLabel(content.length);
+  return (
+    `<div class="markdown-oversized" data-test-markdown-oversized>` +
+    `<p class="markdown-oversized-notice">This content is too large to render as Markdown (${sizeLabel}). Showing the beginning as plain text:</p>` +
+    `<pre class="markdown-oversized-preview">${preview}…</pre>` +
+    `</div>`
+  );
 }
 
 export function hasCodeBlocks(markdown: string | null | undefined): boolean {

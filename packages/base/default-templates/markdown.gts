@@ -14,7 +14,6 @@ import {
   cardTypeName,
   fileNameFromUrl,
   extractMermaidBlocks,
-  MAX_MARKDOWN_RENDER_LENGTH,
   processKatexPlaceholders,
   replaceMermaidSvgs,
   resolveRRIReference,
@@ -23,6 +22,8 @@ import {
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
+  isMarkdownOverRenderLimit,
+  markdownOversizedNoticeHtml,
   markdownToHtml,
   preloadMarkdownLanguages,
 } from '@cardstack/runtime-common/marked-sync';
@@ -54,30 +55,6 @@ function wrapTablesHtml(html: string | null | undefined): string {
 // lazy-loading and the deferred card-slot collection) that is kicked off by
 // modifiers and ember-concurrency tasks after the initial render settles.
 const markdownRenderingWaiter = buildWaiter('markdown-rendering');
-
-// How many leading characters of over-limit content to show as an escaped
-// plain-text preview, so the field is not opaque without parsing all of it.
-const OVERSIZED_PREVIEW_LENGTH = 2000;
-
-// Escape the raw preview so over-limit content is shown as text and never
-// interpreted as HTML.
-function escapeHtml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-// Approximate a content length (in string characters) as a human-readable
-// size for the over-limit notice.
-function markdownContentSizeLabel(length: number): string {
-  if (length >= 1024 * 1024) {
-    return `${(length / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${Math.round(length / 1024)} KB`;
-}
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 type SlotState = 'resolved' | 'loading' | 'unresolved';
@@ -173,11 +150,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // the Monaco/KaTeX/Mermaid follow-on work all runs inside this getter, the
     // early return also avoids scanning the oversized content for code fences,
     // math, and mermaid blocks.
-    if (
-      typeof content === 'string' &&
-      content.length > MAX_MARKDOWN_RENDER_LENGTH
-    ) {
-      return this.oversizedContentHtml(content);
+    if (isMarkdownOverRenderLimit(content)) {
+      return htmlSafe(markdownOversizedNoticeHtml(content));
     }
     let html = markdownToHtml(content, {
       enableMonacoSyntaxHighlighting: !!(
@@ -230,20 +204,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     }
 
     return htmlSafe(html);
-  }
-
-  // Fallback for over-limit content: a short notice plus an escaped, truncated
-  // plain-text preview so the field is not opaque. The preview is escaped so
-  // the raw content is never interpreted as HTML.
-  private oversizedContentHtml(content: string) {
-    let preview = escapeHtml(content.slice(0, OVERSIZED_PREVIEW_LENGTH));
-    let sizeLabel = markdownContentSizeLabel(content.length);
-    return htmlSafe(
-      `<div class="markdown-oversized" data-test-markdown-oversized>` +
-        `<p class="markdown-oversized-notice">This field is too large to render as Markdown (${sizeLabel}). Showing the beginning as plain text:</p>` +
-        `<pre class="markdown-oversized-preview">${preview}…</pre>` +
-        `</div>`,
-    );
   }
 
   captureCardSlots = modifier(
