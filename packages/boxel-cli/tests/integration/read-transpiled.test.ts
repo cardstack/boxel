@@ -7,7 +7,7 @@ import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../../src/commands/read-transpiled.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -167,9 +167,6 @@ describe('read-transpiled (integration)', () => {
 
   it('exits non-zero with a clear error when there is no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    // Materialize an empty profile store so the CLI reaches the
-    // no-active-profile guard rather than any first-run bootstrapping.
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     try {
       let res = await runBoxel(
         ['read-transpiled', 'transpiled-check.gts', '--realm', realmUrl],

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { cancelIndexing } from '../../src/commands/realm/cancel-indexing.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -104,9 +104,6 @@ describe('realm cancel-indexing (integration)', () => {
 
   it('returns error result when no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    // Materialize an empty profile store so the CLI reaches the
-    // no-active-profile guard rather than any first-run bootstrapping.
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     try {
       let res = await runBoxel(
         ['realm', 'cancel-indexing', '--realm', realmUrl],

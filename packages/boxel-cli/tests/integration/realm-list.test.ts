@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -149,9 +149,6 @@ describe('realm list (integration)', () => {
 
   it('returns an error when no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    // Materialize an empty profile store so the CLI reaches the
-    // no-active-profile guard rather than any first-run bootstrapping.
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     try {
       let res = await runBoxel(['realm', 'list', '--json'], {
         home: emptyHome,

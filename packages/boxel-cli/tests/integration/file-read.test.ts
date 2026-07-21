@@ -3,7 +3,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -190,7 +189,6 @@ describe('file read (integration)', () => {
 
   it('returns error result when no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     try {
       let res = await runBoxel(
         ['file', 'read', 'test-card.json', '--realm', realmUrl, '--json'],

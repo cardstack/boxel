@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -243,7 +243,6 @@ export class MyCard extends CardDef {
 
   it('returns error result when no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     let srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-lint-src-'));
     let srcFile = path.join(srcDir, 'test.gts');
     fs.writeFileSync(srcFile, 'let x = 1;', 'utf-8');

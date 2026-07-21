@@ -13,7 +13,6 @@ import {
   type BrokenLinkEntry,
   type FrontmatterErrorEntry,
 } from '../../src/commands/realm/indexing-errors.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -299,9 +298,6 @@ describe('realm indexing-errors (integration)', () => {
 
   it('returns NO_ACTIVE_PROFILE_ERROR when no profile is active', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    // Materialize an empty profile store so the CLI reaches the
-    // no-active-profile guard rather than any first-run bootstrapping.
-    new ProfileManager(path.join(emptyHome, '.boxel-cli'));
     try {
       let res = await runBoxel(
         ['realm', 'indexing-errors', '--realm', realmUrl],
