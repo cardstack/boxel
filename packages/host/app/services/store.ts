@@ -2865,10 +2865,10 @@ export default class StoreService extends Service implements StoreInterface {
       // card). A card instance's JavaScript class is fixed at construction, so
       // applying the new JSON to the existing object with `updateFromSerialized`
       // would leave the old class in place and keep rendering the old type.
-      // When the incoming `meta.adoptsFrom` resolves to a type this instance is
-      // not an instance of, re-instantiate from the new type instead:
-      // `createFromSerialized` builds the new-typed instance and swaps it into
-      // the identity map, so reads of this id re-render as the new type.
+      // Resolve the incoming type and, when it is not exactly the instance's
+      // class, rebuild from the new type. The comparison is exact (not a
+      // subtype check) so that re-pointing from a subclass to one of its
+      // ancestors also rebuilds instead of keeping the subclass instance.
       let newDef: typeof BaseDef;
       try {
         newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
@@ -2878,36 +2878,38 @@ export default class StoreService extends Service implements StoreInterface {
       } catch (err: any) {
         // `loadCardDef` throws a 404 CardError when the resolved module lacks
         // the export. That's a "this client can't resolve the new type" error
-        // state for the card — not a deletion — so surface it without the 404
-        // status, which `reloadTask` reserves for a genuinely removed instance
-        // (a 404 from `fetchJSON` above).
-        throw new Error(
-          err?.message ?? `Cannot resolve the type of ${instance.id}`,
-        );
+        // state for the card, not a deletion — `reloadTask` reserves a 404 for
+        // a genuinely removed instance (the 404 that `fetchJSON` throws above).
+        // Keep the error's detail but drop the 404 so it surfaces as an error
+        // state rather than a phantom delete.
+        if (isCardError(err) && err.status === 404) {
+          err.status = 422;
+        }
+        throw err;
       }
-      // Native `instanceof` (rather than the CodeRef-walking `instanceOf` that
-      // createFromSerialized uses) can diverge only after a loader reset — but
-      // a loader reset always resets the store too, rebuilding instances from
-      // scratch, so this path never sees a stale-loader instance. Where they
-      // could disagree, `instanceof` errs toward rebuilding, the safe direction.
-      if (!(instance instanceof (newDef as typeof CardDef))) {
-        // Carry the existing instance's local id onto the new-typed instance.
-        // A card keeps its identity across a type change, and the identity
-        // map's id-resolver rejects a second local id for an already-known
-        // remote id. Reusing the local id also keeps everything keyed by it
-        // (references, the identity map) resolving to the new instance.
-        let docForNewType: LooseSingleCardDocument = {
-          ...incomingDoc,
-          data: {
-            ...incomingDoc.data,
-            lid: instance[localIdSymbol],
-          },
-        };
-        return await this.createFromSerialized(
-          docForNewType.data,
-          docForNewType,
-          new URL(instance.id),
+
+      let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
+        | typeof BaseDef
+        | undefined;
+      if (currentDef !== newDef) {
+        // Rebuild as the new type, reusing the existing local id so the
+        // identity map — and everything keyed by it, references included —
+        // keeps resolving this card to the rebuilt instance (the id-resolver
+        // also rejects a second local id for an already-known remote id).
+        // Construct directly rather than via `createFromSerialized`, whose
+        // cached-instance reuse would keep the old object when the new type is
+        // one of its ancestors; `updateFromSerialized` then deserializes into
+        // the new instance and swaps it into the identity map.
+        let rebuilt = new (newDef as typeof CardDef)({
+          id: instance.id,
+          [localIdSymbol]: instance[localIdSymbol],
+        });
+        await api.updateFromSerialized<typeof CardDef>(
+          rebuilt,
+          incomingDoc,
+          this.store,
         );
+        return rebuilt;
       }
 
       await api.updateFromSerialized<typeof CardDef>(
