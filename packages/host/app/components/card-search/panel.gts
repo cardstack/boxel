@@ -67,7 +67,11 @@ export default class SearchPanel extends Component<Signature> {
 
   private get initialFocusedSectionId(): string | null {
     let realmURLs = this.args.initialSelectedRealms;
-    if (!realmURLs || realmURLs.length === 0) {
+    // Only auto-focus a section when the search is pinned to a single realm.
+    // Focusing collapses every other realm's section to its header, so for a
+    // multi-realm scope (e.g. the skill chooser's user + catalog + skills)
+    // focusing the first realm would hide the results of all the others.
+    if (!realmURLs || realmURLs.length !== 1) {
       return null;
     }
     return `realm:${realmURLs[0].href}`;
