@@ -112,6 +112,14 @@ export function runBoxel(
 
     let stdout = '';
     let stderr = '';
+    // Decode as UTF-8 via a StringDecoder that buffers partial multi-byte
+    // sequences across `data` events. Without this each chunk is decoded
+    // independently, so a multi-byte character split across a pipe
+    // boundary would yield U+FFFD — a latent flake for realm content with
+    // non-ASCII text (surfacing through `file read` and `--json` payloads
+    // that get JSON.parsed).
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
