@@ -1499,7 +1499,18 @@ export class Batch {
     return typesByUrl;
   }
 
-  async done(): Promise<{ totalIndexEntries: number }> {
+  async done(opts?: {
+    // Write the previous generation's realm_meta value at this batch's
+    // generation instead of recomputing it from `boxel_index_working`. The
+    // setup-phase failure recovery finalizes while the working table still
+    // holds the failed pass's un-promoted fan-out tombstones; a recompute
+    // over that state would undercount live dependents in the type summary
+    // until the next successful pass. Its error rows don't change the
+    // realm's type counts, so the prior summary is the accurate one — and a
+    // row must exist at this generation, because reads join realm_meta to
+    // realm_generations.current_generation.
+    carryForwardRealmMeta?: true;
+  }): Promise<{ totalIndexEntries: number }> {
     // Drain any rows the visit loop left buffered before the swap reads the
     // working table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
@@ -1515,13 +1526,60 @@ export class Batch {
       return { totalIndexEntries: this.#invalidations.size };
     }
     await this.#query(['BEGIN']);
-    await this.updateRealmMeta();
+    if (opts?.carryForwardRealmMeta) {
+      await this.carryForwardRealmMeta();
+    } else {
+      await this.updateRealmMeta();
+    }
     await this.applyBatchUpdates();
     await this.pruneObsoleteEntries();
     await this.#query(['COMMIT']);
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
+  }
+
+  // Re-stamp the current committed generation's realm_meta value at this
+  // batch's generation. Runs inside done()'s transaction before
+  // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
+  // still resolves the prior row here. Falls back to a fresh compute when no
+  // prior row exists (a realm that has never completed a pass).
+  private async carryForwardRealmMeta(): Promise<void> {
+    let [row] = (await this.#query([
+      `SELECT rm.value
+       FROM realm_meta rm
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
+       WHERE`,
+      ...every([['rm.realm_url =', param(this.realmURL.href)]]),
+      `LIMIT 1`,
+    ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
+    if (!row) {
+      await this.updateRealmMeta();
+      return;
+    }
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        realm_url: this.realmURL.href,
+        generation: this.generation,
+        value: row.value,
+        indexed_at: unixTime(new Date().getTime()),
+      } as Omit<RealmMetaTable, 'indexed_at'> & {
+        indexed_at: number;
+      },
+      {
+        jsonFields: ['value'],
+      },
+    );
+    await this.#query([
+      ...upsert(
+        'realm_meta',
+        'realm_meta_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
   }
 
   #query(expression: Expression) {

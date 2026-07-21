@@ -463,55 +463,58 @@ export class IndexRunner {
     let totalFiles = 0;
     let filesCompleted = 0;
     let hrefs: string[] = [];
+    // The outer try's finally covers the setup phase too, so a setup-phase
+    // throw still emits the terminal progress event and releases the
+    // prerender-server affinity rather than leaking them.
     try {
-      await current.batch.invalidate(urls);
-      discoverMs = Date.now() - discoverStart;
-      current.#notifyInvalidationsReady(
-        current.batch.invalidations,
-        new Set(
-          [...operations]
-            .filter(([, operation]) => operation === 'delete')
-            .map(([href]) => href),
-        ),
-      );
-      let orderStart = Date.now();
-      invalidations = sortInvalidations(
-        current.batch.invalidations.map((href) => new URL(href)),
-        current.realmURL,
-      );
-      invalidations =
-        await current.#dependencyResolver.orderInvalidationsByDependencies(
-          invalidations,
+      try {
+        await current.batch.invalidate(urls);
+        discoverMs = Date.now() - discoverStart;
+        current.#notifyInvalidationsReady(
+          current.batch.invalidations,
+          new Set(
+            [...operations]
+              .filter(([, operation]) => operation === 'delete')
+              .map(([href]) => href),
+          ),
         );
-      orderMs = Date.now() - orderStart;
-      let hasExecutableInvalidation = invalidations.some((url) =>
-        hasExecutableExtension(url.href),
-      );
-      if (hasExecutableInvalidation) {
-        if (!current.#shouldClearCacheForNextRender) {
-          current.#log.debug(
-            `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+        let orderStart = Date.now();
+        invalidations = sortInvalidations(
+          current.batch.invalidations.map((href) => new URL(href)),
+          current.realmURL,
+        );
+        invalidations =
+          await current.#dependencyResolver.orderInvalidationsByDependencies(
+            invalidations,
           );
+        orderMs = Date.now() - orderStart;
+        let hasExecutableInvalidation = invalidations.some((url) =>
+          hasExecutableExtension(url.href),
+        );
+        if (hasExecutableInvalidation) {
+          if (!current.#shouldClearCacheForNextRender) {
+            current.#log.debug(
+              `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+            );
+          }
+          current.#scheduleClearCacheForNextRender();
         }
-        current.#scheduleClearCacheForNextRender();
+        totalFiles = invalidations.length;
+        hrefs = urls.map((u) => u.href);
+        // One batched read of the invalidation set's created-at + content
+        // hash/size so the per-visit lookups are served from memory. Deletes
+        // and resumed URLs that get skipped below just leave unused cache
+        // entries — harmless.
+        await current.batch.prefetchFileMeta(
+          current.#visitLocalPaths(invalidations),
+        );
+      } catch (setupErr) {
+        await current.#recordSetupPhaseError(urls, operations, setupErr);
+        throw setupErr;
       }
-      totalFiles = invalidations.length;
-      hrefs = urls.map((u) => u.href);
-      // One batched read of the invalidation set's created-at + content
-      // hash/size so the per-visit lookups are served from memory. Deletes and
-      // resumed URLs that get skipped below just leave unused cache entries —
-      // harmless.
-      await current.batch.prefetchFileMeta(
-        current.#visitLocalPaths(invalidations),
-      );
-    } catch (setupErr) {
-      await current.#recordSetupPhaseError(urls, operations, setupErr);
-      throw setupErr;
-    }
-    let resumedRows = current.batch.resumedRows;
-    let resumedSkipped = 0;
-    let loopStart = Date.now();
-    try {
+      let resumedRows = current.batch.resumedRows;
+      let resumedSkipped = 0;
+      let loopStart = Date.now();
       await current.#runVisitLoop(invalidations, {
         skipReason: (url) => {
           if (
@@ -875,12 +878,19 @@ export class IndexRunner {
     }
     let message = coerceErrorMessage(
       err,
-      `Indexing failed during invalidation with no error message (${jobIdentity(this.#jobInfo)})`,
+      `Indexing failed during the setup phase with no error message (${jobIdentity(this.#jobInfo)})`,
     );
+    // Sample the URL list: a bulk push is exactly when this fires, and
+    // logging hundreds of URLs in one line defeats log-line limits and
+    // searchability. The error docs carry the full per-URL detail.
+    let sample = recordUrls
+      .slice(0, 5)
+      .map((u) => u.href)
+      .join(', ');
     this.#log.warn(
-      `${jobIdentity(this.#jobInfo)} invalidation phase failed for ${recordUrls
-        .map((u) => u.href)
-        .join(', ')}, recording error docs: ${message}`,
+      `${jobIdentity(this.#jobInfo)} setup phase failed for ${recordUrls.length} URLs (${sample}${
+        recordUrls.length > 5 ? ', …' : ''
+      }), recording error docs: ${message}`,
     );
     try {
       let errorBatch = await this.#indexWriter.createBatch(
@@ -908,7 +918,11 @@ export class IndexRunner {
           );
         }
       }
-      await errorBatch.done();
+      // Carry realm_meta forward rather than recomputing it: the working
+      // table still holds the failed pass's un-promoted fan-out tombstones,
+      // and a recompute over that state would undercount live dependents in
+      // the type summary until the next successful pass.
+      await errorBatch.done({ carryForwardRealmMeta: true });
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
       // write fails too. The caller still rethrows the original error, so the

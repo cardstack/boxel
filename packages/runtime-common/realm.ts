@@ -1478,6 +1478,19 @@ export class Realm {
           await opts.onSettled([...invalidations], { generation });
         }
       },
+      onFailed: async () => {
+        // A failed job may still have swapped setup-phase error docs into
+        // boxel_index for the URLs it was handed. Run the same cache wipe the
+        // success path does and broadcast those URLs, so local and peer
+        // readers — and live subscribers — see the error state now rather
+        // than after the next successful swap. Broadcasting is safe when
+        // nothing landed: subscribers re-fetch and find the rows unchanged.
+        await this.clearRealmIndexCachesAndBroadcast();
+        this.broadcastIncrementalInvalidationEvent(
+          urls.map((url) => url.href.replace(/\.json$/, '')),
+          { clientRequestId: opts?.clientRequestId ?? null },
+        );
+      },
     });
 
     return { settled };

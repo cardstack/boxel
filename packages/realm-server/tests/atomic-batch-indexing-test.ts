@@ -1,11 +1,17 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import type { Test, SuperTest } from 'supertest';
+import type { DirResult } from 'tmp';
+import type { PgAdapter } from '@cardstack/postgres';
 
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { RealmHttpServer as Server } from '../server.ts';
 import {
   setupPermissionedRealmCached,
+  setupMatrixRoom,
   createJWT,
   withRealmPath,
   searchCardsForTest,
@@ -100,20 +106,37 @@ module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let testDbAdapter: DBAdapter;
   let request: RealmRequest;
+  let serverRequest: SuperTest<Test>;
+  let testRealmHttpServer: Server;
+  let dir: DirResult;
 
   setupPermissionedRealmCached(hooks, {
     mode: 'beforeEach',
     realmURL: testRealm,
     permissions: {
       '*': ['read', 'write'],
+      '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
     },
+    subscribeToRealmEvents: true,
     fileSystem: makeFileSystem(),
-    onRealmSetup({ testRealm: r, dbAdapter, request: req }) {
-      realm = r;
-      testDbAdapter = dbAdapter;
-      request = withRealmPath(req, testRealm);
+    onRealmSetup(args) {
+      realm = args.testRealm;
+      testDbAdapter = args.dbAdapter;
+      request = withRealmPath(args.request, testRealm);
+      serverRequest = args.request;
+      testRealmHttpServer = args.testRealmHttpServer;
+      dir = args.dir;
     },
   });
+
+  let { getMessagesSince } = setupMatrixRoom(hooks, () => ({
+    testRealm: realm,
+    testRealmHttpServer,
+    request,
+    serverRequest,
+    dir,
+    dbAdapter: testDbAdapter as PgAdapter,
+  }));
 
   async function jobsFor(
     jobType: 'incremental-index' | 'prerender_html',
@@ -296,6 +319,9 @@ module(basename(import.meta.filename), function (hooks) {
     // failed state stays put for the assertions below.
     let fault = injectSetupPhaseFailure(testDbAdapter);
 
+    // Matrix timestamps can skew slightly from this process's clock; back the
+    // capture point off so the failure-path broadcast can't slip under it.
+    let sinceTs = Date.now() - 2_000;
     let hrefs = Array.from(
       { length: fileCount },
       (_unused, i) => `${realm.url}broken-${i}.json`,
@@ -380,6 +406,36 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(
       Boolean(moduleRows[0]?.has_error),
       'the module row is still clean — nothing was collaterally deleted or errored',
+    );
+
+    // The failed pass still broadcasts an incremental invalidation for the
+    // URLs it was handed, so live subscribers and peer caches learn the rows
+    // changed state — error docs a UI never hears about are invisible.
+    await waitUntil(
+      async () => {
+        let messages = await getMessagesSince(sinceTs);
+        return messages.some((message) => {
+          if (message.type !== APP_BOXEL_REALM_EVENT_TYPE) {
+            return false;
+          }
+          let content = message.content as {
+            eventName?: string;
+            indexType?: string;
+            invalidations?: string[];
+          };
+          return (
+            content.eventName === 'index' &&
+            content.indexType === 'incremental' &&
+            (content.invalidations ?? []).includes(`${realm.url}broken-0`)
+          );
+        });
+      },
+      {
+        timeout: 30_000,
+        interval: 250,
+        timeoutMessage:
+          'no incremental invalidation event was broadcast for the failed batch',
+      },
     );
   });
 
