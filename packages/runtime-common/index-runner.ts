@@ -455,8 +455,8 @@ export class IndexRunner {
     // before #runVisitLoop, so its per-URL error isolation cannot cover a
     // throw in this phase. Left uncaught, a setup-phase failure would drop the
     // whole batch with nothing recorded — the silent drop. #recordSetupPhaseError
-    // writes an error doc for every URL the job was handed; the rethrow keeps
-    // the queue retry (and its self-healing) intact.
+    // writes an error doc for every URL the job was handed; the rethrow still
+    // rejects the job so the failure stays visible to job accounting.
     let discoverMs = 0;
     let orderMs = 0;
     let invalidations: URL[] = [];
@@ -851,10 +851,13 @@ export class IndexRunner {
   // `done()` would delete those dependents. Record the failure on a FRESH
   // batch scoped to just the URLs the job was handed: buffer their error rows
   // and promote only those, leaving the rest of the index untouched. The
-  // caller rethrows afterward, so pg-boss still retries — `loadResumedRows`
-  // excludes error rows, so a transient setup failure re-visits and self-heals
-  // on the next attempt, while a persistent one stays visible as an error doc
-  // on every handed URL instead of an invisible gap.
+  // caller rethrows afterward, rejecting the job — a thrown error gets no
+  // in-queue retry (only an expired reservation does), so these error docs
+  // are the durable signal that the batch never indexed. They never wedge the
+  // URLs, either: error rows are excluded from resume (`loadResumedRows`) and
+  // are invalidated like any row, so an expired-reservation re-attempt or any
+  // later write touching the URLs re-visits them and replaces the error with
+  // fresh content.
   async #recordSetupPhaseError(
     urls: URL[],
     operations: Map<string, 'update' | 'delete'>,
