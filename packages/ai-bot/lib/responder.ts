@@ -226,11 +226,18 @@ export class Responder {
       Boolean(call),
     );
 
+    // When we're not sending mid-turn, `finalize()` owns the
+    // `isStreamingFinished` transition — otherwise the flag would flip here,
+    // the mid-turn send would be gated off, and `finalize()` would see no
+    // transition and skip the final send too, leaving only the thinking
+    // placeholder in the room.
+    const isStreamingFinished =
+      this.shouldStreamMidTurn && chunk.choices?.[0]?.finish_reason === 'stop';
     const responseStateChanged = this.responseState.update(
       newReasoningContent,
       snapshot.choices?.[0]?.message?.content,
       toolCalls,
-      chunk.choices?.[0]?.finish_reason === 'stop',
+      isStreamingFinished,
     );
     log.debug('onChunk', {
       reasoning: this.responseState.latestReasoning,

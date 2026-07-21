@@ -400,7 +400,17 @@ module('Responding', (hooks) => {
       await responder.ensureThinkingMessageSent();
 
       for (let i = 0; i < 10; i++) {
-        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        // The last chunk carries `finish_reason: 'stop'` — this pins the
+        // end-of-stream transition and would regress the bug where off mode
+        // let onChunk flip isStreamingFinished, causing finalize to skip the
+        // final consolidated send.
+        let chunk =
+          i === 9
+            ? ({
+                choices: [{ finish_reason: 'stop', index: 0, delta: {} }],
+              } as any)
+            : ({} as any);
+        await responder.onChunk(chunk, snapshotWithContent('content ' + i));
       }
 
       let sentEvents = fakeMatrixClient.getSentEvents();
