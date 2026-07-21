@@ -480,6 +480,8 @@ export class RetrySubmissionWorkflowInput extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardIds = containsMany(StringField);
+  // installed with the listing but not shown in the listing detail view
+  @field supportingCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(RealmField);
 }
