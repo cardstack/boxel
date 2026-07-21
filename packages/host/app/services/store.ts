@@ -32,6 +32,7 @@ import {
   isSingleFileMetaDocument,
   isEntryCollectionDocument,
   isSparseItemResource,
+  loadCardDef,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
   getTypeRefsFromFilter,
@@ -2005,8 +2006,7 @@ export default class StoreService extends Service implements StoreInterface {
 
     try {
       try {
-        await this.reloadInstance(instance);
-        maybeReloadedInstance = instance;
+        maybeReloadedInstance = await this.reloadInstance(instance);
       } catch (err: any) {
         if (err.status === 404) {
           // in this case the document was invalidated in the index because the
@@ -2017,7 +2017,15 @@ export default class StoreService extends Service implements StoreInterface {
           maybeReloadedInstance = errorResponse.errors[0];
         }
       }
-      if (!isCardInstance(maybeReloadedInstance)) {
+      // Detach the original instance's autosave subscription when it's been
+      // superseded: either the reload errored, or the card's type changed and
+      // reloadInstance built a fresh instance of the new type and swapped it
+      // into the identity map. When the reload updated the same object in
+      // place (the common case), keep its subscription.
+      if (
+        !isCardInstance(maybeReloadedInstance) ||
+        maybeReloadedInstance !== instance
+      ) {
         await this.stopAutoSaving(instance);
       }
       if (maybeReloadedInstance) {
@@ -2831,10 +2839,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private async reloadInstance(instance: CardDef): Promise<void> {
+  // Returns the refreshed instance. Usually this is the same object as the
+  // one passed in (updated in place), but when the card's type changed it is a
+  // freshly-built instance of the new type — see below.
+  private async reloadInstance(instance: CardDef): Promise<CardDef> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
-    await this.withTestWaiters(async () => {
+    return await this.withTestWaiters(async () => {
       let api = await this.cardService.getAPI();
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
@@ -2847,11 +2858,64 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
       }
+
+      // Scenario: a saved card instance changes its type — its JSON
+      // `meta.adoptsFrom` is edited to point at a different card definition
+      // (e.g. a realm index card re-pointed from CardsGrid to a custom index
+      // card). A card instance's JavaScript class is fixed at construction, so
+      // applying the new JSON to the existing object with `updateFromSerialized`
+      // would leave the old class in place and keep rendering the old type.
+      // When the incoming `meta.adoptsFrom` resolves to a type this instance is
+      // not an instance of, re-instantiate from the new type instead:
+      // `createFromSerialized` builds the new-typed instance and swaps it into
+      // the identity map, so reads of this id re-render as the new type.
+      let newDef: typeof BaseDef;
+      try {
+        newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(instance.id),
+        });
+      } catch (err: any) {
+        // `loadCardDef` throws a 404 CardError when the resolved module lacks
+        // the export. That's a "this client can't resolve the new type" error
+        // state for the card — not a deletion — so surface it without the 404
+        // status, which `reloadTask` reserves for a genuinely removed instance
+        // (a 404 from `fetchJSON` above).
+        throw new Error(
+          err?.message ?? `Cannot resolve the type of ${instance.id}`,
+        );
+      }
+      // Native `instanceof` (rather than the CodeRef-walking `instanceOf` that
+      // createFromSerialized uses) can diverge only after a loader reset — but
+      // a loader reset always resets the store too, rebuilding instances from
+      // scratch, so this path never sees a stale-loader instance. Where they
+      // could disagree, `instanceof` errs toward rebuilding, the safe direction.
+      if (!(instance instanceof (newDef as typeof CardDef))) {
+        // Carry the existing instance's local id onto the new-typed instance.
+        // A card keeps its identity across a type change, and the identity
+        // map's id-resolver rejects a second local id for an already-known
+        // remote id. Reusing the local id also keeps everything keyed by it
+        // (references, the identity map) resolving to the new instance.
+        let docForNewType: LooseSingleCardDocument = {
+          ...incomingDoc,
+          data: {
+            ...incomingDoc.data,
+            lid: instance[localIdSymbol],
+          },
+        };
+        return await this.createFromSerialized(
+          docForNewType.data,
+          docForNewType,
+          new URL(instance.id),
+        );
+      }
+
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
         this.store,
       );
+      return instance;
     });
   }
 
