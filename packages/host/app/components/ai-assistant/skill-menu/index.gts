@@ -208,14 +208,29 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           ...exclusions,
         ],
       },
-      // Scope to the user's own workspaces plus the shared Boxel Skills realm,
-      // where most attachable skills live. A bounded scope keeps the mixed
-      // chooser (`includeFiles`) from fanning out across every server realm
-      // (base, catalog, …) and stalling on their contents.
+      // Scope to the realms where attachable skills live: the user's own
+      // workspaces, any catalog realms, and the shared Boxel Skills realm.
       realms: [
-        ...new Set([...this.realmServer.userRealmIdentifiers, skillsRealmURL]),
+        ...new Set([
+          ...this.realmServer.userRealmIdentifiers,
+          ...this.realmServer.catalogRealmIdentifiers,
+          skillsRealmURL,
+        ]),
       ],
     };
+    // TEMP DIAGNOSTIC — remove before merge.
+    console.warn(
+      '[SKILL-SCOPE] user=',
+      JSON.stringify(this.realmServer.userRealmIdentifiers),
+      'catalog=',
+      JSON.stringify(this.realmServer.catalogRealmIdentifiers),
+      'skills=',
+      skillsRealmURL,
+      'available=',
+      JSON.stringify(this.realmServer.availableRealmIdentifiers),
+      'FINAL=',
+      JSON.stringify(query.realms),
+    );
     let chosen = await chooseCard(query, { includeFiles: true });
     if (!chosen) {
       return;
