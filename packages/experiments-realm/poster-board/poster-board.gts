@@ -27,7 +27,6 @@ class Isolated extends Component<typeof PosterBoard> {
   private panSession: PanSession | null = null;
   private activePointerId: number | null = null;
   private rootElement: HTMLElement | null = null;
-  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   get zoomLabel() {
     return Math.round(this.rig.magnify * 100) + '%';
@@ -70,8 +69,12 @@ class Isolated extends Component<typeof PosterBoard> {
     this.panSession = this.surfaceRig.startPan(event.clientX, event.clientY);
     this.activePointerId = event.pointerId;
     this.isPanning = true;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    const root = event.currentTarget as HTMLElement;
+    root.setPointerCapture(event.pointerId);
     event.preventDefault();
+    // preventDefault suppresses pointerdown's click-to-focus, so focus
+    // explicitly — the keydown listener lives on this element
+    root.focus();
   };
 
   handlePointerMove = (rawEvent: Event) => {
@@ -121,7 +124,8 @@ class Isolated extends Component<typeof PosterBoard> {
     this.rig.magnify = 1;
   };
 
-  handleKeyDown = (event: KeyboardEvent) => {
+  handleKeyDown = (rawEvent: Event) => {
+    const event = rawEvent as KeyboardEvent;
     const target = event.target as HTMLElement;
     if (
       target.tagName === 'INPUT' ||
@@ -152,15 +156,9 @@ class Isolated extends Component<typeof PosterBoard> {
 
   handleInserted = (el: HTMLElement) => {
     this.rootElement = el;
-    this.keydownHandler = this.handleKeyDown;
-    window.addEventListener('keydown', this.keydownHandler);
   };
 
   willDestroy(): void {
-    if (this.keydownHandler) {
-      window.removeEventListener('keydown', this.keydownHandler);
-      this.keydownHandler = null;
-    }
     this.surfaceRig.destroy();
     super.willDestroy();
   }
@@ -170,12 +168,16 @@ class Isolated extends Component<typeof PosterBoard> {
     <div
       class='poster-board-root'
       style={{this.rootStyle}}
+      role='application'
+      aria-label='Poster board canvas'
+      tabindex='0'
       {{OnInsert this.handleInserted}}
       {{on 'wheel' this.handleWheel}}
       {{on 'pointerdown' this.handlePointerDown}}
       {{on 'pointermove' this.handlePointerMove}}
       {{on 'pointerup' this.handlePointerUp}}
       {{on 'pointercancel' this.handlePointerUp}}
+      {{on 'keydown' this.handleKeyDown}}
       data-test-poster-board
     >
       <div class='poster-board-plane' style={{this.planeStyle}}>
@@ -244,6 +246,15 @@ class Isolated extends Component<typeof PosterBoard> {
         overflow: hidden;
         touch-action: none;
         min-width: 0;
+      }
+
+      .poster-board-root:focus {
+        outline: none;
+      }
+
+      .poster-board-root:focus-visible {
+        outline: 2px solid var(--ring, var(--primary));
+        outline-offset: -2px;
       }
 
       .poster-board-plane {

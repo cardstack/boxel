@@ -56,19 +56,30 @@ export function runTests() {
         .hasText('100%', 'fit resets zoom to 100%');
     });
 
-    test('poster-board keyboard shortcuts match physical keys and leave browser zoom alone', async function (assert) {
+    test('poster-board keyboard shortcuts match physical keys, stay scoped to the board, and leave browser zoom alone', async function (assert) {
       await renderPosterBoard();
+
+      // The listener lives on the board element, not window — a keystroke
+      // while focus is elsewhere must not zoom the board
+      await triggerEvent(document, 'keydown', {
+        code: 'Equal',
+        key: '+',
+        shiftKey: true,
+      });
+      assert
+        .dom('[data-test-zoom-level]')
+        .hasText('100%', 'keystroke outside the board is ignored');
 
       // event.key carries the shifted character ('+', '_', ')') — the
       // handler must match the physical event.code instead
-      await triggerEvent(document, 'keydown', {
+      await triggerEvent('[data-test-poster-board]', 'keydown', {
         code: 'Equal',
         key: '+',
         shiftKey: true,
       });
       assert.dom('[data-test-zoom-level]').hasText('120%', 'Shift+= zooms in');
 
-      await triggerEvent(document, 'keydown', {
+      await triggerEvent('[data-test-poster-board]', 'keydown', {
         code: 'Equal',
         key: '+',
         shiftKey: true,
@@ -78,7 +89,7 @@ export function runTests() {
         .dom('[data-test-zoom-level]')
         .hasText('120%', 'ctrl+shift+= is left to the browser');
 
-      await triggerEvent(document, 'keydown', {
+      await triggerEvent('[data-test-poster-board]', 'keydown', {
         code: 'Digit0',
         key: ')',
         shiftKey: true,
@@ -87,7 +98,7 @@ export function runTests() {
         .dom('[data-test-zoom-level]')
         .hasText('100%', 'Shift+0 resets to 100%');
 
-      await triggerEvent(document, 'keydown', {
+      await triggerEvent('[data-test-poster-board]', 'keydown', {
         code: 'Minus',
         key: '_',
         shiftKey: true,
