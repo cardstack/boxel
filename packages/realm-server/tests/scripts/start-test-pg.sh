@@ -71,15 +71,24 @@ reap_port_holder() {
   docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
 
   # Almost always the port is held by Docker's netfilter/proxy state rather than
-  # a live process, so this rarely fires — but if a real process is bound to the
-  # port (e.g. a docker-proxy that outlived its container), kill exactly that PID.
+  # a live process, so this rarely fires. When something IS bound to the port,
+  # only reap it if it is unambiguously a stale docker-proxy for THIS port — a
+  # developer's unrelated service (or another test Postgres) must be left alone
+  # to surface as diagnostics, never killed.
   if command -v ss >/dev/null 2>&1; then
-    local holder_pid
+    local holder_pid holder_cmd holder_args
     holder_pid="$(ss -H -tanp "( sport = :${TEST_PG_PORT} )" 2>/dev/null \
       | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
     if [ -n "${holder_pid:-}" ]; then
-      echo "Killing stale process ${holder_pid} bound to 127.0.0.1:${TEST_PG_PORT}" >&2
-      kill "$holder_pid" 2>/dev/null || true
+      holder_cmd="$(ps -o comm= -p "$holder_pid" 2>/dev/null || true)"
+      holder_args="$(tr '\0' ' ' < "/proc/${holder_pid}/cmdline" 2>/dev/null || true)"
+      if [ "$holder_cmd" = "docker-proxy" ] \
+        && printf '%s' "$holder_args" | grep -q -- "-host-port ${TEST_PG_PORT}"; then
+        echo "Reaping stale docker-proxy (pid ${holder_pid}) for 127.0.0.1:${TEST_PG_PORT}" >&2
+        kill "$holder_pid" 2>/dev/null || true
+      else
+        echo "Port ${TEST_PG_PORT} held by non-docker-proxy pid ${holder_pid} (${holder_cmd:-unknown}); leaving it alone" >&2
+      fi
     fi
   fi
 }
