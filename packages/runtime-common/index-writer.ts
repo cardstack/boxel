@@ -551,7 +551,7 @@ export class Batch {
   // content) would leave the in-flight batch's `instance` tombstone in the
   // shared working table to be promoted — silently deleting a previously-good
   // card. Seeding from the index (the reliable oracle) closes that.
-  async recordProductionLiveTypes(urls: URL[]): Promise<void> {
+  async seedLiveTypesFromProduction(urls: URL[]): Promise<void> {
     await this.ready;
     if (urls.length === 0) {
       return;

@@ -455,8 +455,8 @@ export class IndexRunner {
     // before #runVisitLoop, so its per-URL error isolation cannot cover a
     // throw in this phase. Left uncaught, a setup-phase failure would drop the
     // whole batch with nothing recorded — the silent drop. #recordSetupPhaseError
-    // writes an error doc for every URL the job was handed; the rethrow still
-    // rejects the job so the failure stays visible to job accounting.
+    // writes error docs for the job's URLs; the rethrow still rejects the job
+    // so the failure stays visible to job accounting.
     let discoverMs = 0;
     let orderMs = 0;
     let invalidations: URL[] = [];
@@ -817,7 +817,7 @@ export class IndexRunner {
     // has no prior row to protect but should still surface its failure as an
     // instance error when it's a card. (The setup-phase recovery seeds this
     // batch's live types from the production index first — see
-    // recordProductionLiveTypes — so an existing card is classified from the
+    // seedLiveTypesFromProduction — so an existing card is classified from the
     // index there too, and the reparse runs only for genuinely new files.)
     let isCardInstance =
       batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
@@ -866,9 +866,9 @@ export class IndexRunner {
     // Deletes are excluded: a delete whose job failed at setup must not be
     // half-applied. Recording an error would resurrect the removed card, and
     // letting the in-flight tombstone promote would apply a delete from a
-    // failed job. Leave production untouched and let the queue retry complete
-    // the delete — the same outcome a setup failure produced before this
-    // recovery existed.
+    // failed job. Leave production untouched — the stale live row clears when
+    // a later pass visits the URL (the visit 404s on the missing file and its
+    // tombstone promotes) or on the next full reindex.
     let recordUrls = urls.filter((u) => operations.get(u.href) !== 'delete');
     if (recordUrls.length === 0) {
       return;
@@ -892,7 +892,7 @@ export class IndexRunner {
       // card is written as an instance-error — overwriting the `instance`
       // tombstone the in-flight batch left in the shared working table —
       // rather than having that tombstone promoted and the card deleted.
-      await errorBatch.recordProductionLiveTypes(recordUrls);
+      await errorBatch.seedLiveTypesFromProduction(recordUrls);
       for (let url of recordUrls) {
         if (errorBatch.resumedRows.has(url.href)) {
           // A prior attempt of this same job already indexed this URL and
@@ -911,8 +911,8 @@ export class IndexRunner {
       await errorBatch.done();
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
-      // write fails too. The rethrow in the caller still surfaces the original
-      // error to the queue, so the job is retried rather than lost.
+      // write fails too. The caller still rethrows the original error, so the
+      // job rejects and the failure stays visible even without error docs.
       this.#log.error(
         `${jobIdentity(this.#jobInfo)} failed to record setup-phase error docs for ${this.realmURL.href}: ${(recordErr as Error)?.message} (original: ${message})`,
       );

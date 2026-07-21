@@ -291,12 +291,6 @@ module(basename(import.meta.filename), function (hooks) {
     assert.timeout(120_000);
 
     const fileCount = 5;
-    const indexingGroup = `indexing:${realm.url}`;
-    let indexBaselineJobs = await jobsFor('incremental-index', indexingGroup);
-    let indexBaseline = indexBaselineJobs.reduce(
-      (max, job) => Math.max(max, job.id),
-      0,
-    );
 
     // The fault holds for the whole scenario, so the job rejects and the
     // failed state stays put for the assertions below.
@@ -331,22 +325,23 @@ module(basename(import.meta.filename), function (hooks) {
         'the push still reports success — the writes are durable regardless of indexing',
       );
 
-      // The job runs, fails in the setup phase, retries, and after its
-      // attempts are exhausted is marked rejected.
+      // Outcome-based wait: the recovery's error docs landing on every pushed
+      // file IS the behavior under test — job-table status is not a reliable
+      // settle signal (a finalization lost to a serialization conflict leaves
+      // the job unfulfilled behind a long-lived reservation).
       await waitUntil(
         async () => {
-          let jobs = (await jobsFor('incremental-index', indexingGroup)).filter(
-            (job) => job.id > indexBaseline,
+          let errorRows = await count(
+            `select count(*)::int as n from boxel_index
+               where realm_url = $1 and has_error = true and type = 'instance'`,
           );
-          return (
-            jobs.length > 0 && jobs.every((job) => job.status === 'rejected')
-          );
+          return errorRows >= fileCount;
         },
         {
           timeout: 90_000,
-          interval: 100,
+          interval: 200,
           timeoutMessage:
-            'incremental index job did not reject after the injected setup-phase failure',
+            'the failed batch never recorded error docs for the pushed files',
         },
       );
     } finally {
@@ -676,6 +671,29 @@ module(basename(import.meta.filename), function (hooks) {
       fault.restore();
     }
     assert.ok(fault.throwCount() > 0, 'the injected setup-phase fault fired');
+
+    // Before re-pushing, wait for the failed job to leave flight: a re-push
+    // enqueued while the failed job is still reserved and unfulfilled would
+    // coalesce into it (identical URL set) and reject along with it instead
+    // of running its own clean pass.
+    await waitUntil(
+      async () => {
+        let [inFlight] = (await testDbAdapter.execute(
+          `select count(*)::int as n from jobs j
+             where j.job_type = 'incremental-index'
+               and j.concurrency_group = $1
+               and j.status = 'unfulfilled'`,
+          { bind: [`indexing:${realm.url}`] },
+        )) as { n: number }[];
+        return (inFlight?.n ?? 0) === 0;
+      },
+      {
+        timeout: 90_000,
+        interval: 200,
+        timeoutMessage:
+          'the failed index job never left flight ahead of the re-push',
+      },
+    );
 
     // Re-push the same files with the fault lifted; the clean pass replaces
     // every error doc.
