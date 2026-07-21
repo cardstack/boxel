@@ -383,6 +383,9 @@ export default class CreateListingModal extends Component<Signature> {
                 class='field-contents examples-field'
                 data-test-create-listing-supporting-cards
               >
+                <p class='field-hint'>
+                  Installed with the listing, but not shown on the listing page.
+                </p>
                 {{#if this.hasSelectedSupportingCards}}
                   <div
                     class='selected-cards-list'
