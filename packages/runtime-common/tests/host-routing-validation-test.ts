@@ -1,5 +1,6 @@
 import {
   findDuplicateRoutingPaths,
+  normalizeRoutingPath,
   validateRoutingPath,
 } from '../host-routing-validation.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -149,6 +150,46 @@ const tests: SharedTests<unknown> = Object.freeze({
         ]),
         ['/docs'],
       );
+    },
+
+  'findDuplicateRoutingPaths: treats trailing-slash variants as the same route':
+    async (assert) => {
+      // The map normalizes both to '/pricing' and resolves via .find(), so
+      // the second target would be silently unreachable; the editor must
+      // flag the collision. Reported in normalized form.
+      assert.deepEqual(
+        findDuplicateRoutingPaths([
+          { path: '/pricing' },
+          { path: '/pricing/' },
+        ]),
+        ['/pricing'],
+      );
+      assert.deepEqual(
+        findDuplicateRoutingPaths([{ path: '/docs/' }, { path: '/docs' }]),
+        ['/docs'],
+      );
+      // Root variants collapse together too.
+      assert.deepEqual(
+        findDuplicateRoutingPaths([{ path: '/' }, { path: '//' }]),
+        ['/'],
+      );
+      // A genuine non-colliding pair still reports nothing.
+      assert.deepEqual(
+        findDuplicateRoutingPaths([
+          { path: '/pricing' },
+          { path: '/pricing-2' },
+        ]),
+        [],
+      );
+    },
+
+  'normalizeRoutingPath: strips trailing slashes and preserves the root':
+    async (assert) => {
+      assert.strictEqual(normalizeRoutingPath('/pricing/'), '/pricing');
+      assert.strictEqual(normalizeRoutingPath('/pricing'), '/pricing');
+      assert.strictEqual(normalizeRoutingPath('/a/b//'), '/a/b');
+      assert.strictEqual(normalizeRoutingPath('/'), '/');
+      assert.strictEqual(normalizeRoutingPath('//'), '/');
     },
 });
 

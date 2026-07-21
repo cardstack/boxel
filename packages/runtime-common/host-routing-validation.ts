@@ -6,6 +6,19 @@
 const VALID_PATH_PATTERN = /^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/;
 
 /**
+ * Canonical form of a routing rule path: a trailing slash is stripped so
+ * `/pricing/` and `/pricing` compare and match identically, with the realm
+ * root `/` preserved. This is the single source of truth for that
+ * normalization — `Realm.getHostRoutingMap` uses it to build the map, and
+ * `findDuplicateRoutingPaths` / `validateRoutingPath` use it so the editor's
+ * collision detection and advisories agree with how routes actually resolve.
+ * Callers that care about surrounding whitespace should `trim()` first.
+ */
+export function normalizeRoutingPath(path: string): string {
+  return path.replace(/\/+$/, '') || '/';
+}
+
+/**
  * Returns a warning message for a routing rule path that is non-empty
  * but malformed. Empty / whitespace-only / null / undefined input
  * returns `undefined` so an in-progress rule never shows the warning.
@@ -37,8 +50,9 @@ export function validateRoutingPath(
   // input. The root '/' is the realm root, not a trailing slash, so it is
   // exempt.
   if (trimmed !== '/' && trimmed.endsWith('/')) {
-    let normalized = trimmed.replace(/\/+$/, '') || '/';
-    return `Trailing slash is ignored; this route matches "${normalized}"`;
+    return `Trailing slash is ignored; this route matches "${normalizeRoutingPath(
+      trimmed,
+    )}"`;
   }
   return undefined;
 }
@@ -47,6 +61,12 @@ export function validateRoutingPath(
  * Returns the set of non-empty paths that appear on more than one
  * routing rule, in insertion order. Empty paths are ignored — they
  * represent rules whose path field hasn't been filled in yet.
+ *
+ * Paths are compared in their normalized form, so `/pricing` and
+ * `/pricing/` collide — matching how the routing map resolves them (both
+ * become `/pricing`, and the map's `.find()` would otherwise make the
+ * second target silently unreachable). The reported path is the normalized
+ * one.
  */
 export function findDuplicateRoutingPaths(
   rules: ReadonlyArray<{ path?: string | null }> | null | undefined,
@@ -54,8 +74,9 @@ export function findDuplicateRoutingPaths(
   if (!rules) return [];
   let counts = new Map<string, number>();
   for (let rule of rules) {
-    let path = rule?.path?.trim();
-    if (!path) continue;
+    let trimmed = rule?.path?.trim();
+    if (!trimmed) continue;
+    let path = normalizeRoutingPath(trimmed);
     counts.set(path, (counts.get(path) ?? 0) + 1);
   }
   let dups: string[] = [];

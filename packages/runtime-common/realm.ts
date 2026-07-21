@@ -44,6 +44,7 @@ import {
   HtmlResourceType,
 } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
+import { normalizeRoutingPath } from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
@@ -6799,9 +6800,10 @@ export class Realm {
         // matched slash-insensitively (RealmPaths.local strips trailing
         // slashes), so an un-normalized '/pricing/' rule would never match;
         // normalizing here also feeds the correct canonical form to the
-        // serve-index redirect and the client-side routing map. The
-        // realm-root rule '/' is preserved.
-        let normalizedPath = path.replace(/\/+$/, '') || '/';
+        // serve-index redirect and the client-side routing map. Shared with
+        // the editor's duplicate detection so a '/pricing' + '/pricing/'
+        // collision is flagged there. The realm-root rule '/' is preserved.
+        let normalizedPath = normalizeRoutingPath(path);
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];
