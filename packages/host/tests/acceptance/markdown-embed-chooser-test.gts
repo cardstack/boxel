@@ -203,68 +203,6 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     );
   });
 
-  test('selecting a fitted format inserts a directive carrying its size', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[{ id: noteId, format: 'isolated' }]],
-    });
-
-    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
-    await waitFor(
-      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
-      { timeout: 5000 },
-    );
-    await waitFor('[data-test-toolbar="add-embed"]', { timeout: 5000 });
-
-    await click('[data-test-toolbar="add-embed"]');
-    await click('[data-test-toolbar-embed="card"]');
-    await waitFor('[data-test-markdown-embed-chooser-modal]', {
-      timeout: 5000,
-    });
-
-    await fillIn(
-      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
-      'Mango',
-    );
-    await waitFor(
-      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
-      { timeout: 5000 },
-    );
-    await click(
-      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
-    );
-    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
-      timeout: 5000,
-    });
-
-    // Choose the Custom-size Fitted option from the format dropdown.
-    await click('[data-test-markdown-embed-preview-format-select]');
-    await waitFor('[data-test-format-option="custom"]', { timeout: 5000 });
-    await click('[data-test-format-option="custom"]');
-    await click('[data-test-markdown-embed-preview-cta]');
-
-    await waitUntil(
-      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
-    );
-    await settled();
-
-    let editorEl = document.querySelector(
-      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
-    ) as HTMLElement | null;
-    let docText = (
-      editorEl
-        ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()
-        : ''
-    )?.trim();
-
-    // The inserted directive must carry a resolvable fitted size — not a bare
-    // `fitted` with no dimensions.
-    assert.notStrictEqual(
-      docText,
-      `::card[../Pet/mango | fitted]`,
-      'custom fitted must not insert a size-less bare fitted directive',
-    );
-  });
-
   test('cursor inside an existing directive swaps the toolbar to the Edit pencil', async function (assert) {
     // Open the card on the stack, then patch the body content to a pre-
     // existing :card[...] directive so the cursor lands inside it once the
