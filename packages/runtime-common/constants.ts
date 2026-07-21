@@ -121,6 +121,14 @@ export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB
 // Default max file (module / binary) payload size, in bytes.
 export const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 MB
 
+// Above this content length (in string characters), the default MarkdownField
+// template skips the synchronous markdown parse and renders a bounded notice
+// with a short plain-text preview instead. A single field longer than an
+// entire card is allowed to be cannot be written under the card size limit, so
+// content past this bound is over-limit and would otherwise run a multi-MB
+// synchronous parse + sanitize on the render thread.
+export const MAX_MARKDOWN_RENDER_LENGTH = DEFAULT_CARD_SIZE_LIMIT_BYTES;
+
 export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   2500: 5,
   20000: 30,
