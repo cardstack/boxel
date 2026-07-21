@@ -31,6 +31,7 @@ import {
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   isToolResultEventType,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -467,7 +468,26 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
-          const responder = new Responder(client, room.roomId, agentId);
+          // Route to-device streaming previews (see APP_BOXEL_STREAMING_MODE
+          // handling in Responder) at the device that composed this prompt.
+          // Absent on older clients that didn't stamp the id — Responder falls
+          // back to the `off`-mode behavior in that case.
+          const originatingDeviceId = (
+            event.getContent() as Record<string, unknown>
+          )?.[APP_BOXEL_ORIGINATING_DEVICE_ID_KEY];
+          const promptSenderUserId = event.getSender();
+          const streamPreviewTarget =
+            typeof originatingDeviceId === 'string' &&
+            originatingDeviceId &&
+            promptSenderUserId
+              ? { userId: promptSenderUserId, deviceId: originatingDeviceId }
+              : undefined;
+          const responder = new Responder(
+            client,
+            room.roomId,
+            agentId,
+            streamPreviewTarget,
+          );
 
           if (Responder.eventWillDefinitelyTriggerResponse(event)) {
             await responder.ensureThinkingMessageSent();

@@ -16,6 +16,10 @@ export class FakeMatrixClient extends MatrixClient {
     eventType: string;
     content: IContent;
   }[] = [];
+  private sentToDeviceEvents: {
+    eventType: string;
+    contentMap: Record<string, Record<string, IContent>>;
+  }[] = [];
 
   baseUrl = 'https://example.com';
 
@@ -97,6 +101,19 @@ export class FakeMatrixClient extends MatrixClient {
     return this.sentEvents;
   }
 
+  async sendToDevice(
+    eventType: string,
+    contentMap: any,
+    _txnId?: string,
+  ): Promise<any> {
+    this.sentToDeviceEvents.push({ eventType, contentMap });
+    return {};
+  }
+
+  getSentToDeviceEvents() {
+    return this.sentToDeviceEvents;
+  }
+
   sendStateEvent<K extends keyof StateEvents>(
     _roomId: string,
     _eventType: K,
@@ -109,6 +126,7 @@ export class FakeMatrixClient extends MatrixClient {
 
   resetSentEvents() {
     this.sentEvents = [];
+    this.sentToDeviceEvents = [];
     this.eventId = 0;
   }
 
