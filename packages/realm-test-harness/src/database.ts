@@ -732,10 +732,13 @@ function startIndexingProgressReporter(
 // fact still making steady progress (the indexing progress reporter keeps
 // printing throughout). Budget generously, matching the realm-server multi-realm
 // helper that drains the identical prerender_html tail. Override via env for
-// local iteration.
-const QUEUE_IDLE_TIMEOUT_MS = Number(
-  process.env.TEST_HARNESS_QUEUE_IDLE_TIMEOUT_MS ?? 300_000,
-);
+// local iteration; a malformed override (empty string coerces to 0,
+// non-numeric to NaN) is ignored rather than allowed to collapse the wait into
+// an immediate failure.
+const QUEUE_IDLE_TIMEOUT_MS = (() => {
+  let override = Number(process.env.TEST_HARNESS_QUEUE_IDLE_TIMEOUT_MS);
+  return Number.isFinite(override) && override > 0 ? override : 300_000;
+})();
 
 export async function waitForQueueIdle(databaseName: string): Promise<void> {
   await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
@@ -752,12 +755,21 @@ export async function waitForQueueIdle(databaseName: string): Promise<void> {
             let { rows: rejected } = await client.query<{
               id: number;
               job_type: string;
-            }>(`SELECT id, job_type FROM jobs WHERE status = 'rejected'`);
+            }>(
+              `SELECT id, job_type FROM jobs WHERE status = 'rejected' ORDER BY id`,
+            );
             if (rejected.length > 0) {
+              let sampleLimit = 20;
+              let sample = rejected
+                .slice(0, sampleLimit)
+                .map((row) => `${row.job_type}#${row.id}`)
+                .join(', ');
+              let overflow =
+                rejected.length > sampleLimit
+                  ? ` (+${rejected.length - sampleLimit} more)`
+                  : '';
               throw new Error(
-                `job(s) rejected while waiting for queue to become idle in ${databaseName}: ${rejected
-                  .map((row) => `${row.job_type}#${row.id}`)
-                  .join(', ')}`,
+                `${rejected.length} job(s) rejected while waiting for queue to become idle in ${databaseName}: ${sample}${overflow}`,
               );
             }
             let {
