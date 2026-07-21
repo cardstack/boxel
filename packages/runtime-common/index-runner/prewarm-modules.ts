@@ -178,6 +178,14 @@ export interface PreWarmModulesTableArgs {
 //   3. `adoptsFrom.module` read from disk — for novel `.json` URLs without a
 //      prior `deps` row.
 //
+// Every source is then narrowed to modules that live in this realm. The
+// populate keys rows on this realm's cache context, while the render-phase
+// reader keys a module's row on the realm the module lives in — so warming a
+// cross-realm dep (a base module, an icon module) renders and persists a row
+// under a key the reader never consults. Cross-realm modules are served by
+// their owning realm's cache (populated by that realm's own sweep) or by the
+// on-demand read-through.
+//
 // Cache hits are O(1) DB reads inside DefinitionLookup. Cache misses go
 // through the read-through populate path, the same flow `lookupDefinition`
 // uses; DefinitionLookup owns the in-flight dedup and the cross-process
@@ -264,7 +272,41 @@ export async function preWarmModulesTable({
     }
   }
 
-  if (toWarm.size === 0) {
+  // Warm only this realm's own modules. The populate below keys every row on
+  // this realm's cache context, but the render-phase reader
+  // (`buildLookupContext`) keys a module's row on the realm the module
+  // *lives in* — a cross-realm dep pulled in through the deps / adoptsFrom
+  // layers (base modules, icon modules) would be rendered and persisted
+  // under a key that reader never consults. Those modules are the owning
+  // realm's to cache: its own pre-warm sweep populates them under the key
+  // the reader does hit, and anything it misses falls back to the safe
+  // on-demand read-through. The realm match mirrors `buildLookupContext`'s
+  // form-agnostic check, so a dep recorded in RRI form still matches the
+  // realm that owns it.
+  let unresolvedRealmHref = virtualNetwork.unresolveURL(realmURL.href);
+  let crossRealmSkipped = 0;
+  let realmOwnModules: string[] = [];
+  for (let moduleUrl of toWarm) {
+    if (
+      moduleUrl.startsWith(realmURL.href) ||
+      virtualNetwork.unresolveURL(moduleUrl).startsWith(unresolvedRealmHref)
+    ) {
+      realmOwnModules.push(moduleUrl);
+    } else {
+      crossRealmSkipped++;
+    }
+  }
+  if (crossRealmSkipped > 0) {
+    // Info, not debug: when a sweep is unexpectedly slow (or a mid-render
+    // sub-prerender fires for a module pre-warm was expected to cover), the
+    // first question is what the warm set actually contained — this line
+    // answers it from CI logs without a log-level override.
+    log.info(
+      `${jobIdentity(jobInfo)} module pre-warm: skipping ${crossRealmSkipped} cross-realm dep(s) cached under their own realm's key (${realmOwnModules.length} realm-own module(s) to warm)`,
+    );
+  }
+
+  if (realmOwnModules.length === 0) {
     return 0;
   }
 
@@ -311,7 +353,7 @@ export async function preWarmModulesTable({
   // cache miss; DefinitionLookup owns the in-flight dedup and cross-process
   // coalescer, so different modules run independently while same-URL callers
   // share one prerender.
-  let urls = [...toWarm];
+  let urls = realmOwnModules;
   let totalToWarm = urls.length;
   let failed = 0;
   let warmed = 0;
@@ -353,7 +395,7 @@ export async function preWarmModulesTable({
   }
 
   perfLog.debug(
-    `${jobIdentity(jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} failed=${failed} concurrency=${concurrency})`,
+    `${jobIdentity(jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} crossRealmSkipped=${crossRealmSkipped} failed=${failed} concurrency=${concurrency})`,
   );
   return warmed;
 }
