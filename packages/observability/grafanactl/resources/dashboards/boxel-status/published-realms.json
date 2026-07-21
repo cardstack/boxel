@@ -709,7 +709,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant a permission level on the **selected published realm** (dropdown or Manual URL box) to a Matrix user. To add access for yourself, type your own Matrix ID (e.g. `@you:matrix.host`) or pick it from the list. Note: publishing already grants public read (`*` → read), so you typically only need this to give yourself read/write. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token substituted from SSM at apply time, CS-10929), same mechanism as the Realms dashboard Grant Permission panel.",
+        "description": "Operator action: grant a permission level on the **selected published realm** (dropdown or Manual URL box) to a Matrix user. To add access for yourself, type your own Matrix ID (e.g. `@you:matrix.host`) or pick it from the list. Note: publishing already grants public read (`*` → read), so you typically only need this to give yourself read/write. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token substituted from SSM at apply time), same mechanism as the Realms dashboard Grant Permission panel.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
