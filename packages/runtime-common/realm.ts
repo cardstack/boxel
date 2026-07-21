@@ -6794,6 +6794,14 @@ export class Realm {
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
+        // Normalize a rule authored with a trailing slash ('/pricing/') to
+        // its canonical slash-free form ('/pricing'). Request paths are
+        // matched slash-insensitively (RealmPaths.local strips trailing
+        // slashes), so an un-normalized '/pricing/' rule would never match;
+        // normalizing here also feeds the correct canonical form to the
+        // serve-index redirect and the client-side routing map. The
+        // realm-root rule '/' is preserved.
+        let normalizedPath = path.replace(/\/+$/, '') || '/';
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];
@@ -6815,11 +6823,11 @@ export class Realm {
         // are handled correctly.
         if (!this.paths.inRealm(idURL)) {
           this.#log.warn(
-            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+            `dropping host routing rule for path "${normalizedPath}" — target ${id} is outside this realm`,
           );
           return [];
         }
-        return [{ path, id }];
+        return [{ path: normalizedPath, id }];
       });
       return (this.#cachedHostRoutingMap = map);
     } catch (e) {
