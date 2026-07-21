@@ -440,37 +440,6 @@ export class IndexRunner {
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
-    await current.batch.invalidate(urls);
-    let discoverMs = Date.now() - discoverStart;
-    current.#notifyInvalidationsReady(
-      current.batch.invalidations,
-      new Set(
-        [...operations]
-          .filter(([, operation]) => operation === 'delete')
-          .map(([href]) => href),
-      ),
-    );
-    let orderStart = Date.now();
-    let invalidations = sortInvalidations(
-      current.batch.invalidations.map((href) => new URL(href)),
-      current.realmURL,
-    );
-    invalidations =
-      await current.#dependencyResolver.orderInvalidationsByDependencies(
-        invalidations,
-      );
-    let orderMs = Date.now() - orderStart;
-    let hasExecutableInvalidation = invalidations.some((url) =>
-      hasExecutableExtension(url.href),
-    );
-    if (hasExecutableInvalidation) {
-      if (!current.#shouldClearCacheForNextRender) {
-        current.#log.debug(
-          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-        );
-      }
-      current.#scheduleClearCacheForNextRender();
-    }
     // Incremental indexing does no module pre-warming. Query-backed field
     // expansion during a prerender `_search` reads the `queryFieldDefs`
     // pre-extracted onto each result instance's stored meta
@@ -481,16 +450,64 @@ export class IndexRunner {
     // needs outside it resolve through the on-demand `lookupDefinition`
     // read-through. There is nothing left for a pre-warm pass to
     // front-load here.
+    //
+    // Invalidation, dependency ordering, and the file-meta prefetch all run
+    // before #runVisitLoop, so its per-URL error isolation cannot cover a
+    // throw in this phase. Left uncaught, a setup-phase failure would drop the
+    // whole batch with nothing recorded — the silent drop. #recordSetupPhaseError
+    // writes an error doc for every URL the job was handed; the rethrow keeps
+    // the queue retry (and its self-healing) intact.
+    let discoverMs = 0;
+    let orderMs = 0;
+    let invalidations: URL[] = [];
+    let totalFiles = 0;
     let filesCompleted = 0;
-    let totalFiles = invalidations.length;
-
-    let hrefs = urls.map((u) => u.href);
-    // One batched read of the invalidation set's created-at + content hash/size
-    // so the per-visit lookups are served from memory. Deletes and resumed URLs
-    // that get skipped below just leave unused cache entries — harmless.
-    await current.batch.prefetchFileMeta(
-      current.#visitLocalPaths(invalidations),
-    );
+    let hrefs: string[] = [];
+    try {
+      await current.batch.invalidate(urls);
+      discoverMs = Date.now() - discoverStart;
+      current.#notifyInvalidationsReady(
+        current.batch.invalidations,
+        new Set(
+          [...operations]
+            .filter(([, operation]) => operation === 'delete')
+            .map(([href]) => href),
+        ),
+      );
+      let orderStart = Date.now();
+      invalidations = sortInvalidations(
+        current.batch.invalidations.map((href) => new URL(href)),
+        current.realmURL,
+      );
+      invalidations =
+        await current.#dependencyResolver.orderInvalidationsByDependencies(
+          invalidations,
+        );
+      orderMs = Date.now() - orderStart;
+      let hasExecutableInvalidation = invalidations.some((url) =>
+        hasExecutableExtension(url.href),
+      );
+      if (hasExecutableInvalidation) {
+        if (!current.#shouldClearCacheForNextRender) {
+          current.#log.debug(
+            `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+          );
+        }
+        current.#scheduleClearCacheForNextRender();
+      }
+      totalFiles = invalidations.length;
+      hrefs = urls.map((u) => u.href);
+      // One batched read of the invalidation set's created-at + content
+      // hash/size so the per-visit lookups are served from memory. Deletes and
+      // resumed URLs that get skipped below just leave unused cache entries —
+      // harmless.
+      await current.batch.prefetchFileMeta(
+        current.#visitLocalPaths(invalidations),
+      );
+    } catch (setupErr) {
+      await current.#recordSetupPhaseError(urls, setupErr);
+      throw setupErr;
+    }
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     let loopStart = Date.now();
@@ -759,6 +776,20 @@ export class IndexRunner {
     this.#log.warn(
       `${jobIdentity(this.#jobInfo)} failed to index ${url.href}, recording file-error: ${message}`,
     );
+    await this.#bufferErrorEntriesFor(this.batch, url, err, message);
+  }
+
+  // Buffer a file-error row (and, when the URL is or was a card instance, an
+  // instance-error row) for `url` into `batch`, preserving last-known-good
+  // content. Shared by the per-visit failure isolation (#handleVisitError)
+  // and the setup-phase failure path (#recordSetupPhaseError) so both record
+  // the same shape of error doc.
+  async #bufferErrorEntriesFor(
+    batch: Batch,
+    url: URL,
+    err: any,
+    message: string,
+  ): Promise<void> {
     let error = isCardError(err)
       ? serializableError(err)
       : serializableError(
@@ -771,7 +802,7 @@ export class IndexRunner {
       type: 'file-error',
       error,
     };
-    await this.batch.bufferEntry(url, fileEntry);
+    await batch.bufferEntry(url, fileEntry);
     this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
     this.stats.fileErrors++;
     // `Batch.invalidate()` already tombstoned every type this URL previously
@@ -782,11 +813,12 @@ export class IndexRunner {
     // index is the oracle for "was this a card?": the batch records which live
     // row types it tombstoned, so an existing card is protected even when the
     // file can't be read — which may be exactly how the visit failed.
-    // Re-parsing the source is only the fallback for a brand-new file, which
-    // has no prior row to protect but should still surface its failure as an
-    // instance error when it's a card.
+    // Re-parsing the source is only the fallback for a brand-new file (or the
+    // setup-phase path, whose fresh batch tombstoned nothing), which has no
+    // prior row to protect but should still surface its failure as an instance
+    // error when it's a card.
     let isCardInstance =
-      this.batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
+      batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
     if (!isCardInstance && url.href.endsWith('.json')) {
       try {
         let fileRef = await this.#reader.readFile(url);
@@ -805,8 +837,61 @@ export class IndexRunner {
         type: 'instance-error',
         error,
       };
-      await this.batch.bufferEntry(url, instanceEntry);
+      await batch.bufferEntry(url, instanceEntry);
       this.stats.instanceErrors++;
+    }
+  }
+
+  // A throw during the invalidation / dependency-ordering / file-meta-prefetch
+  // phase happens before #runVisitLoop starts, so no per-file visit ever runs
+  // to attach an error to — and the in-flight batch's working table holds only
+  // fan-out tombstones that were never re-visited, so promoting it via
+  // `done()` would delete those dependents. Record the failure on a FRESH
+  // batch scoped to just the URLs the job was handed: buffer their error rows
+  // and promote only those, leaving the rest of the index untouched. The
+  // caller rethrows afterward, so pg-boss still retries — `loadResumedRows`
+  // excludes error rows, so a transient setup failure re-visits and self-heals
+  // on the next attempt, while a persistent one stays visible as an error doc
+  // on every handed URL instead of an invisible gap.
+  async #recordSetupPhaseError(urls: URL[], err: any): Promise<void> {
+    let message = coerceErrorMessage(
+      err,
+      `Indexing failed during invalidation with no error message (${jobIdentity(this.#jobInfo)})`,
+    );
+    this.#log.warn(
+      `${jobIdentity(this.#jobInfo)} invalidation phase failed for ${urls
+        .map((u) => u.href)
+        .join(', ')}, recording error docs: ${message}`,
+    );
+    try {
+      let errorBatch = await this.#indexWriter.createBatch(
+        this.realmURL,
+        this.#virtualNetwork,
+        this.#jobInfo,
+      );
+      for (let url of urls) {
+        if (errorBatch.resumedRows.has(url.href)) {
+          // A prior attempt of this same job already indexed this URL and
+          // `done()` will promote that good row — don't clobber it with an
+          // error just because this attempt's invalidation phase threw.
+          continue;
+        }
+        try {
+          await this.#bufferErrorEntriesFor(errorBatch, url, err, message);
+        } catch (bufferErr) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} failed to buffer setup-phase error row for ${url.href}: ${(bufferErr as Error)?.message}`,
+          );
+        }
+      }
+      await errorBatch.done();
+    } catch (recordErr) {
+      // Recording is best-effort: if the failure was a DB outage the recovery
+      // write fails too. The rethrow in the caller still surfaces the original
+      // error to the queue, so the job is retried rather than lost.
+      this.#log.error(
+        `${jobIdentity(this.#jobInfo)} failed to record setup-phase error docs for ${this.realmURL.href}: ${(recordErr as Error)?.message} (original: ${message})`,
+      );
     }
   }
 
