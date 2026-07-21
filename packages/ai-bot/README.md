@@ -44,11 +44,43 @@ Start the server with `pnpm start` or `pnpm start-dev` for live reload.
     - `pnpm dlx clinic open .clinic/ai-bot-bp`
     - If needed, open the trace directly: `pnpm dlx clinic open '.clinic/ai-bot-bp/*clinic-bubbleprof/*-traceevent'`
 
-### Streaming behavior tuning
+### Streaming modes
 
-- You can adjust mid-stream edit frequency to balance responsiveness vs. Matrix churn:
-  - `AI_BOT_STREAM_THROTTLE_MS` (default `600`): min ms between edit sends.
-  - `AI_BOT_STREAM_MIN_DELTA` (default `300`): min new characters before sending an edit (final send always occurs).
+While the model generates a response, ai-bot can surface the in-flight text so the client renders it as it arrives, instead of appearing all at once when the turn finishes. `AI_BOT_STREAMING_MODE` selects how those mid-turn updates are delivered:
+
+- `room-edits` (default): each mid-turn update is a Matrix `m.replace` edit of the bot's placeholder message. Every connected client in the room sees the stream, and it needs no client support, but it writes many room events per response — a large share of homeserver load.
+- `off`: no mid-turn updates at all. The room shows the thinking placeholder, then a single consolidated bot message when the turn completes. Cheapest for the homeserver; the client shows no streaming.
+- `to-device`: mid-turn previews are sent as ephemeral [`app.boxel.response-stream`](#appboxelresponse-stream-to-device-event) to-device messages targeted at the one device that composed the prompt, and only the final consolidated state lands as a room event. Streaming UX with a fraction of the room-event churn. See the event schema below.
+
+Regardless of mode, the final consolidated response always lands as a room event — to-device previews are ephemeral and not persisted, so durable state must live in the room.
+
+**`to-device` fallback.** to-device previews need to know which device to target. The client stamps its device id (`matrixClient.getDeviceId()`) on the prompt event under the `app.boxel.originating-device-id` key. If ai-bot can't find that id for a turn — an older client that never stamped it, or a tool/code-patch continuation that carries no prompt — it skips mid-turn previews for that turn (as in `off`), and the final room event still lands.
+
+### Streaming throttle tuning
+
+Applies to `room-edits` and `to-device` mid-turn sends; `off` sends nothing mid-turn.
+
+- `AI_BOT_STREAM_THROTTLE_MS` (default `250`): min ms between mid-turn sends.
+- `AI_BOT_STREAM_MIN_DELTA` (default `0`): min new body characters before sending an update. New reasoning, a changed tool call, the first content, and the final send always go through regardless of this threshold.
+
+### `app.boxel.response-stream` to-device event
+
+In `to-device` streaming mode, ai-bot emits `app.boxel.response-stream` to-device messages to the originating device to carry in-flight state without writing a room event per ~250 ms of tokens. Each event carries the **full accumulated state** for the turn (not a delta), so a dropped or reordered event is non-fatal — the client applies last-writer-wins by `sequence`.
+
+Content payload (`AppBoxelResponseStreamContent` in `packages/runtime-common/matrix-constants.ts`):
+
+| Field           | Type        | Description                                                                                                                                                                                                    |
+| --------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `roomId`        | `string`    | Room the response belongs to.                                                                                                                                                                                  |
+| `parentEventId` | `string`    | Event id of the thinking placeholder this stream will eventually replace. Keys the client's preview state so concurrent turns don't collide.                                                                   |
+| `sequence`      | `number`    | Monotonic per turn. Since the payload is cumulative, gaps or reordering are safe — apply last-writer-wins by sequence.                                                                                         |
+| `body`          | `string`    | Accumulated response text so far.                                                                                                                                                                              |
+| `reasoning`     | `string`    | Accumulated reasoning text so far.                                                                                                                                                                             |
+| `toolRequests`  | `unknown[]` | Tool calls in the same wire shape as the room event's `app.boxel.tool-requests` key: each entry is `{ id, name, arguments: <object> }`, where `arguments` is `{}` until the streamed tool-call JSON completes. |
+
+### Rationale
+
+`room-edits` mode writes a room event every throttle window of every response, which is a large share of the load on the Matrix homeserver. `off` removes that load entirely at the cost of streaming UX. `to-device` keeps the streaming UX but moves the per-window traffic onto Matrix's ephemeral direct-to-device channel, so live output reaches the originating client without every token becoming a persisted room event; only the final consolidated state is written to the room.
 
 ## Usage
 
