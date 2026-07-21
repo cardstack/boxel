@@ -49,15 +49,19 @@ print_start_diagnostics() {
   # A lingering DNAT rule for the port is the fingerprint of the teardown race:
   # docker-proxy is gone but the netfilter rule that reserves the host port has
   # not been reaped yet. Surface it so a future failure is diagnosable at a glance.
+  # Match the port as a whole word (grep -w) so it catches every rendering
+  # (`--dport 55436` from iptables -S, `dpt:55436` from -L, bare `55436` from
+  # nft) without matching 554360 — and stays portable, since \b as a word
+  # boundary is a GNU-grep extension, not POSIX ERE.
   echo "=== Docker NAT rules for :${TEST_PG_PORT} ===" >&2
   if command -v iptables >/dev/null 2>&1; then
     { iptables -t nat -S 2>/dev/null || sudo -n iptables -t nat -S 2>/dev/null; } \
-      | grep -E ":${TEST_PG_PORT}\b|--dport ${TEST_PG_PORT}\b" >&2 \
+      | grep -w "${TEST_PG_PORT}" >&2 \
       || echo "(no matching iptables NAT rule)" >&2
   fi
   if command -v nft >/dev/null 2>&1; then
     { nft list ruleset 2>/dev/null || sudo -n nft list ruleset 2>/dev/null; } \
-      | grep -E "\b${TEST_PG_PORT}\b" >&2 || true
+      | grep -w "${TEST_PG_PORT}" >&2 || true
   fi
 
   echo "=== ${TEST_PG_CONTAINER} logs (if present) ===" >&2
