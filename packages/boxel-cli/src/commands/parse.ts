@@ -110,11 +110,11 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // Node modules: in-monorepo, host has every transitive dep glint needs
 // already installed. In a published install we don't ship host's
 // node_modules, so we resolve against the CLI's own runtime deps:
-// `@glint/ember-tsc`, `typescript`, and `content-tag` (CS-11165), plus
-// the packages card code itself commonly imports — `@glimmer/component`
-// and `@glimmer/tracking` (CS-11509). Imports outside that set surface
-// as "Cannot find module …" parse errors; the fix is adding the package
-// as a boxel-cli dependency, not shimming it.
+// `@glint/ember-tsc`, `typescript`, and `content-tag`, plus the packages
+// card code itself commonly imports — `@glimmer/component` and
+// `@glimmer/tracking`. Imports outside that set surface as "Cannot find
+// module …" parse errors; the fix is adding the package as a boxel-cli
+// dependency, not shimming it.
 //
 // Those deps live in different places depending on the install layout:
 //   - pnpm keeps them in the CLI's own nested `node_modules`
