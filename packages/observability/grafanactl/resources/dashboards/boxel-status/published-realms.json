@@ -119,7 +119,7 @@
                     {
                       "title": "Open source realm in Realms dashboard",
                       "targetBlank": true,
-                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm}&orgId=1"
+                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm:queryparam}&orgId=1"
                     }
                   ]
                 }
@@ -1066,7 +1066,7 @@
                     {
                       "title": "Inspect this published realm",
                       "targetBlank": false,
-                      "url": "/d/boxelpubrealms01?var-realm_manual=${__data.fields.published_realm}&orgId=1"
+                      "url": "/d/boxelpubrealms01?var-realm_manual=${__data.fields.published_realm:queryparam}&orgId=1"
                     }
                   ]
                 }
@@ -1092,7 +1092,7 @@
                     {
                       "title": "Open source realm in Realms dashboard",
                       "targetBlank": true,
-                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm}&orgId=1"
+                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm:queryparam}&orgId=1"
                     }
                   ]
                 }
