@@ -218,19 +218,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         ]),
       ],
     };
-    // TEMP DIAGNOSTIC — remove before merge.
-    console.warn(
-      '[SKILL-SCOPE] user=',
-      JSON.stringify(this.realmServer.userRealmIdentifiers),
-      'catalog=',
-      JSON.stringify(this.realmServer.catalogRealmIdentifiers),
-      'skills=',
-      skillsRealmURL,
-      'available=',
-      JSON.stringify(this.realmServer.availableRealmIdentifiers),
-      'FINAL=',
-      JSON.stringify(query.realms),
-    );
     let chosen = await chooseCard(query, { includeFiles: true });
     if (!chosen) {
       return;

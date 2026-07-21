@@ -39,6 +39,10 @@ test.describe('Skills', () => {
         .click();
     }
     await page.locator('[data-test-pill-menu-add-button]').click();
+    // The chooser spans the shared Boxel Skills realm (dozens of skills), so the
+    // target tile can render below the fold. Narrow to it by URL first so it's
+    // the visible result before clicking.
+    await page.locator('[data-test-search-field]').fill(cardId);
     await page.locator(`[data-test-item-button="${cardId}"]`).click();
     await page.locator('[data-test-card-chooser-go-button]').click();
 
