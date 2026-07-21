@@ -158,12 +158,20 @@ export class Responder {
       toolRequests: this.responseState.toolCalls ?? [],
       isFinal: false,
     };
+    // matrix-js-sdk's sendToDevice takes a Map<userId, Map<deviceId, content>>
+    // and iterates it internally — a plain nested object throws
+    // `TypeError: contentMap is not iterable` at runtime.
+    const contentMap = new Map([
+      [
+        this.streamPreviewTarget.userId,
+        new Map([[this.streamPreviewTarget.deviceId, payload]]),
+      ],
+    ]);
     try {
-      await this.client.sendToDevice(APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE, {
-        [this.streamPreviewTarget.userId]: {
-          [this.streamPreviewTarget.deviceId]: payload,
-        },
-      } as any);
+      await this.client.sendToDevice(
+        APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        contentMap,
+      );
     } catch (e) {
       // Preview loss is non-fatal; the final room edit still lands. Log at
       // debug so a wedged homeserver doesn't spam sentry.

@@ -7,6 +7,7 @@ import type {
   Method,
 } from 'matrix-js-sdk';
 import { MatrixClient } from 'matrix-js-sdk';
+import { recursiveMapToObject } from 'matrix-js-sdk/lib/utils.js';
 
 export class FakeMatrixClient extends MatrixClient {
   private eventId = 0;
@@ -103,10 +104,21 @@ export class FakeMatrixClient extends MatrixClient {
 
   async sendToDevice(
     eventType: string,
-    contentMap: any,
+    contentMap: Map<string, Map<string, IContent>>,
     _txnId?: string,
   ): Promise<any> {
-    this.sentToDeviceEvents.push({ eventType, contentMap });
+    // The real matrix-js-sdk client requires a nested Map and iterates it
+    // internally (via recursiveMapToObject + `for...of`), throwing
+    // `TypeError: contentMap is not iterable` on a plain object. Enforce the
+    // same contract here so a plain-object payload fails the test the way it
+    // fails in production. Store the normalized plain object for assertions.
+    if (!(contentMap instanceof Map)) {
+      throw new TypeError('sendToDevice contentMap must be a Map');
+    }
+    this.sentToDeviceEvents.push({
+      eventType,
+      contentMap: recursiveMapToObject(contentMap),
+    });
     return {};
   }
 

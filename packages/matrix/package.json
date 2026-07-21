@@ -15,6 +15,7 @@
     "@types/uuid": "catalog:",
     "fs-extra": "catalog:",
     "jsonwebtoken": "catalog:",
+    "matrix-js-sdk": "catalog:",
     "pg": "catalog:",
     "start-server-and-test": "catalog:",
     "tmp": "catalog:",
