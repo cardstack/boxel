@@ -208,7 +208,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  url AS published_realm,\n  source_url AS origin_realm,\n  owner_username AS owner,\n  to_timestamp(last_published_at / 1000.0) AS last_published,\n  pinned,\n  disk_id\nFROM realm_registry\nWHERE kind = 'published'\n  AND url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring});",
+            "rawSql": "SELECT\n  url AS published_realm,\n  source_url AS origin_realm,\n  owner_username AS owner,\n  to_timestamp(last_published_at / 1000.0) AS last_published,\n  pinned,\n  disk_id\nFROM realm_registry\nWHERE kind = 'published'\n  AND url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/');",
             "refId": "A"
           }
         ],
@@ -269,7 +269,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT COUNT(*) AS cards FROM boxel_index WHERE realm_url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring}) AND type = 'instance' AND is_deleted IS NOT TRUE;",
+            "rawSql": "SELECT COUNT(*) AS cards FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'instance' AND is_deleted IS NOT TRUE;",
             "refId": "A"
           }
         ],
@@ -330,7 +330,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT COUNT(*) AS modules FROM boxel_index WHERE realm_url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring}) AND type = 'module' AND is_deleted IS NOT TRUE;",
+            "rawSql": "SELECT COUNT(*) AS modules FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'module' AND is_deleted IS NOT TRUE;",
             "refId": "A"
           }
         ],
@@ -391,7 +391,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT COUNT(*) AS files FROM boxel_index WHERE realm_url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring}) AND type = 'file' AND is_deleted IS NOT TRUE;",
+            "rawSql": "SELECT COUNT(*) AS files FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'file' AND is_deleted IS NOT TRUE;",
             "refId": "A"
           }
         ],
@@ -457,7 +457,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE realm_url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring}) AND type = 'error' AND is_deleted IS NOT TRUE;",
+            "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'error' AND is_deleted IS NOT TRUE;",
             "refId": "A"
           }
         ],
@@ -578,7 +578,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  rm.publishable,\n  rm.show_as_catalog,\n  up.slug AS unlisted_slug,\n  up.source_realm_url AS unlisted_source\nFROM realm_registry rr\nLEFT JOIN realm_metadata rm ON rm.url = rr.url\nLEFT JOIN unlisted_realm_paths up ON up.source_realm_url = rr.source_url\nWHERE rr.kind = 'published'\n  AND rr.url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring});",
+            "rawSql": "SELECT\n  rm.publishable,\n  rm.show_as_catalog,\n  up.slug AS unlisted_slug,\n  up.source_realm_url AS unlisted_source\nFROM realm_registry rr\nLEFT JOIN realm_metadata rm ON rm.url = rr.url\nLEFT JOIN unlisted_realm_paths up ON up.source_realm_url = rr.source_url\nWHERE rr.kind = 'published'\n  AND rr.url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/');",
             "refId": "A"
           }
         ],
@@ -697,7 +697,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  p2.url AS published_realm,\n  to_timestamp(p2.last_published_at / 1000.0) AS last_published,\n  p2.pinned\nFROM realm_registry p1\nJOIN realm_registry p2\n  ON p2.source_url = p1.source_url\n AND p2.kind = 'published'\nWHERE p1.kind = 'published'\n  AND p1.url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})\nORDER BY p2.last_published_at DESC NULLS LAST\nLIMIT 200;",
+            "rawSql": "SELECT\n  p2.url AS published_realm,\n  to_timestamp(p2.last_published_at / 1000.0) AS last_published,\n  p2.pinned\nFROM realm_registry p1\nJOIN realm_registry p2\n  ON p2.source_url = p1.source_url\n AND p2.kind = 'published'\nWHERE p1.kind = 'published'\n  AND p1.url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/')\nORDER BY p2.last_published_at DESC NULLS LAST\nLIMIT 200;",
             "refId": "A"
           }
         ],
@@ -796,7 +796,7 @@
               "size": "md",
               "variant": "primary",
               "value": "",
-              "customCode": "const manual = ${realm_manual:doublequote};\nconst picker = ${realm_picker:doublequote};\nconst realm = (manual && String(manual).trim()) ? String(manual).trim() : picker;\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!realm) {\n  context.grafana.notifyWarning(['Realm required', 'Pick a published realm from the dropdown or paste a URL into the Manual URL box.']);\n  return;\n}\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
+              "customCode": "const manual = ${realm_manual:doublequote};\nconst picker = ${realm_picker:doublequote};\nconst rawRealm = (manual && String(manual).trim()) ? String(manual).trim() : picker;\nconst realm = rawRealm ? rawRealm.replace(/[/]+$/, '') + '/' : rawRealm;\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!realm) {\n  context.grafana.notifyWarning(['Realm required', 'Pick a published realm from the dropdown or paste a URL into the Manual URL box.']);\n  return;\n}\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
             }
           ],
           "initial": {
@@ -995,7 +995,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT \n  username,\n  read,\n  write,\n  realm_owner,\n  CASE\n    WHEN realm_owner THEN 'owner'\n    WHEN write THEN 'read/write'\n    WHEN read THEN 'read'\n    ELSE 'none'\n  END AS permission\nFROM realm_user_permissions\nWHERE realm_url = COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})\nORDER BY realm_owner DESC, write DESC, read DESC, username ASC\nLIMIT 500;",
+            "rawSql": "SELECT \n  username,\n  read,\n  write,\n  realm_owner,\n  CASE\n    WHEN realm_owner THEN 'owner'\n    WHEN write THEN 'read/write'\n    WHEN read THEN 'read'\n    ELSE 'none'\n  END AS permission\nFROM realm_user_permissions\nWHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/')\nORDER BY realm_owner DESC, write DESC, read DESC, username ASC\nLIMIT 500;",
             "refId": "A"
           }
         ],
@@ -1212,7 +1212,7 @@
           "type": "query"
         },
         {
-          "description": "Paste any published realm URL to override the dropdown. Wins over the dropdown when non-empty.",
+          "description": "Paste any published realm URL to override the dropdown. Wins over the dropdown when non-empty. A trailing slash is optional — it's normalized to the canonical form before lookup.",
           "hide": 0,
           "label": "Manual URL",
           "name": "realm_manual",
