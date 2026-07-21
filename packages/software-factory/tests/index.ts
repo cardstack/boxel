@@ -21,6 +21,7 @@ import './factory-agent-claude-code.test.ts';
 import './issue-loop.test.ts';
 import './issue-scheduler.test.ts';
 import './run-log.test.ts';
+import './run-trace.test.ts';
 import './instance-discovery.test.ts';
 import './transient-agent-error.test.ts';
 import './workspace-skills.test.ts';

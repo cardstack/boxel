@@ -13,6 +13,7 @@ import {
   type LinkBoardToRealmIndexOptions,
 } from './factory-realm-index.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
+import { initRunTrace, withSpan } from './run-trace.ts';
 import {
   parseAgentFlag,
   type FactoryAgentProvider,
@@ -636,19 +637,27 @@ export async function runFactoryEntrypoint(
 
   // One source per run: a brief card (our authored content) or a GitHub
   // repo (inspired-by port — the analysis issue does the deep reading).
-  let brief = options.repoUrl
-    ? await loadGitHubBrief(options.repoUrl, { fetch: dependencies?.fetch })
-    : await loadFactoryBrief(requireBriefSource(options), {
-        client,
-        fetch: dependencies?.fetch,
-      });
+  let brief = await withSpan('startup', 'load-brief', undefined, () =>
+    options.repoUrl
+      ? loadGitHubBrief(options.repoUrl, { fetch: dependencies?.fetch })
+      : loadFactoryBrief(requireBriefSource(options), {
+          client,
+          fetch: dependencies?.fetch,
+        }),
+  );
   // Downstream (run slug, loop config, bootstrap prompt) keys off one
   // source URL regardless of which flag provided it.
   let briefSourceUrl = brief.sourceUrl;
 
-  let targetRealm = await (
-    dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
-  )(targetRealmResolution);
+  let targetRealm = await withSpan(
+    'startup',
+    'bootstrap-target-realm',
+    undefined,
+    () =>
+      (dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm)(
+        targetRealmResolution,
+      ),
+  );
 
   // v3 control/product split: resolve + bootstrap the control realm the
   // same way as the target (created if missing). A control realm equal to
@@ -690,8 +699,22 @@ export async function runFactoryEntrypoint(
     log.info(`Workspace directory: ${workspaceDir}`);
   }
 
+  // Span-trace telemetry for the whole run (see run-trace.ts for the
+  // schema). Spans recorded before this point were buffered and flush now.
+  initRunTrace({
+    workspaceDir,
+    tags: {
+      targetRealm: targetRealm.url,
+      controlRealm: controlRealmUrl,
+      brief: briefSourceUrl,
+      v2: options.v2 === true,
+    },
+  });
+
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
-  await pullTargetRealm(client, targetRealm.url, workspaceDir);
+  await withSpan('startup', 'pull-target-realm', undefined, () =>
+    pullTargetRealm(client, targetRealm.url, workspaceDir),
+  );
 
   // `.factory-scratch/` (the port-analysis turn's download area) never
   // syncs anywhere — always ignored, split or not.
@@ -709,7 +732,9 @@ export async function runFactoryEntrypoint(
       controlRealm: controlRealmUrl,
       workspaceDir,
     });
-    await controlSync.pull();
+    await withSpan('startup', 'pull-control-realm', undefined, () =>
+      controlSync!.pull(),
+    );
   }
 
   // Legacy single-realm mode only: replace the default CardsGrid index
@@ -728,14 +753,16 @@ export async function runFactoryEntrypoint(
   }
 
   // Create the seed issue locally
-  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(brief, {
-    darkfactoryModuleUrl,
-    workspaceDir,
-    // v2: hierarchical design — a design-foundation issue (brand guide,
-    // tokens, family coherence sheet) runs between bootstrap and the
-    // implementation issues.
-    designFoundation: options.v2 === true,
-  });
+  let seedResult = await withSpan('seed', 'create-seed', undefined, () =>
+    (dependencies?.createSeed ?? createSeedIssue)(brief, {
+      darkfactoryModuleUrl,
+      workspaceDir,
+      // v2: hierarchical design — a design-foundation issue (brand guide,
+      // tokens, family coherence sheet) runs between bootstrap and the
+      // implementation issues.
+      designFoundation: options.v2 === true,
+    }),
+  );
 
   // Push the freshly-written seed (and any other pre-existing workspace
   // state) to the realm. `defaultSyncWorkspaceToRealm` uses

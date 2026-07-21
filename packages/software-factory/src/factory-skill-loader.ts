@@ -7,6 +7,7 @@ import type {
   ResolvedSkill,
 } from './factory-agent/index.ts';
 import { logger } from './logger.ts';
+import { startSpan } from './run-trace.ts';
 
 const log = logger('factory-skill-loader');
 
@@ -334,6 +335,9 @@ export class SkillLoader implements SkillLoaderInterface {
     skillNames: string[],
     issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
+    let endLoadSpan = startSpan('skills', 'load', {
+      skills: skillNames.join(','),
+    });
     let results: ResolvedSkill[] = [];
 
     for (let name of skillNames) {
@@ -349,6 +353,7 @@ export class SkillLoader implements SkillLoaderInterface {
       }
     }
 
+    endLoadSpan({ loaded: results.length });
     return results;
   }
 

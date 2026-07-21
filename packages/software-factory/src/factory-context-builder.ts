@@ -16,6 +16,7 @@ import {
 } from './factory-skill-loader.ts';
 import { buildHostToolsSkill } from './host-import-manifest.ts';
 import { logger } from './logger.ts';
+import { startSpan } from './run-trace.ts';
 
 let log = logger('factory-context-builder');
 
@@ -182,12 +183,39 @@ export class ContextBuilder {
       );
     }
 
+    let endContextSpan = startSpan('context', 'build-for-issue', {
+      issue: String(params.issue.id).split('/').filter(Boolean).pop(),
+    });
+    try {
+      return await this.#buildForIssueInner(params);
+    } finally {
+      endContextSpan();
+    }
+  }
+
+  async #buildForIssueInner(params: {
+    issue: IssueData;
+    targetRealm: string;
+    darkfactoryModuleUrl?: string;
+    validationResults?: ValidationResults;
+    validationContext?: string;
+    briefUrl?: string;
+  }): Promise<AgentContext> {
     let { issue, targetRealm, darkfactoryModuleUrl } = params;
+
+    // Re-assert for the type system — the public wrapper already threw if
+    // the loader is missing.
+    let issueLoader = this.issueLoader;
+    if (!issueLoader) {
+      throw new Error(
+        'buildForIssue() requires an issueLoader in ContextBuilderConfig',
+      );
+    }
 
     // Step 1: Traverse issue relationships
     let [project, knowledge] = await Promise.all([
-      this.issueLoader.loadProject(issue),
-      this.issueLoader.loadKnowledge(issue),
+      issueLoader.loadProject(issue),
+      issueLoader.loadKnowledge(issue),
     ]);
 
     if (!project) {

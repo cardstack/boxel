@@ -16,6 +16,7 @@ import type {
 } from '../factory-agent/index.ts';
 
 import type { Validator } from '../issue-loop.ts';
+import { startSpan } from '../run-trace.ts';
 
 import { TestValidationStep } from './test-step.ts';
 import { LintValidationStep } from './lint-step.ts';
@@ -78,8 +79,21 @@ export class ValidationPipeline implements Validator {
       return { passed: true, steps: [] };
     }
 
+    // Steps run concurrently, so step spans overlap inside the pipeline
+    // span — the visualization should treat the pipeline duration as the
+    // wall-clock cost and the step durations as attribution.
     let settled = await Promise.allSettled(
-      this.runners.map((runner) => runner.run(targetRealm, iteration)),
+      this.runners.map(async (runner) => {
+        let endStepSpan = startSpan('validation', runner.step, { iteration });
+        try {
+          let result = await runner.run(targetRealm, iteration);
+          endStepSpan({ passed: result.passed });
+          return result;
+        } catch (error) {
+          endStepSpan({ passed: false, error: true });
+          throw error;
+        }
+      }),
     );
 
     let stepResults: ValidationStepResult[] = [];

@@ -42,6 +42,7 @@ import {
   deriveHostToolImports,
 } from './host-import-manifest.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
+import { startSpan, withSpan } from './run-trace.ts';
 import { RenderGate } from './render-gate.ts';
 import { RunLogWriter } from './run-log.ts';
 import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
@@ -227,7 +228,9 @@ export async function runFactoryIssueLoop(
   // Glob/Grep/Read over real files (searchable, instinct-aligned) —
   // instead of only through the read_skill MCP tool. Dotdirs never sync
   // to the realm. Best-effort by design.
-  await materializeWorkspaceSkills(workspaceDir);
+  await withSpan('skills', 'materialize', undefined, () =>
+    materializeWorkspaceSkills(workspaceDir),
+  );
 
   // 1. Issue store — reads/writes the control realm under the split.
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
@@ -265,8 +268,11 @@ export async function runFactoryIssueLoop(
   // generated manifest skill in every agent context, and the static
   // `imports` validation step. Degrades to no gate when the host source
   // isn't present (undefined).
-  let hostToolImports = await deriveHostToolImports(
-    defaultHostToolsDir(PACKAGE_ROOT),
+  let hostToolImports = await withSpan(
+    'manifest',
+    'host-imports',
+    undefined,
+    () => deriveHostToolImports(defaultHostToolsDir(PACKAGE_ROOT)),
   );
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
@@ -335,14 +341,19 @@ export async function runFactoryIssueLoop(
   let monitor: RunMonitor | undefined;
   let syncWorkspace = async () => {
     let start = Date.now();
+    let endSyncSpan = startSpan('sync', 'workspace');
     try {
       // Product sync (atomic; control paths excluded via .boxelignore under
       // the split), then the control-plane raw-write sync. Both must land
       // for the composite to report ok — the loop refuses to mark issues
       // done on a failed sync, and that guarantee has to cover both realms.
+      let endProductSpan = startSpan('sync', 'product');
       let result = await syncGate.sync();
+      endProductSpan({ ok: result.ok });
       if (controlSync) {
+        let endControlSpan = startSpan('sync', 'control');
         let controlResult = await controlSync.sync();
+        endControlSpan({ ok: controlResult.ok });
         if (!controlResult.ok) {
           result = {
             ok: false,
@@ -379,8 +390,11 @@ export async function runFactoryIssueLoop(
           // Healing is best-effort; never fail a sync over it.
         }
       }
+      endSyncSpan({ ok: result.ok });
       return result;
     } finally {
+      // Idempotent close: a throw path lands here with the span still open.
+      endSyncSpan({ error: true });
       syncElapsedMs += Date.now() - start;
     }
   };

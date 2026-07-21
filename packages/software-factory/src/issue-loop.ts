@@ -30,6 +30,7 @@ import type { IssueStore } from './issue-scheduler.ts';
 
 import { IssueScheduler } from './issue-scheduler.ts';
 import { logger } from './logger.ts';
+import { startSpan, traceEvent } from './run-trace.ts';
 import { isBugFixIssue } from './factory-prompt-loader.ts';
 import {
   type RunLogWriter,
@@ -322,6 +323,13 @@ function issueSummaryLabel(issue: SchedulableIssue): string {
   return summary ? `"${issue.id}" — "${summary}"` : `"${issue.id}"`;
 }
 
+/** Short stable issue identifier for trace tags (URL basename). */
+function issueSlug(issue: SchedulableIssue): string {
+  let id = String(issue.id);
+  let basename = id.split('/').filter(Boolean).pop();
+  return basename ?? id;
+}
+
 /** Realm-relative card path for an issue (for run-log show-me links). */
 function issueCardPath(
   issue: SchedulableIssue,
@@ -518,8 +526,12 @@ export async function runIssueLoop(
 
   let controlRealm = config.controlRealm ?? targetRealm;
 
+  let endRunSpan = startSpan('run', 'issue-loop', { targetRealm });
+
   let scheduler = new IssueScheduler(issueStore);
+  let endLoadSpan = startSpan('scheduler', 'load-issues');
   await scheduler.loadIssues();
+  endLoadSpan();
 
   // A crash/stop mid-review strands an issue at 'review' — a status the
   // scheduler never picks. Reset stragglers to in_progress so a restart
@@ -568,6 +580,13 @@ export async function runIssueLoop(
       });
     }
     let turnStartMs = Date.now();
+    let endTurnSpan = startSpan('inference', info.turnType, {
+      issue: info.issueTitle,
+      iteration: info.iteration,
+      model: context.modelBudget?.model ?? 'inherit',
+      effort: context.modelBudget?.effort ?? 'inherit',
+      resumed: Boolean(context.resumeSession),
+    });
     try {
       // Transient SDK/network faults (idle stream timeouts, connection
       // resets) otherwise crash the whole multi-hour process — observed
@@ -594,12 +613,22 @@ export async function runIssueLoop(
         durationMs: Date.now() - turnStartMs,
         usage: result.usage,
       });
+      let usage = result.usage as
+        | { inputTokens?: number; outputTokens?: number }
+        | undefined;
+      endTurnSpan({
+        status: result.status,
+        toolCalls: result.toolCalls.length,
+        tokensIn: usage?.inputTokens,
+        tokensOut: usage?.outputTokens,
+      });
       return result;
     } catch (error) {
       monitor?.endTurn({
         status: 'error',
         durationMs: Date.now() - turnStartMs,
       });
+      endTurnSpan({ status: 'error' });
       throw error;
     } finally {
       // Restore the un-wrapped hooks: a later turn may spread this context
@@ -641,6 +670,7 @@ export async function runIssueLoop(
     let hasAnyIssues = scheduler.hasAnyIssues();
     if (hasAnyIssues) {
       log.info('All issues are blocked — nothing to do');
+      endRunSpan({ outcome: 'no_unblocked_issues' });
       return {
         outcome: 'no_unblocked_issues',
         outerCycles: 0,
@@ -648,6 +678,7 @@ export async function runIssueLoop(
       };
     }
     log.info('No issues found — nothing to do');
+    endRunSpan({ outcome: 'all_issues_done' });
     return { outcome: 'all_issues_done', outerCycles: 0, issueResults: [] };
   }
 
@@ -740,6 +771,10 @@ export async function runIssueLoop(
         log.info(
           `Outer cycle ${outerCycles}: skipping ${issueSummaryLabel(issue)} — workspace file says done, the realm index is stale (${issue.status})`,
         );
+        traceEvent('scheduler', 'skip-stale-done', {
+          issue: issueSlug(issue),
+          cycle: outerCycles,
+        });
         exhaustedIssues.add(issue.id);
         continue;
       }
@@ -821,6 +856,12 @@ export async function runIssueLoop(
     cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
     let cycleStartMs = Date.now();
     let cycleSyncStartMs = getSyncElapsedMs();
+
+    let endIssueSpan = startSpan('issue', issueSlug(issue), {
+      cycle: outerCycles,
+      issueType: issue.issueType ?? 'implementation',
+      priority: issue.priority,
+    });
 
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
@@ -959,7 +1000,12 @@ export async function runIssueLoop(
           log.info(
             `  Render gate: capturing ${Math.min(gateCardPaths.length, 4)} card(s)`,
           );
+          let endGateSpan = startSpan('render-gate', 'capture', {
+            issue: issueSlug(reviewIssue),
+            cards: Math.min(gateCardPaths.length, 4),
+          });
           renderResults = await renderGate.captureCards(gateCardPaths);
+          endGateSpan({ ok: renderResults.filter((r) => r.ok).length });
           // Push the PNGs (design/render/ rides the product sync) so the
           // run-log image links resolve.
           await syncWorkspace();
@@ -1071,8 +1117,17 @@ export async function runIssueLoop(
       }
     };
 
+    // Iteration spans use a close-previous pattern: the body has several
+    // break/continue exits, so each span is closed when the next iteration
+    // opens (or after the loop). Inter-iteration overhead lands in the
+    // owning iteration's span, which is where it belongs.
+    let endIterationSpan: () => void = () => {};
     for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
       innerIterations = iteration;
+      endIterationSpan();
+      endIterationSpan = startSpan('iteration', issueSlug(issue), {
+        iteration,
+      });
 
       log.info(
         `  Inner iteration ${iteration}/${maxIterationsPerIssue} for issue ${issueSummaryLabel(issue)}`,
@@ -1322,7 +1377,20 @@ export async function runIssueLoop(
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
       let validationStartMs = Date.now();
+      let endValidationSpan = startSpan('validation', 'pipeline', {
+        issue: issueSlug(issue),
+        iteration,
+      });
       validationResults = await validator.validate(targetRealm, iteration);
+      endValidationSpan({
+        passed: validationResults.passed,
+        steps: validationResults.steps.length,
+        failedSteps:
+          validationResults.steps
+            .filter((s) => !s.passed)
+            .map((s) => s.step)
+            .join(',') || undefined,
+      });
       let validationMs = Date.now() - validationStartMs;
       cur.validationMs += validationMs;
       grand.validationMs += validationMs;
@@ -1601,6 +1669,7 @@ export async function runIssueLoop(
 
       exhaustedIssues.add(issue.id);
     }
+    endIterationSpan();
 
     // All syncs during this issue (loop-owned + tool-triggered) accrued to the
     // shared counter; the delta is this issue's sync time.
@@ -1611,6 +1680,14 @@ export async function runIssueLoop(
       syncMs: cur.syncMs,
       totalMs: Date.now() - cycleStartMs,
     };
+
+    endIssueSpan({
+      exitReason,
+      iterations: innerIterations,
+      agentMs: issueTiming.agentMs,
+      validationMs: issueTiming.validationMs,
+      syncMs: issueTiming.syncMs,
+    });
 
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
@@ -1748,6 +1825,14 @@ export async function runIssueLoop(
   if (debug) {
     logTimingSummary(issueResults, grand);
   }
+
+  endRunSpan({
+    outcome,
+    cycles: outerCycles,
+    agentMs: grand.agentMs,
+    validationMs: grand.validationMs,
+    syncMs: grand.syncMs,
+  });
 
   return { outcome, outerCycles, issueResults };
 }
