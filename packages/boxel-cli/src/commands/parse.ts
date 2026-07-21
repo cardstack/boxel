@@ -116,19 +116,18 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
 // as "Cannot find module …" parse errors; the fix is adding the package
 // as a boxel-cli dependency, not shimming it.
 //
-// Where those deps live depends on the install layout, and picking the
-// wrong dir is what broke `boxel parse` for npm installs:
+// Those deps live in different places depending on the install layout:
 //   - pnpm keeps them in the CLI's own nested `node_modules`
 //     (`<cli>/node_modules`).
 //   - npm hoists them to the install root's `node_modules`, leaving the
-//     CLI's nested dir empty/absent — so the old unconditional nested
-//     path resolved nothing, `qunit-dom` (and every template's
-//     `@glint/ember-tsc/-private/dsl` import) failed, and glint reported
-//     "no diagnostics" while having type-checked nothing.
-// Prefer the nested dir when it actually carries the deps; otherwise use
-// the `node_modules` Node's own resolver finds `@glint/ember-tsc` in,
-// which is the hoisted root under npm. Both cases then resolve the CLI's
-// runtime deps identically.
+//     CLI's nested dir empty or absent.
+// Resolving against the nested dir alone would find nothing under npm:
+// `qunit-dom` and every compiled template's
+// `@glint/ember-tsc/-private/dsl` import go unresolved and glint exits
+// non-zero having type-checked nothing. Prefer the nested dir when it
+// actually carries the deps; otherwise use the `node_modules` that Node's
+// own resolver finds `@glint/ember-tsc` in — the hoisted root under npm.
+// Both resolve the CLI's runtime deps identically.
 const NODE_MODULES_PATH = (() => {
   if (!BUNDLED_TYPES_DIR) {
     return join(PACKAGES_PATH, 'host', 'node_modules');
@@ -596,8 +595,8 @@ async function runGlintCheck(
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
-            // Host tools moved from `commands/*` to `tools/*`; current card
-            // code imports `@cardstack/boxel-host/tools/<name>`.
+            // Card code imports host tools as
+            // `@cardstack/boxel-host/tools/<name>`.
             '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
             '*': [`${HOST_TYPES_PATH}/*`],

@@ -18,11 +18,10 @@ import type { ParseRealmResult } from '../../src/commands/parse.ts';
 const FIXTURES_DIR = resolve(import.meta.dirname, '../fixtures/parse');
 
 // Message the CLI emits when ember-tsc exits non-zero but produced zero
-// TS diagnostics — i.e. glint resolved nothing and checked nothing. A
-// "pass" that never actually type-checked. The primary bug: an npm
-// install put the CLI's deps in a hoisted node_modules the parse
-// workspace's symlink didn't point at, so glint aborted with this before
-// checking any card. No fixture may surface it.
+// TS diagnostics — glint resolved nothing and checked nothing: a "pass"
+// that never actually type-checked. It surfaces when the parse
+// workspace's node_modules can't resolve the CLI's deps. No fixture may
+// produce it — if one does, the install layout is broken, not the card.
 const NOTHING_CHECKED = 'produced no TS diagnostics';
 
 async function parseFixture(name: string): Promise<ParseRealmResult> {
@@ -33,16 +32,16 @@ async function parseFixture(name: string): Promise<ParseRealmResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Primary behavior: glint actually runs against an npm install, and the
-// resolution surfaces the CLI's tsconfig aliases cover type-check clean.
+// Primary behavior: glint runs against an npm install and the CLI's
+// tsconfig aliases resolve, so real cards type-check clean.
 // ---------------------------------------------------------------------------
 describe('boxel parse (against the installed CLI)', () => {
   it(
     'type-checks a card importing @cardstack/boxel-host/tools/* clean',
     async () => {
-      // Exercises the post-rename host-tools path alias + the bundled
-      // `tools/` source. Also proves glint ran end-to-end on a real card
-      // in the installed layout.
+      // Exercises the host-tools path alias + the bundled `tools/`
+      // source. Also proves glint ran end-to-end on a real card in the
+      // installed layout.
       let result = await parseFixture('boxel-host-tools');
       expect(result.errors).toEqual([]);
       expect(result.status).toBe('passed');
