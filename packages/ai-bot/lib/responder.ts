@@ -1,5 +1,9 @@
 import { logger } from '@cardstack/runtime-common';
-import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+  type AppBoxelResponseStreamContent,
+} from '@cardstack/runtime-common/matrix-constants';
 import { isToolOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import { errorReporter } from './sentry.ts';
@@ -11,7 +15,9 @@ import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
-import MatrixResponsePublisher from './matrix/response-publisher.ts';
+import MatrixResponsePublisher, {
+  toCommandRequest,
+} from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
@@ -49,7 +55,18 @@ export class Responder {
     );
   }
 
-  constructor(client: MatrixClient, roomId: string, agentId: string) {
+  private client: MatrixClient;
+  private streamPreviewTarget: { userId: string; deviceId: string } | undefined;
+  private _streamPreviewSequence = 0;
+
+  constructor(
+    client: MatrixClient,
+    roomId: string,
+    agentId: string,
+    streamPreviewTarget?: { userId: string; deviceId: string },
+  ) {
+    this.client = client;
+    this.streamPreviewTarget = streamPreviewTarget;
     this.matrixResponsePublisher = new MatrixResponsePublisher(
       client,
       roomId,
@@ -81,6 +98,19 @@ export class Responder {
     return 'room-edits';
   }
 
+  // Whether mid-turn state changes should trigger a throttled preview send.
+  // In `off` mode we never send mid-turn events. In `to-device` mode without a
+  // preview target (older client that didn't stamp its device id on the prompt)
+  // we also skip mid-turn — the sensible fallback since we can't target a
+  // preview at anyone in particular. The final consolidated room edit still
+  // lands from `finalize`/`flush`.
+  private get shouldStreamMidTurn(): boolean {
+    const mode = this.streamingMode;
+    if (mode === 'off') return false;
+    if (mode === 'to-device' && !this.streamPreviewTarget) return false;
+    return true;
+  }
+
   async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
   }
@@ -96,10 +126,67 @@ export class Responder {
   sendMessageEventWithThrottlingInternal: () => unknown = throttle(
     () => {
       this.needsMessageSend = false;
-      this.sendMessageEvent();
+      // The final consolidated event always lands as a room edit — never a
+      // to-device preview — because to-device is ephemeral and durable state
+      // must be in the room. Intermediate previews in to-device mode go over
+      // sendToDevice targeted at the originating device only.
+      if (
+        this.streamingMode === 'to-device' &&
+        this.streamPreviewTarget &&
+        !this.responseState.isStreamingFinished
+      ) {
+        this.sendToDevicePreview();
+      } else {
+        this.sendMessageEvent();
+      }
     },
     Number(process.env.AI_BOT_STREAM_THROTTLE_MS ?? 250),
   );
+
+  private sendToDevicePreview = async (): Promise<void> => {
+    if (!this.streamPreviewTarget) return;
+    const parentEventId = this.matrixResponsePublisher.originalResponseEventId;
+    if (!parentEventId) {
+      // Haven't sent the thinking placeholder yet — the client would have
+      // nothing to attach the preview to.
+      return;
+    }
+    const payload: AppBoxelResponseStreamContent = {
+      roomId: this.matrixResponsePublisher.roomId,
+      parentEventId,
+      sequence: this._streamPreviewSequence++,
+      body: this.responseState.latestContent ?? '',
+      reasoning: this.responseState.latestReasoning ?? '',
+      // Normalize to the same shape the room event carries (see
+      // toCommandRequest) so a client reads toolRequests identically on both
+      // channels; arguments come through as objects, empty until the streamed
+      // JSON completes.
+      toolRequests: (this.responseState.toolCalls ?? [])
+        .filter(Boolean)
+        .map((toolCall) =>
+          toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+        ),
+    };
+    // matrix-js-sdk's sendToDevice takes a Map<userId, Map<deviceId, content>>
+    // and iterates it internally — a plain nested object throws
+    // `TypeError: contentMap is not iterable` at runtime.
+    const contentMap = new Map([
+      [
+        this.streamPreviewTarget.userId,
+        new Map([[this.streamPreviewTarget.deviceId, payload]]),
+      ],
+    ]);
+    try {
+      await this.client.sendToDevice(
+        APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        contentMap,
+      );
+    } catch (e) {
+      // Preview loss is non-fatal; the final room edit still lands. Log at
+      // debug so a wedged homeserver doesn't spam sentry.
+      log.debug('to-device response-stream preview send failed', e);
+    }
+  };
 
   sendMessageEvent = async () => {
     // Only send if the delta is meaningful, unless we are finalizing.
@@ -156,11 +243,18 @@ export class Responder {
       Boolean(call),
     );
 
+    // When we're not sending mid-turn, `finalize()` owns the
+    // `isStreamingFinished` transition — otherwise the flag would flip here,
+    // the mid-turn send would be gated off, and `finalize()` would see no
+    // transition and skip the final send too, leaving only the thinking
+    // placeholder in the room.
+    const isStreamingFinished =
+      this.shouldStreamMidTurn && chunk.choices?.[0]?.finish_reason === 'stop';
     const responseStateChanged = this.responseState.update(
       newReasoningContent,
       snapshot.choices?.[0]?.message?.content,
       toolCalls,
-      chunk.choices?.[0]?.finish_reason === 'stop',
+      isStreamingFinished,
     );
     log.debug('onChunk', {
       reasoning: this.responseState.latestReasoning,
@@ -169,7 +263,7 @@ export class Responder {
       isStreamingFinished: this.responseState.isStreamingFinished,
       responseStateChanged,
     });
-    if (responseStateChanged && this.streamingMode !== 'off') {
+    if (responseStateChanged && this.shouldStreamMidTurn) {
       await this.sendMessageEventWithThrottling();
     }
 

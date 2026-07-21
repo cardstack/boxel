@@ -11,6 +11,7 @@ import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
@@ -264,13 +265,188 @@ module('Responding', (hooks) => {
     );
   });
 
+  test('`to-device` streaming mode: streams previews to the target device and lands one final consolidated room event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      // Stream several chunks — each is a state change that should trigger a
+      // throttled to-device preview, not a room edit.
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        // Advance past the throttle window so each chunk gets its own send.
+        await clock.tickAsync(300);
+      }
+
+      let roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        1,
+        'Only the thinking placeholder has landed as a room event so far',
+      );
+
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.ok(
+        toDeviceEvents.length >= 1,
+        'At least one preview was sent over to-device',
+      );
+      assert.ok(
+        toDeviceEvents.every(
+          (e) => e.eventType === APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        ),
+        'All to-device events use the response-stream type',
+      );
+      let firstPreview =
+        toDeviceEvents[0].contentMap['@alice:example.com']?.['DEVICEALICE'];
+      assert.ok(firstPreview, 'Preview targets the originating device');
+      assert.equal(
+        (firstPreview as any).parentEventId,
+        '0',
+        'Preview attaches to the thinking placeholder event id',
+      );
+      assert.equal(
+        (firstPreview as any).roomId,
+        'room-id',
+        'Preview carries the correct roomId',
+      );
+      assert.deepEqual(
+        toDeviceEvents.map(
+          (e) =>
+            (e as any).contentMap['@alice:example.com']?.['DEVICEALICE']
+              ?.sequence,
+        ),
+        toDeviceEvents.map((_, i) => i),
+        'Sequence numbers are monotonic and start at 0',
+      );
+
+      await responder.finalize();
+
+      roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        2,
+        'Placeholder plus one final consolidated room event',
+      );
+      assert.equal(
+        roomEvents[1].content.body,
+        'content 4',
+        'Final room event carries the full accumulated content',
+      );
+      assert.deepEqual(
+        roomEvents[1].content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'Final room event replaces the thinking placeholder',
+      );
+      assert.deepEqual(
+        roomEvents[1].content.isStreamingFinished,
+        true,
+        'isStreamingFinished is set on the final room event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('`to-device` streaming mode without a target device falls back to `off` behavior', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      // No streamPreviewTarget passed (simulates a prompt from an older client
+      // that didn't stamp the originating device id).
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      let roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        1,
+        'No intermediate room events while streaming',
+      );
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.equal(
+        toDeviceEvents.length,
+        0,
+        'No to-device previews sent when target device is unknown',
+      );
+
+      await responder.finalize();
+
+      roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        2,
+        'Final consolidated room event still lands',
+      );
+      assert.equal(roomEvents[1].content.body, 'content 4');
+      assert.deepEqual(roomEvents[1].content.isStreamingFinished, true);
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('`to-device` streaming mode: previews carry tool requests in the room-event wire shape', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      await responder.onChunk(
+        {} as any,
+        snapshotWithToolCall({
+          id: 'tool-1',
+          name: 'searchCards',
+          arguments: { query: 'pets' },
+        }),
+      );
+      await clock.tickAsync(300);
+
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.ok(toDeviceEvents.length >= 1, 'A preview was sent');
+      let preview =
+        toDeviceEvents[toDeviceEvents.length - 1].contentMap[
+          '@alice:example.com'
+        ]?.['DEVICEALICE'];
+      assert.deepEqual(
+        (preview as any).toolRequests,
+        [{ id: 'tool-1', name: 'searchCards', arguments: { query: 'pets' } }],
+        'toolRequests is normalized to the room event’s { id, name, arguments: <object> } shape, not the raw OpenAI { function: { name, arguments: <string> } } shape',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('`off` streaming mode: only sends the thinking placeholder and a single final consolidated event', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'off';
     try {
       await responder.ensureThinkingMessageSent();
 
       for (let i = 0; i < 10; i++) {
-        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        // The last chunk carries `finish_reason: 'stop'` — this pins the
+        // end-of-stream transition and would regress the bug where off mode
+        // let onChunk flip isStreamingFinished, causing finalize to skip the
+        // final consolidated send.
+        let chunk =
+          i === 9
+            ? ({
+                choices: [{ finish_reason: 'stop', index: 0, delta: {} }],
+              } as any)
+            : ({} as any);
+        await responder.onChunk(chunk, snapshotWithContent('content ' + i));
       }
 
       let sentEvents = fakeMatrixClient.getSentEvents();

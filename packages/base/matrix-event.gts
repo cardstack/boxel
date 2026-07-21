@@ -20,6 +20,7 @@ import type {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -250,6 +251,7 @@ export interface CardMessageContent {
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
+  [APP_BOXEL_ORIGINATING_DEVICE_ID_KEY]?: string;
   [APP_BOXEL_TOOL_REQUESTS_KEY]?: Partial<EncodedToolRequest>[];
   // Replay-only: messages written before the command → tool rename carry
   // their requests under this key. Read via `getToolRequests`; never write.
