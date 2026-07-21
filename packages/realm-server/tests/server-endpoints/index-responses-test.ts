@@ -1870,6 +1870,35 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           '/pricing/ is redirected for */* too',
         );
       });
+
+      test('a non-public realm does not disclose routes via a canonical redirect', async function (assert) {
+        // Drop the published realm's permissions so it is no longer publicly
+        // readable. `fetchRealmPermissions` reads this table uncached, so the
+        // next request sees the change immediately.
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        // The public-permission gate runs before the routing-map lookup, so a
+        // non-public realm falls through to the generic Boxel shell instead of
+        // emitting a route-specific 308 that would reveal the private route
+        // exists.
+        assert.notStrictEqual(
+          response.status,
+          308,
+          'no route-specific redirect is emitted for a non-public realm',
+        );
+        assert.strictEqual(
+          response.status,
+          200,
+          'serves the generic shell for a non-public realm',
+        );
+      });
     },
   );
 });
