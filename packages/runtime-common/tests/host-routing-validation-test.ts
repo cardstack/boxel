@@ -61,6 +61,27 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.strictEqual(validateRoutingPath('/foo%gg'), INVALID_CHARS_MSG);
   },
 
+  'validateRoutingPath: advises when the path has a trailing slash': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      validateRoutingPath('/pricing/'),
+      'Trailing slash is ignored; this route matches "/pricing"',
+    );
+    assert.strictEqual(
+      validateRoutingPath('/blog/posts/'),
+      'Trailing slash is ignored; this route matches "/blog/posts"',
+    );
+    // Trimmed before checking, so trailing whitespace after the slash
+    // still warns and normalizes correctly.
+    assert.strictEqual(
+      validateRoutingPath('  /docs/  '),
+      'Trailing slash is ignored; this route matches "/docs"',
+    );
+    // The realm root's slash is the root itself, not a trailing slash.
+    assert.strictEqual(validateRoutingPath('/'), undefined);
+  },
+
   'validateRoutingPath: trims surrounding whitespace before validating': async (
     assert,
   ) => {

@@ -30,6 +30,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
 
+    test('validateRoutingPath: advises when the path has a trailing slash', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
     test('validateRoutingPath: trims surrounding whitespace before validating', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
