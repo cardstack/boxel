@@ -22,6 +22,36 @@ test.describe('Skills', () => {
   let firstUser: { username: string; password: string; credentials: any };
   let secondUser: { username: string; password: string; credentials: any };
 
+  // The skill chooser now searches the shared Boxel Skills realm alongside the
+  // user's own workspaces. In the e2e env that realm is indexed from scratch on
+  // server startup, so the chooser's federated search stalls until it is ready
+  // — long enough to blow the per-test timeout. Warm it once for this module by
+  // waiting until a known skill card is served from the realm's index. Scoped
+  // here (not the shared harness) so only these tests, which depend on the
+  // skills realm being searchable, pay the wait. The Skills realm is public-
+  // read, so no auth is needed.
+  test.beforeAll(async ({ playwright }) => {
+    test.setTimeout(180_000);
+    const skillsRealmURL = `${new URL(appURL).origin}/skills/`;
+    const probe = `${skillsRealmURL}Skill/boxel-environment`;
+    const request = await playwright.request.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    try {
+      await expect(async () => {
+        const res = await request.get(probe, {
+          headers: { Accept: 'application/vnd.card+json' },
+        });
+        expect(
+          res.status(),
+          `Boxel Skills realm not indexed yet (${probe})`,
+        ).toBe(200);
+      }).toPass({ timeout: 170_000, intervals: [2_000, 5_000, 10_000] });
+    } finally {
+      await request.dispose();
+    }
+  });
+
   test.beforeEach(async () => {
     firstUser = await createSubscribedUser('user-1');
     secondUser = await createSubscribedUser('user-2');
