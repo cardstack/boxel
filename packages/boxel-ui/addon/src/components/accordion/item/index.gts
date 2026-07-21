@@ -32,7 +32,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
         {{on 'click' (optional @onClick)}}
         id={{@id}}
         aria-controls='section-{{@id}}'
-        aria-expanded={{@isOpen}}
+        aria-expanded={{if @isOpen 'true' 'false'}}
         disabled={{@disabled}}
       >
         <ChevronRight
@@ -114,7 +114,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       .boxel-accordion-item-icon {
         flex-shrink: 0;
       }
-      [aria-expanded] .boxel-accordion-item-icon {
+      [aria-expanded='true'] .boxel-accordion-item-icon {
         transform: rotate(90deg);
       }
 
