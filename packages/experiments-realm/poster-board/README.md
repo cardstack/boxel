@@ -6,10 +6,10 @@ engine; `poster-board.gts` is the `PosterBoard` card def that renders it.
 
 ## Running the tests
 
-Tests live in `poster-board.test.gts` and run on the catalog live-test
-infrastructure (see the catalog repo's `tests/live/README.md` for the full details): the
-realm serves the test file, and the host's QUnit runner discovers and loads
-it at runtime.
+Tests live in `poster-board.test.gts` and run on the live-test harness at
+`packages/host/tests/live-test.js`: the realm serves the test file, and the
+harness fetches the realm's `_mtimes`, filters for `*.test.gts` modules, and
+calls each module's exported `runTests` at runtime.
 
 ### 1. Start the servers
 
@@ -20,8 +20,8 @@ mise run dev-all
 ```
 
 This brings up the whole dev stack — host dev server (port 4200) plus the
-realm server stack (base + catalog realms, matrix, smtp) — in the right
-order.
+realm server stack (base, catalog, and experiments realms, matrix, smtp) —
+in the right order.
 
 ### 2a. Run in the browser (interactive)
 
@@ -41,13 +41,16 @@ REALM_URL="https://localhost:4201/experiments/" \
   npx ember test --config-file testem-live.js --path ./dist --filter "poster-board"
 ```
 
-Or run the full experiments-realm suite: `REALM_URL="https://localhost:4201/experiments/" pnpm test:live`.
+Or run the full experiments-realm suite (also from `packages/host` — that's
+the only package that defines the `test:live` script):
+`cd packages/host && REALM_URL="https://localhost:4201/experiments/" pnpm test:live`.
 
 ### Caveats
 
 - After adding or moving a `.test.gts` file, the realm has to re-index before
   the runner's `_mtimes` discovery sees it — restart `mise run dev-all` if a
   new test doesn't show up.
-- Check whether the live-test CI job's path filter covers
-  `packages/experiments-realm/**` before relying on CI — if not, run the
+- These tests do not run in CI: the `ci-host.yaml` path filter doesn't
+  include `packages/experiments-realm/**`, and the live-test job targets the
+  skills realm (which has no test files) rather than experiments. Run the
   tests locally before merging and say so in the PR.
