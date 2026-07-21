@@ -16,7 +16,7 @@ import {
   createRealm,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 test.describe('Skills', () => {
   let firstUser: { username: string; password: string; credentials: any };
@@ -24,29 +24,39 @@ test.describe('Skills', () => {
 
   // The skill chooser now searches the shared Boxel Skills realm alongside the
   // user's own workspaces. In the e2e env that realm is indexed from scratch on
-  // server startup, so the chooser's federated search stalls until it is ready
-  // — long enough to blow the per-test timeout. Warm it once for this module by
-  // waiting until a known skill card is served from the realm's index. Scoped
-  // here (not the shared harness) so only these tests, which depend on the
-  // skills realm being searchable, pay the wait. The Skills realm is public-
-  // read, so no auth is needed.
+  // server startup, so the chooser's federated search stalls until indexing
+  // finishes — long enough to blow the per-test timeout. Wait once for the
+  // realm-server index queue to drain (`/_queue-status` → `pending: 0`) before
+  // this module's tests run. Scoped here (not the shared harness) so only these
+  // tests, which depend on the skills realm being searchable, pay the wait.
   test.beforeAll(async ({ playwright }) => {
-    test.setTimeout(180_000);
-    const skillsRealmURL = `${new URL(appURL).origin}/skills/`;
-    const probe = `${skillsRealmURL}Skill/boxel-environment`;
+    test.setTimeout(300_000);
+    // `/_queue-status` is monitoring-gated: the bearer token is
+    // sha256('MONITORING' + realm-server secret seed), matching realm-server's
+    // `monitoringAuthToken`. The e2e realm server runs with this seed.
+    const seed = process.env.REALM_SERVER_SECRET_SEED ?? "mum's the word";
+    const token = createHash('sha256')
+      .update('MONITORING')
+      .update(seed)
+      .digest('hex');
+    const queueStatusURL = `${new URL(appURL).origin}/_queue-status`;
     const request = await playwright.request.newContext({
       ignoreHTTPSErrors: true,
     });
     try {
       await expect(async () => {
-        const res = await request.get(probe, {
-          headers: { Accept: 'application/vnd.card+json' },
+        const res = await request.get(queueStatusURL, {
+          headers: { Authorization: `Bearer ${token}` },
         });
+        expect(res.status(), 'unexpected /_queue-status response').toBe(200);
+        const body = (await res.json()) as {
+          data?: { attributes?: { pending?: number } };
+        };
         expect(
-          res.status(),
-          `Boxel Skills realm not indexed yet (${probe})`,
-        ).toBe(200);
-      }).toPass({ timeout: 170_000, intervals: [2_000, 5_000, 10_000] });
+          body?.data?.attributes?.pending,
+          'realm-server index queue still draining',
+        ).toBe(0);
+      }).toPass({ timeout: 290_000, intervals: [2_000, 5_000, 10_000] });
     } finally {
       await request.dispose();
     }
