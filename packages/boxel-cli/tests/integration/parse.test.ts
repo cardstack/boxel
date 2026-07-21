@@ -101,10 +101,10 @@ describe('boxel parse (against the installed CLI)', () => {
 //   - helper arg shapes: the bundled `formatDateTime` typing rejects the
 //     common positional call `(formatDateTime @model.when 'MMM D')`.
 //
-// Marked `it.fails` so they run and stay red-as-expected without failing
-// CI; when a fix lands, the test flips green and vitest reports the
-// `it.fails` itself as failing — a tripwire to delete the marker and move
-// the case up into the block above.
+// Marked `it.fails`: each is an expected failure while the published CLI
+// lacks support for the pattern, so it runs without failing CI. An
+// unexpected pass makes `it.fails` itself fail — the signal to remove the
+// marker and move the case into the block above.
 // ---------------------------------------------------------------------------
 describe('boxel parse — known typing gaps (deferred)', () => {
   const DEFERRED = [
