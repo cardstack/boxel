@@ -203,6 +203,76 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     );
   });
 
+  test('Custom-size fitted holds Accept disabled until a valid size is entered', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+    await waitFor('[data-test-toolbar="add-embed"]', { timeout: 5000 });
+
+    await click('[data-test-toolbar="add-embed"]');
+    await click('[data-test-toolbar-embed="card"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+    );
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+
+    // Selecting Custom size with no dimensions must hold the CTA disabled so a
+    // size-less bare `fitted` directive can't be inserted.
+    await click('[data-test-markdown-embed-preview-format-select]');
+    await waitFor('[data-test-format-option="custom"]', { timeout: 5000 });
+    await click('[data-test-format-option="custom"]');
+    await waitFor('[data-test-markdown-embed-preview-size]', { timeout: 5000 });
+    assert
+      .dom('[data-test-markdown-embed-preview-cta]')
+      .isDisabled('Accept is disabled while Custom size has no dimensions');
+
+    // A size that matches no named variant keeps the selection on Custom; once
+    // entered, the CTA unlocks and inserts a directive carrying those dims.
+    await fillIn('[data-test-markdown-embed-preview-width]', '512');
+    await fillIn('[data-test-markdown-embed-preview-height]', '384');
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let docText = editorEl
+      ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()?.trim()
+      : undefined;
+    assert.strictEqual(
+      docText,
+      `::card[../Pet/mango | w:512 h:384]`,
+      'custom fitted inserts the entered width and height',
+    );
+  });
+
   test('cursor inside an existing directive swaps the toolbar to the Edit pencil', async function (assert) {
     // Open the card on the stack, then patch the body content to a pre-
     // existing :card[...] directive so the cursor lands inside it once the

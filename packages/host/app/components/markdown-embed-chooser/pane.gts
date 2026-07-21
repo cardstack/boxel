@@ -118,8 +118,15 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     this.args.selection.setKind(kind);
   }
 
+  // A Custom-size fitted embed with no dimensions would insert a size-less
+  // bare `fitted`, so the CTA is held disabled until a valid size is entered.
+  private get ctaDisabled(): boolean {
+    return !this.args.selection.hasValidSize;
+  }
+
   @action
   private insert() {
+    if (this.ctaDisabled) return;
     let bfm = this.bfmString;
     if (!bfm) return;
     this.args.onInsert(bfm);
@@ -207,6 +214,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         <Button
           @kind='primary'
           @size='small'
+          @disabled={{this.ctaDisabled}}
           class='markdown-embed-preview-pane__cta'
           data-test-markdown-embed-preview-cta
           {{on 'click' this.insert}}
