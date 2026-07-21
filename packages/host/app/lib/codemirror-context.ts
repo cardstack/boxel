@@ -147,9 +147,10 @@ class CardWidget extends WidgetType {
     readonly cardId: string,
     readonly kind: 'inline' | 'block',
     readonly refType: 'card' | 'file' = 'card',
-    // Size specifier fields (as strings, for a clean DOM data-attr round-trip),
-    // parsed from the directive's `| spec` segment. Undefined when absent.
-    readonly format?: string,
+    // Size specifier fields parsed from the directive's `| spec` segment.
+    // `width`/`height` stay strings for a clean DOM data-attr round-trip;
+    // `format` is the parsed render format. Undefined when absent.
+    readonly format?: BfmRefFormat,
     readonly width?: string,
     readonly height?: string,
   ) {
@@ -668,11 +669,12 @@ function buildLinkDecorations(
 // ── Card decorations ───────────────────────────────────────────────────────
 
 // Parse a directive's inner content (between `[` and `]`) into the URL/id and
-// the CardWidget size args. Kept as strings so they round-trip cleanly through
-// DOM data-attrs, where `notifyTargets` re-derives format + style.
+// the CardWidget size args. `width`/`height` are kept as strings so they
+// round-trip cleanly through DOM data-attrs, where `notifyTargets` re-derives
+// format + style.
 function parseCardWidgetContent(content: string): {
   cardId: string;
-  format?: string;
+  format?: BfmRefFormat;
   width?: string;
   height?: string;
 } {

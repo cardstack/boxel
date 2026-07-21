@@ -1350,7 +1350,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 }}
                   {{#if (isInline target.kind)}}
                     <span
-                      class='codemirror-card-slot codemirror-card-slot--inline'
+                      class='codemirror-card-slot
+                        {{if
+                          (eq target.format 'atom')
+                          'codemirror-card-slot--inline'
+                          'codemirror-card-slot--inline-embed'
+                        }}'
                       style={{if target.style (htmlSafe target.style)}}
                       data-test-codemirror-file-slot-inline={{if
                         (eq target.refType 'file')
@@ -1647,6 +1652,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           padding: 1px 6px;
           font-size: 0.85em;
           cursor: pointer;
+        }
+
+        /* Inline embeds with an explicit non-atom format flow inline-block so a
+           sized card sits in the text run without the atom pill's flex chrome,
+           mirroring the saved/preview markdown renderers. */
+        .codemirror-editor :deep(.codemirror-card-slot--inline-embed) {
+          display: inline-block;
+          vertical-align: middle;
         }
 
         .codemirror-editor :deep(.codemirror-card-slot--block) {
