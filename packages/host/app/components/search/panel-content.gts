@@ -27,7 +27,6 @@ import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
-import type { MainResultsSnapshot } from '@cardstack/host/services/search-sheet-state';
 
 import {
   buildRecentsQuery,
@@ -255,15 +254,6 @@ export default class PanelContent extends Component<Signature> {
     });
   }
 
-  // A stable identity for the current main search — the serialized wire query.
-  // Undefined when the search is idle (empty key or a URL paste, both skipped).
-  // The snapshot is keyed by this so a reopen only redisplays results for the
-  // same search, and an idle sheet never captures (or clobbers) a snapshot.
-  private get mainQueryKey(): string | undefined {
-    let query = this.mainSearchQuery;
-    return query ? JSON.stringify(query) : undefined;
-  }
-
   // In the mini card chooser every result row renders as the uniform CardDef
   // fitted tile instead of each card's own fitted template. Bind that
   // rendering through the wire filter's top-level `eq` htmlQuery — fitted
@@ -415,45 +405,6 @@ export default class PanelContent extends Component<Signature> {
     this.args.onSortChange(option);
   }
 
-  // The snapshot to seed the fresh main-search resource with on reopen, so it
-  // adopts the prior rows and skips its fetch — no re-run, no "Searching…"
-  // flash. Only offered while persisting, and only when a captured snapshot
-  // belongs to the current query and actually has rows; the resource re-checks
-  // the query match before adopting it. A changed term/filter/sort has a
-  // different `mainQueryKey`, so the seed no longer matches and the search runs
-  // normally.
-  get mainSearchSeed(): MainResultsSnapshot | undefined {
-    if (!this.args.persist) {
-      return undefined;
-    }
-    let snapshot = this.searchSheetState.mainSnapshot;
-    if (
-      snapshot === undefined ||
-      snapshot.entries.length === 0 ||
-      snapshot.queryKey !== this.mainQueryKey
-    ) {
-      return undefined;
-    }
-    return snapshot;
-  }
-
-  // Persist a freshly-settled main-search snapshot for a later reopen. Skips a
-  // write that matches the stored one (same query, same rows) so a live re-run
-  // that changed nothing doesn't churn the seed identity.
-  persistMainSnapshot = (snapshot: MainResultsSnapshot) => {
-    let current = this.searchSheetState.mainSnapshot;
-    let unchanged =
-      current !== undefined &&
-      current.queryKey === snapshot.queryKey &&
-      current.entries.length === snapshot.entries.length &&
-      current.meta.page?.total === snapshot.meta.page?.total &&
-      current.entries.every((entry, i) => entry.id === snapshot.entries[i].id);
-    if (unchanged) {
-      return;
-    }
-    this.searchSheetState.mainSnapshot = snapshot;
-  };
-
   // Restore and track the results-list scroll offset across a sheet
   // close/reopen (only while persisting; the choosers keep their own scroll).
   //
@@ -532,11 +483,14 @@ export default class PanelContent extends Component<Signature> {
             live-search resource and re-runs only through its `@query` thunk.
             `<SheetResults>` derives the sections / count / multiselect from the
             yielded results — no parallel search resource. }}
+        {{! When persisting (the search sheet) the main results render the
+            service-owned resource, so they survive the sheet's close/reopen
+            and stay subscribed while closed. Otherwise (the card choosers) the
+            component owns its own resource, driven by the derived query. }}
         <SearchResults
-          @query={{this.mainSearchQuery}}
+          @query={{unless @persist this.mainSearchQuery}}
+          @resource={{if @persist this.searchSheetState.mainSearch}}
           @mode='none'
-          @seed={{this.mainSearchSeed}}
-          @onSnapshot={{if @persist this.persistMainSnapshot}}
           as |mainResults|
         >
           <SearchResults

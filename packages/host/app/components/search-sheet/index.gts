@@ -1,7 +1,8 @@
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { debounce } from '@ember/runloop';
+import { cancel, debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -19,14 +20,11 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
-import {
-  type Filter,
-  type ResolvedCodeRef,
-  baseRef,
-} from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
+import { SEARCH_SHEET_BASE_FILTER } from '@cardstack/host/services/search-sheet-state';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
@@ -79,13 +77,6 @@ const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
   return () =>
     element.removeEventListener('transitionend', handler as EventListener);
 });
-
-// The sheet searches everything the index knows — cards (including specs,
-// which the default `not: specRef` query path excludes), field instances, and
-// files. BaseDef is the common ancestor stamped on both instance and file type
-// chains, so this one ref spans all kinds; `scope: 'all'` rides the wire
-// alongside (see `searchScopeForOptions`).
-const BASE_FILTER: Filter = { type: baseRef };
 
 export default class SearchSheet extends Component<Signature> {
   @service declare private realmServer: RealmServerService;
@@ -177,16 +168,39 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
+    // A triggered search starts clean: leftover state from a previously
+    // persisted search (realm scope, sort, scroll offset, a pending debounce)
+    // must not silently narrow, position, or overwrite it. Reset everything,
+    // then apply the trigger's own term and type. Bumping the epoch remounts a
+    // `SearchPanel` that's already mounted (the sheet was open), so its
+    // init-once filter display re-reads the freshly-reset state instead of
+    // showing stale chips over the correctly-rescoped search.
+    this.resetState();
     this.searchKey = term;
     this.searchSheetState.selectedTypes = typeRef ? [typeRef] : undefined;
+    this.searchSheetState.searchTriggerEpoch++;
   }
 
+  // The pending 300ms debounce handle, kept so Cancel/Escape can cancel it —
+  // otherwise a keystroke within 300ms of a reset re-persists the cancelled
+  // term and reopens the sheet.
+  private pendingSearchKeyDebounce: ReturnType<typeof debounce> | undefined;
+
   private resetState() {
+    if (this.pendingSearchKeyDebounce) {
+      cancel(this.pendingSearchKeyDebounce);
+      this.pendingSearchKeyDebounce = undefined;
+    }
     this.searchSheetState.resetState();
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
-    debounce(this, this.setSearchKey, searchKey, 300);
+    this.pendingSearchKeyDebounce = debounce(
+      this,
+      this.setSearchKey,
+      searchKey,
+      300,
+    );
   }
 
   @action
@@ -292,44 +306,54 @@ export default class SearchSheet extends Component<Signature> {
           data-test-open-search-field
         />
       {{else}}
-        <SearchPanel
-          @searchKey={{this.searchKey}}
-          @baseFilter={{BASE_FILTER}}
-          @initialSelectedTypes={{this.initialSelectedTypes}}
-          @initialSelectedRealms={{this.initialSelectedRealms}}
-          @initialActiveSort={{this.initialActiveSort}}
-          @persist={{true}}
-          @onRealmChange={{this.handleRealmChange}}
-          @onTypeChange={{this.handleTypeChange}}
-          @onSortChange={{this.handleSortChange}}
-          as |Bar Content|
-        >
-          <Bar
-            class='search-sheet__search-input-group'
-            @placeholder={{this.placeholderText}}
-            @state={{this.inputValidationState}}
-            @bottomTreatment={{this.inputBottomTreatment}}
-            @onFocus={{@onFocus}}
-            @onInput={{this.debouncedSetSearchKey}}
-            @onKeyDown={{this.onSearchInputKeyDown}}
-            @onInputInsertion={{@onInputInsertion}}
-            @autocomplete='off'
-          />
-          <Content
-            class='search-sheet__content'
-            @isCompact={{this.isCompact}}
-            @handleSelect={{this.handleCardSelect}}
-            @adorn={{true}}
-          />
-          <div class='footer'>
-            <div class='buttons'>
-              <Button
-                {{on 'click' this.onCancel}}
-                data-test-search-sheet-cancel-button
-              >Cancel</Button>
+        {{! Keyed on the trigger epoch so an externally-triggered search (which
+            bumps it) remounts the panel — the only way its init-once filter
+            display picks up the freshly-reset state while the sheet is already
+            open. A normal reopen doesn't bump the epoch, so it reuses the
+            panel. }}
+        {{#each
+          (array this.searchSheetState.searchTriggerEpoch) key='@identity'
+          as |_epoch|
+        }}
+          <SearchPanel
+            @searchKey={{this.searchKey}}
+            @baseFilter={{SEARCH_SHEET_BASE_FILTER}}
+            @initialSelectedTypes={{this.initialSelectedTypes}}
+            @initialSelectedRealms={{this.initialSelectedRealms}}
+            @initialActiveSort={{this.initialActiveSort}}
+            @persist={{true}}
+            @onRealmChange={{this.handleRealmChange}}
+            @onTypeChange={{this.handleTypeChange}}
+            @onSortChange={{this.handleSortChange}}
+            as |Bar Content|
+          >
+            <Bar
+              class='search-sheet__search-input-group'
+              @placeholder={{this.placeholderText}}
+              @state={{this.inputValidationState}}
+              @bottomTreatment={{this.inputBottomTreatment}}
+              @onFocus={{@onFocus}}
+              @onInput={{this.debouncedSetSearchKey}}
+              @onKeyDown={{this.onSearchInputKeyDown}}
+              @onInputInsertion={{@onInputInsertion}}
+              @autocomplete='off'
+            />
+            <Content
+              class='search-sheet__content'
+              @isCompact={{this.isCompact}}
+              @handleSelect={{this.handleCardSelect}}
+              @adorn={{true}}
+            />
+            <div class='footer'>
+              <div class='buttons'>
+                <Button
+                  {{on 'click' this.onCancel}}
+                  data-test-search-sheet-cancel-button
+                >Cancel</Button>
+              </div>
             </div>
-          </div>
-        </SearchPanel>
+          </SearchPanel>
+        {{/each}}
       {{/if}}
     </div>
     <style scoped>

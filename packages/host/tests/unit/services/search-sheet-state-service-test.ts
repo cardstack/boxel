@@ -28,11 +28,6 @@ function populate(service: SearchSheetStateService) {
   service.activeSort = SORT;
   service.activeViewId = 'strip';
   service.pagination.focus('realm:http://test-realm/test/');
-  service.mainSnapshot = {
-    queryKey: 'key',
-    entries: [],
-    meta: { page: { total: 0 } },
-  };
   service.resultsScrollTop = 240;
 }
 
@@ -66,11 +61,6 @@ function assertCleared(
     service.pagination.focusedSection,
     null,
     `${label}: pagination reset`,
-  );
-  assert.strictEqual(
-    service.mainSnapshot,
-    undefined,
-    `${label}: mainSnapshot cleared`,
   );
   assert.strictEqual(
     service.resultsScrollTop,
@@ -107,6 +97,26 @@ module('Unit | Service | search-sheet-state', function (hooks) {
       service.pagination,
       before,
       'a new SectionPagination replaces the old one',
+    );
+  });
+
+  test('mainQuery is idle with an empty key and derives from the service inputs once a key is set', function (assert) {
+    assert.strictEqual(
+      service.mainQuery,
+      undefined,
+      'an empty search key leaves the query idle',
+    );
+
+    service.searchKey = 'Mango';
+    let query = service.mainQuery;
+    assert.ok(query, 'a search key yields a derived query');
+    // The sheet caps each realm's rows at the focused-section display limit;
+    // an empty realm selection lets the resource fall back to every realm.
+    assert.ok(query?.page, 'the derived query carries the per-realm page cap');
+    assert.deepEqual(
+      query?.realms,
+      [],
+      'no realm selection => empty realms (the resource searches all)',
     );
   });
 });

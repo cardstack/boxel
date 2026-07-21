@@ -48,7 +48,6 @@ import { searchErrorEntry } from '../lib/search-error-entry';
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
-import type { MainResultsSnapshot } from '../services/search-sheet-state';
 import type StoreService from '../services/store';
 import type {
   RealmEventContent,
@@ -96,10 +95,6 @@ export interface SearchEntry {
 interface Args {
   named: {
     query: SearchEntryWireQuery | undefined;
-    // A snapshot of a prior run's results to adopt on the first modify instead
-    // of fetching, when it belongs to this exact query. Used by the search
-    // sheet to rehydrate on reopen with no re-run; other consumers omit it.
-    seed?: MainResultsSnapshot;
   };
 }
 
@@ -148,12 +143,19 @@ export class SearchEntriesResource extends Resource<Args> {
   // fetch must not narrow it).
   private hasCompletedFullRun = false;
 
+  // True once any run has finished (success OR failure, full OR partial). Drives
+  // `isLoading` across the microtask gap between a query being set in modify()
+  // and the deferred task starting — distinct from `hasCompletedFullRun`, which
+  // means specifically a *successful full* run and gates the partial-refresh
+  // path. A failed run must still report settled (or every consumer shows
+  // "Searching…" forever), but must NOT unlock the partial-refresh path over an
+  // empty/undefined result set — hence the two flags. Plain untracked field:
+  // read in `isLoading` and written here, never mutated mid-render; the tracked
+  // `search.isRunning` dependency drives recomputation.
+  #hasSettled = false;
+
   #previousQuery: SearchEntryWireQuery | undefined;
   #previousRealms: string[] | undefined;
-  // One-shot: a handed-in seed is adopted at most once, on the first modify of
-  // this instance. Once spent, every later query change — including re-typing a
-  // key that was used before — takes the normal fetch path, never the seed.
-  #seedConsumed = false;
   #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
@@ -214,7 +216,7 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, seed } = named;
+    let { query } = named;
 
     if (query === undefined) {
       // Clear stale state so live subscriptions don't re-fire the old query.
@@ -232,6 +234,7 @@ export class SearchEntriesResource extends Resource<Args> {
       // cleared query, same as on teardown.
       this.#refreshEpoch++;
       this.hasCompletedFullRun = false;
+      this.#hasSettled = false;
       this.search.cancelAll();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
@@ -332,44 +335,7 @@ export class SearchEntriesResource extends Resource<Args> {
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
-
-    // Seed-and-skip: on the first modify of a freshly-mounted resource, if a
-    // snapshot for this exact query was handed in (the search sheet reopening
-    // with an unchanged search), adopt its rows and skip the fetch — no re-run,
-    // no "Searching…" flash. Subscriptions were already (re)established above,
-    // so a live index event still refreshes these rows while the sheet is open.
-    // One-shot via `#seedConsumed`, and gated on the query match, so any later
-    // query change — including re-typing the same key after changing it — falls
-    // through to the fetch below. The result state is applied out of this render
-    // (a microtask, the same escape hatch the fetch path uses): mutating the
-    // tracked `_entries` / `_meta` synchronously here would trip Glimmer's
-    // backtracking assertion. The rows land right after this render, before
-    // paint, so there is no visible empty frame — and, crucially, no fetch.
-    if (
-      !this.#seedConsumed &&
-      seed !== undefined &&
-      seed.queryKey === JSON.stringify(query)
-    ) {
-      this.#seedConsumed = true;
-      let seeded = seed;
-      // Mark the run complete synchronously (a plain field, so no tracked
-      // mutation mid-render) so `isLoading` reads false immediately — the
-      // seeded rows are presented as settled, not loading. The tracked result
-      // state itself must still be applied out of this render (a microtask, the
-      // same escape hatch the fetch path uses): mutating `_entries` / `_meta`
-      // synchronously here would trip Glimmer's backtracking assertion. The
-      // rows land right after this render, before paint — no fetch, no flash.
-      this.hasCompletedFullRun = true;
-      void Promise.resolve().then(() => {
-        if (isDestroyed(this) || isDestroying(this)) {
-          return;
-        }
-        this._entries.splice(0, this._entries.length, ...seeded.entries);
-        this._meta = seeded.meta;
-        this._errors = undefined;
-      });
-      return;
-    }
+    this.#hasSettled = false;
 
     // Start the search out of the render that triggered this modify. A consumer
     // reads the task's `isRunning` (through `isLoading`) during render, so a
@@ -399,13 +365,15 @@ export class SearchEntriesResource extends Resource<Args> {
     // between a query being set in modify() and the deferred task actually
     // starting — otherwise a just-set query briefly reads as
     // settled-with-no-results (which e.g. makes the playground autogenerate a
-    // blank instance). `#previousQuery` / `hasCompletedFullRun` are plain
-    // fields — reading them here, and writing them in modify(), never mutates
-    // tracked state mid-render (that would backtrack); the tracked `isRunning`
-    // dependency drives recomputation.
+    // blank instance). Settles on `#hasSettled`, not `hasCompletedFullRun`, so
+    // a *failed* run also reports settled — a 500/network failure leaves the
+    // error entry rendered, not a permanent "Searching…". `#previousQuery` /
+    // `#hasSettled` are plain fields — reading them here, and writing them in
+    // modify()/the task, never mutates tracked state mid-render (that would
+    // backtrack); the tracked `isRunning` dependency drives recomputation.
     return (
       this.search.isRunning ||
-      (this.#previousQuery !== undefined && !this.hasCompletedFullRun)
+      (this.#previousQuery !== undefined && !this.#hasSettled)
     );
   }
 
@@ -555,6 +523,11 @@ export class SearchEntriesResource extends Resource<Args> {
         // them.
       }
     } finally {
+      // Every run that reaches here has settled — success or failure — so
+      // `isLoading` can go false. A cancelled run (superseded by a restart)
+      // also lands here; the replacement run keeps `search.isRunning` true, so
+      // `isLoading` stays true across the handoff regardless.
+      this.#hasSettled = true;
       waiter.endAsync(token);
     }
   });
@@ -955,12 +928,10 @@ function memberValidator(member: SearchEntry): string {
 export function getSearchEntriesResource(
   parent: object,
   getQuery: () => SearchEntryWireQuery | undefined,
-  getSeed: () => MainResultsSnapshot | undefined = () => undefined,
 ) {
   return SearchEntriesResource.from(parent, () => ({
     named: {
       query: getQuery(),
-      seed: getSeed(),
     },
   })) as SearchEntriesResource;
 }

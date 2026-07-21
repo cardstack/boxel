@@ -154,7 +154,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('closed');
 
       // Reopening restores the results view, the query text, the view toggle, and
-      // the results (adopted from the retained snapshot, with no re-run).
+      // the results (rendered from the service-owned resource, which outlived
+      // the close, so there's no re-run).
       await click('[data-test-open-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('results');
       assert.dom('[data-test-search-field]').hasValue('Mango');
@@ -173,8 +174,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       let originalSearchEntries = store.searchEntries.bind(store);
       let mainSearchFetches = 0;
       store.searchEntries = async (query, realms) => {
-        // Isolate the main search from the recents query (which is not seeded
-        // and does re-run on reopen) by keying on the search term.
+        // Isolate the main search from the recents query (component-owned, so
+        // it re-runs on reopen) by keying on the search term.
         if (JSON.stringify(query).toLowerCase().includes('mango')) {
           mainSearchFetches++;
         }
@@ -201,11 +202,11 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert.strictEqual(
           mainSearchFetches,
           fetchesAfterSearch,
-          'the seeded reopen performs no additional main-search fetch',
+          'reopen reuses the same resource — no additional main-search fetch',
         );
 
-        // Changing the term still runs a fresh search (the seed only matches
-        // the unchanged query).
+        // Changing the term still runs a fresh search (the derived query
+        // changed).
         await fillIn('[data-test-search-field]', 'Van Gogh');
         assert
           .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
@@ -245,8 +246,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       let restoredContainer = document.querySelector(
         '[data-test-search-sheet] .search-sheet-content',
       ) as HTMLElement;
-      // Restore re-applies per frame until the seeded rows are laid out and the
-      // offset sticks; wait for that to settle.
+      // Restore re-applies per frame until the restored rows are laid out and
+      // the offset sticks; wait for that to settle.
       for (
         let i = 0;
         i < 30 && Math.abs(restoredContainer.scrollTop - expected) > 1;
