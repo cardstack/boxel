@@ -505,7 +505,7 @@ export class IndexRunner {
         current.#visitLocalPaths(invalidations),
       );
     } catch (setupErr) {
-      await current.#recordSetupPhaseError(urls, setupErr);
+      await current.#recordSetupPhaseError(urls, operations, setupErr);
       throw setupErr;
     }
     let resumedRows = current.batch.resumedRows;
@@ -813,10 +813,12 @@ export class IndexRunner {
     // index is the oracle for "was this a card?": the batch records which live
     // row types it tombstoned, so an existing card is protected even when the
     // file can't be read — which may be exactly how the visit failed.
-    // Re-parsing the source is only the fallback for a brand-new file (or the
-    // setup-phase path, whose fresh batch tombstoned nothing), which has no
-    // prior row to protect but should still surface its failure as an instance
-    // error when it's a card.
+    // Re-parsing the source is only the fallback for a brand-new file, which
+    // has no prior row to protect but should still surface its failure as an
+    // instance error when it's a card. (The setup-phase recovery seeds this
+    // batch's live types from the production index first — see
+    // recordProductionLiveTypes — so an existing card is classified from the
+    // index there too, and the reparse runs only for genuinely new files.)
     let isCardInstance =
       batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
     if (!isCardInstance && url.href.endsWith('.json')) {
@@ -853,13 +855,27 @@ export class IndexRunner {
   // excludes error rows, so a transient setup failure re-visits and self-heals
   // on the next attempt, while a persistent one stays visible as an error doc
   // on every handed URL instead of an invisible gap.
-  async #recordSetupPhaseError(urls: URL[], err: any): Promise<void> {
+  async #recordSetupPhaseError(
+    urls: URL[],
+    operations: Map<string, 'update' | 'delete'>,
+    err: any,
+  ): Promise<void> {
+    // Deletes are excluded: a delete whose job failed at setup must not be
+    // half-applied. Recording an error would resurrect the removed card, and
+    // letting the in-flight tombstone promote would apply a delete from a
+    // failed job. Leave production untouched and let the queue retry complete
+    // the delete — the same outcome a setup failure produced before this
+    // recovery existed.
+    let recordUrls = urls.filter((u) => operations.get(u.href) !== 'delete');
+    if (recordUrls.length === 0) {
+      return;
+    }
     let message = coerceErrorMessage(
       err,
       `Indexing failed during invalidation with no error message (${jobIdentity(this.#jobInfo)})`,
     );
     this.#log.warn(
-      `${jobIdentity(this.#jobInfo)} invalidation phase failed for ${urls
+      `${jobIdentity(this.#jobInfo)} invalidation phase failed for ${recordUrls
         .map((u) => u.href)
         .join(', ')}, recording error docs: ${message}`,
     );
@@ -869,7 +885,12 @@ export class IndexRunner {
         this.#virtualNetwork,
         this.#jobInfo,
       );
-      for (let url of urls) {
+      // Seed the live-card oracle from the production index so an existing
+      // card is written as an instance-error — overwriting the `instance`
+      // tombstone the in-flight batch left in the shared working table —
+      // rather than having that tombstone promoted and the card deleted.
+      await errorBatch.recordProductionLiveTypes(recordUrls);
+      for (let url of recordUrls) {
         if (errorBatch.resumedRows.has(url.href)) {
           // A prior attempt of this same job already indexed this URL and
           // `done()` will promote that good row — don't clobber it with an

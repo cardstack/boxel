@@ -540,6 +540,33 @@ export class Batch {
     return this.#tombstonedLiveTypes.get(url);
   }
 
+  // Populate `#tombstonedLiveTypes` for `urls` straight from the production
+  // index, WITHOUT tombstoning or computing a fan-out — the same live-type
+  // memory `invalidate()` records, but for a batch that never invalidated.
+  // The setup-phase failure recovery uses a fresh batch (it must not reuse the
+  // in-flight batch, whose working table holds fan-out tombstones a `done()`
+  // would promote); that fresh batch has no tombstone memory, so without this
+  // it would fall back to re-reading each file to decide "was this a card?".
+  // Any URL it then failed to re-classify (a read blip, non-card on-disk
+  // content) would leave the in-flight batch's `instance` tombstone in the
+  // shared working table to be promoted — silently deleting a previously-good
+  // card. Seeding from the index (the reliable oracle) closes that.
+  async recordProductionLiveTypes(urls: URL[]): Promise<void> {
+    await this.ready;
+    if (urls.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingIndexTypes(urls.map((u) => u.href));
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#tombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
+  }
+
   /**
    * The prerendered_html analog of `tombstonedLiveTypes`: row types
    * `tombstonePrerenderedHtmlEntries` overwrote with tombstones this pass,

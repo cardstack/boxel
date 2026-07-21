@@ -25,13 +25,17 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 function makeFileSystem() {
   return {
     'person.gts': `
-      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import { contains, field, linksTo, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
       import NumberField from "@cardstack/base/number";
 
       export class Person extends CardDef {
         @field firstName = contains(StringField);
         @field hourlyRate = contains(NumberField);
+        // searchable so the index visit records the link on boxel_index.deps,
+        // which the delete test relies on to fan out (and it does not appear in
+        // any template, so tests that never set it are unaffected).
+        @field friend = linksTo(() => Person, { searchable: true });
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
@@ -49,6 +53,44 @@ function makeFileSystem() {
         }
       }
     `,
+  };
+}
+
+// Force the dependency-ordering scan of an incremental index job to throw. It
+// runs in the setup phase — after the invalidation tombstones are written,
+// before any file is visited — the phase #runVisitLoop's per-URL isolation
+// cannot cover, so throwing here exercises the setup-phase recovery path AND
+// leaves the in-flight `instance` tombstone in the working table (the state a
+// naive recovery would wrongly promote). The `PARTITION BY` string is unique to
+// `queryOrderingDependencyRows`; it appears in neither the `/_atomic` write nor
+// the recovery's own writes (so the write still returns 201 and the recovery's
+// rows still land), and it does not run on the prerender-html channel (so the
+// spawned prerender job still succeeds — no retry congestion). The scan is
+// skipped for a single-URL invalidation, so a caller must invalidate >=2 URLs
+// to trigger it. Returns a restore fn and a throw counter; a refactor that
+// moves the query leaves the counter at 0 and makes `throwCount() > 0` fail
+// loudly rather than pass silently.
+function injectSetupPhaseFailure(adapter: DBAdapter) {
+  let original = adapter.execute.bind(adapter);
+  let throws = 0;
+  (adapter as unknown as { execute: unknown }).execute = async (
+    ...execArgs: unknown[]
+  ) => {
+    let sql = execArgs[0];
+    if (
+      typeof sql === 'string' &&
+      sql.includes('PARTITION BY url, type ORDER BY source_priority')
+    ) {
+      throws++;
+      throw new Error('injected setup-phase failure');
+    }
+    return (original as (...a: unknown[]) => unknown)(...execArgs);
+  };
+  return {
+    throwCount: () => throws,
+    restore: () => {
+      (adapter as unknown as { execute: unknown }).execute = original;
+    },
   };
 }
 
@@ -254,31 +296,10 @@ module(basename(import.meta.filename), function (hooks) {
       0,
     );
 
-    // Force the incremental index job's dependency-ordering step — part of the
-    // setup phase, which runs before any file is visited — to throw, standing
-    // in for a transient failure there (DB blip, ordering error). This is the
-    // exact phase #runVisitLoop's per-URL isolation does NOT cover; the
-    // recovery path must record an error doc for every URL the push handed the
-    // job rather than dropping them silently. The fault is persistent, so the
-    // job exhausts its attempts and stays failed, leaving the error docs in
-    // place to assert on (a transient one would self-heal on retry). The
-    // recovery writes are inserts/upserts, not this ordering SELECT, so they
-    // still succeed.
-    let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
-    let injectedThrows = 0;
-    (testDbAdapter as unknown as { execute: unknown }).execute = async (
-      ...execArgs: unknown[]
-    ) => {
-      let sql = execArgs[0];
-      if (
-        typeof sql === 'string' &&
-        sql.includes('PARTITION BY url, type ORDER BY source_priority')
-      ) {
-        injectedThrows++;
-        throw new Error('injected setup-phase failure');
-      }
-      return (originalExecute as (...a: unknown[]) => unknown)(...execArgs);
-    };
+    // The fault is persistent, so the job exhausts its attempts and stays
+    // failed, leaving the error docs in place to assert on (a transient one
+    // would self-heal on retry).
+    let fault = injectSetupPhaseFailure(testDbAdapter);
 
     let hrefs = Array.from(
       { length: fileCount },
@@ -328,11 +349,10 @@ module(basename(import.meta.filename), function (hooks) {
         },
       );
     } finally {
-      (testDbAdapter as unknown as { execute: unknown }).execute =
-        originalExecute;
+      fault.restore();
     }
 
-    assert.ok(injectedThrows > 0, 'the injected setup-phase fault fired');
+    assert.ok(fault.throwCount() > 0, 'the injected setup-phase fault fired');
 
     // Every pushed file has an error doc — the drop is visible in boxel_index
     // instead of vanishing.
@@ -364,6 +384,144 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(
       Boolean(moduleRows[0]?.has_error),
       'the module row is still clean — nothing was collaterally deleted or errored',
+    );
+  });
+
+  test('a setup-phase failure on a delete leaves the existing card live for the retry rather than deleting it', async function (assert) {
+    assert.timeout(120_000);
+
+    const indexingGroup = `indexing:${realm.url}`;
+    const cardUrl = `${realm.url}keep-me.json`;
+
+    const linkerUrl = `${realm.url}linker.json`;
+
+    // Seed the target card, then a second card that links to it — in separate
+    // settled pushes so the link resolves against an already-indexed target.
+    // The link is searchable, so it lands on `boxel_index.deps`; deleting the
+    // target then invalidates both cards, and that >=2-URL fan-out is what
+    // makes the dependency-ordering step (and thus the injected fault) run.
+    async function pushCard(href: string, doc: Record<string, unknown>) {
+      let res = await request
+        .post('/_atomic')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            'atomic:operations': [{ op: 'add', href, data: doc }],
+          }),
+        );
+      assert.strictEqual(res.status, 201, `seeded ${href}`);
+      await realm.incrementalIndexing();
+      await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+    }
+
+    await pushCard('keep-me.json', {
+      type: 'card',
+      attributes: { firstName: 'Keep Me' },
+      meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+    });
+    await pushCard('linker.json', {
+      type: 'card',
+      attributes: { firstName: 'Linker' },
+      relationships: { friend: { links: { self: './keep-me' } } },
+      meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+    });
+
+    let [before] = (await testDbAdapter.execute(
+      `select is_deleted from boxel_index where url = $1 and type = 'instance'`,
+      { bind: [cardUrl] },
+    )) as { is_deleted: boolean | null }[];
+    assert.notOk(
+      Boolean(before?.is_deleted),
+      'precondition: the target card indexed as a live instance',
+    );
+
+    // Fail fast (rather than time out below) if the link didn't record: the
+    // delete fans out to the linker — and so runs the ordering step the fault
+    // targets — only when the linker depends on the target.
+    let [linkerRow] = (await testDbAdapter.execute(
+      `select deps from boxel_index where url = $1 and type = 'instance'`,
+      { bind: [linkerUrl] },
+    )) as { deps: unknown }[];
+    let linkerDeps: string[] = Array.isArray(linkerRow?.deps)
+      ? (linkerRow!.deps as string[])
+      : typeof linkerRow?.deps === 'string'
+        ? (JSON.parse(linkerRow!.deps as string) as string[])
+        : [];
+    assert.ok(
+      linkerDeps.some((d) => d.includes('keep-me')),
+      `precondition: the linker records a dependency on the target (deps: ${JSON.stringify(linkerDeps)})`,
+    );
+
+    let indexBaseline = (
+      await jobsFor('incremental-index', indexingGroup)
+    ).reduce((max, job) => Math.max(max, job.id), 0);
+
+    // Delete the target while the dependency-ordering step throws — after the
+    // invalidation tombstones are written, so the in-flight `instance`
+    // tombstone exists and would be promoted by a naive recovery. The recovery
+    // must NOT promote it (a failed job must not half-apply the delete); the
+    // card stays live until a retry completes it.
+    let fault = injectSetupPhaseFailure(testDbAdapter);
+    let after:
+      | { is_deleted: boolean | null; has_error: boolean | null }
+      | undefined;
+    try {
+      await realm.delete('keep-me.json', { waitForIndex: false });
+      // Wait for the delete's index job to run its first attempt to
+      // completion — that attempt's setup throws and its recovery runs, which
+      // is what decides the card's fate (a naive recovery deletes it here, the
+      // fixed one leaves it). Gate on a completed reservation rather than the
+      // job reaching `rejected`: the recovery's verdict is final after the
+      // first attempt, and waiting for the full retry-to-rejection is both
+      // unnecessary and slow.
+      let deleteJobId = -1;
+      await waitUntil(
+        async () => {
+          let jobs = (await jobsFor('incremental-index', indexingGroup)).filter(
+            (job) => job.id > indexBaseline,
+          );
+          if (jobs.length === 0) {
+            return false;
+          }
+          deleteJobId = jobs[0].id;
+          let [reservation] = (await testDbAdapter.execute(
+            `select count(*)::int as n from job_reservations
+               where job_id = $1 and completed_at is not null`,
+            { bind: [deleteJobId] },
+          )) as { n: number }[];
+          return (reservation?.n ?? 0) >= 1;
+        },
+        {
+          timeout: 90_000,
+          interval: 100,
+          timeoutMessage:
+            'delete index job did not attempt/fail after the injected setup-phase failure',
+        },
+      );
+      // Snapshot the card while the fault is still active: once it is lifted a
+      // retry would legitimately complete the delete, so the assertion must
+      // read the state the failed attempt left, not a later successful one.
+      [after] = (await testDbAdapter.execute(
+        `select is_deleted, has_error from boxel_index where url = $1 and type = 'instance'`,
+        { bind: [cardUrl] },
+      )) as { is_deleted: boolean | null; has_error: boolean | null }[];
+    } finally {
+      fault.restore();
+    }
+
+    assert.ok(fault.throwCount() > 0, 'the injected setup-phase fault fired');
+    assert.ok(after, 'the card still has an index row');
+    assert.notOk(
+      Boolean(after?.is_deleted),
+      'the failed delete did not prematurely delete the card',
+    );
+    assert.notOk(
+      Boolean(after?.has_error),
+      'the failed delete did not spuriously error the card',
     );
   });
 });
