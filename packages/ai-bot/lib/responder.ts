@@ -15,7 +15,9 @@ import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
-import MatrixResponsePublisher from './matrix/response-publisher.ts';
+import MatrixResponsePublisher, {
+  toCommandRequest,
+} from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
@@ -155,8 +157,15 @@ export class Responder {
       sequence: this._streamPreviewSequence++,
       body: this.responseState.latestContent ?? '',
       reasoning: this.responseState.latestReasoning ?? '',
-      toolRequests: this.responseState.toolCalls ?? [],
-      isFinal: false,
+      // Normalize to the same shape the room event carries (see
+      // toCommandRequest) so a client reads toolRequests identically on both
+      // channels; arguments come through as objects, empty until the streamed
+      // JSON completes.
+      toolRequests: (this.responseState.toolCalls ?? [])
+        .filter(Boolean)
+        .map((toolCall) =>
+          toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+        ),
     };
     // matrix-js-sdk's sendToDevice takes a Map<userId, Map<deviceId, content>>
     // and iterates it internally — a plain nested object throws

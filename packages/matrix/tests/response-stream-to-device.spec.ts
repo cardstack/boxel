@@ -46,7 +46,6 @@ test.describe('ai-bot to-device response-stream previews', () => {
       body: 'partial answer so far',
       reasoning: 'thinking…',
       toolRequests: [],
-      isFinal: false,
     };
 
     // Positive path: the real client accepts the Map contract and Synapse

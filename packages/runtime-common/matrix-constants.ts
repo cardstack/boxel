@@ -153,12 +153,11 @@ export interface AppBoxelResponseStreamContent {
   sequence: number;
   body: string;
   reasoning: string;
-  // Same wire shape as APP_BOXEL_TOOL_REQUESTS_KEY on the room event, though
-  // each request's `arguments` JSON may still be partial during streaming.
+  // Same wire shape as APP_BOXEL_TOOL_REQUESTS_KEY on the room event: ai-bot
+  // runs previews through the same normalization, so each request is
+  // `{ id, name, arguments: <object> }`. `arguments` is `{}` while the tool
+  // call's JSON is still incomplete mid-stream.
   toolRequests: unknown[];
-  // Set on the final preview immediately before ai-bot flushes the room edit;
-  // lets the client discard preview state promptly.
-  isFinal: boolean;
 }
 
 // Device id (from matrixClient.getDeviceId()) of the client that composed a

@@ -394,6 +394,42 @@ module('Responding', (hooks) => {
     }
   });
 
+  test('`to-device` streaming mode: previews carry tool requests in the room-event wire shape', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      await responder.onChunk(
+        {} as any,
+        snapshotWithToolCall({
+          id: 'tool-1',
+          name: 'searchCards',
+          arguments: { query: 'pets' },
+        }),
+      );
+      await clock.tickAsync(300);
+
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.ok(toDeviceEvents.length >= 1, 'A preview was sent');
+      let preview =
+        toDeviceEvents[toDeviceEvents.length - 1].contentMap[
+          '@alice:example.com'
+        ]?.['DEVICEALICE'];
+      assert.deepEqual(
+        (preview as any).toolRequests,
+        [{ id: 'tool-1', name: 'searchCards', arguments: { query: 'pets' } }],
+        'toolRequests is normalized to the room event’s { id, name, arguments: <object> } shape, not the raw OpenAI { function: { name, arguments: <string> } } shape',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('`off` streaming mode: only sends the thinking placeholder and a single final consolidated event', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'off';
     try {
