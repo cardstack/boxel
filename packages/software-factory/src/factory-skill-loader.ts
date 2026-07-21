@@ -35,20 +35,20 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  * found in the primary directory.
  *
  * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
- *   plugin skills (`boxel-api`, `boxel-command`, etc.) — boxel-cli owns the
- *   entire Boxel API surface, so its skills describe the platform. Same
- *   directory the plugin distributes to end users.
- * - The monorepo root `.agents/skills/` hosts shared domain skills
- *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
+ *   plugin skills — boxel-cli owns the entire Boxel API surface, so its
+ *   skills describe the platform. The directory is synced from the
+ *   boxel-skills repo (the source of truth for every non-factory skill:
+ *   `boxel-development`, `boxel-workspace-cardinal-rules`,
+ *   `ember-best-practices`, `boxel-ui-component-discovery`, …) and is the
+ *   same directory the plugin distributes to end users.
+ * - The monorepo root `.agents/skills/` is retained as an override slot for
+ *   local skill experiments; nothing ships from it.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   join(MONOREPO_ROOT, '.agents', 'skills'),
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
-  // are the primary skill set for the runbook (interactive Claude Code) loop and
-  // also where the optional `boxel-ui-component-discovery` skill lives. Listing
-  // them here lets the orchestrator's resolver pick them up too when the
-  // matching flag (`--enable-boxel-ui-discovery`) is on.
+  // are the runbook (interactive Claude Code) loop's factory-process skills.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
@@ -242,12 +242,10 @@ export class DefaultSkillResolver implements SkillResolver {
       'boxel-file-structure',
       'boxel-api',
       'boxel-command',
-      // Local-only addition for this workspace's factory runs: hard-won,
-      // silent-realm-corrupting gotchas (DateField/DateTimeField mismatch,
-      // external URL in a relationships link poisoning the whole realm's
-      // indexing transaction, etc.) that upstream's boxel-development refs
-      // don't cover. Not an upstream change — lives in this checkout's
-      // .agents/skills/ only.
+      // Hard-won, silent-realm-corrupting gotchas (DateField/DateTimeField
+      // mismatch, external URL in a relationships link poisoning the whole
+      // realm's indexing transaction, etc.) that boxel-development's refs
+      // don't cover. Lives in boxel-skills; resolves from the plugin dir.
       'boxel-workspace-cardinal-rules',
     ];
 
