@@ -25,9 +25,13 @@ import {
   getToolRequests,
   isToolResultRelType,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODEL_ID,
+  type AppBoxelResponseStreamContent,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -94,6 +98,12 @@ interface Args {
 export class RoomResource extends Resource<Args> {
   #skillIds = new Set<string>();
   #hasRegisteredDestructor = false;
+  #responseStreamPreviewDisposer: (() => void) | undefined;
+  // Highest to-device preview `sequence` applied per streaming message
+  // (keyed by parentEventId). Previews carry full accumulated state, so an
+  // out-of-order or duplicate delivery is simply dropped rather than regressing
+  // the message to older content.
+  #lastPreviewSequence = new Map<string, number>();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -123,6 +133,10 @@ export class RoomResource extends Resource<Args> {
     this.processing = this.processRoomTask.perform(named.roomId);
     if (!this.#hasRegisteredDestructor) {
       this.#hasRegisteredDestructor = true;
+      this.#responseStreamPreviewDisposer =
+        this.matrixService.onResponseStreamPreview((payload) =>
+          this.hydrateResponseStreamPreview(payload),
+        );
       registerDestructor(this, () => this.teardown());
     }
   }
@@ -131,6 +145,9 @@ export class RoomResource extends Resource<Args> {
     this.processRoomTask.cancelAll();
     this.activateLLMTask.cancelAll();
     this.activateLLMModeTask.cancelAll();
+    this.#responseStreamPreviewDisposer?.();
+    this.#responseStreamPreviewDisposer = undefined;
+    this.#lastPreviewSequence.clear();
     for (let id of this.#skillIds ?? []) {
       this.store.dropReference(id);
     }
@@ -713,6 +730,66 @@ export class RoomResource extends Resource<Args> {
         continuedFromMessage.continuedInMessage = message;
       }
     }
+  }
+
+  // Hydrate an in-flight `app.boxel.response-stream` to-device preview (ai-bot
+  // in AI_BOT_STREAMING_MODE=to-device) into the same Message the final room
+  // edit will eventually reconcile. Shaping the preview as the CardMessage edit
+  // it mirrors lets us reuse MessageBuilder.updateMessage — including its tool
+  // request chunk merging — and its `setUpdated(new Date())` resets the
+  // streaming stall timeout so long responses don't trip the fallback.
+  private async hydrateResponseStreamPreview(
+    payload: AppBoxelResponseStreamContent,
+  ) {
+    if (!payload || payload.roomId !== this.roomId) {
+      return;
+    }
+    let message = this._messageCache.get(payload.parentEventId);
+    // Either the thinking placeholder this preview belongs to hasn't loaded
+    // yet, or the turn already landed its final consolidated room edit. In both
+    // cases the room-event path is authoritative and reconciles the true state,
+    // so there is nothing for an ephemeral preview to add.
+    if (!message || message.isStreamingOfEventFinished) {
+      return;
+    }
+    let lastSequence =
+      this.#lastPreviewSequence.get(payload.parentEventId) ?? -1;
+    if (payload.sequence <= lastSequence) {
+      return;
+    }
+    this.#lastPreviewSequence.set(payload.parentEventId, payload.sequence);
+
+    let author = this.upsertRoomMember({
+      roomId: payload.roomId,
+      userId: this.matrixService.aiBotUserId,
+    });
+    // origin_server_ts is pinned to the message's creation time so a preview
+    // never advances past — and thus never suppresses (see
+    // MessageBuilder.applyToolRequestChunk) — the real, later final room edit.
+    let syntheticEvent = {
+      type: 'm.room.message',
+      event_id: payload.parentEventId,
+      room_id: payload.roomId,
+      sender: this.matrixService.aiBotUserId,
+      origin_server_ts: message.created.getTime(),
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: payload.body,
+        [APP_BOXEL_REASONING_CONTENT_KEY]: payload.reasoning,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: payload.toolRequests,
+        isStreamingFinished: false,
+      },
+    } as unknown as CardMessageEvent;
+
+    let messageBuilder = new MessageBuilder(syntheticEvent, getOwner(this)!, {
+      roomId: payload.roomId,
+      effectiveEventId: payload.parentEventId,
+      author,
+      index: message.index ?? 0,
+      events: this.events,
+      skills: this.skills,
+    });
+    await messageBuilder.updateMessage(message);
   }
 
   private async updateMessageCommandResult({
