@@ -264,6 +264,50 @@ module('Responding', (hooks) => {
     );
   });
 
+  test('`off` streaming mode: only sends the thinking placeholder and a single final consolidated event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'off';
+    try {
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 10; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      }
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        sentEvents.length,
+        1,
+        'No intermediate content events are sent while streaming in off mode',
+      );
+
+      await responder.finalize();
+
+      sentEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        sentEvents.length,
+        2,
+        'Only the thinking placeholder and one final consolidated event are sent',
+      );
+      assert.equal(
+        sentEvents[1].content.body,
+        'content 9',
+        'Final event carries the complete accumulated content',
+      );
+      assert.deepEqual(
+        sentEvents[1].content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'Final event replaces the thinking placeholder',
+      );
+      assert.deepEqual(
+        sentEvents[1].content.isStreamingFinished,
+        true,
+        'isStreamingFinished is set on the final event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('Sends tool call event and replaces thinking message when tool call happens with no content', async () => {
     const patchArgs = {
       description: 'A new thing',

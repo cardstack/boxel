@@ -73,6 +73,14 @@ export class Responder {
     return this.matrixResponsePublisher.originalResponseEventId;
   }
 
+  private get streamingMode(): 'room-edits' | 'off' | 'to-device' {
+    const mode = process.env.AI_BOT_STREAMING_MODE;
+    if (mode === 'off' || mode === 'to-device') {
+      return mode;
+    }
+    return 'room-edits';
+  }
+
   async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
   }
@@ -161,7 +169,7 @@ export class Responder {
       isStreamingFinished: this.responseState.isStreamingFinished,
       responseStateChanged,
     });
-    if (responseStateChanged) {
+    if (responseStateChanged && this.streamingMode !== 'off') {
       await this.sendMessageEventWithThrottling();
     }
 
