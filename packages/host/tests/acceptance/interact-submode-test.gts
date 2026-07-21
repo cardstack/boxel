@@ -233,7 +233,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         'the results list overflows and can scroll',
       );
 
-      // Scroll partway down and fire the scroll event so the offset is recorded.
+      // A user gesture then a scroll partway down: the gesture is what marks the
+      // scroll as user-driven so the offset is recorded (programmatic restores
+      // and layout resets, which lack a gesture, are deliberately ignored).
+      await triggerEvent(scrollContainer, 'wheel');
       scrollContainer.scrollTop = 60;
       let expected = scrollContainer.scrollTop;
       assert.ok(expected > 0, 'the list was scrolled away from the top');

@@ -34,10 +34,6 @@ interface Signature {
     // Seed the sort from a restored value (the search sheet passes its
     // persisted sort); defaults to the first option otherwise.
     initialActiveSort?: SortOption;
-    // When true, view + pagination + last-results state persist to the
-    // session-scoped search-sheet-state service (the operator-mode search sheet
-    // opts in; the card choosers do not). Forwarded to PanelContent.
-    persist?: boolean;
     onRealmChange?: (selectedRealms: URL[]) => void;
     onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
     onSortChange?: (option: SortOption) => void;
@@ -54,7 +50,6 @@ interface Signature {
         | 'activeSort'
         | 'onSortChange'
         | 'initialFocusedSection'
-        | 'persist'
       >,
     ];
   };
@@ -168,7 +163,6 @@ export default class SearchPanel extends Component<Signature> {
         activeSort=this.activeSort
         onSortChange=this.onSortChange
         initialFocusedSection=this.initialFocusedSectionId
-        persist=@persist
       )
     }}
   </template>

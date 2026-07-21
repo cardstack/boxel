@@ -226,6 +226,17 @@ export default class SearchSheet extends Component<Signature> {
     this.searchSheetState.activeSort = option;
   }
 
+  // The panel is a controlled consumer here: it renders the session-scoped
+  // service's view id / scroll offset and reports changes back through these,
+  // so both survive the sheet's close/reopen.
+  @action private handleViewIdChange(id: string) {
+    this.searchSheetState.activeViewId = id;
+  }
+
+  @action private handleScrollTopChange(scrollTop: number) {
+    this.searchSheetState.resultsScrollTop = scrollTop;
+  }
+
   @action private onSearchInputKeyDown(e: Event) {
     let kbEvent = e as KeyboardEvent;
     if (kbEvent.key === 'Escape') {
@@ -321,7 +332,6 @@ export default class SearchSheet extends Component<Signature> {
             @initialSelectedTypes={{this.initialSelectedTypes}}
             @initialSelectedRealms={{this.initialSelectedRealms}}
             @initialActiveSort={{this.initialActiveSort}}
-            @persist={{true}}
             @onRealmChange={{this.handleRealmChange}}
             @onTypeChange={{this.handleTypeChange}}
             @onSortChange={{this.handleSortChange}}
@@ -343,6 +353,12 @@ export default class SearchSheet extends Component<Signature> {
               @isCompact={{this.isCompact}}
               @handleSelect={{this.handleCardSelect}}
               @adorn={{true}}
+              @mainSearchResource={{this.searchSheetState.mainSearch}}
+              @viewId={{this.searchSheetState.activeViewId}}
+              @onViewIdChange={{this.handleViewIdChange}}
+              @pagination={{this.searchSheetState.pagination}}
+              @scrollTop={{this.searchSheetState.resultsScrollTop}}
+              @onScrollTopChange={{this.handleScrollTopChange}}
             />
             <div class='footer'>
               <div class='buttons'>
