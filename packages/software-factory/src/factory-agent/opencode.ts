@@ -54,6 +54,7 @@ import {
 } from '../factory-tool-builder.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { logger } from '../logger.ts';
+import { startSpan } from '../run-trace.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -575,9 +576,14 @@ async function startFactoryMcpServer(
     let typedArgs = (args ?? {}) as Record<string, unknown>;
     let start = Date.now();
     let result: unknown;
+    let endToolSpan = startSpan('tool', name);
     try {
       result = await tool.execute(typedArgs);
+      endToolSpan({
+        ok: !(result && typeof result === 'object' && 'error' in result),
+      });
     } catch (error) {
+      endToolSpan({ ok: false });
       result = {
         error: error instanceof Error ? error.message : String(error),
       };

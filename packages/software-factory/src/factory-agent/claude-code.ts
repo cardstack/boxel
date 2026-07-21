@@ -62,6 +62,7 @@ import { TurnToolTelemetry } from './agent-tool-telemetry.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter.ts';
 import { logger } from '../logger.ts';
+import { startSpan, traceEvent } from '../run-trace.ts';
 
 const MCP_SERVER_NAME = 'factory';
 const MAX_TOOL_USE_TURNS = 100;
@@ -278,6 +279,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         // once per factory run, guarded by `this.modelLogged`. Matches
         // the openrouter path's `Agent backend: openrouter (model=…)`
         // format for a single consistent log line across backends.
+        // Non-init system messages are SDK lifecycle overhead — compaction
+        // boundaries especially, which have shown up as multi-minute silent
+        // gaps inside turns. Mark them so the trace can attribute that time
+        // to SDK overhead rather than model work.
+        if (message.type === 'system') {
+          let subtype = (message as { subtype?: string }).subtype;
+          if (subtype && subtype !== 'init') {
+            traceEvent('inference', `sdk-${subtype}`);
+          }
+        }
         if (
           message.type === 'system' &&
           (message as { subtype?: string }).subtype === 'init'
@@ -399,6 +410,21 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     // back to the streamed running totals so telemetry still gets tokens.
     if (!usage && sawStreamedUsage) {
       usage = streamedUsage;
+    }
+
+    // The terminal result message's usage and the per-assistant-message
+    // sums can differ (the terminal number has undercounted in practice).
+    // Emit both so the trace shows real token/cache traffic per turn.
+    if (sawStreamedUsage) {
+      traceEvent('inference', 'usage', {
+        sumIn: streamedUsage.inputTokens,
+        sumOut: streamedUsage.outputTokens,
+        sumCacheRead: streamedUsage.cacheReadTokens,
+        termIn: usage?.inputTokens,
+        termOut: usage?.outputTokens,
+        termCacheRead: usage?.cacheReadTokens,
+        costUsd: usage?.costUsd,
+      });
     }
 
     if (captured?.kind === 'done') {
@@ -639,9 +665,17 @@ export function buildSdkToolsFromFactoryTools(
         let start = Date.now();
         let typedArgs = args as Record<string, unknown>;
         let result: unknown;
+        // Trace at the MCP dispatch point: this is where the claude
+        // backend's factory tools actually execute, so these spans carve
+        // in-turn tool time out of the surrounding `inference` span.
+        let endToolSpan = startSpan('tool', factoryTool.name);
         try {
           result = await factoryTool.execute(typedArgs);
+          endToolSpan({
+            ok: !(result && typeof result === 'object' && 'error' in result),
+          });
         } catch (error) {
+          endToolSpan({ ok: false });
           result = {
             error: error instanceof Error ? error.message : String(error),
           };

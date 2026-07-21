@@ -614,13 +614,20 @@ export async function runIssueLoop(
         usage: result.usage,
       });
       let usage = result.usage as
-        | { inputTokens?: number; outputTokens?: number }
+        | {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            costUsd?: number;
+          }
         | undefined;
       endTurnSpan({
         status: result.status,
         toolCalls: result.toolCalls.length,
         tokensIn: usage?.inputTokens,
         tokensOut: usage?.outputTokens,
+        tokensCacheRead: usage?.cacheReadTokens,
+        costUsd: usage?.costUsd,
       });
       return result;
     } catch (error) {
