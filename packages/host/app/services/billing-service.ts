@@ -141,6 +141,15 @@ export default class BillingService extends Service {
   // Always fetches fresh: consumers reload on a billing-notification push, on a
   // reload after an out-of-credits message, and on every profile-popover mount,
   // each of which must observe current server state rather than a cached value.
+  //
+  // Deliberately NOT coalesced into a single in-flight request. Coalescing was
+  // tried and reverted: <WithSubscriptionData/> only mounts inside the profile
+  // popover / settings modal (both closed at boot, so there is no boot
+  // double-fetch to dedupe), and routing its mount through a coalesced/
+  // present-or-load path made the popover early-return on stale data and show
+  // outdated credits after a billing-notification push. Keep this fetching
+  // fresh; if you need a boot-time "load once" guard, that belongs in
+  // initializeSubscriptionData(), not here.
   async loadSubscriptionData() {
     this._loadingSubscriptionData = true;
     try {

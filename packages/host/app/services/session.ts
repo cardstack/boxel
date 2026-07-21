@@ -59,7 +59,12 @@ export default class SessionService extends Service {
   notifySessionStarted() {
     this.isAuthenticated = true;
     let errors: unknown[] = [];
-    for (let p of this.participants) {
+    // Iterate a snapshot: a participant's sessionStarted() can lazily
+    // first-inject another participant service, whose constructor calls
+    // register() and appends to `participants`. Iterating the live array would
+    // then reach that late registrant here *and* it already ran via register()'s
+    // replay — a double sessionStarted() in one broadcast.
+    for (let p of [...this.participants]) {
       this.notifyOne(p, errors);
     }
     this.surfaceInTests(errors);
@@ -69,7 +74,9 @@ export default class SessionService extends Service {
   notifySessionEnded() {
     this.isAuthenticated = false;
     let errors: unknown[] = [];
-    for (let p of this.participants) {
+    // Snapshot for the same mutation-during-iteration reason as
+    // notifySessionStarted().
+    for (let p of [...this.participants]) {
       // Per-participant isolation: one throwing resetState() must not skip the
       // rest of the registry.
       try {
@@ -95,11 +102,25 @@ export default class SessionService extends Service {
   // rest of the registry, so its error is only logged. In tests that same
   // swallowing hides real failures — teardown cleans state between tests via
   // notifySessionEnded(), so a silently-failing resetState() surfaces later as
-  // an unrelated flake. Rethrow, but only after the full broadcast has run, so
+  // an unrelated flake. Re-raise, but only after the full broadcast has run, so
   // the isolation guarantee holds in both environments.
   private surfaceInTests(errors: unknown[]) {
     if (errors.length > 0 && isTesting()) {
-      throw errors[0];
+      this.reraiseParticipantErrorsInTests(errors);
+    }
+  }
+
+  // Re-raise participant errors asynchronously rather than throwing here.
+  // Both production broadcast sites (MatrixService.start() and logout()) call
+  // the notify methods inside their own try/catch; a synchronous throw would be
+  // swallowed there and the test would pass despite a broken participant. A
+  // floated rejection can't be caught by those callers and is failed by the
+  // harness's `unhandledrejection` hook, so the surfacing works on every call
+  // path. Public + overridable so unit tests can observe the surfaced errors
+  // without the floated rejection failing the asserting test.
+  reraiseParticipantErrorsInTests(errors: unknown[]) {
+    for (let e of errors) {
+      void Promise.reject(e);
     }
   }
 }

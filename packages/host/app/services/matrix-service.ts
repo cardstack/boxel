@@ -690,6 +690,7 @@ export default class MatrixService extends Service {
 
   async logout() {
     let client = this._client;
+    let didResetState = false;
     try {
       // Logout should synchronously move the app into a logged-out state.
       // Waiting on background Matrix flush promises first can leave the
@@ -709,6 +710,16 @@ export default class MatrixService extends Service {
       this.session.notifySessionEnded();
       this.loaderService.resetSessionBoundary('logout');
       this.unbindEventListeners();
+      // Tear down MatrixService's own session state now — synchronously, in the
+      // same tick as the participants above — rather than deferring it to the
+      // `finally` after the awaited network logout. resetState() stops sliding
+      // sync and recreates a fresh anonymous client; deferring it left a window
+      // where (a) an in-flight /sync response could run against already-reset
+      // participants and (b) a re-login completing during the await would be
+      // silently wiped by the deferred reset. The old client is captured in
+      // `client` above, so the network logout below is unaffected.
+      this.resetState();
+      didResetState = true;
       await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
@@ -727,7 +738,11 @@ export default class MatrixService extends Service {
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
-      this.resetState();
+      // Safety net for a synchronous throw before resetState() ran above.
+      // Skipped on the normal path so we don't recreate the client twice.
+      if (!didResetState) {
+        this.resetState();
+      }
     }
   }
 
@@ -1171,6 +1186,7 @@ export default class MatrixService extends Service {
         if (isTesting()) console.warn('[start-phase] loginToRealms');
         await this.loginToRealms();
 
+        let wasAuthenticated = this.session.isAuthenticated;
         this.setPostLoginCompleted(true, 'start-success');
         loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
@@ -1181,7 +1197,16 @@ export default class MatrixService extends Service {
         // loginToRealms so realm auth is established; participants that need
         // rooms (e.g. the AI panel) already tolerate sliding sync not having
         // delivered them yet.
-        this.session.notifySessionStarted();
+        //
+        // Broadcast only on the not-authenticated → authenticated edge. start()
+        // re-runs on an already-established session (the /connect route runs it
+        // on every visit); re-broadcasting there would re-fire every
+        // participant's sessionStarted() with no intervening session end,
+        // breaking the "exactly once per established session" contract and
+        // duplicating their re-arm work.
+        if (!wasAuthenticated) {
+          this.session.notifySessionStarted();
+        }
 
         // If any trusted server was unreachable during boot assembly, keep
         // the reachable realms and retry the unreachable ones in the

@@ -781,7 +781,11 @@ export function setupRenderingTest(hooks: NestedHooks) {
     // MatrixService is the session orchestrator, not a participant, so
     // notifySessionEnded() no longer resets it. Reset it explicitly (as
     // setupApplicationTest does) so its client/room state doesn't bleed
-    // across rendering tests.
+    // across rendering tests. Reset the AI panel first — its resetState()
+    // cancels an in-flight loadRoomsTask, so cancelling before
+    // MatrixService.resetState() replaces the initial-sync barrier avoids a
+    // task hanging on a deferred nothing re-fulfills.
+    resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
     resetServiceIfPresent(this.owner, 'service:matrix-service');
     await settled();
     (

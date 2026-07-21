@@ -55,6 +55,13 @@ module('Unit | Service | session', function (hooks) {
 
   test('a throwing sessionStarted() does not block later participants', function (assert) {
     let session = getSession(this);
+    // Capture the surfaced errors instead of letting them float as unhandled
+    // rejections (which would fail this test). The production seam re-raises
+    // asynchronously so the broadcast callers' try/catch can't swallow it.
+    let surfaced: unknown[] = [];
+    session.reraiseParticipantErrorsInTests = (errors) => {
+      surfaced.push(...errors);
+    };
     let thrower: SessionParticipant = {
       resetState() {},
       sessionStarted() {
@@ -65,13 +72,7 @@ module('Unit | Service | session', function (hooks) {
     session.register(thrower);
     session.register(after);
 
-    // In tests the participant error is rethrown (after the full broadcast)
-    // so a broken participant fails loudly instead of being swallowed.
-    assert.throws(
-      () => session.notifySessionStarted(),
-      /boom/,
-      'the participant error resurfaces in the test environment',
-    );
+    session.notifySessionStarted();
 
     assert.strictEqual(
       after.startedCount,
@@ -82,10 +83,21 @@ module('Unit | Service | session', function (hooks) {
       session.isAuthenticated,
       'the session is still marked established',
     );
+    // In tests the participant error is surfaced (after the full broadcast) so
+    // a broken participant fails loudly instead of being swallowed.
+    assert.deepEqual(
+      surfaced.map((e) => (e as Error).message),
+      ['boom'],
+      'the participant error is surfaced in the test environment',
+    );
   });
 
   test('a throwing resetState() does not block later participants', function (assert) {
     let session = getSession(this);
+    let surfaced: unknown[] = [];
+    session.reraiseParticipantErrorsInTests = (errors) => {
+      surfaced.push(...errors);
+    };
     let thrower: SessionParticipant = {
       resetState() {
         throw new Error('boom');
@@ -95,14 +107,7 @@ module('Unit | Service | session', function (hooks) {
     session.register(thrower);
     session.register(after);
 
-    // In tests the participant error is rethrown (after the full broadcast)
-    // so a broken resetState() fails the test that caused it instead of
-    // leaking state into a later, unrelated test.
-    assert.throws(
-      () => session.notifySessionEnded(),
-      /boom/,
-      'the participant error resurfaces in the test environment',
-    );
+    session.notifySessionEnded();
 
     assert.strictEqual(
       after.resetCount,
@@ -110,6 +115,13 @@ module('Unit | Service | session', function (hooks) {
       'the participant after a throwing one still got resetState',
     );
     assert.false(session.isAuthenticated, 'the session is still marked ended');
+    // A broken resetState() surfaces so it fails the test that caused it
+    // instead of leaking state into a later, unrelated test.
+    assert.deepEqual(
+      surfaced.map((e) => (e as Error).message),
+      ['boom'],
+      'the participant error is surfaced in the test environment',
+    );
   });
 
   test('registering while a session is established replays sessionStarted() exactly once', function (assert) {
@@ -135,6 +147,10 @@ module('Unit | Service | session', function (hooks) {
 
   test('a throwing replay on late registration resurfaces in tests', function (assert) {
     let session = getSession(this);
+    let surfaced: unknown[] = [];
+    session.reraiseParticipantErrorsInTests = (errors) => {
+      surfaced.push(...errors);
+    };
     session.notifySessionStarted();
 
     let thrower: SessionParticipant = {
@@ -144,10 +160,12 @@ module('Unit | Service | session', function (hooks) {
       },
     };
 
-    assert.throws(
-      () => session.register(thrower),
-      /boom/,
-      'the replay error resurfaces in the test environment',
+    session.register(thrower);
+
+    assert.deepEqual(
+      surfaced.map((e) => (e as Error).message),
+      ['boom'],
+      'the replay error is surfaced in the test environment',
     );
   });
 
