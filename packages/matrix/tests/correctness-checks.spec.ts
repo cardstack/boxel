@@ -2,6 +2,7 @@ import { expect, test } from './fixtures.ts';
 import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
+  openAiAssistant,
   createSubscribedUserAndLogin,
   getRoomEvents,
   showAllCards,
@@ -57,6 +58,7 @@ test.describe('Correctness Checks', () => {
     });
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let roomId = await getRoomId(page);
     await showAllCards(page);
     let testCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
@@ -539,6 +541,7 @@ export class ImportCheck extends CardDef {
     await postCardSource(page, realmURL, modulePath, originalModuleContent);
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let roomId = await getRoomId(page);
 
     let agentId = await page.evaluate(() => {

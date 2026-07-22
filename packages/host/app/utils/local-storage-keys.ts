@@ -27,4 +27,5 @@ export function clearLocalStorage(storage: Storage | undefined) {
   storage?.removeItem(ScrollPositions);
   storage?.removeItem(AiAssistantMessageDrafts);
   storage?.removeItem(AiAssistantPendingSends);
+  storage?.removeItem(AiAssistantOpen);
 }

@@ -2,6 +2,7 @@ import { expect, test } from './fixtures.ts';
 import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
+  openAiAssistant,
   sendMessage,
   createSubscribedUserAndLogin,
   getRoomEvents,
@@ -56,6 +57,7 @@ test.describe('Commands', () => {
     });
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await showAllCards(page);
     let realmCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
@@ -113,6 +115,7 @@ test.describe('Commands', () => {
     });
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await showAllCards(page);
     let realmCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
@@ -168,6 +171,7 @@ test.describe('Commands', () => {
     });
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await showAllCards(page);
     let newCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
@@ -230,6 +234,7 @@ test.describe('Commands', () => {
   }) => {
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(page, 'commands-search');
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
     let commandRequestId = '1';
@@ -307,6 +312,7 @@ test.describe('Commands', () => {
     const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     await showAllCards(page);
 
     // create a skill card
