@@ -406,6 +406,9 @@ const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
 );
+// TEMP (CS-11450 diagnostic): per-id deserialize-create counter to detect an
+// identity-map miss storm. Revert.
+const deserializeCreateCounts = new Map<string, number>();
 const subscribers = initSharedState(
   'subscribers',
   () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
@@ -4224,6 +4227,18 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
       [localId]: resource.lid,
     }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
+    // TEMP (CS-11450 diagnostic): a re-creation storm (same id constructed
+    // many times) means the identity-map lookup above is missing — the
+    // signature of a store-key form divergence. Revert.
+    if (canonicalId != null) {
+      let n = (deserializeCreateCounts.get(canonicalId) ?? 0) + 1;
+      deserializeCreateCounts.set(canonicalId, n);
+      if (n === 25 || n === 100 || n % 500 === 0) {
+        console.log(
+          `[DESER-PROBE] created id=${JSON.stringify(canonicalId)} ${n} times (identity-map miss storm?)`,
+        );
+      }
+    }
   }
   stores.set(instance, store);
   return await _updateFromSerialized({

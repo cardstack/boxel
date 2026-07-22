@@ -185,6 +185,12 @@ export class VirtualNetwork {
     }
     let result = this.computeUnresolveURL(url);
     this.unresolveURLCache.set(url, result);
+    // TEMP (CS-11450 diagnostic): surface monotonic cache growth. Revert.
+    if (this.unresolveURLCache.size % 2000 === 0) {
+      console.log(
+        `[CACHE-PROBE] unresolveURLCache.size=${this.unresolveURLCache.size} toURLHrefCache.size=${this.toURLHrefCache.size}`,
+      );
+    }
     return result;
   }
 
