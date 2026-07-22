@@ -394,7 +394,7 @@ reference.
   realm regenerates the transpiled JS on every write, so any edit
   there is silently discarded.
 - **When in doubt, favor idiomatic card development practices.** The
-  `boxel-development` skill and existing cards in the target realm are
+  `boxel` skill and existing cards in the target realm are
   the right references — not what the compiler happens to emit.
 
 Use the transpiled fetch the way a developer uses a source map: to
