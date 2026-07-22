@@ -210,6 +210,13 @@ export class Loader {
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
   private virtualNetwork: VirtualNetwork | undefined;
+  // Unsubscribe for the realm-mapping-change listener registered below. The
+  // VirtualNetwork outlives any single loader (LoaderService replaces the
+  // loader on every module edit / session boundary), so a loader that isn't
+  // unsubscribed when it's discarded stays pinned — along with its whole
+  // module cache — by the listener the network still holds. `dispose()`
+  // releases it; the owner calls that before dropping the loader.
+  private unsubscribeMappingChange: (() => void) | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -231,6 +238,24 @@ export class Loader {
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
+    // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
+    // relationship to a real URL is only stable between realm-mapping changes.
+    // Discard the RRI-keyed caches whenever a mapping is added or removed so an
+    // entry can't outlive the spelling it was keyed under.
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
+      this.modules.clear();
+      this.moduleCanonicalURLs.clear();
+      this.knownDepsCache.clear();
+    });
+  }
+
+  // Release the realm-mapping-change subscription so this loader can be
+  // garbage-collected once discarded. Only detaches the listener — the caches
+  // are left intact because a discarded loader may still be draining in-flight
+  // imports, and once nothing references it the maps are collected wholesale.
+  dispose() {
+    this.unsubscribeMappingChange?.();
+    this.unsubscribeMappingChange = undefined;
   }
 
   getVirtualNetwork(): VirtualNetwork | undefined {
@@ -314,6 +339,12 @@ export class Loader {
     });
   }
 
+  // Returns the transitive consumed modules of `moduleIdentifier` in
+  // canonical identifier form: the registered realm-prefix (RRI) spelling
+  // (e.g. `@cardstack/base/card-api`) when the virtual network has a matching
+  // prefix mapping, otherwise the module URL. Accepts either spelling as
+  // input. Callers that need a fetchable URL resolve via the virtual network
+  // at the network boundary.
   async getConsumedModules(moduleIdentifier: string): Promise<string[]> {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
@@ -355,7 +386,10 @@ export class Loader {
     await walk(moduleIdentifier, initialHref);
     // you can't consume yourself
     visited.delete(initialHref);
-    return [...visited];
+    return this.canonicalizeIdentifiers(
+      visited,
+      this.canonicalIdentifier(initialHref),
+    );
   }
 
   static identify(
@@ -440,15 +474,65 @@ export class Loader {
     }
   }
 
+  // Synchronous sibling of `getConsumedModules` limited to modules already
+  // known to this loader. Output is in the same canonical identifier form:
+  // realm-prefix (RRI) spelling where a prefix mapping is registered,
+  // module URL otherwise.
   getKnownConsumedModules(moduleIdentifier: string): string[] {
     let resolvedModuleIdentifier = this.resolveImport(moduleIdentifier);
     let knownDependencies = this.collectKnownModuleDependencies(
       resolvedModuleIdentifier,
     );
-    // Filter rather than delete to avoid mutating the cached Set
-    return [...knownDependencies].filter(
-      (dep) => dep !== resolvedModuleIdentifier,
+    // Copy rather than delete from the cached Set to avoid mutating it
+    return this.canonicalizeIdentifiers(
+      knownDependencies,
+      this.canonicalIdentifier(resolvedModuleIdentifier),
     );
+  }
+
+  // Canonical form for module identifiers that flow out of the loader
+  // (dependency lists, identities): the registered realm-prefix (RRI)
+  // spelling when the virtual network has a matching mapping, otherwise the
+  // identifier unchanged. Resolving back to a fetchable URL is the virtual
+  // network's job at the network boundary.
+  private canonicalIdentifier(moduleIdentifier: string): string {
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(moduleIdentifier)
+      : moduleIdentifier;
+  }
+
+  // Map a set of module identifiers to canonical form, deduped (distinct
+  // spellings of one module — a real URL and its virtual alias — collapse to
+  // one canonical identifier) and with the module itself excluded: a module
+  // doesn't consume itself, and the canonical comparison catches self
+  // references under any spelling.
+  private canonicalizeIdentifiers(
+    identifiers: Iterable<string>,
+    selfCanonical: string,
+  ): string[] {
+    let seen = new Set<string>();
+    let result: string[] = [];
+    for (let identifier of identifiers) {
+      let canonical = this.canonicalIdentifier(identifier);
+      if (canonical === selfCanonical || seen.has(canonical)) {
+        continue;
+      }
+      seen.add(canonical);
+      result.push(canonical);
+    }
+    return result;
+  }
+
+  // The runtime dependency tracker keys module nodes by http(s) URL — its
+  // canonicalURL guard drops realm-prefix identifiers (see
+  // dependency-tracker.ts) — and this loader collapses each tracked module
+  // onto its virtual-alias URL when one is registered (see
+  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
+  // form included, into that tracking-key form. Callers recording
+  // loader-derived module identifiers with the tracker must cross this
+  // boundary; identifiers stay in canonical RRI form everywhere else.
+  dependencyTrackingKey(moduleIdentifier: string): string {
+    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
   }
 
   private trackKnownModuleDependencies(
@@ -770,38 +854,27 @@ export class Loader {
         status: 500,
         statusText: detail.slice(0, 200) || 'fetch failed',
       });
-      // Mark this Response as a transport-level (server-unreachable) failure.
-      // The thrown CardError above this gets flagged downstream so callers
-      // know not to poison the module cache with this exception — a
-      // "Failed to fetch" means the server wasn't there, not that the
-      // module is broken.
-      (synthetic as any)[Symbol.for('boxel-loader-transient-fetch-failure')] =
-        true;
       return synthetic;
     }
   };
 
-  // Cache key for the per-module maps. Collapses the virtual-alias URL and the
-  // resolved real URL of the same module onto one key, so a base module
-  // imported via the alias (`https://cardstack.com/base/X`) and via the RRI
-  // prefix (`@cardstack/base/X` → resolveImport → resolved real URL) share one
-  // cached module — and therefore one class object. Without this, the alias
-  // and RRI forms evaluate as two distinct modules and `instanceof` /
-  // polymorphic-field identity checks across them diverge. Mirrors the
-  // real→virtual convention used by `canonicalizeTrackingKey`.
+  // Cache key for the per-module maps: the canonical RRI form. Every spelling
+  // of a module — its resolved real URL, the virtual-alias URL, and the RRI
+  // prefix — folds to one RRI via `unresolveURL`, so a base module reached by
+  // any of them shares one cached module and therefore one class object.
+  // Without this collapse the spellings evaluate as distinct modules and
+  // `instanceof` / polymorphic-field identity checks across them diverge.
+  // Modules with no realm-prefix mapping (user realms, bare package specifiers)
+  // are returned unchanged by `unresolveURL`.
+  //
+  // The RRI→URL relationship is only stable between realm-mapping changes, so
+  // the caches keyed here are discarded whenever a mapping is added or removed
+  // (see the `onMappingChange` subscription in the constructor).
   private moduleCacheKey(moduleIdentifier: string): string {
     let trimmed = trimModuleIdentifier(moduleIdentifier);
-    if (this.virtualNetwork) {
-      try {
-        let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
-        if (virtual) {
-          return virtual.href;
-        }
-      } catch {
-        // not a parseable URL (e.g. a bare specifier) — fall through
-      }
-    }
-    return trimmed;
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(trimmed)
+      : trimmed;
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {
@@ -848,10 +921,11 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let trimmed = trimModuleIdentifier(moduleIdentifier);
-    let moduleId = this.virtualNetwork
-      ? this.virtualNetwork.unresolveURL(trimmed)
-      : trimmed;
+    // Identities are recorded in canonical identifier form so that
+    // `identify()` output matches the form persisted in code refs.
+    let moduleId = this.canonicalIdentifier(
+      trimModuleIdentifier(moduleIdentifier),
+    );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
@@ -903,23 +977,22 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
-      if (
-        (exception as { isTransientFetchFailure?: boolean })
-          ?.isTransientFetchFailure
-      ) {
-        // Inability to talk to the server isn't a deterministic property
-        // of the module — caching this as `broken` would poison the
-        // module entry for the lifetime of this loader (every future
-        // `import` would rethrow without retrying). Drop the entry so
-        // the next `import` re-enters `fetchModule` and refetches.
-        this.modules.delete(this.moduleCacheKey(moduleIdentifier));
-      } else {
-        this.setModule(moduleIdentifier, {
-          state: 'broken',
-          exception,
-          consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-        });
-      }
+      // A failure to OBTAIN the module — a network failure or an error
+      // HTTP response — is never cached as `broken`. The modules map keys
+      // entries by the extension-trimmed identifier (see
+      // `trimModuleIdentifier`): one slot shared by the `.gts` / `.ts` /
+      // extensionless spellings of a module. A fetch failure is a property
+      // of the requested SPELLING, not of that shared identity — a 404 for
+      // `foo.gts` says nothing about `foo`, which may resolve via
+      // `foo.ts` — so caching it would poison every sibling import for the
+      // lifetime of this loader (definition-cache population probes
+      // extension candidates with real fetches, making this a routine
+      // occurrence, not an edge case). Likewise a transport-level failure
+      // isn't a property of the module at all. Drop the entry so the next
+      // `import` re-enters `fetchModule` and refetches; failures of
+      // *obtained* source (transpile / evaluate below) are deterministic
+      // properties of the module and are the ones cached as `broken`.
+      this.modules.delete(this.moduleCacheKey(moduleIdentifier));
       module.deferred.fulfill();
       throw exception;
     }
@@ -1163,19 +1236,6 @@ export class Loader {
         if (!error.deps?.length) {
           error.deps = [response.url || moduleURL.href];
         }
-      }
-      // Surfaced from `_fetch`'s catch: the request never reached the
-      // server. Tag the error so `fetchModule` skips caching it as a
-      // broken module — transport-level failures are non-deterministic
-      // and the next import should retry rather than replay this error.
-      if (
-        (response as unknown as Record<symbol, unknown>)[
-          Symbol.for('boxel-loader-transient-fetch-failure')
-        ]
-      ) {
-        (
-          error as CardError & { isTransientFetchFailure?: boolean }
-        ).isTransientFetchFailure = true;
       }
       throw error;
     }

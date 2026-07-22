@@ -146,9 +146,10 @@ export function buildToolFunctionName(
   commandCodeRef: ResolvedCodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   // Optional: omit to resolve the code ref in RRI space (no VirtualNetwork).
-  // `functionName` is a recomputed `computeVia` field (never persisted), and
-  // `buildToolFunctionName` is its only producer, so dropping the VN keeps
-  // every command name self-consistent.
+  // Every producer of a functionName — the recomputed `computeVia` field on
+  // ToolField, and the index-time stamp on a skill's file-meta resource —
+  // resolves in RRI space, so dropping the VN keeps every command name
+  // self-consistent.
   virtualNetwork?: VirtualNetwork,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
@@ -219,14 +220,17 @@ export function decodeToolRequest(
     decodedCommandRequest.name = commandRequest.name;
   }
   if (commandRequest.arguments) {
-    decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
     try {
+      decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
       let attributes = decodedCommandRequest.arguments?.attributes;
       if (typeof attributes === 'string') {
         decodedCommandRequest.arguments!.attributes = JSON.parse(attributes);
       }
     } catch {
-      // ignore malformed nested json; validation will report a clearer error later
+      // ignore malformed json — e.g. a still-streaming arguments payload or
+      // malformed nested attributes; `arguments` stays undefined (or keeps
+      // the outer parse) and validation reports a clearer error once the
+      // request is finalized
     }
   }
   if (commandRequest.executedBy != null) {

@@ -268,7 +268,7 @@ module(basename(import.meta.filename), function () {
         // publish-realm handler invokes after the FS swap so that the
         // pre-swap bytes living in #sourceCache / #transpiledModuleCache don't get
         // served to the reindex job (which would then write stale
-        // isolated_html into boxel_index). Functionally equivalent to
+        // isolated_html into prerendered_html). Functionally equivalent to
         // __testOnlyClearCaches minus the test-only transpile-counter
         // reset.
         test('clearLocalSourceCaches drops cached source bytes', async function (assert) {
@@ -983,7 +983,6 @@ module(basename(import.meta.filename), function () {
                   attributes: {
                     field1: 'a',
                     field2a: 'c',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {

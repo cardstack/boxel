@@ -43,7 +43,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
@@ -59,6 +59,12 @@ const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 // In tests we shorten this so the stuck-timeout invalidation path can be
 // exercised in a single test without holding a real test open for a minute.
 const STUCK_PROCESSING_TIMEOUT_MS = isTesting() ? 1000 : 60_000;
+// How many times drainToolProcessingQueue requeues an event whose finalized
+// content the room resource hasn't folded into its Message yet, before
+// giving up and validating whatever state is there (guaranteeing a terminal
+// result either way). Requeues are ~100ms apart (the drain debounce), so
+// this allows well over the normal sub-second catch-up.
+const MAX_TOOL_FINALIZATION_RETRIES = isTesting() ? 10 : 100;
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -74,10 +80,19 @@ export default class ToolService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   executedToolRequestIds = new TrackedSet<string>();
+  // Requests the auto-execution flow has claimed for resolution. Drain
+  // passes can overlap, and the records above are written only after
+  // validation's slow awaits — so two overlapping passes could resolve
+  // the same request twice (a stale-snapshot 'invalid' alongside an
+  // 'applied', after which the model re-issues the call). A claim is a
+  // synchronous check-and-set before validation's first await: exactly
+  // one pass carries a request to its terminal result. Claims are never
+  // released; the manual "Try Anyway" path bypasses them.
+  claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
@@ -97,18 +112,22 @@ export default class ToolService extends Service {
     { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
   >();
   private toolProcessingEventQueue: string[] = [];
+  // How many times each queued event has been requeued waiting for the room
+  // resource to fold the event's finalized content into its Message.
+  private toolFinalizationRetries = new Map<string, number>();
   private codePatchProcessingEventQueue: string[] = [];
   private flushToolProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
     this.executedToolRequestIds.clear();
+    this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
@@ -119,6 +138,7 @@ export default class ToolService extends Service {
       this.cleanupInvalidationWaiter(key);
     }
     this.toolProcessingEventQueue = [];
+    this.toolFinalizationRetries.clear();
     this.codePatchProcessingEventQueue = [];
     this.flushToolProcessingQueue = undefined;
     this.flushCodePatchProcessingQueue = undefined;
@@ -365,8 +385,39 @@ export default class ToolService extends Service {
         }
 
         let message = roomResource.messages.find((m) => m.eventId === eventId);
-        if (!message) {
-          continue;
+        // Events are only queued once their content is finalized
+        // (isStreamingFinished), but the room resource folds that content
+        // into its Message asynchronously — at drain time the Message may
+        // not exist yet, or may still hold a streaming snapshot whose tool
+        // arguments are partial or unparsed. Validating that snapshot posts
+        // a spurious 'invalid' result for a request that is actually fine
+        // (CS-12103). Requeue until the Message reports the finalized state;
+        // bounded so a message that never catches up still falls through
+        // and resolves with a real (terminal) validation result.
+        if (
+          !message ||
+          (!message.isStreamingOfEventFinished && !message.isCanceled)
+        ) {
+          let compoundKey = `${roomId}|${eventId}`;
+          let retries = this.toolFinalizationRetries.get(compoundKey) ?? 0;
+          if (retries < MAX_TOOL_FINALIZATION_RETRIES) {
+            this.toolFinalizationRetries.set(compoundKey, retries + 1);
+            if (!this.toolProcessingEventQueue.includes(compoundKey)) {
+              this.toolProcessingEventQueue.push(compoundKey);
+            }
+            debounce(this, this.drainToolProcessingQueue, 100);
+            continue;
+          }
+          this.toolFinalizationRetries.delete(compoundKey);
+          if (!message) {
+            // Nothing addressable to validate or invalidate.
+            console.error(
+              `Tool processing gave up waiting for message ${eventId} in room ${roomId} to appear in the room resource`,
+            );
+            continue;
+          }
+        } else {
+          this.toolFinalizationRetries.delete(`${roomId}|${eventId}`);
         }
         if (message.agentId !== this.matrixService.agentId) {
           // This command was sent by another agent, so we will not auto-execute it
@@ -397,6 +448,16 @@ export default class ToolService extends Service {
           }
           if (!messageTool.name) {
             continue;
+          }
+          // Claim before validate's first await — the guards above are
+          // checked here but recorded only after validation resolves, so
+          // without this synchronous check-and-set an overlapping drain
+          // pass could also carry this request to a terminal result.
+          if (messageTool.id) {
+            if (this.claimedToolRequestIds.has(messageTool.id)) {
+              continue;
+            }
+            this.claimedToolRequestIds.add(messageTool.id);
           }
 
           let isValid = await this.validate(messageTool);
@@ -471,6 +532,11 @@ export default class ToolService extends Service {
       if (this.executedToolRequestIds.has(commandRequestId)) {
         continue;
       }
+      // A drain pass that already claimed this request is carrying it to
+      // its own terminal result; don't also resolve it invalid here.
+      if (this.claimedToolRequestIds.has(commandRequestId)) {
+        continue;
+      }
       if (
         messageTool.status === 'applied' ||
         messageTool.status === 'invalid'
@@ -487,6 +553,9 @@ export default class ToolService extends Service {
         // button is still the user's fallback for those.
         continue;
       }
+      // Terminal for auto-execution: a later drain pass must not execute a
+      // request the model has been told was not started.
+      this.claimedToolRequestIds.add(commandRequestId);
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
         messageTool.eventId;
@@ -851,6 +920,10 @@ export default class ToolService extends Service {
       }
     }
     if (error) {
+      // The caller claimed this request before validating, so this invalid
+      // result is already terminal for auto-execution. (The user can still
+      // run it manually — "Try Anyway" bypasses the drain.)
+      //
       // CS-11045: Same canonical-event-id resolution as the run task — emit
       // the invalid commandResult linked to the bot-message event currently
       // owning the toolRequest in room state, so ai-bot's /messages view

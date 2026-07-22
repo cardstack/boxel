@@ -1,5 +1,6 @@
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import { CARD_INSTANCE_FILE_KEY } from './search-doc-keys.ts';
 import type { FieldDefinition } from './definitions.ts';
 import type {
   FileMetaResource,
@@ -401,6 +402,18 @@ export function getTypeRefsFromFilter(
     return results.length > 0 ? results : undefined;
   }
   return undefined;
+}
+
+// The dedup filter for a mixed (`scope: 'all'`) entry search: keep card
+// instances and plain files, drop a card's dual-indexed `.json` file row (the
+// card already appears via its `instance` row). The `_isCardInstanceFile` key
+// is stamped only on that file row, so `eq: false` (absent-as-false) keeps
+// every other row and drops it. Restricting to a single kind is better done
+// with the wire `scope` member (`'cards'`/`'files'`), which pins
+// `boxel_index.type` directly; this filter is only for the both-kinds case that
+// still wants each card once.
+export function excludeCardInstanceFileRows(): Filter {
+  return { eq: { [CARD_INSTANCE_FILE_KEY]: false } };
 }
 
 export function cloneRelationship(

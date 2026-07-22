@@ -50,14 +50,13 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { removeFileExtension } from '../utils/card-search/types';
-
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
 } from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
+import { removeCardJsonExtension } from '../utils/search/types';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
@@ -65,7 +64,7 @@ import type ErrorDisplayService from './error-display';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type { RecentFile } from './recent-files-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
@@ -78,6 +77,7 @@ export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
   openCardIds?: RealmResourceIdentifier[];
+  supportingCardIds?: RealmResourceIdentifier[];
   declarationKind: 'card' | 'field';
 }
 
@@ -230,7 +230,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private router: RouterService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -239,7 +239,7 @@ export default class OperatorModeStateService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
 
     let moduleInspectorHistory = window.localStorage.getItem(
       ModuleInspectorSelections,
@@ -396,7 +396,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
+          (i: StackItem) => i.id && removeCardJsonExtension(i.id) === cardId,
         ) as StackItem[]),
       );
     }

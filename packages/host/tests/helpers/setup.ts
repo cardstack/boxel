@@ -1,6 +1,8 @@
 /* eslint-disable @cardstack/host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
+import { _backburner } from '@ember/runloop';
+
 import { getContext, getSettledState, settled } from '@ember/test-helpers';
 
 import { getPendingWaiterState } from '@ember/test-waiters';
@@ -15,7 +17,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as yaml from 'yaml';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
 import { cleanupMonacoEditorModels } from './index';
@@ -138,6 +140,54 @@ function installTimeoutDiagnosticsOnce() {
       }`;
     });
   }
+  // QUnit pushes the "Test took longer than Nms; test timed out." failure
+  // synchronously from its timeout handler, while the hung app is still
+  // mounted and the test owner still exists. That instant — not testDone — is
+  // when the evidence is intact: teardown hooks run in between and reset
+  // services, re-render the login screen, and re-arm queues, so the
+  // testDone-time dump below reports the post-teardown world (all settled,
+  // teardown-era DOM) instead of what was actually stuck. Capture a full dump
+  // at the moment of the first timeout; later timeouts of the same test (a
+  // hung afterEach/teardown `settled()` re-arms QUnit's timer, so one test can
+  // time out repeatedly) get a compact dump naming what teardown is stuck on.
+  if (typeof qunitGlobal.log === 'function') {
+    let lastTimeoutMomentTestLabel: string | undefined;
+    qunitGlobal.log((details: QUnitLogDetails) => {
+      if (
+        !details ||
+        details.result !== false ||
+        typeof details.message !== 'string' ||
+        !details.message.includes('test timed out')
+      ) {
+        return;
+      }
+      // Fall back to the testStart-maintained label when the log payload
+      // carries neither module nor name — otherwise two different tests
+      // whose payloads both lack metadata would collapse into one label and
+      // the second test's full dump would be suppressed as a repeat.
+      let label =
+        details.module || details.name
+          ? `${details.module ?? '<unknown module>'} > ${
+              details.name ?? '<unknown test>'
+            }`
+          : currentTestLabel;
+      if (lastTimeoutMomentTestLabel === label) {
+        console.error(
+          [
+            '[test-timeout-moment+] same test timed out again (teardown also hung)',
+            summarizeSettledState(),
+            summarizePendingRunloopTimers(),
+          ].join('\n'),
+        );
+        return;
+      }
+      lastTimeoutMomentTestLabel = label;
+      logRejectionDiagnostics(
+        '[test-timeout-moment]',
+        `test "${label}" hit QUnit's timeout; state captured at the moment of timeout, before teardown hooks ran`,
+      );
+    });
+  }
   qunitGlobal.testDone((details: QUnitTestDoneDetails) => {
     if (
       details &&
@@ -171,10 +221,18 @@ interface QUnitTestStartDetails {
   module?: string;
 }
 
+interface QUnitLogDetails {
+  result?: boolean;
+  message?: string;
+  name?: string;
+  module?: string;
+}
+
 function getQUnitWithCallbacks():
   | {
       testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
       testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
+      log?: (cb: (details: QUnitLogDetails) => void) => void;
     }
   | undefined {
   let q = (globalThis as { QUnit?: unknown }).QUnit;
@@ -182,6 +240,7 @@ function getQUnitWithCallbacks():
     ? (q as {
         testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
         testStart?: (cb: (details: QUnitTestStartDetails) => void) => void;
+        log?: (cb: (details: QUnitLogDetails) => void) => void;
       })
     : undefined;
 }
@@ -374,7 +433,9 @@ function logRejectionDiagnostics(prefix: string, formattedReason: string) {
         ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
         : 'recent failed fetches this test: <none>',
       summarizeSettledState(),
+      summarizePendingRunloopTimers(),
       summarizeRealmAuth(),
+      summarizeLoginReadiness(),
       summarizeEventLoopLag(),
       summarizeDomSnapshot(),
     ]
@@ -399,6 +460,15 @@ let eventLoopLagSamplerStarted = false;
 // is torn down and the live container is empty — so this preserves what the
 // hung test was actually rendering ~during the stall.
 let lastMountedDomSnapshot = '';
+// Last matrix login-readiness + `postLoginCompleted` transition provenance
+// captured while a test was still mounted. Sampled here (rather than read at
+// QUnit.testDone) for the same reason as the DOM snapshot — the owner is torn
+// down by then — and because the CI console output is a rolling buffer that
+// evicts the causal reset before the post-timeout diagnostic runs. Preserving
+// which caller last flipped `postLoginCompleted` turns an opaque cold-boot
+// login-screen timeout (DOM shows the login form, `postLoginCompleted:false`)
+// into one that names the reset.
+let lastLoginReadinessSnapshot = '';
 function startEventLoopLagSampler() {
   if (eventLoopLagSamplerStarted) return;
   eventLoopLagSamplerStarted = true;
@@ -425,7 +495,88 @@ function startEventLoopLagSampler() {
     } catch {
       // never let diagnostics sampling throw
     }
+    try {
+      let snapshot = captureLoginReadinessSnapshot();
+      // Only overwrite with a real reading so a between-tests / post-teardown
+      // tick (owner gone) doesn't clobber the last mounted snapshot.
+      if (snapshot) {
+        lastLoginReadinessSnapshot = snapshot;
+      }
+    } catch {
+      // never let diagnostics sampling throw
+    }
   }, EVENT_LOOP_LAG_INTERVAL_MS);
+}
+
+interface PostLoginTransitionDebug {
+  to: boolean;
+  reason: string;
+  msAgo: number;
+  stack: string;
+}
+
+// Read the current test's matrix login-readiness from the container cache
+// (never `lookup`, so sampling can't instantiate the service for a test that
+// doesn't use it) and format it, including a compact tail of each recent
+// `postLoginCompleted` transition's stack. Returns undefined when there is no
+// active owner or the service was never instantiated.
+function captureLoginReadinessSnapshot(): string | undefined {
+  let owner = (
+    getContext() as
+      | { owner?: { __container__?: { cache?: Record<string, unknown> } } }
+      | undefined
+  )?.owner;
+  let service = owner?.__container__?.cache?.['service:matrix-service'] as
+    | {
+        loginReadinessDebug?: unknown;
+        postLoginTransitionsDebug?: PostLoginTransitionDebug[];
+      }
+    | undefined;
+  if (!service) {
+    return undefined;
+  }
+  let readiness = service.loginReadinessDebug;
+  let transitions = service.postLoginTransitionsDebug ?? [];
+  let transitionLines = transitions.length
+    ? transitions
+        .map((t) => {
+          // Skip the Error header + the setter frame; keep the caller chain
+          // that identifies who flipped the flag (start-success / logout /
+          // resetState → afterEach, etc.).
+          let frames = (t.stack ?? '')
+            .split('\n')
+            .slice(2, 6)
+            .map((f) => f.trim())
+            .filter(Boolean);
+          return `${t.to ? '→true' : '→false'} via ${t.reason} (${t.msAgo}ms ago)${
+            frames.length ? `\n      ${frames.join('\n      ')}` : ''
+          }`;
+        })
+        .join('\n    ')
+    : '<none recorded>';
+  return [
+    `flags: ${JSON.stringify(readiness)}`,
+    `postLoginCompleted transitions (most recent last):\n    ${transitionLines}`,
+  ].join('\n  ');
+}
+
+// Matrix login-readiness at failure time — the missing half of a cold-boot
+// login-screen timeout. The DOM snapshot shows the login form rendered; this
+// shows WHY (`postLoginCompleted:false` despite `clientLoggedIn:true`) and
+// which caller reset it. Prefers a live read when the owner is still around
+// (during-test rejection paths); on QUnit's post-teardown timeout path the
+// owner is gone, so it falls back to the last value sampled while mounted.
+function summarizeLoginReadiness(): string {
+  try {
+    let snapshot =
+      captureLoginReadinessSnapshot() ?? lastLoginReadinessSnapshot;
+    if (!snapshot) {
+      return 'matrix login readiness: <unavailable>';
+    }
+    return `matrix login readiness:\n  ${snapshot}`;
+  } catch (error) {
+    return `matrix login readiness: <unavailable: ${formatErrorForLog(error)}>`;
+  }
 }
 
 function summarizeEventLoopLag(): string {
@@ -514,6 +665,51 @@ function summarizeRealmAuth(): string {
       : 'realm auth: <no realm resources>';
   } catch (error) {
     return `realm auth: <unavailable: ${formatErrorForLog(error)}>`;
+  }
+}
+
+// `hasPendingTimers=true` alone can't say WHICH `later`/`debounce` is keeping
+// `settled()` from resolving — and a continuously re-armed debounce blocks a
+// test forever with no console output at all. Name each pending runloop timer
+// (its target class and method) so a silent settled() hang points at the code
+// that scheduled it. Reads backburner's private `_timers` flat array (stride
+// 6: executeAt, id, target, method, args, stack — see backburner.js); fully
+// defensive since the layout is an implementation detail.
+function summarizePendingRunloopTimers(): string {
+  try {
+    let bb = _backburner as unknown as {
+      _timers?: unknown[];
+      _autorun?: unknown;
+    };
+    let timers = bb._timers ?? [];
+    if (timers.length === 0) {
+      return `pending runloop timers: <none>${bb._autorun ? ' (autorun pending)' : ''}`;
+    }
+    let now = Date.now();
+    let lines: string[] = [];
+    const STRIDE = 6;
+    const LIMIT = 10;
+    for (let i = 0; i < timers.length && lines.length < LIMIT; i += STRIDE) {
+      let executeAt = timers[i];
+      let target = timers[i + 2];
+      let method = timers[i + 3];
+      let methodName =
+        typeof method === 'function'
+          ? method.name || '<anonymous fn>'
+          : String(method);
+      let targetName =
+        target === null || target === undefined
+          ? '<no target>'
+          : ((target as object).constructor?.name ?? typeof target);
+      let due =
+        typeof executeAt === 'number' ? `${executeAt - now}ms` : '<unknown>';
+      lines.push(`${targetName}#${methodName} (due in ${due})`);
+    }
+    let count = Math.floor(timers.length / STRIDE);
+    let suffix = count > LIMIT ? `\n  … +${count - LIMIT} more` : '';
+    return `pending runloop timers (${count}):\n  ${lines.join('\n  ')}${suffix}`;
+  } catch (error) {
+    return `pending runloop timers: <unavailable: ${formatErrorForLog(error)}>`;
   }
 }
 
@@ -672,12 +868,27 @@ export function setupApplicationTest(hooks: NestedHooks) {
     resetServiceIfPresent(this.owner, 'service:matrix-service');
     resetServiceIfPresent(this.owner, 'service:operator-mode-state-service');
     await settled();
-    (
-      this.owner.lookup('service:reset') as ResetService | undefined
-    )?.resetAll();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
+}
+
+// A SessionParticipant whose resetState()/sessionStarted() threw during this
+// test was buffered by SessionService rather than thrown or floated (a
+// synchronous throw is swallowed by MatrixService.start()/logout(); a floated
+// rejection can be blamed on the next test). Drain the buffer here — after the
+// teardown notifySessionEnded() above has run — so the failure lands
+// deterministically on the test that actually caused it.
+function failOnParticipantErrors(session: SessionService | undefined) {
+  let errors = session?.takeParticipantErrorsForTest?.() ?? [];
+  if (errors.length > 0) {
+    throw errors[0];
+  }
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
@@ -687,12 +898,23 @@ export function setupRenderingTest(hooks: NestedHooks) {
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
+    // MatrixService is the session orchestrator, not a participant, so
+    // notifySessionEnded() no longer resets it. Reset it explicitly (as
+    // setupApplicationTest does) so its client/room state doesn't bleed
+    // across rendering tests. Reset the AI panel first — its resetState()
+    // cancels an in-flight loadRoomsTask, so cancelling before
+    // MatrixService.resetState() replaces the initial-sync barrier avoids a
+    // task hanging on a deferred nothing re-fulfills.
+    resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
+    resetServiceIfPresent(this.owner, 'service:matrix-service');
     await settled();
-    (
-      this.owner.lookup('service:reset') as ResetService | undefined
-    )?.resetAll();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
 }
 

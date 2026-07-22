@@ -7,12 +7,24 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkItemType,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { isCardErrorJSONAPI } from '@cardstack/runtime-common';
+import {
+  isCardErrorJSONAPI,
+  type CardErrorJSONAPI,
+} from '@cardstack/runtime-common';
 
-import { fileNameFromUrl } from '@cardstack/runtime-common/bfm-card-references';
+import {
+  cardTypeName,
+  fileNameFromUrl,
+  type BfmSizeSpec,
+} from '@cardstack/runtime-common/bfm-card-references';
 
 import MiniCardChooser from '@cardstack/host/components/card-chooser/mini';
 import MiniFileChooser from '@cardstack/host/components/file-chooser/mini';
@@ -24,10 +36,23 @@ import type {
 import type StoreService from '@cardstack/host/services/store';
 
 import MarkdownEmbedPreviewPane from './pane';
+import MarkdownEmbedPreview from './preview';
 import TabPills from './tab-pills';
 
 import type EmbedFormatSelection from './format-selection';
 import type { CardDef, FileDef } from '@cardstack/base/card-api';
+
+// The current-target tile renders the placed card/file as a compact fitted
+// chip — a fixed Double Strip (250×65), independent of the format the user
+// picks for the actual embed in the preview pane. It's an identity marker for
+// "what's placed here now", not the embed being configured. Frozen module
+// constant so the tile hands `MarkdownEmbedPreview` a stable object identity
+// across renders rather than a fresh one each time.
+const CURRENT_TILE_SIZE: BfmSizeSpec = Object.freeze<BfmSizeSpec>({
+  format: 'fitted',
+  width: 250,
+  height: 65,
+});
 
 interface Signature {
   Element: HTMLDivElement;
@@ -49,6 +74,9 @@ interface Signature {
     // (The pane's format seed comes from the shared `@selection`, which the
     // modal seeds from this same target.)
     initialTarget?: MarkdownEmbedInitialTarget;
+    // The editing document's own URL. The pane relativizes the inserted ref
+    // against it, so the directive serializes in the `../Type/id` form.
+    documentBaseUrl?: string;
     // Fired when the user clicks "Remove" in `current` mode. The modal
     // resolves its deferred with `{ remove: true }`.
     onRemove?: () => void;
@@ -67,6 +95,11 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
 
   @tracked private selectedTarget: CardDef | FileDef | undefined;
   @tracked private selectedUrl: string | undefined;
+  // Set when the picked/preloaded ref fails to resolve (deleted, moved, no
+  // permission). Distinguishes "resolution failed" from "still loading /
+  // nothing picked" so the pane can render the broken-ref visual instead of
+  // the empty placeholder.
+  @tracked private selectedError: CardErrorJSONAPI | undefined;
   @tracked private mode: 'choose' | 'current' = 'choose';
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -97,22 +130,13 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     return this.currentUrl !== initial;
   }
 
-  // 'DONE' until the user diverges from the initial preload, 'ACCEPT' once
+  // 'Done' until the user diverges from the initial preload, 'Accept' once
   // they do — matches Zeplin 08B. Non-edit (choose) tabs keep the dynamic
   // "Insert as …" label.
   private get ctaLabelOverride(): string | undefined {
     if (!this.isEditMode) return undefined;
     let dirty = this.args.selection.isDirty || this.targetChanged;
-    return dirty ? 'ACCEPT' : 'DONE';
-  }
-
-  private get currentTargetLabel(): string {
-    let t = this.selectedTarget;
-    if (!t) return this.selectedUrl ?? '';
-    if (this.args.refType === 'file') {
-      return fileNameFromUrl(t.id ?? this.selectedUrl ?? '');
-    }
-    return (t as CardDef).cardTitle ?? t.id ?? this.selectedUrl ?? '';
+    return dirty ? 'Accept' : 'Done';
   }
 
   @action
@@ -133,17 +157,67 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
     async (url: string, refType: MarkdownEmbedRefType) => {
       this.selectedUrl = url;
       this.selectedTarget = undefined;
+      this.selectedError = undefined;
       let result =
         refType === 'card'
           ? await this.store.get(url)
           : await this.store.get<FileDef>(url, { type: 'file-meta' });
       if (isCardErrorJSONAPI(result)) {
-        this.selectedTarget = undefined;
+        // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
+        // renders the broken-ref visual from `selectedError` instead of the
+        // resolved embed.
+        this.selectedError = result;
         return;
       }
       this.selectedTarget = result as CardDef | FileDef;
     },
   );
+
+  // The pane mounts once a row is picked and either resolves (selectedTarget)
+  // or fails (selectedError); the empty placeholder shows only before then.
+  private get hasPreview(): boolean {
+    return !!this.selectedTarget || !!this.selectedError;
+  }
+
+  // Broken-ref state threaded to the pane. Each is undefined unless the load
+  // failed, so the pane renders the resolved embed on the happy path and the
+  // broken visual only when `selectedError` is set.
+  private get brokenUrl(): string | undefined {
+    return this.selectedError ? this.selectedUrl : undefined;
+  }
+
+  private get brokenState(): BrokenLinkState | undefined {
+    if (!this.selectedError) return undefined;
+    return this.selectedError.status === 404 ? 'not-found' : 'error';
+  }
+
+  private get brokenErrorDoc(): BrokenLinkErrorDoc | undefined {
+    let e = this.selectedError;
+    if (!e) return undefined;
+    return {
+      status: e.status,
+      title: e.title,
+      message: e.message,
+      stack: e.meta?.stack ?? undefined,
+      additionalErrors: e.additionalErrors ?? null,
+    };
+  }
+
+  // Card refs label by type name; file refs label by filename — matching the
+  // label the base `linksTo` broken visual derives for cards.
+  private get brokenDisplayName(): string | undefined {
+    if (!this.selectedError || !this.selectedUrl) return undefined;
+    return this.args.refType === 'file'
+      ? fileNameFromUrl(this.selectedUrl)
+      : cardTypeName(this.selectedUrl);
+  }
+
+  // Drives the broken-ref overlay headline ("Linked file not found" vs the
+  // card wording) so a broken `:file[...]` ref doesn't read as a card.
+  private get brokenItemType(): BrokenLinkItemType | undefined {
+    if (!this.selectedError) return undefined;
+    return this.args.refType === 'file' ? 'file' : 'card';
+  }
 
   @action
   private handleInsert(bfm: string) {
@@ -181,12 +255,30 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             class='markdown-embed-chooser-tab-panel__current'
             data-test-markdown-embed-chooser-current
           >
-            <span
-              class='markdown-embed-chooser-tab-panel__current-label'
-              data-test-markdown-embed-chooser-current-label
-            >
-              {{this.currentTargetLabel}}
-            </span>
+            {{#if this.hasPreview}}
+              <MarkdownEmbedPreview
+                class='markdown-embed-chooser-tab-panel__current-preview'
+                @target={{this.selectedTarget}}
+                @format='fitted'
+                @sizeSpec={{CURRENT_TILE_SIZE}}
+                @kind='block'
+                @brokenUrl={{this.brokenUrl}}
+                @brokenState={{this.brokenState}}
+                @brokenDisplayName={{this.brokenDisplayName}}
+                @brokenItemType={{this.brokenItemType}}
+                @errorDoc={{this.brokenErrorDoc}}
+                data-test-markdown-embed-chooser-current-preview
+              />
+            {{else}}
+              {{! Hold the tile's 250×65 footprint while the preload resolves so
+                the Replace / Remove buttons don't jump when the chip arrives. }}
+              <div
+                class='markdown-embed-chooser-tab-panel__current-loading'
+                data-test-markdown-embed-chooser-current-loading
+              >
+                <LoadingIndicator />
+              </div>
+            {{/if}}
             <div class='markdown-embed-chooser-tab-panel__current-actions'>
               <BoxelButton
                 {{on 'click' this.startReplace}}
@@ -225,13 +317,19 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        {{#if this.selectedTarget}}
+        {{#if this.hasPreview}}
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
             @refType={{@refType}}
             @selection={{@selection}}
+            @documentBaseUrl={{@documentBaseUrl}}
             @onInsert={{this.handleInsert}}
             @ctaLabelOverride={{this.ctaLabelOverride}}
+            @brokenUrl={{this.brokenUrl}}
+            @brokenState={{this.brokenState}}
+            @brokenDisplayName={{this.brokenDisplayName}}
+            @brokenItemType={{this.brokenItemType}}
+            @errorDoc={{this.brokenErrorDoc}}
           />
         {{else}}
           <p
@@ -319,9 +417,24 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         padding: var(--boxel-sp);
         text-align: center;
       }
-      .markdown-embed-chooser-tab-panel__current-label {
-        font: 600 var(--boxel-font);
-        word-break: break-word;
+      /* The fitted chip (and its loading stand-in) carries its own fixed
+         footprint; the column centers it, so keep flex from shrinking it on the
+         main axis. `align-items: center` already prevents cross-axis stretch. */
+      .markdown-embed-chooser-tab-panel__current-preview,
+      .markdown-embed-chooser-tab-panel__current-loading {
+        flex: 0 0 auto;
+      }
+      /* Same 250×65 footprint as the resolved fitted chip so Replace / Remove
+         hold their position while the preload resolves. */
+      .markdown-embed-chooser-tab-panel__current-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 250px;
+        height: 65px;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
       }
       .markdown-embed-chooser-tab-panel__current-actions {
         display: flex;

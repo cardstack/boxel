@@ -398,6 +398,64 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test('not: { type } genuinely excludes rows whose types chain contains the ref', async function (assert) {
+    // mango is a FancyPerson, so its `types` chain contains Person. With the
+    // per-row membership predicate `not: { type: Person }` must exclude it (and
+    // vangogh/ringo); before the fix the shared cross-join alias let a
+    // FancyPerson row survive via its own non-Person element.
+    let { paper } = testCards;
+    await setupIndex(dbAdapter, [testCards.mango, testCards.vangogh, paper]);
+
+    let personType = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { not: { type: personType } } },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'only the non-Person card remains');
+    assert.deepEqual(
+      getIds(results),
+      [paper.id],
+      'the Cat is kept; both Person-chain cards are excluded',
+    );
+  });
+
+  test('every: [{ type: A }, { type: B }] is an intersection, satisfiable within one chain', async function (assert) {
+    // mango's chain contains both FancyPerson and Person, so the intersection
+    // matches it; ringo (plain Person) lacks FancyPerson. Before the fix this
+    // conjunction was unsatisfiable (no single array element equals both).
+    let { mango, ringo } = testCards;
+    await setupIndex(dbAdapter, [mango, ringo]);
+
+    let personType = await personCardType(testCards);
+    let fancyType = internalKeyToCodeRef([...(await getTypes(mango))].shift()!);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { every: [{ type: fancyType }, { type: personType }] } },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the intersection matches one card');
+    assert.deepEqual(getIds(results), [mango.id], 'only the FancyPerson');
+  });
+
+  test('{ type: baseRef } matches every card instance (BaseDef terminates the chain)', async function (assert) {
+    // getTypes now ends each chain at BaseDef, so a BaseDef-anchored filter is a
+    // universe selector across kinds. Here (instance-only fixtures) it should
+    // match all cards regardless of their concrete type.
+    let { mango, paper } = testCards;
+    await setupIndex(dbAdapter, [mango, paper]);
+
+    // BaseDef is the last element of any card's types chain.
+    let baseType = internalKeyToCodeRef([...(await getTypes(mango))].pop()!);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { type: baseType } },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'both cards match BaseDef');
+    assert.deepEqual(getIds(results), [mango.id, paper.id]);
+  });
+
   test(`can filter using 'eq'`, async function (assert) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [

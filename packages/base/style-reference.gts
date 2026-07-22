@@ -32,6 +32,7 @@ class Isolated extends Component<typeof StyleReference> {
     <ThemeDashboard
       class='style-reference'
       @themeCss={{@model.cssVariables}}
+      @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
     >
       <:header>

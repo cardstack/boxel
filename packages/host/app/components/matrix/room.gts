@@ -1,4 +1,8 @@
-import { registerDestructor } from '@ember/destroyable';
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -617,7 +621,16 @@ export default class Room extends Component<Signature> {
     // Replay any persisted optimistic sends from a prior tab/session before
     // matrix-js-sdk's /sync delivers real echoes — entries left in 'not_sent'
     // surface the retry alert; matched real echoes reconcile via the cgi bridge.
-    this.matrixService.ensurePendingSendsHydrated(this.args.roomId);
+    // Deferred to afterRender: hydration writes the room's tracked `_events`,
+    // and doing it synchronously here would mutate tracked state during the
+    // same render that created this component (the parent already read
+    // `_events`), tripping Ember's backtracking assertion.
+    schedule('afterRender', () => {
+      if (isDestroyed(this) || isDestroying(this)) {
+        return;
+      }
+      this.matrixService.ensurePendingSendsHydrated(this.args.roomId);
+    });
     registerDestructor(this, () => {
       this.cleanupScrollState();
       this.getConversationScrollability = undefined;

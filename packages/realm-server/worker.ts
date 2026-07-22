@@ -83,6 +83,7 @@ let {
   priority = 0,
   migrateDB,
   prerendererUrl,
+  indexJobsOnly = false,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -116,10 +117,19 @@ let {
       demandOption: true,
       type: 'string',
     },
+    indexJobsOnly: {
+      description:
+        'When set, the worker only registers (and therefore only claims) indexing job types, making it a dedicated index lane that other job types cannot occupy',
+      type: 'boolean',
+    },
   })
   .parseSync();
 
-log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+log.info(
+  `starting worker with pid ${process.pid} and priority ${priority}${
+    indexJobsOnly ? ' (index jobs only)' : ''
+  }`,
+);
 
 let prerenderer = createRemotePrerenderer(prerendererUrl);
 let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
@@ -204,6 +214,7 @@ let autoMigrate = migrateDB || undefined;
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
     createPrerenderAuth,
+    indexJobsOnly,
   });
 
   await worker.run();

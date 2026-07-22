@@ -1,6 +1,12 @@
 import { precompileTemplate } from '@ember/template-compilation';
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -35,7 +41,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { BaseDef } from '@cardstack/base/card-api';
+import type { BaseDef, CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -305,6 +311,76 @@ module('Integration | RichMarkdownField', function (hooks) {
       .exists('card reference placeholder is rendered');
   });
 
+  test('display path renders a relative card-ref pill in a prefix-mapped realm', async function (assert) {
+    // End-to-end over the whole reference chain in a prefix-mapped realm: the
+    // markdown field extracts the ref in RRI space, the query-backed
+    // linkedCards field searches by that RRI, the index and the client-side
+    // filter matcher tolerate the URL-form instance id, and the pill slot
+    // matches — so the referenced card's atom actually renders. Guards the
+    // regression where the client re-filter dropped the URL-form instance
+    // against the RRI filter value, leaving the pill unresolved.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: { body: { content: `Inline: :card[./Pet/mango]` } },
+            meta: { adoptsFrom: { module: './article', name: 'ArticleCard' } },
+          },
+        },
+      },
+    });
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+    try {
+      let store = getService('store');
+      let article = (await store.get(
+        `${testRealmURL}article-1`,
+      )) as CardDefType;
+      let refs = (article as any).body?.cardReferenceUrls;
+      assert.deepEqual(
+        refs,
+        ['@test/cards/Pet/mango'],
+        'the relative ref resolves against the prefix-form base into RRI space',
+      );
+      await renderCard(loader, article, 'isolated');
+      await waitFor('[data-test-pet-atom]');
+      assert
+        .dom('[data-test-pet-atom]')
+        .hasText('Mango', 'the referenced card renders as a pill');
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
+  });
+
   test('renders footnotes', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
@@ -520,6 +596,304 @@ module('Integration | RichMarkdownField', function (hooks) {
     } finally {
       virtualNetwork.removeRealmMapping('@test/cards/');
     }
+  });
+
+  test('edit-mode compose preview renders a block fitted embed at the specified size', async function (assert) {
+    // Exercises the real edit path: the field renders in compose mode and
+    // resolves the embed via the getCards resource (linkedCards is empty in
+    // edit mode), the same way the operator-mode editor does.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-pet-fitted>{{@model.name}}</div>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `::card[${testRealmURL}Pet/mango | fitted w:400 h:300]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'edit');
+
+    // The fitted card must actually render in the compose preview — a broken
+    // size path shows the URL fallback instead.
+    await waitFor('[data-test-pet-fitted]', { timeout: 10_000 });
+    assert
+      .dom('[data-test-pet-fitted]')
+      .exists('block fitted embed renders the referenced card, not a fallback');
+    assert
+      .dom('.codemirror-card-fallback')
+      .doesNotExist('no URL fallback remains once the card resolves');
+
+    let slot = document
+      .querySelector('[data-test-pet-fitted]')!
+      .closest('.codemirror-card-slot--block') as HTMLElement | null;
+    assert.ok(slot, 'the card renders inside a block slot');
+    assert.strictEqual(
+      slot?.style.width,
+      '400px',
+      'block fitted slot carries the requested width',
+    );
+    assert.strictEqual(
+      slot?.style.height,
+      '300px',
+      'block fitted slot carries the requested height',
+    );
+    assert.strictEqual(
+      slot?.style.overflow,
+      'hidden',
+      'block fitted slot clips overflow',
+    );
+  });
+
+  test('edit-mode compose preview renders a prefix-form (@-RRI) ref with a named fitted variant', async function (assert) {
+    // Mirrors the reported failing case: a block embed whose ref is a
+    // prefix-form RRI (`@scope/name/...`) with a named fitted variant
+    // (`double-strip`), resolved in edit mode via getCards.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-pet-fitted>{{@model.name}}</div>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `::card[@test/cards/Pet/mango | double-strip]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+    try {
+      let store = getService('store');
+      let article = (await store.get('@test/cards/article-1')) as BaseDef;
+      await store.loaded();
+
+      await renderCard(loader, article, 'edit');
+
+      await waitFor('[data-test-pet-fitted]', { timeout: 10_000 });
+      assert
+        .dom('[data-test-pet-fitted]')
+        .exists('prefix-form ref renders the card, not a URL fallback');
+      assert
+        .dom('.codemirror-card-fallback')
+        .doesNotExist('no URL fallback remains once the card resolves');
+
+      let slot = document
+        .querySelector('[data-test-pet-fitted]')!
+        .closest('.codemirror-card-slot--block') as HTMLElement | null;
+      assert.strictEqual(
+        slot?.style.width,
+        '250px',
+        'double-strip width is applied',
+      );
+      assert.strictEqual(
+        slot?.style.height,
+        '65px',
+        'double-strip height is applied',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
+  });
+
+  test('edit-mode compose preview flows inline embeds by format (atom pill vs sized inline-block)', async function (assert) {
+    // The compose editor must route inline embeds the same way the
+    // saved/preview renderers do: an atom ref keeps the atom pill chrome, while
+    // a non-atom (embedded/fitted) inline ref flows as a chrome-less
+    // inline-block slot that also carries any fitted size style.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded>{{@model.name}}</div>
+        </template>
+      };
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-pet-fitted>{{@model.name}}</div>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Embedded: :card[${testRealmURL}Pet/mango | embedded]\n\nAtom: :card[${testRealmURL}Pet/mango | atom]\n\nFitted: :card[${testRealmURL}Pet/mango | fitted w:200 h:100]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'edit');
+
+    await waitFor('[data-test-pet-embedded]', { timeout: 10_000 });
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+    await waitFor('[data-test-pet-fitted]', { timeout: 10_000 });
+
+    let embeddedSlot = document
+      .querySelector('[data-test-pet-embedded]')!
+      .closest('[data-test-codemirror-card-slot-inline]');
+    assert
+      .dom(embeddedSlot)
+      .hasClass(
+        'codemirror-card-slot--inline-embed',
+        'a non-atom inline embed flows as an inline-block slot',
+      );
+    assert
+      .dom(embeddedSlot)
+      .doesNotHaveClass(
+        'codemirror-card-slot--inline',
+        'a non-atom inline embed does not use the atom pill flow class',
+      );
+
+    let atomSlot = document
+      .querySelector('[data-test-pet-atom]')!
+      .closest('[data-test-codemirror-card-slot-inline]');
+    assert
+      .dom(atomSlot)
+      .hasClass(
+        'codemirror-card-slot--inline',
+        'a plain (atom) inline ref keeps the atom pill flow class',
+      );
+
+    let fittedSlot = document
+      .querySelector('[data-test-pet-fitted]')!
+      .closest('[data-test-codemirror-card-slot-inline]') as HTMLElement | null;
+    assert
+      .dom(fittedSlot)
+      .hasClass(
+        'codemirror-card-slot--inline-embed',
+        'a fitted inline embed flows as an inline-block slot',
+      );
+    assert.strictEqual(
+      fittedSlot?.style.width,
+      '200px',
+      'fitted inline slot carries the requested width',
+    );
+    assert.strictEqual(
+      fittedSlot?.style.height,
+      '100px',
+      'fitted inline slot carries the requested height',
+    );
+    assert.strictEqual(
+      fittedSlot?.style.overflow,
+      'hidden',
+      'fitted inline slot clips overflow',
+    );
   });
 
   test('inline card reference with a non-atom format resolves to an inline-block slot', async function (assert) {
@@ -1117,6 +1491,52 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-markdown-mode-option="source"]')
       .exists('view selector opens without editor focus');
     await click('[data-test-markdown-mode-option="compose"]');
+  });
+
+  test('toolbar items are wrapped in tooltips whose hint is suppressed while the control is disabled', async function (assert) {
+    // The enabled-on-focus transition depends on document.hasFocus(), which is
+    // false in headless CI (see the "formatting controls start disabled" test),
+    // so the format buttons are disabled here. That makes this the reliable
+    // side to assert: every item is a tooltip trigger, and hovering a disabled
+    // control reveals no tooltip. The always-enabled add/edit-embed tooltips
+    // (label + hover reveal) are covered in the codemirror embed toolbar test.
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await waitFor('[data-test-toolbar="bold"]');
+
+    // Bold (a shortcut item) and Strikethrough (shortcut-less) are both wrapped
+    // in a tooltip trigger.
+    assert
+      .dom('[data-test-toolbar-tooltip="bold"]')
+      .exists('Bold is wrapped in a tooltip trigger');
+    assert
+      .dom('[data-test-toolbar-tooltip="strikethrough"]')
+      .exists('Strikethrough is wrapped in a tooltip trigger');
+
+    // Disabled before the editor gains focus → hovering reveals no tooltip.
+    assert.dom('[data-test-toolbar="bold"]').isDisabled();
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .doesNotExist('no tooltip is shown while the control is disabled');
+    await triggerEvent('[data-test-toolbar-tooltip="bold"]', 'mouseleave');
   });
 
   test('selecting Preview shows rendered markdown and hides editor', async function (assert) {

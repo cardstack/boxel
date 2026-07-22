@@ -22,6 +22,8 @@ import {
 } from '@cardstack/runtime-common';
 import {
   hasCodeBlocks,
+  isMarkdownOverRenderLimit,
+  markdownOversizedNoticeHtml,
   markdownToHtml,
   preloadMarkdownLanguages,
 } from '@cardstack/runtime-common/marked-sync';
@@ -142,7 +144,16 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
   @cached
   get renderedHtml() {
-    let html = markdownToHtml(this.args.content, {
+    let content = this.args.content;
+    // Skip the parse entirely for over-limit content: a synchronous multi-MB
+    // parse + sanitize + DOMParser reparse blocks the render thread. Because
+    // the Monaco/KaTeX/Mermaid follow-on work all runs inside this getter, the
+    // early return also avoids scanning the oversized content for code fences,
+    // math, and mermaid blocks.
+    if (isMarkdownOverRenderLimit(content)) {
+      return htmlSafe(markdownOversizedNoticeHtml(content));
+    }
+    let html = markdownToHtml(content, {
       enableMonacoSyntaxHighlighting: !!(
         this.hasCodeBlocks && this.monacoContext
       ),
@@ -635,6 +646,25 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           font-size: var(--markdown-font-size, inherit);
           font-family: var(--markdown-font-family, inherit);
           overflow: hidden;
+        }
+
+        /* Over-limit content notice + truncated plain-text preview */
+        .markdown-content :deep(.markdown-oversized-notice) {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-style: italic;
+          color: var(--boxel-500);
+        }
+        .markdown-content :deep(.markdown-oversized-preview) {
+          max-height: 20rem;
+          overflow: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-family: var(--md-mono);
+          font-size: 0.8125em;
+          background-color: var(--md-muted);
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
         }
 
         /* Heading */

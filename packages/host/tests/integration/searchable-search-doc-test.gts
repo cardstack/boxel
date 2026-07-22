@@ -1,9 +1,15 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { Realm, IndexedInstance } from '@cardstack/runtime-common';
+import {
+  rri,
+  type Realm,
+  type IndexedInstance,
+  type SearchDocTimings,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import CardStoreWithGarbageCollection from '@cardstack/host/lib/gc-card-store';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -23,6 +29,8 @@ import {
   FieldDef,
   Component,
   StringField,
+  createFromSerialized,
+  getDataBucket,
   searchDocFromFields,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -289,6 +297,26 @@ module('Integration | searchable search doc', function (hooks) {
       });
     }
 
+    // ---- a throwing branch beside a searchable link -------------------------
+    // On a fresh store the computed's branch throws: reading `other` fires
+    // that target's lazy load and yields `undefined`, so the `.name` read
+    // throws. The computed is declared BEFORE the searchable link, so a walk
+    // that stopped at the first failing branch would never reach the link
+    // field. Branches run concurrently and all settle before the first
+    // rejection rethrows, so the searchable link's targeted load fires (and
+    // completes) in the same walk. Once `other` is resident the computed
+    // succeeds, so the card indexes cleanly.
+    class Boom extends CardDef {
+      static displayName = 'Boom';
+      @field other = linksTo(Author);
+      @field boom = contains(StringField, {
+        computeVia: function (this: any) {
+          return this.other.name;
+        },
+      });
+      @field agent = linksTo(Agent, { searchable: true });
+    }
+
     let agentRef = (id: string) => ({ links: { self: id } });
 
     ({ realm } = await setupIntegrationTestRealm({
@@ -333,10 +361,14 @@ module('Integration | searchable search doc', function (hooks) {
         },
         'profile.gts': { Profile, FancyProfile, ArticleProfile },
         'article-query.gts': { ArticleQuery },
+        'boom.gts': { Boom },
 
         // --- leaves + chain ---
         'Agent/a1.json': card('Agent Smith', 'agent', 'Agent'),
         'Agent/a2.json': card('Agent Jones', 'agent', 'Agent'),
+        // Referenced only by Boom/b1, so its residency in a test's store is
+        // attributable to that card's walk alone.
+        'Agent/a3.json': card('Agent Braun', 'agent', 'Agent'),
         'Headquarters/h1.json': card('HQ One', 'headquarters', 'Headquarters'),
         'Company/co1.json': {
           data: {
@@ -614,6 +646,20 @@ module('Integration | searchable search doc', function (hooks) {
             id: `${testRealmURL}ArticleQuery/q1`,
             attributes: { title: 'Query' },
             meta: adoptsFrom('article-query', 'ArticleQuery'),
+          },
+        },
+
+        // --- throwing branch beside a searchable link ---
+        'Boom/b1.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Boom/b1`,
+            attributes: {},
+            relationships: {
+              other: agentRef(`${testRealmURL}Author/au1`),
+              agent: agentRef(`${testRealmURL}Agent/a3`),
+            },
+            meta: adoptsFrom('boom', 'Boom'),
           },
         },
       },
@@ -1142,6 +1188,61 @@ module('Integration | searchable search doc', function (hooks) {
     assert.notOk('related' in doc, 'the query-backed field is skipped');
   });
 
+  test('a throwing branch does not stop sibling link loads in the same walk', async function (assert) {
+    // Build the instance from its bare document on a dedicated store, so both
+    // of its links start not-loaded — the shape the indexer's walk sees. (The
+    // live store's card GET sideloads the whole link graph, which would leave
+    // nothing for the walk to load.)
+    let network = getService('network');
+    let store = new CardStoreWithGarbageCollection(
+      new Map(),
+      network.fetch,
+      network.virtualNetwork,
+    );
+    let doc = {
+      data: {
+        id: `${testRealmURL}Boom/b1`,
+        type: 'card' as const,
+        attributes: {},
+        relationships: {
+          other: { links: { self: `${testRealmURL}Author/au1` } },
+          agent: { links: { self: `${testRealmURL}Agent/a3` } },
+        },
+        meta: {
+          adoptsFrom: { module: rri(`${testRealmURL}boom`), name: 'Boom' },
+        },
+      },
+    };
+    let instance = (await createFromSerialized(
+      doc.data,
+      doc,
+      new URL(doc.data.id),
+      { store },
+    )) as CardDefType;
+    let thrown: unknown;
+    try {
+      await searchDocFromFields(instance);
+    } catch (e) {
+      thrown = e;
+    }
+    // The computed branch reads its not-yet-loaded `other` target and throws.
+    assert.notStrictEqual(
+      thrown,
+      undefined,
+      'the failing branch rethrows to the caller',
+    );
+    // Branches settle together before the rethrow, so the searchable link's
+    // targeted load — a sibling of the throwing computed — has already
+    // completed and registered its target.
+    assert.ok(
+      store.getCard(`${testRealmURL}Agent/a3`),
+      'the sibling searchable target loaded during the same walk',
+    );
+    // Drain the lazy load the computed's read fired so no fetch outlives the
+    // test.
+    await store.loaded();
+  });
+
   test('a linksTo target is enumerated by its DECLARED type (subtype bloat dropped)', async function (assert) {
     let doc = await loadAndGenerate(`${testRealmURL}ArticleSubtype/sub1`);
     assert.strictEqual(
@@ -1213,6 +1314,140 @@ module('Integration | searchable search doc', function (hooks) {
     assert.ok(
       deps.some((d) => d.includes('SimpleAuthor/sa1')),
       'the searchable-expanded target is recorded as a dependency',
+    );
+  });
+
+  // ===========================================================================
+  // the timing collector (searchDocFieldsMs / searchDocLinkLoads inputs)
+  // ===========================================================================
+
+  async function loadInstance(id: string) {
+    let store = getService('store') as StoreService;
+    return (await store.get(id)) as CardDefType;
+  }
+
+  // A store-resident instance can arrive with its link fields already
+  // materialized, in which case the generator has no load to perform (and
+  // correctly records none). Reset a link slot to its unloaded wire state so
+  // the walk drives the load itself — the state an indexing visit starts
+  // from.
+  function unloadLink(
+    instance: CardDefType,
+    fieldName: string,
+    reference: string | string[],
+  ) {
+    getDataBucket(instance).set(
+      fieldName,
+      Array.isArray(reference)
+        ? reference.map((r) => ({ type: 'not-loaded', reference: r }))
+        : { type: 'not-loaded', reference },
+    );
+  }
+
+  test('per-field timings are keyed by dotted path and include expanded link targets; link loads carry path + target', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}ArticleDeep/d1`);
+    let author = await loadInstance(authorUrl);
+    unloadLink(instance, 'author', authorUrl);
+    unloadLink(author, 'agent', agentUrl);
+    let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
+    let doc = await searchDocFromFields(instance, undefined, timings);
+
+    let fieldsMs = timings.fieldsMs!;
+    for (let path of ['title', 'author', 'author.agent']) {
+      assert.strictEqual(
+        typeof fieldsMs[path],
+        'number',
+        `fieldsMs['${path}'] is a number, got: ${fieldsMs[path]}`,
+      );
+      assert.ok(
+        fieldsMs[path] >= 0,
+        `fieldsMs['${path}'] is non-negative, got: ${fieldsMs[path]}`,
+      );
+    }
+    assert.ok(
+      fieldsMs['author'] >= fieldsMs['author.agent'],
+      'a parent field time is inclusive of its nested fields',
+    );
+
+    let loads = timings.linkLoads!;
+    assert.ok(
+      loads.some((l) => l.path === 'author' && l.target === authorUrl),
+      `the author load is recorded with its path and target, got: ${JSON.stringify(loads)}`,
+    );
+    assert.ok(
+      loads.some((l) => l.path === 'author.agent' && l.target === agentUrl),
+      'the route-expanded deeper load is recorded under its dotted path',
+    );
+    assert.ok(
+      loads.every((l) => typeof l.ms === 'number' && l.ms >= 0),
+      'every load entry carries a non-negative ms',
+    );
+
+    // Instrumentation must not perturb the doc itself.
+    assert.deepEqual(
+      doc,
+      await searchDocFromFields(instance),
+      'the instrumented walk produces the same doc as an uninstrumented one',
+    );
+  });
+
+  test('a plural field accumulates under one path key and records one load per slot', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}Team/valid`);
+    unloadLink(instance, 'members', [
+      `${testRealmURL}Author/au1`,
+      `${testRealmURL}Author/au2`,
+    ]);
+    let timings: SearchDocTimings = { fieldsMs: {}, linkLoads: [] };
+    await searchDocFromFields(instance, undefined, timings);
+
+    let memberKeys = Object.keys(timings.fieldsMs!).filter(
+      (k) => k === 'members' || k.startsWith('members.'),
+    );
+    assert.ok(
+      memberKeys.includes('members'),
+      'the plural field has a single accumulated key',
+    );
+    assert.ok(
+      memberKeys.includes('members.name'),
+      "the expanded members' fields accumulate under the shared dotted path",
+    );
+
+    let memberLoads = timings.linkLoads!.filter((l) => l.path === 'members');
+    assert.deepEqual(
+      memberLoads.map((l) => l.target).sort(),
+      [`${testRealmURL}Author/au1`, `${testRealmURL}Author/au2`],
+      'each slot records its own load, distinguished by target',
+    );
+  });
+
+  test('collector channels are opt-in', async function (assert) {
+    let instance = await loadInstance(`${testRealmURL}ArticleSelf/s1`);
+    unloadLink(instance, 'author', authorUrl);
+
+    let fieldsOnly: SearchDocTimings = { fieldsMs: {} };
+    await searchDocFromFields(instance, undefined, fieldsOnly);
+    assert.ok(
+      Object.keys(fieldsOnly.fieldsMs!).length > 0,
+      'the supplied fields channel is filled',
+    );
+    assert.strictEqual(
+      fieldsOnly.linkLoads,
+      undefined,
+      'the absent loads channel is not created',
+    );
+
+    let loadsOnly: SearchDocTimings = { linkLoads: [] };
+    await searchDocFromFields(instance, undefined, loadsOnly);
+    assert.ok(
+      loadsOnly.linkLoads!.some(
+        (l) => l.path === 'author' && l.target === authorUrl,
+      ),
+      'the supplied loads channel is filled',
+    );
+    assert.strictEqual(
+      loadsOnly.fieldsMs,
+      undefined,
+      'the absent fields channel is not created',
     );
   });
 });

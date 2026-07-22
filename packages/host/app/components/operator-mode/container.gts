@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -22,6 +23,7 @@ import {
   GetCardCollectionContextName,
   CommandContextName,
   type getCard as GetCardType,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -32,12 +34,13 @@ import InteractSubmode from '@cardstack/host/components/operator-mode/interact-s
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type MarkdownEmbedChooserService from '@cardstack/host/services/markdown-embed-chooser';
 import type MessageService from '@cardstack/host/services/message-service';
 
 import CardChooserModal from '../card-chooser/modal';
-import SearchResults from '../card-search/search-results';
 import FileChooserModal from '../file-chooser/modal';
 import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
+import SearchResults from '../search/search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
@@ -63,6 +66,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private messageService: MessageService;
+  @service declare private markdownEmbedChooser: MarkdownEmbedChooserService;
   @service declare realmServer: RealmServerService;
   @service declare private toolService: ToolService;
   @service declare private store: StoreService;
@@ -81,10 +85,37 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getCard as unknown as GetCardType;
   }
 
+  // The realm a card's no-realm search targets — the operator-mode current
+  // realm. Read lazily by the card search surfaces below.
+  private get currentRealm(): string | undefined {
+    return this.operatorModeStateService.realmURL;
+  }
+
+  // The store handed to cards as `@context.store`: bound to the current realm
+  // and the card caps (see StoreService.cardFacingStore).
+  @cached
+  private get cardStore() {
+    return this.store.cardFacingStore(() => this.currentRealm);
+  }
+
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return this.store.getSearchResource.bind(this.store);
+    let store = this.store;
+    let getDefaultRealm = () => this.currentRealm;
+    // Card `getCards`: run under the card caps and default a no-realm search to
+    // the current realm.
+    return (
+      parent: object,
+      getQuery: () => Query | undefined,
+      getRealms?: () => string[] | undefined,
+      opts?: { isLive?: boolean; doWhileRefreshing?: () => void },
+    ) =>
+      store.getSearchResource(parent, getQuery, getRealms, {
+        ...opts,
+        cardInitiated: true,
+        getDefaultRealm,
+      });
   }
 
   @provide(GetCardCollectionContextName)
@@ -105,12 +136,13 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store,
+      store: this.cardStore,
       toolContext: this.toolContext,
       // populated alongside toolContext for content still reading the
       // pre-rename spelling
       commandContext: this.toolContext,
       searchResultsComponent: SearchResults,
+      markdownEmbedChooser: this.markdownEmbedChooser,
       mode: 'operator',
       submode: this.operatorModeStateService.state?.submode,
     };

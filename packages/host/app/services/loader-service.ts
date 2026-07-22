@@ -26,7 +26,7 @@ import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmInfoService from './realm-info-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 const log = logger('loader-service');
 
@@ -34,19 +34,22 @@ export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
     if (isTesting()) {
       // clears the fetch cache and SSR-injected scoped styles in between tests
       this.resetState();
     }
-    registerDestructor(this, () => this.resetState());
+    registerDestructor(this, () => {
+      this.resetState();
+      this.loader?.dispose();
+    });
   }
 
   public resetState() {
@@ -57,9 +60,9 @@ export default class LoaderService extends Service {
     this.resetTime = undefined;
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
-    this.loader = this.loader
-      ? Loader.cloneLoader(this.loader)
-      : this.makeInstance();
+    let previous = this.loader;
+    this.loader = previous ? Loader.cloneLoader(previous) : this.makeInstance();
+    previous?.dispose();
   }
 
   public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
@@ -71,6 +74,7 @@ export default class LoaderService extends Service {
       this.resetTime = Date.now();
       log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
       clearFetchCache();
+      this.loader?.dispose();
       this.loader = this.makeInstance();
       return;
     }
@@ -85,8 +89,10 @@ export default class LoaderService extends Service {
       log.debug(`resetting loader (${options?.reason ?? ''})`);
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
-      if (this.loader) {
-        this.loader = Loader.cloneLoader(this.loader);
+      let previous = this.loader;
+      if (previous) {
+        this.loader = Loader.cloneLoader(previous);
+        previous.dispose();
       } else {
         this.loader = this.makeInstance();
       }

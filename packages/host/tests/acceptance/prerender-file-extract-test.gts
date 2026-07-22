@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  buildToolFunctionNameFromResolvedRef,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -144,6 +145,72 @@ module('Acceptance | prerender | file-extract', function (hooks) {
           // base hash/size handling (including the provided-options shortcut).
           export class PassthroughDef extends BaseFileDef {}
         `,
+          'greet-tool.ts': `
+          import { Command } from '@cardstack/runtime-common';
+          import { CardDef, field, contains } from "${baseRealm.url}card-api";
+          import StringField from "${baseRealm.url}string";
+
+          export class GreetInput extends CardDef {
+            @field greeting = contains(StringField);
+          }
+
+          export default class GreetCommand extends Command {
+            description = 'Sends a greeting';
+
+            async getInputType() {
+              return GreetInput;
+            }
+
+            async run() {
+              return undefined;
+            }
+          }
+        `,
+          'skills/greeting/SKILL.md': `---
+name: greeting
+description: A skill that greets
+boxel:
+  kind: skill
+  tools:
+    - codeRef:
+        module: ../../greet-tool
+        name: default
+      requiresApproval: false
+    - codeRef:
+        module: '@cardstack/boxel-host/tools/switch-submode'
+        name: default
+---
+# Greeting
+
+Greets people.
+`,
+          'skills/broken-tool/SKILL.md': `---
+name: broken-tool
+boxel:
+  kind: skill
+  tools:
+    - codeRef:
+        module: ./missing-tool
+        name: default
+    - codeRef:
+        module: ../../greet-tool
+        name: default
+---
+# Broken Tool
+
+One of my tools does not exist.
+`,
+          'recipe.md': `---
+name: pasta
+boxel:
+  kind: recipe
+  tools:
+    - codeRef:
+        module: ../greet-tool
+        name: default
+---
+# Pasta
+`,
           'sample.txt': 'hello world',
           'mismatch.txt': 'mismatch content',
         },
@@ -259,6 +326,182 @@ module('Acceptance | prerender | file-extract', function (hooks) {
     assert.strictEqual(result.status, 'ready');
     assert.true(result.mismatch, 'sets mismatch flag');
     assert.ok(result.error, 'includes the original extraction error');
+  });
+
+  test('stamps LLM tool definitions onto a skill file-meta resource', async function (assert) {
+    let url = fileURL('skills/greeting/SKILL.md');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: {
+          module: `${baseRealm.url}markdown-file-def`,
+          name: 'MarkdownDef',
+        } as ResolvedCodeRef,
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.frontmatterDiagnostics,
+      undefined,
+      'no frontmatter diagnostics',
+    );
+
+    let tools = (result.resource?.attributes as Record<string, any>)
+      ?.frontmatter?.tools;
+    assert.strictEqual(tools?.length, 2, 'both tools are stamped');
+
+    let realmToolModule = fileURL('greet-tool');
+    let expectedRealmFn = buildToolFunctionNameFromResolvedRef({
+      module: realmToolModule,
+      name: 'default',
+    });
+    let [realmTool, hostTool] = tools;
+    assert.strictEqual(
+      realmTool.codeRef.module,
+      realmToolModule,
+      'relative tool module is resolved absolute against the skill URL',
+    );
+    assert.strictEqual(realmTool.codeRef.name, 'default');
+    assert.strictEqual(realmTool.functionName, expectedRealmFn);
+    assert.false(realmTool.requiresApproval, 'authored false is preserved');
+    assert.strictEqual(realmTool.definition.type, 'function');
+    assert.strictEqual(realmTool.definition.function.name, expectedRealmFn);
+    assert.strictEqual(
+      realmTool.definition.function.description,
+      'Sends a greeting',
+    );
+    assert.ok(
+      realmTool.definition.function.parameters.properties.attributes.properties
+        .greeting,
+      'generated schema carries the input card fields',
+    );
+
+    let hostToolModule = '@cardstack/boxel-host/tools/switch-submode';
+    assert.strictEqual(
+      hostTool.codeRef.module,
+      hostToolModule,
+      'package specifier passes through verbatim',
+    );
+    assert.strictEqual(
+      hostTool.functionName,
+      buildToolFunctionNameFromResolvedRef({
+        module: hostToolModule,
+        name: 'default',
+      }),
+    );
+    assert.true(
+      hostTool.requiresApproval,
+      'absent requiresApproval stamps as true',
+    );
+    assert.ok(
+      hostTool.definition.function.parameters.properties.attributes.properties
+        .submode,
+      'host tool schema carries its input card fields',
+    );
+
+    let searchDocTools = (result.searchDoc as Record<string, any>)?.frontmatter
+      ?.tools;
+    assert.strictEqual(
+      searchDocTools?.[0]?.codeRef?.module,
+      '../../greet-tool',
+      'search doc keeps the tools as authored',
+    );
+    assert.false(
+      'definition' in searchDocTools[0],
+      'generated schemas stay out of the search doc',
+    );
+    assert.false(
+      'functionName' in searchDocTools[0],
+      'stamped functionName stays out of the search doc',
+    );
+
+    assert.ok(
+      result.deps.includes(realmToolModule),
+      'realm-hosted tool module is a runtime dependency of the extract',
+    );
+  });
+
+  test('a broken tool ref indexes the remaining tools and reports a tool schema error', async function (assert) {
+    let url = fileURL('skills/broken-tool/SKILL.md');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: {
+          module: `${baseRealm.url}markdown-file-def`,
+          name: 'MarkdownDef',
+        } as ResolvedCodeRef,
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready', 'extract still succeeds');
+
+    let toolSchemaErrors = result.frontmatterDiagnostics?.toolSchemaErrors;
+    assert.strictEqual(toolSchemaErrors?.length, 1);
+    let [toolError] = toolSchemaErrors!;
+    assert.strictEqual(
+      toolError.module,
+      fileURL('skills/broken-tool/missing-tool'),
+      'error names the resolved module',
+    );
+    assert.strictEqual(toolError.name, 'default');
+    assert.ok(toolError.message, 'error carries a message');
+
+    let tools = (result.resource?.attributes as Record<string, any>)
+      ?.frontmatter?.tools;
+    assert.strictEqual(tools?.length, 2, 'both tools stay in the list');
+    assert.strictEqual(
+      tools[0].codeRef.module,
+      './missing-tool',
+      'failed tool entry stays as authored',
+    );
+    assert.strictEqual(
+      tools[0].definition,
+      undefined,
+      'failed tool entry has no schema',
+    );
+    assert.ok(tools[1].definition, 'the remaining tool still enriches');
+    assert.strictEqual(
+      tools[1].functionName,
+      buildToolFunctionNameFromResolvedRef({
+        module: fileURL('greet-tool'),
+        name: 'default',
+      }),
+    );
+  });
+
+  test('a non-skill markdown file is not enriched even when it declares tools', async function (assert) {
+    let url = fileURL('recipe.md');
+    await visit(
+      renderPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: {
+          module: `${baseRealm.url}markdown-file-def`,
+          name: 'MarkdownDef',
+        } as ResolvedCodeRef,
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(
+      result.frontmatterDiagnostics,
+      undefined,
+      'no frontmatter diagnostics',
+    );
+    // A non-skill kind keeps only the raw frontmatter (no typed `tools`
+    // field), and the kind gate skips enrichment before ever looking.
+    let frontmatter = (result.resource?.attributes as Record<string, any>)
+      ?.frontmatter;
+    assert.strictEqual(
+      frontmatter?.tools,
+      undefined,
+      'no typed tools on a non-skill file',
+    );
+    assert.strictEqual(
+      frontmatter?.rawContent?.boxel?.tools?.[0]?.codeRef?.module,
+      '../greet-tool',
+      'raw frontmatter is preserved as authored',
+    );
   });
 
   test('returns an error when the file fetch fails', async function (assert) {

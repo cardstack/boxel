@@ -444,6 +444,30 @@ module('Acceptance | theme-card-test', function (hooks) {
               },
             },
           },
+          'checkbox-forest-green-2.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: false,
+                cardInfo: {
+                  name: 'Second Forest Green Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}forest-green-theme`,
+                  },
+                },
+              },
+            },
+          },
           'checkbox-forest-green.json': {
             data: {
               meta: {
@@ -510,6 +534,25 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert.dom('[data-test-css-field]').containsText('--radius: 0.75rem;');
       assert.dom(cardSelector).hasClass('boxel-card-container--themed');
       assert.dom(cardSelector).hasAttribute('data-boxel-theme-scope');
+
+      // the card container and the theme dashboard inside it derive their
+      // scopes from the same identity (the theme card's id plus its css), so
+      // the two render paths agree and their stylesheets are dedupable
+      let containerScope = document
+        .querySelector(cardSelector)!
+        .getAttribute('data-boxel-theme-scope');
+      let dashboardScope = document
+        .querySelector(`${cardSelector} article[data-boxel-theme-scope]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.true(
+        containerScope!.startsWith(`${themeCardId}-`),
+        'scope derives from the theme card id',
+      );
+      assert.strictEqual(
+        dashboardScope,
+        containerScope,
+        'dashboard scope matches the container scope',
+      );
 
       assert.strictEqual(
         computedProperty(cardSelector, '--background'),
@@ -1081,6 +1124,87 @@ module('Acceptance | theme-card-test', function (hooks) {
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '16px',
         'checkbox size matches --theme-body-font-size',
+      );
+    });
+
+    test('cards sharing a theme emit identical scoped stylesheets with only one active copy', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-forest-green`;
+      let otherCardId = `${testRealmURL}checkbox-forest-green-2`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: cardId, format: 'isolated' }],
+          [{ id: otherCardId, format: 'isolated' }],
+        ],
+      });
+
+      let themeStyleText = (id: string) => {
+        let container = document.querySelector(`[data-test-card="${id}"]`);
+        return [...container!.querySelectorAll('style')]
+          .map((style) => style.textContent?.trim())
+          .filter((text) => text?.includes('data-boxel-theme-scope'))
+          .join('');
+      };
+
+      let scope = document
+        .querySelector(`[data-test-card="${cardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      let otherScope = document
+        .querySelector(`[data-test-card="${otherCardId}"]`)!
+        .getAttribute('data-boxel-theme-scope');
+      assert.ok(scope, 'theme scope is set');
+      assert.true(
+        scope!.startsWith(`${testRealmURL}forest-green-theme-`),
+        'scope derives from the theme card id plus a content hash',
+      );
+      assert.strictEqual(
+        scope,
+        otherScope,
+        'cards sharing a theme share a scope',
+      );
+      assert.ok(
+        themeStyleText(cardId).length,
+        'theme stylesheet is rendered within the card container',
+      );
+      assert.strictEqual(
+        themeStyleText(cardId),
+        themeStyleText(otherCardId),
+        'cards sharing a theme emit byte-identical theme stylesheets',
+      );
+
+      let copies = () =>
+        [...document.querySelectorAll('style')].filter((style) =>
+          style.textContent?.includes(
+            `data-boxel-theme-scope="${testRealmURL}forest-green-theme-`,
+          ),
+        );
+      assert.strictEqual(copies().length, 2, 'each card emits its own copy');
+      assert.strictEqual(
+        copies().filter((style) => !style.disabled).length,
+        1,
+        'exactly one copy participates in style matching',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${cardId}"]`, '--primary'),
+        '#2e7d32',
+        'the first card resolves the theme variables',
+      );
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the second card resolves the theme variables',
+      );
+
+      // when the active copy leaves the DOM, a survivor is promoted
+      copies()
+        .find((style) => !style.disabled)!
+        .remove();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(copies().length, 1, 'one copy remains');
+      assert.false(copies()[0].disabled, 'the surviving copy is re-enabled');
+      assert.strictEqual(
+        computedProperty(`[data-test-card="${otherCardId}"]`, '--primary'),
+        '#2e7d32',
+        'the theme stays applied after the active copy is removed',
       );
     });
   });

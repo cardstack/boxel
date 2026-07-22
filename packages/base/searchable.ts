@@ -6,6 +6,7 @@ import {
   primitive,
   relativeTo,
   routesForField,
+  type SearchDocTimings,
   type SerializedError,
 } from '@cardstack/runtime-common';
 import {
@@ -48,6 +49,12 @@ import {
 // links, and `linksToMany` id normalization match `BaseDef[queryableValue]`. The
 // declared field type is enumerated for both links and contained values (not the
 // runtime subtype), which drops non-queryable polymorphic-subtype bloat.
+//
+// Independent branches of the walk — a card's fields, a plural field's
+// slots — run concurrently, so their link loads overlap; a route's own
+// segments stay sequential (each hop needs the previous target). The doc is
+// assembled in declaration/slot order regardless of load completion order,
+// so concurrency never changes the output.
 export async function searchDocFromFields(
   instance: CardDef,
   // Collects the URLs of the link targets pulled into the doc. The indexer
@@ -56,6 +63,12 @@ export async function searchDocFromFields(
   // owner — whether or not the render happened to load it (a `{ id }`-only link
   // contributes none, since its target's data is not in the doc).
   dependencies: Set<string> = new Set(),
+  // Optional timing collector, filled in place as the walk runs (so entries
+  // recorded before a mid-walk throw survive): per-field inclusive
+  // evaluation wall-clock keyed by dotted path, and one entry per link-
+  // target load performed. Each sub-collector is opt-in and raw — the
+  // caller bounds and rounds before persisting.
+  timings?: SearchDocTimings,
 ): Promise<Record<string, any>> {
   let routes = seedSearchableRoutes(
     instance.constructor as unknown as typeof BaseDef,
@@ -67,6 +80,8 @@ export async function searchDocFromFields(
     [],
     getStore(instance),
     dependencies,
+    '',
+    timings,
   )) as Record<string, any>;
 }
 
@@ -91,6 +106,31 @@ function seedSearchableRoutes(cardClass: typeof BaseDef): string[] {
 type SearchableTargetResult =
   | { status: 'loaded'; card: CardDef }
   | { status: 'broken'; sentinel: LinkErrorValue | LinkNotFoundValue };
+
+// Run independent async branches concurrently, preserving declaration order
+// in the returned values. Concurrency is what lets a single walk fire every
+// link load the current store state permits: a card's independent
+// `searchable` routes — and a plural field's slots — load together instead
+// of one after another, while a single route's own segments stay sequential
+// inside their branch (each hop's load needs the previous hop's target).
+// Every branch runs to completion before the first rejection (in declaration
+// order) is rethrown, so a throwing branch — typically a computed reading a
+// link target whose load is still in flight — doesn't stop sibling branches
+// from starting THEIR loads, and no branch rejection is left floating to
+// surface as an unhandled rejection (which the prerender tab treats as
+// fatal).
+async function settleBranches<T>(
+  branches: Array<() => Promise<T>>,
+): Promise<T[]> {
+  let settled = await Promise.allSettled(branches.map((branch) => branch()));
+  let rejection = settled.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (rejection) {
+    throw rejection.reason;
+  }
+  return (settled as PromiseFulfilledResult<T>[]).map(({ value }) => value);
+}
 
 // Build the terminal sentinel a broken link resolves to, mirroring the shape
 // `lazilyLoadLink` plants: HTTP 404 → `link-not-found`, anything else →
@@ -124,6 +164,13 @@ function brokenLinkSentinel(
 // set instead. A missing / broken target resolves to a terminal sentinel; the
 // store may surface that either as a returned `CardError` or a thrown rejection
 // (e.g. a 404 / invalid-URL on the load path), so both are captured.
+//
+// The document load is `untracked`: this function awaits it and the walk
+// folds the target straight into the doc it returns, so the store's
+// load-generation settle machinery — which exists for loads fired and
+// abandoned by field getters — has nothing to observe. Untracked, a walk
+// whose targets are all resident or cache-served reads as settled without a
+// confirmation pass.
 async function loadSearchableTarget(
   store: CardStore,
   reference: string,
@@ -133,7 +180,7 @@ async function loadSearchableTarget(
     return { status: 'loaded', card: resident };
   }
   try {
-    let cardDoc = await store.loadCardDocument(reference);
+    let cardDoc = await store.loadCardDocument(reference, { untracked: true });
     if (isCardError(cardDoc)) {
       return {
         status: 'broken',
@@ -167,6 +214,10 @@ async function searchableQueryableValue(
   // must still load against the owner's store.
   store: CardStore,
   dependencies: Set<string>,
+  // Dotted field path from the indexed card's root down to `value` ('' at
+  // the root); keys the `timings` entries.
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any> {
   if (primitive in fieldCard) {
     // Delegate to the field's own queryableValue. The default handles
@@ -195,7 +246,13 @@ async function searchableQueryableValue(
   let makeAbsoluteURL = (reference: string) =>
     value[relativeTo] ? resolveRef(reference, value[relativeTo]) : reference;
   let nextStack = [value, ...stack];
-  let entries: [string, any][] = [];
+  // Each field is an independent branch; `settleBranches` runs them
+  // concurrently so one field's link load overlaps its siblings'. The cycle
+  // guard is concurrency-safe (`nextStack` is an immutable per-level
+  // snapshot shared read-only by every branch), sentinel plants touch
+  // disjoint field slots, and `dependencies` is a Set whose insertion set is
+  // order-independent.
+  let branches: Array<() => Promise<[string, any] | undefined>> = [];
   for (let [fieldName, field] of Object.entries(
     getFields(fieldCard, { includeComputeds: true }),
   )) {
@@ -216,57 +273,67 @@ async function searchableQueryableValue(
     let isDeclaredLink =
       (field!.fieldType === 'linksTo' || field!.fieldType === 'linksToMany') &&
       !field!.computeVia;
-    let rawValue =
-      isDeclaredLink && !getDataBucket(value).has(fieldName)
-        ? null
-        : peekAtField(value, fieldName);
-    switch (field!.fieldType) {
-      case 'contains': {
-        entries.push([
-          fieldName,
-          await searchableQueryableValue(
+    let fieldPath = path === '' ? fieldName : `${path}.${fieldName}`;
+    branches.push(async () => {
+      // Inclusive per-field timing: starts before the field read — a
+      // computed's computeVia runs inside peekAtField — and covers the nested
+      // recursion and link loads below, so a slow leaf surfaces together with
+      // every ancestor on its path. Guarded on the collector so an
+      // uninstrumented walk pays no timer calls. Sibling branches run
+      // concurrently, so a field's span can overlap its siblings' — read the
+      // values as per-field wall-clock, not as summable slices.
+      let fieldStart = timings?.fieldsMs ? performance.now() : 0;
+      let rawValue =
+        isDeclaredLink && !getDataBucket(value).has(fieldName)
+          ? null
+          : peekAtField(value, fieldName);
+      let entryValue: any;
+      switch (field!.fieldType) {
+        case 'contains': {
+          entryValue = await searchableQueryableValue(
             field!.card,
             rawValue,
             tails,
             nextStack,
             store,
             dependencies,
-          ),
-        ]);
-        break;
-      }
-      case 'containsMany': {
-        // A whole-field sentinel (e.g. a computed containsMany that consumes
-        // an unresolved link) is not iterable; treat as null, the same as the
-        // linksToMany branch below.
-        if (rawValue == null || isNonPresentLink(rawValue)) {
-          entries.push([fieldName, null]);
+            fieldPath,
+            timings,
+          );
           break;
         }
-        let items: any[] = [];
-        for (let item of rawArrayValues(rawValue)) {
-          if (item == null) {
-            continue;
+        case 'containsMany': {
+          // A whole-field sentinel (e.g. a computed containsMany that consumes
+          // an unresolved link) is not iterable; treat as null, the same as the
+          // linksToMany branch below.
+          if (rawValue == null || isNonPresentLink(rawValue)) {
+            entryValue = null;
+            break;
           }
-          let v = await searchableQueryableValue(
-            field!.card,
-            item,
-            tails,
-            nextStack,
-            store,
-            dependencies,
-          );
-          if (v != null) {
-            items.push(v);
-          }
+          let items = (
+            await settleBranches(
+              rawArrayValues(rawValue)
+                .filter((item) => item != null)
+                .map(
+                  (item) => () =>
+                    searchableQueryableValue(
+                      field!.card,
+                      item,
+                      tails,
+                      nextStack,
+                      store,
+                      dependencies,
+                      fieldPath,
+                      timings,
+                    ),
+                ),
+            )
+          ).filter((v) => v != null);
+          entryValue = items.length === 0 ? null : items;
+          break;
         }
-        entries.push([fieldName, items.length === 0 ? null : items]);
-        break;
-      }
-      case 'linksTo': {
-        entries.push([
-          fieldName,
-          await searchableLink(
+        case 'linksTo': {
+          entryValue = await searchableLink(
             value,
             field!,
             rawValue,
@@ -276,14 +343,13 @@ async function searchableQueryableValue(
             store,
             makeAbsoluteURL,
             dependencies,
-          ),
-        ]);
-        break;
-      }
-      case 'linksToMany': {
-        entries.push([
-          fieldName,
-          await searchableLinksToMany(
+            fieldPath,
+            timings,
+          );
+          break;
+        }
+        case 'linksToMany': {
+          entryValue = await searchableLinksToMany(
             field!,
             rawValue,
             matched,
@@ -292,12 +358,27 @@ async function searchableQueryableValue(
             store,
             makeAbsoluteURL,
             dependencies,
-          ),
-        ]);
-        break;
+            fieldPath,
+            timings,
+          );
+          break;
+        }
+        default: {
+          return undefined;
+        }
       }
-    }
+      if (timings?.fieldsMs) {
+        // Accumulate rather than assign: a plural field's items (and a card
+        // re-entered on another branch) all land under one path key.
+        timings.fieldsMs[fieldPath] =
+          (timings.fieldsMs[fieldPath] ?? 0) + (performance.now() - fieldStart);
+      }
+      return [fieldName, entryValue];
+    });
   }
+  let entries = (await settleBranches(branches)).filter(
+    (entry): entry is [string, any] => entry !== undefined,
+  );
   return Object.fromEntries(entries);
 }
 
@@ -314,6 +395,8 @@ async function searchableLink(
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
   dependencies: Set<string>,
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any> {
   if (rawValue == null) {
     return null;
@@ -347,7 +430,13 @@ async function searchableLink(
     // getter. The store can't `toURL` a relative string, which would otherwise
     // degrade an expandable searchable link to `{ id }`.
     let resolvedRef = makeAbsoluteURL(rawValue.reference);
+    let loadStart = timings?.linkLoads ? performance.now() : 0;
     let result = await loadSearchableTarget(store, resolvedRef);
+    timings?.linkLoads?.push({
+      path,
+      target: resolvedRef,
+      ms: performance.now() - loadStart,
+    });
     if (result.status === 'broken') {
       // Plant the terminal sentinel on the owner's field so `getBrokenLinks`
       // (which reads terminal sentinels from the data bucket) records this
@@ -374,6 +463,8 @@ async function searchableLink(
     stack,
     store,
     dependencies,
+    path,
+    timings,
   );
 }
 
@@ -390,73 +481,85 @@ async function searchableLinksToMany(
   store: CardStore,
   makeAbsoluteURL: (reference: string) => string,
   dependencies: Set<string>,
+  path: string,
+  timings: SearchDocTimings | undefined,
 ): Promise<any[] | null> {
   // A whole-field sentinel (errored/unresolved plural) is not iterable; treat
   // as empty, same as `LinksToMany.queryableValue`.
   if (rawValue == null || isNonPresentLink(rawValue)) {
     return null;
   }
-  let out: any[] = [];
+  // Slots are independent branches: each slot's target load overlaps its
+  // siblings' (see `settleBranches`), and the output preserves slot order.
   let backing = rawArrayValues(rawValue);
-  for (let [index, item] of backing.entries()) {
-    if (item == null) {
-      continue;
-    }
-    if (isLinkError(item) || isLinkNotFound(item)) {
-      let reference = makeAbsoluteURL(item.reference);
-      // A broken searchable element stays a dependency — see `searchableLink`.
-      if (matched) {
-        dependencies.add(reference);
-      }
-      out.push({ id: reference });
-      continue;
-    }
-    if (!matched) {
-      out.push({
-        id: makeAbsoluteURL(
-          isNotLoadedValue(item) ? item.reference : (item as CardDef).id,
-        ),
-      });
-      continue;
-    }
-    let target = item as CardDef;
-    if (isNotLoadedValue(item)) {
-      // Resolve a relative reference before the load — see `searchableLink`.
-      let resolvedRef = makeAbsoluteURL(item.reference);
-      let result = await loadSearchableTarget(store, resolvedRef);
-      if (result.status === 'broken') {
-        // Plant the sentinel into the failed slot so `getBrokenLinks` records
-        // this broken searchable element (see `searchableLink`). Assign through
-        // the proxy so the mutation reaches the data bucket the diagnostic
-        // reads.
-        rawValue[index] = result.sentinel;
-        // A broken searchable element stays a dependency — see `searchableLink`.
-        dependencies.add(resolvedRef);
-        out.push({ id: resolvedRef });
-        continue;
-      }
-      target = result.card;
-    }
-    // The expanded target's data is now in the doc, so it is a dependency of
-    // the indexed card.
-    if (target.id != null) {
-      dependencies.add(makeAbsoluteURL(target.id));
-    }
-    let expanded = await searchableQueryableValue(
-      field.card,
-      target,
-      tails,
-      stack,
-      store,
-      dependencies,
-    );
-    if (expanded != null) {
-      out.push(
-        expanded.id != null
+  let out = (
+    await settleBranches(
+      backing.map((item, index) => async () => {
+        if (item == null) {
+          return undefined;
+        }
+        if (isLinkError(item) || isLinkNotFound(item)) {
+          let reference = makeAbsoluteURL(item.reference);
+          // A broken searchable element stays a dependency — see `searchableLink`.
+          if (matched) {
+            dependencies.add(reference);
+          }
+          return { id: reference };
+        }
+        if (!matched) {
+          return {
+            id: makeAbsoluteURL(
+              isNotLoadedValue(item) ? item.reference : (item as CardDef).id,
+            ),
+          };
+        }
+        let target = item as CardDef;
+        if (isNotLoadedValue(item)) {
+          // Resolve a relative reference before the load — see `searchableLink`.
+          let resolvedRef = makeAbsoluteURL(item.reference);
+          let loadStart = timings?.linkLoads ? performance.now() : 0;
+          let result = await loadSearchableTarget(store, resolvedRef);
+          timings?.linkLoads?.push({
+            path,
+            target: resolvedRef,
+            ms: performance.now() - loadStart,
+          });
+          if (result.status === 'broken') {
+            // Plant the sentinel into the failed slot so `getBrokenLinks`
+            // records this broken searchable element (see `searchableLink`).
+            // Assign through the proxy so the mutation reaches the data bucket
+            // the diagnostic reads. Slot branches run concurrently but each
+            // writes only its own index, so plants never collide.
+            rawValue[index] = result.sentinel;
+            // A broken searchable element stays a dependency — see `searchableLink`.
+            dependencies.add(resolvedRef);
+            return { id: resolvedRef };
+          }
+          target = result.card;
+        }
+        // The expanded target's data is now in the doc, so it is a dependency
+        // of the indexed card.
+        if (target.id != null) {
+          dependencies.add(makeAbsoluteURL(target.id));
+        }
+        let expanded = await searchableQueryableValue(
+          field.card,
+          target,
+          tails,
+          stack,
+          store,
+          dependencies,
+          path,
+          timings,
+        );
+        if (expanded == null) {
+          return undefined;
+        }
+        return expanded.id != null
           ? { ...expanded, id: makeAbsoluteURL(expanded.id) }
-          : expanded,
-      );
-    }
-  }
+          : expanded;
+      }),
+    )
+  ).filter((slot) => slot !== undefined);
   return out.length === 0 ? null : out;
 }

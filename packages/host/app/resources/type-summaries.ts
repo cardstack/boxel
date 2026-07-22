@@ -20,7 +20,7 @@ import {
   getBaseFilterTypeKeys,
   getFilterTypeRefs,
   getRootTypeKeys,
-} from '../utils/card-search/type-filter';
+} from '../utils/search/type-filter';
 
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
@@ -35,7 +35,15 @@ export interface TypeOption {
 type TypeSummaryItem = {
   id: string;
   type: string;
-  attributes: { displayName: string; total: number; iconHTML: string };
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+    // The `_federated-types` response tags each entry as a card-instance or a
+    // file type. A cards-only chooser hides the file entries. Optional for
+    // back-compat with the legacy response (no kind — treated as 'instance').
+    kind?: 'instance' | 'file';
+  };
   meta?: { realmURL: string };
 };
 
@@ -44,6 +52,9 @@ export interface TypeSummariesArgs {
     realmURLs: string[];
     baseFilter: Filter | undefined;
     initialSelectedTypes: ResolvedCodeRef[] | undefined;
+    // When true (a cards-only chooser), file-type entries are excluded from the
+    // picker options so a file type can't be selected against a card scope.
+    cardsOnly?: boolean;
     owner: Owner;
   };
 }
@@ -81,12 +92,16 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     });
   }
 
+  #cardsOnly = false;
+
   modify(_positional: never[], named: TypeSummariesArgs['named']) {
-    let { realmURLs, baseFilter, initialSelectedTypes, owner } = named;
+    let { realmURLs, baseFilter, initialSelectedTypes, cardsOnly, owner } =
+      named;
     setOwner(this, owner);
 
     this.#baseFilter = baseFilter;
     this.#initialSelectedTypes = initialSelectedTypes;
+    this.#cardsOnly = cardsOnly ?? false;
 
     // Only re-fetch when realmURLs change (search key changes are handled by onSearchChange)
     let realmURLsKey = realmURLs.join(',');
@@ -299,6 +314,13 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
         continue;
       }
 
+      // A cards-only chooser offers card types only — hide file-type entries so
+      // one can't be picked against the card scope (which would just return no
+      // results).
+      if (this.#cardsOnly && item.attributes.kind === 'file') {
+        continue;
+      }
+
       // Never show root types — they are internal meta types
       if (rootTypeKeys.has(codeRef)) {
         continue;
@@ -384,6 +406,7 @@ export function getTypeSummaries(
     realmURLs: string[];
     baseFilter: Filter | undefined;
     initialSelectedTypes: ResolvedCodeRef[] | undefined;
+    cardsOnly?: boolean;
   },
 ) {
   let resource = TypeSummariesResource.from(parent, () => ({
@@ -391,6 +414,7 @@ export function getTypeSummaries(
       realmURLs: getArgs().realmURLs,
       baseFilter: getArgs().baseFilter,
       initialSelectedTypes: getArgs().initialSelectedTypes,
+      cardsOnly: getArgs().cardsOnly,
       owner,
     },
   }));

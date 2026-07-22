@@ -5,6 +5,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
+import { MAX_MARKDOWN_RENDER_LENGTH } from '@cardstack/runtime-common';
+
 import RenderedMarkdown from '@cardstack/host/components/operator-mode/preview-panel/rendered-markdown';
 
 import { testRealmURL } from '../../helpers';
@@ -737,6 +739,32 @@ module('Integration | rendered-markdown', function (hooks) {
       .doesNotHaveClass(
         'markdown-bfm-broken--embedded',
         'a plain inline ref is not given a non-atom footprint',
+      );
+  });
+
+  test('over-limit content renders a notice instead of parsing markdown', async function (assert) {
+    // `.md` files reach this component at up to the 5 MB file limit, so the
+    // same render-thread guard the base template applies is needed here.
+    let content = '# Heading\n\n' + 'a'.repeat(MAX_MARKDOWN_RENDER_LENGTH);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom('[data-test-markdown-oversized]')
+      .exists('over-limit content renders the notice');
+    assert
+      .dom('.markdown-content h1')
+      .doesNotExist('markdown was not parsed into HTML');
+    assert
+      .dom('.markdown-oversized-preview')
+      .hasTextContaining(
+        '# Heading',
+        'the preview shows the raw content start',
       );
   });
 });

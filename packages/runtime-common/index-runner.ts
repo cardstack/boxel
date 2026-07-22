@@ -6,19 +6,17 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   logger,
-  hasCardExtension,
   hasExecutableExtension,
-  SupportedMimeType,
+  isCardResource,
   jobIdentity,
   Deferred,
-  isBrowserTestEnv,
   RealmPaths,
   type IndexWriter,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
-  type RealmInfo,
+  type FileErrorIndexEntry,
   type FromScratchResult,
   type IncrementalResult,
   type LastModifiedTimes,
@@ -29,50 +27,41 @@ import {
   type Reader,
   type Stats,
   type Diagnostics,
+  type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import { isCardError } from './error.ts';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
-import { canonicalURL } from './index-runner/dependency-url.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
-import { isScopedCSSRequest } from './scoped-css.ts';
+import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
   discoverInvalidations,
   type DiscoverInvalidationsResult,
 } from './index-runner/discover-invalidations.ts';
-import { visitFileForIndexing } from './index-runner/visit-file.ts';
+import {
+  renderFileForIndexing,
+  routeIndexVisitResult,
+  type IndexVisitRenderResult,
+} from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
 
-// Default module pre-warm concurrency. Serial by default: a cold/shared
-// prerender pool serves serial pre-warm by reusing a single warm tab,
-// whereas concurrent module prerenders force the pool to materialize one
-// tab per in-flight request — and that tab-startup cost outweighs the
-// parallelism for the fast definition-extraction renders pre-warm fires.
-// Raise `INDEXER_PREWARM_CONCURRENCY` only where the prerender pool is
-// pre-sized for the extra concurrent module renders; the ceiling that
-// matters is the per-affinity tab budget (`PRERENDER_AFFINITY_TAB_MAX`),
-// since a realm's pre-warm targets one prerender affinity and beyond that
-// the requests just queue at the server's per-affinity admission.
-const DEFAULT_PREWARM_CONCURRENCY = 1;
-
-// Resolve the pre-warm fan-out width from `INDEXER_PREWARM_CONCURRENCY`,
-// falling back to the default. Reads `process.env` defensively — pre-warm
-// is skipped in the browser (see `isBrowserTestEnv`), but the bundle is
-// shared, so guard against a missing `process`.
-function prewarmConcurrency(): number {
-  let raw =
-    typeof process !== 'undefined'
-      ? process.env?.INDEXER_PREWARM_CONCURRENCY
-      : undefined;
-  let parsed = raw != null && raw !== '' ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0
-    ? Math.floor(parsed)
-    : DEFAULT_PREWARM_CONCURRENCY;
-}
+// The result of a prefetched render, with any thrown error captured rather
+// than rejected so an un-awaited prefetch can't surface as an unhandled
+// rejection. `skipped` covers files the render short-circuited (ignored /
+// different realm).
+type VisitRenderOutcome =
+  | { status: 'rendered'; result: IndexVisitRenderResult }
+  | { status: 'skipped' }
+  | { status: 'error'; error: unknown };
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -89,7 +78,6 @@ export class IndexRunner {
   #auth: string;
   #realmURL: URL;
   #virtualNetwork: VirtualNetwork;
-  #realmInfo?: RealmInfo;
   #moduleCacheContext?: {
     resolvedRealmURL: string;
     cacheScope: CacheScope;
@@ -224,17 +212,23 @@ export class IndexRunner {
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
     current.#dependencyResolver.reset();
     let start = Date.now();
+    // Between-visit phase walls, assembled onto the job result's `phaseTimings`
+    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    let visitLoopMs: number | undefined;
+    let swapMs: number | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing for realm ${current.realmURL.href}`,
     );
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
     // pre-warm — so the dashboard shows it immediately. The total starts
     // at 0 and is filled in by the first `file-visited` once the
@@ -250,21 +244,23 @@ export class IndexRunner {
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
+    let mtimesMs = Date.now() - mtimesStart;
     current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+      `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${mtimesMs} ms`,
     );
     let invalidateStart = Date.now();
     let discoverResult = await current.discoverInvalidations(
       current.realmURL,
       mtimes,
     );
+    let discoverMs = Date.now() - invalidateStart;
     invalidations = discoverResult.urls.map((href) => new URL(href));
     // The from-scratch URL list lives outside the batch's invalidation set
     // until each visit writes its row; feed the loader-epoch scan up front
     // so the epoch is fixed before the enqueue and the first visit.
     current.batch.noteInvalidatedURLs(discoverResult.urls);
     current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
+      `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
     current.#notifyInvalidationsReady(
       discoverResult.urls,
@@ -272,93 +268,79 @@ export class IndexRunner {
     );
 
     let visitStart = Date.now();
+    let orderStart = Date.now();
     invalidations = sortInvalidations(invalidations, current.realmURL);
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
-    // Pre-warm the modules cache. Combines per-row deps (which catch
-    // most modules used during a from-scratch pass) with the realm-
-    // wide `.gts` / `.gjs` sweep (which catches sibling card modules
-    // referenced by string in templates — the typical
-    // `<Search @query={{filter: {type: {module: '.../cohort.gts', name: 'Cohort'}}}}>`
-    // pattern). The filesystem-mtimes walk was already paid by
-    // discoverInvalidations above; we just filter and reuse it.
-    let allRealmCardModules = Object.keys(
-      discoverResult.filesystemMtimes,
-    ).filter(hasCardExtension);
-    // Pre-warm reports each warmed module as a `file-visited`; the modules
-    // and the files visited below share one `totalFiles`, so the dashboard
-    // bar advances through pre-warming and into the visit phase.
+    let orderMs = Date.now() - orderStart;
+    // The index visit runs no module pre-warm: the from-scratch-spawned
+    // `prerender_html` job runs the sweep, since that job is where the
+    // mid-render `lookupDefinition` sub-prerenders it protects fire (the index
+    // visit runs no format components). Any residual `lookupDefinition` during
+    // an index visit falls back to the on-demand read-through, which is safe:
+    // the PagePool materializes a tab for the sub-prerender rather than
+    // queueing it behind the caller.
     let filesCompleted = 0;
-    let preWarmedCount = await current.preWarmModulesTable(
-      invalidations,
-      allRealmCardModules,
-      ({ moduleUrl, filesCompleted: completed, totalFiles }) => {
-        filesCompleted = completed;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: moduleUrl,
-          filesCompleted,
-          totalFiles,
-        });
-      },
+    let totalFiles = invalidations.length;
+    // One batched read of every visit's created-at + content hash/size, so the
+    // per-visit lookups below are served from memory rather than two DB
+    // round-trips each across the whole pass.
+    await current.batch.prefetchFileMeta(
+      current.#visitLocalPaths(invalidations),
     );
-    let totalFiles = preWarmedCount + invalidations.length;
+    let loopStart = Date.now();
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     try {
-      for (let invalidation of invalidations) {
-        // Resume guard. If a previous attempt of this same job already
-        // wrote URL_X to the working table AND the EFS mtime hasn't
-        // changed since, skip the visit — the existing working row is
-        // still authoritative and `applyBatchUpdates` will promote it
-        // (the constructor pre-seeded it into `#invalidations`). If
-        // mtime DID change, fall through to a normal visit so the
-        // upsert in `updateEntry` overwrites the resumed row with
-        // current content.
-        let resumedMtime = resumedRows.get(invalidation.href);
-        if (resumedMtime !== undefined) {
-          let currentMtime = discoverResult.filesystemMtimes[invalidation.href];
-          if (currentMtime !== undefined && currentMtime === resumedMtime) {
-            resumedSkipped++;
-            filesCompleted++;
-            current.#onProgress?.({
-              type: 'file-visited',
-              realmURL: current.realmURL.href,
-              jobId: current.#jobInfo.jobId,
-              url: invalidation.href,
-              filesCompleted,
-              totalFiles,
-            });
-            continue;
+      await current.#runVisitLoop(invalidations, {
+        // Resume guard. If a previous attempt of this same job already wrote
+        // URL_X to the working table AND the EFS mtime hasn't changed since,
+        // skip the visit — the existing working row is still authoritative
+        // and `applyBatchUpdates` will promote it (the constructor pre-seeded
+        // it into `#invalidations`). If mtime DID change, fall through to a
+        // normal visit so the upsert in `updateEntry` overwrites the resumed
+        // row with current content.
+        skipReason: (url) => {
+          let resumedMtime = resumedRows.get(url.href);
+          if (resumedMtime === undefined) {
+            return undefined;
           }
-        }
-        await current.tryToVisit(invalidation);
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles,
-        });
-      }
+          let currentMtime = discoverResult.filesystemMtimes[url.href];
+          return currentMtime !== undefined && currentMtime === resumedMtime
+            ? 'resumed'
+            : undefined;
+        },
+        onSkip: () => {
+          resumedSkipped++;
+        },
+        onVisited: (url) => {
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: url.href,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
         );
       }
+      visitLoopMs = Date.now() - loopStart;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      swapMs = Date.now() - finalizeStart;
       current.#perfLog.debug(
-        `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
+        `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
@@ -396,6 +378,16 @@ export class IndexRunner {
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,
+      phaseTimings: {
+        totalMs: Date.now() - start,
+        setupMs,
+        mtimesMs,
+        discoverMs,
+        orderMs,
+        ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
+        writeMs: current.batch.writeMs,
+        ...(swapMs !== undefined ? { swapMs } : {}),
+      },
     };
   }
 
@@ -409,6 +401,10 @@ export class IndexRunner {
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
     let start = Date.now();
+    // Between-visit phase walls, assembled onto the job result's `phaseTimings`
+    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    let visitLoopMs: number | undefined;
+    let swapMs: number | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -422,11 +418,13 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
 
+    let setupStart = Date.now();
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
     );
+    let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
     // dashboard shows it immediately. The total starts at 0 and the
     // first `file-visited` fills it in once the counts are known.
@@ -438,37 +436,10 @@ export class IndexRunner {
       totalFiles: 0,
       files: [],
     });
+    let discoverStart = Date.now();
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
-    await current.batch.invalidate(urls);
-    current.#notifyInvalidationsReady(
-      current.batch.invalidations,
-      new Set(
-        [...operations]
-          .filter(([, operation]) => operation === 'delete')
-          .map(([href]) => href),
-      ),
-    );
-    let invalidations = sortInvalidations(
-      current.batch.invalidations.map((href) => new URL(href)),
-      current.realmURL,
-    );
-    invalidations =
-      await current.#dependencyResolver.orderInvalidationsByDependencies(
-        invalidations,
-      );
-    let hasExecutableInvalidation = invalidations.some((url) =>
-      hasExecutableExtension(url.href),
-    );
-    if (hasExecutableInvalidation) {
-      if (!current.#shouldClearCacheForNextRender) {
-        current.#log.debug(
-          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-        );
-      }
-      current.#scheduleClearCacheForNextRender();
-    }
     // Incremental indexing does no module pre-warming. Query-backed field
     // expansion during a prerender `_search` reads the `queryFieldDefs`
     // pre-extracted onto each result instance's stored meta
@@ -479,45 +450,116 @@ export class IndexRunner {
     // needs outside it resolve through the on-demand `lookupDefinition`
     // read-through. There is nothing left for a pre-warm pass to
     // front-load here.
+    //
+    // Invalidation, dependency ordering, and the file-meta prefetch all run
+    // before #runVisitLoop, so its per-URL error isolation cannot cover a
+    // throw in this phase. Left uncaught, a setup-phase failure would drop the
+    // whole batch with nothing recorded — the silent drop. #recordSetupPhaseError
+    // writes error docs for the job's URLs; the rethrow still rejects the job
+    // so the failure stays visible to job accounting.
+    let discoverMs = 0;
+    let orderMs = 0;
+    let invalidations: URL[] = [];
+    let totalFiles = 0;
     let filesCompleted = 0;
-    let totalFiles = invalidations.length;
-
-    let hrefs = urls.map((u) => u.href);
-    let resumedRows = current.batch.resumedRows;
-    let resumedSkipped = 0;
+    let hrefs: string[] = [];
+    // The outer try's finally covers the setup phase too, so a setup-phase
+    // throw still emits the terminal progress event and releases the
+    // prerender-server affinity rather than leaking them.
     try {
-      for (let invalidation of invalidations) {
-        if (
-          operations.get(invalidation.href) === 'delete' &&
-          hrefs.includes(invalidation.href)
-        ) {
-          // file is deleted, there is nothing to visit
-        } else if (resumedRows.has(invalidation.href)) {
-          // Previous attempt of this job already produced a working
-          // row for this URL. `args.changes` is the deterministic seed
-          // for incremental jobs; if the file changed again, that's a
-          // different changeset enqueued as a separate job. Skip.
-          resumedSkipped++;
-        } else {
-          await current.tryToVisit(invalidation);
+      try {
+        await current.batch.invalidate(urls);
+        discoverMs = Date.now() - discoverStart;
+        current.#notifyInvalidationsReady(
+          current.batch.invalidations,
+          new Set(
+            [...operations]
+              .filter(([, operation]) => operation === 'delete')
+              .map(([href]) => href),
+          ),
+        );
+        let orderStart = Date.now();
+        invalidations = sortInvalidations(
+          current.batch.invalidations.map((href) => new URL(href)),
+          current.realmURL,
+        );
+        invalidations =
+          await current.#dependencyResolver.orderInvalidationsByDependencies(
+            invalidations,
+          );
+        orderMs = Date.now() - orderStart;
+        let hasExecutableInvalidation = invalidations.some((url) =>
+          hasExecutableExtension(url.href),
+        );
+        if (hasExecutableInvalidation) {
+          if (!current.#shouldClearCacheForNextRender) {
+            current.#log.debug(
+              `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+            );
+          }
+          current.#scheduleClearCacheForNextRender();
         }
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles,
-        });
+        totalFiles = invalidations.length;
+        hrefs = urls.map((u) => u.href);
+        // One batched read of the invalidation set's created-at + content
+        // hash/size so the per-visit lookups are served from memory. Deletes
+        // and resumed URLs that get skipped below just leave unused cache
+        // entries — harmless.
+        await current.batch.prefetchFileMeta(
+          current.#visitLocalPaths(invalidations),
+        );
+      } catch (setupErr) {
+        await current.#recordSetupPhaseError(urls, operations, setupErr);
+        throw setupErr;
       }
+      let resumedRows = current.batch.resumedRows;
+      let resumedSkipped = 0;
+      let loopStart = Date.now();
+      await current.#runVisitLoop(invalidations, {
+        skipReason: (url) => {
+          if (
+            operations.get(url.href) === 'delete' &&
+            hrefs.includes(url.href)
+          ) {
+            // file is deleted, there is nothing to visit
+            return 'delete';
+          }
+          // Previous attempt of this job already produced a working row for
+          // this URL. `args.changes` is the deterministic seed for
+          // incremental jobs; if the file changed again, that's a different
+          // changeset enqueued as a separate job. Skip.
+          if (resumedRows.has(url.href)) {
+            return 'resumed';
+          }
+          return undefined;
+        },
+        onSkip: (_url, reason) => {
+          if (reason === 'resumed') {
+            resumedSkipped++;
+          }
+        },
+        onVisited: (url) => {
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: url.href,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
           `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
         );
       }
+      visitLoopMs = Date.now() - loopStart;
 
+      let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
+      swapMs = Date.now() - finalizeStart;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -552,6 +594,15 @@ export class IndexRunner {
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,
+      phaseTimings: {
+        totalMs: Date.now() - start,
+        setupMs,
+        discoverMs,
+        orderMs,
+        ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
+        writeMs: current.batch.writeMs,
+        ...(swapMs !== undefined ? { swapMs } : {}),
+      },
     };
   }
 
@@ -576,9 +627,33 @@ export class IndexRunner {
     });
   }
 
-  private async tryToVisit(url: URL) {
+  // Local paths for the URLs this pass will visit, keyed the same way the
+  // visit's own file-meta lookups are (`realmPaths.local(url)`). URLs outside
+  // this realm are skipped — the visit skips them too. Handed to
+  // `batch.prefetchFileMeta` so the per-visit created-at / content-meta lookups
+  // are served from one batched read instead of a round-trip each.
+  #visitLocalPaths(urls: URL[]): string[] {
+    let paths: string[] = [];
+    for (let url of urls) {
+      try {
+        paths.push(this.#realmPaths.local(url));
+      } catch (_e) {
+        // different realm — not visited, so nothing to prefetch
+      }
+    }
+    return paths;
+  }
+
+  // The render (tab-bound) half of a visit. Reads the file and runs the
+  // prerender round-trip(s) but never touches the index tables, so a
+  // prefetched render can run while the previous visit's rows are still being
+  // written. Rejections are folded into the returned outcome — a prefetched
+  // render sits un-awaited for a tick, and an escaping rejection there would
+  // be an unhandled-rejection rather than something the loop can route to a
+  // file-error row.
+  async #renderVisit(url: URL): Promise<VisitRenderOutcome> {
     try {
-      await visitFileForIndexing({
+      let result = await renderFileForIndexing({
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,
@@ -594,17 +669,267 @@ export class IndexRunner {
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
-        indexCardWithResult: async (args) => await this.indexCard(args),
-        indexFileWithResults: async (args) => await this.indexFile(args),
       });
-    } catch (err: any) {
-      if (isCardError(err) && err.status === 404) {
-        this.#log.info(
-          `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
-        );
-      } else {
-        throw err;
+      return result ? { status: 'rendered', result } : { status: 'skipped' };
+    } catch (error) {
+      return { status: 'error', error };
+    }
+  }
+
+  // The bookkeeping + row-write (worker/DB-bound) half of a visit. Runs in
+  // the shadow of the next visit's render.
+  async #finishVisit(result: IndexVisitRenderResult): Promise<void> {
+    await routeIndexVisitResult(result, {
+      indexCardWithResult: async (args) => await this.indexCard(args),
+      indexFileWithResults: async (args) => await this.indexFile(args),
+    });
+  }
+
+  // Render-ahead visit loop. Visits are FINISHED strictly in order — the
+  // post-render bookkeeping reads prior visits' index rows (dependency-error
+  // propagation), and the visit order sequences dependencies before their
+  // dependents — but the NEXT visit's render is started before the current
+  // visit's bookkeeping + row write, so the tab renders file N+1 while the
+  // worker writes file N. Since a render reads only production `boxel_index`
+  // (never this pass's uncommitted `boxel_index_working` rows), rendering
+  // ahead cannot observe a write that hasn't landed yet.
+  //
+  // `skipReason` suppresses the render for URLs a prior attempt already
+  // resolved (`'resumed'`) or that were deleted (`'delete'`); it must be pure
+  // because the prefetch look-ahead and the finish cursor each call it. Every
+  // URL still reports progress in order via `onVisited`.
+  async #runVisitLoop(
+    invalidations: URL[],
+    {
+      skipReason,
+      onSkip,
+      onVisited,
+    }: {
+      skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
+      onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
+      onVisited: (url: URL) => void;
+    },
+  ): Promise<void> {
+    let n = invalidations.length;
+    let renders = new Map<number, Promise<VisitRenderOutcome>>();
+    // Start the render for the next non-skipped URL at or after `from`,
+    // keeping exactly one render in flight ahead of the finish cursor.
+    let prefetch = (from: number) => {
+      for (let j = from; j < n; j++) {
+        if (renders.has(j)) {
+          return;
+        }
+        if (skipReason(invalidations[j])) {
+          continue;
+        }
+        renders.set(j, this.#renderVisit(invalidations[j]));
+        return;
       }
+    };
+    prefetch(0);
+    for (let i = 0; i < n; i++) {
+      let url = invalidations[i];
+      let reason = skipReason(url);
+      if (reason) {
+        onSkip(url, reason);
+        onVisited(url);
+        prefetch(i + 1);
+        continue;
+      }
+      let outcome = await renders.get(i)!;
+      renders.delete(i);
+      // Kick off the next render now so its round-trip overlaps the finish
+      // work below.
+      prefetch(i + 1);
+      try {
+        if (outcome.status === 'error') {
+          throw outcome.error;
+        }
+        if (outcome.status === 'rendered') {
+          await this.#finishVisit(outcome.result);
+        }
+      } catch (err) {
+        await this.#handleVisitError(url, err);
+      }
+      onVisited(url);
+    }
+  }
+
+  async #handleVisitError(url: URL, err: any): Promise<void> {
+    if (isCardError(err) && err.status === 404) {
+      this.#log.info(
+        `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
+      );
+      return;
+    }
+    // A transport-level failure of the visit — its prerender-server request
+    // timing out/aborting, or a reader/network error — never reaches
+    // performCardIndexing/performFileIndexing's own error-entry construction:
+    // renderFileForIndexing rejects before `#finishVisit` routes it. (HTML
+    // prerendering is a separate job; the request here is the index pass's own
+    // visit.) Left uncaught, one file's failure propagates out of the
+    // fromScratch/incremental visit loop, skips batch.done(), and discards
+    // every other successfully-visited file's rows for the whole job. Persist
+    // a file-error row instead so the failure is isolated to this URL,
+    // matching the error_doc pattern used for in-band render errors.
+    let message = coerceErrorMessage(
+      err,
+      `Indexing failed for ${url.href} with no error message (${jobIdentity(this.#jobInfo)})`,
+    );
+    this.#log.warn(
+      `${jobIdentity(this.#jobInfo)} failed to index ${url.href}, recording file-error: ${message}`,
+    );
+    await this.#bufferErrorEntriesFor(this.batch, url, err, message);
+  }
+
+  // Buffer a file-error row (and, when the URL is or was a card instance, an
+  // instance-error row) for `url` into `batch`, preserving last-known-good
+  // content. Shared by the per-visit failure isolation (#handleVisitError)
+  // and the setup-phase failure path (#recordSetupPhaseError) so both record
+  // the same shape of error doc.
+  async #bufferErrorEntriesFor(
+    batch: Batch,
+    url: URL,
+    err: any,
+    message: string,
+  ): Promise<void> {
+    let error = isCardError(err)
+      ? serializableError(err)
+      : serializableError(
+          Object.assign(new CardError(message, { status: 500 }), {
+            stack: (err as Error)?.stack,
+          }),
+        );
+    error.message = message;
+    let fileEntry: FileErrorIndexEntry = {
+      type: 'file-error',
+      error,
+    };
+    await batch.bufferEntry(url, fileEntry);
+    this.#dependencyResolver.invalidateRelationshipDependencyRowCache(url);
+    this.stats.fileErrors++;
+    // `Batch.invalidate()` already tombstoned every type this URL previously
+    // had in the index — for an existing card that's both `instance` and
+    // `file`. Overwriting only the `file` tombstone above would let
+    // batch.done() promote the untouched `instance` tombstone, silently
+    // removing a previously-good card from search over a transient error. The
+    // index is the oracle for "was this a card?": the batch records which live
+    // row types it tombstoned, so an existing card is protected even when the
+    // file can't be read — which may be exactly how the visit failed.
+    // Re-parsing the source is only the fallback for a brand-new file, which
+    // has no prior row to protect but should still surface its failure as an
+    // instance error when it's a card. (The setup-phase recovery seeds this
+    // batch's live types from the production index first — see
+    // seedLiveTypesFromProduction — so an existing card is classified from the
+    // index there too, and the reparse runs only for genuinely new files.)
+    let isCardInstance =
+      batch.tombstonedLiveTypes(url.href)?.includes('instance') ?? false;
+    if (!isCardInstance && url.href.endsWith('.json')) {
+      try {
+        let fileRef = await this.#reader.readFile(url);
+        let resource = fileRef?.content
+          ? (JSON.parse(fileRef.content)?.data as unknown)
+          : undefined;
+        isCardInstance = Boolean(resource && isCardResource(resource));
+      } catch (parseErr) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+        );
+      }
+    }
+    if (isCardInstance) {
+      let instanceEntry: InstanceErrorIndexEntry = {
+        type: 'instance-error',
+        error,
+      };
+      await batch.bufferEntry(url, instanceEntry);
+      this.stats.instanceErrors++;
+    }
+  }
+
+  // A throw during the invalidation / dependency-ordering / file-meta-prefetch
+  // phase happens before #runVisitLoop starts, so no per-file visit ever runs
+  // to attach an error to — and the in-flight batch's working table holds only
+  // fan-out tombstones that were never re-visited, so promoting it via
+  // `done()` would delete those dependents. Record the failure on a FRESH
+  // batch scoped to just the URLs the job was handed: buffer their error rows
+  // and promote only those, leaving the rest of the index untouched. The
+  // caller rethrows afterward, rejecting the job — a thrown error gets no
+  // in-queue retry (only an expired reservation does), so these error docs
+  // are the durable signal that the batch never indexed. They never wedge the
+  // URLs, either: error rows are excluded from resume (`loadResumedRows`) and
+  // are invalidated like any row, so an expired-reservation re-attempt or any
+  // later write touching the URLs re-visits them and replaces the error with
+  // fresh content.
+  async #recordSetupPhaseError(
+    urls: URL[],
+    operations: Map<string, 'update' | 'delete'>,
+    err: any,
+  ): Promise<void> {
+    // Deletes are excluded: a delete whose job failed at setup must not be
+    // half-applied. Recording an error would resurrect the removed card, and
+    // letting the in-flight tombstone promote would apply a delete from a
+    // failed job. Leave production untouched — the stale live row clears when
+    // a later pass visits the URL (the visit 404s on the missing file and its
+    // tombstone promotes) or on the next full reindex.
+    let recordUrls = urls.filter((u) => operations.get(u.href) !== 'delete');
+    if (recordUrls.length === 0) {
+      return;
+    }
+    let message = coerceErrorMessage(
+      err,
+      `Indexing failed during the setup phase with no error message (${jobIdentity(this.#jobInfo)})`,
+    );
+    // Sample the URL list: a bulk push is exactly when this fires, and
+    // logging hundreds of URLs in one line defeats log-line limits and
+    // searchability. The error docs carry the full per-URL detail.
+    let sample = recordUrls
+      .slice(0, 5)
+      .map((u) => u.href)
+      .join(', ');
+    this.#log.warn(
+      `${jobIdentity(this.#jobInfo)} setup phase failed for ${recordUrls.length} URLs (${sample}${
+        recordUrls.length > 5 ? ', …' : ''
+      }), recording error docs: ${message}`,
+    );
+    try {
+      let errorBatch = await this.#indexWriter.createBatch(
+        this.realmURL,
+        this.#virtualNetwork,
+        this.#jobInfo,
+      );
+      // Seed the live-card oracle from the production index so an existing
+      // card is written as an instance-error — overwriting the `instance`
+      // tombstone the in-flight batch left in the shared working table —
+      // rather than having that tombstone promoted and the card deleted.
+      await errorBatch.seedLiveTypesFromProduction(recordUrls);
+      for (let url of recordUrls) {
+        if (errorBatch.resumedRows.has(url.href)) {
+          // A prior attempt of this same job already indexed this URL and
+          // `done()` will promote that good row — don't clobber it with an
+          // error just because this attempt's invalidation phase threw.
+          continue;
+        }
+        try {
+          await this.#bufferErrorEntriesFor(errorBatch, url, err, message);
+        } catch (bufferErr) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} failed to buffer setup-phase error row for ${url.href}: ${(bufferErr as Error)?.message}`,
+          );
+        }
+      }
+      // Carry realm_meta forward rather than recomputing it: the working
+      // table still holds the failed pass's un-promoted fan-out tombstones,
+      // and a recompute over that state would undercount live dependents in
+      // the type summary until the next successful pass.
+      await errorBatch.done({ carryForwardRealmMeta: true });
+    } catch (recordErr) {
+      // Recording is best-effort: if the failure was a DB outage the recovery
+      // write fails too. The caller still rethrows the original error, so the
+      // job rejects and the failure stays visible even without error docs.
+      this.#log.error(
+        `${jobIdentity(this.#jobInfo)} failed to record setup-phase error docs for ${this.realmURL.href}: ${(recordErr as Error)?.message} (original: ${message})`,
+      );
     }
   }
 
@@ -619,319 +944,16 @@ export class IndexRunner {
     return this.#realmURL;
   }
 
-  private async ensureRealmInfo(): Promise<RealmInfo> {
-    if (!this.#realmInfo) {
-      let realmInfoURL = `${this.realmURL}_info`;
-      let realmInfoResponse = await this.#fetch(realmInfoURL, {
-        method: 'QUERY',
-        headers: { Accept: SupportedMimeType.RealmInfo },
-      });
-      if (!realmInfoResponse.ok) {
-        let body = '<unable to read response body>';
-        try {
-          body = await realmInfoResponse.text();
-        } catch (_err) {
-          // fall back to placeholder body text
-        }
-        throw new Error(
-          `Failed to load realm info for indexing from ${realmInfoURL}: ` +
-            `${realmInfoResponse.status} ${realmInfoResponse.statusText}. ` +
-            `Response body: ${body}`,
-        );
-      }
-      let payload: unknown;
-      try {
-        payload = await realmInfoResponse.json();
-      } catch (err: unknown) {
-        throw new Error(
-          `Failed to parse realm info response from ${realmInfoURL} as JSON: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-      this.#realmInfo = (
-        payload as { data?: { attributes?: RealmInfo } }
-      )?.data?.attributes;
-    }
-    if (!this.#realmInfo) {
-      throw new Error('Unable to load realm info for indexing');
-    }
-    return this.#realmInfo;
-  }
-
   private async getModuleCacheContext() {
     if (this.#moduleCacheContext) {
       return this.#moduleCacheContext;
     }
-    let realmInfo = await this.ensureRealmInfo();
-    let isPublic = realmInfo.visibility === 'public';
-    this.#moduleCacheContext = {
-      resolvedRealmURL: this.realmURL.href,
-      cacheScope: isPublic ? 'public' : 'realm-auth',
-      authUserId: isPublic ? '' : this.#realmOwnerUserId,
-    };
+    this.#moduleCacheContext = await resolveModuleCacheContext({
+      fetch: this.#fetch,
+      realmURL: this.realmURL,
+      realmOwnerUserId: this.#realmOwnerUserId,
+    });
     return this.#moduleCacheContext;
-  }
-
-  // Populate the `modules` table for every module the upcoming visit
-  // loop is likely to need, before the file-visit phase fires.
-  //
-  // Why: a file render that fires a `_federated-search` calling
-  // `populateQueryFields` → `lookupDefinition` for a definition not
-  // in the modules cache triggers a nested prerender. That nested
-  // prerender enters the same affinity-scoped tab queue the original
-  // render is occupying, deadlocking the pool (PR #4777 papered over
-  // this with `cacheOnlyDefinitions:true`). Pre-warming the modules
-  // table before the visit loop fires means `lookupDefinition` hits
-  // a populated row instead of spawning a sub-prerender.
-  //
-  // Signal sources, in priority order:
-  //   1. Existing `boxel_index.deps` — the runtime-captured dep list
-  //      from the URL's prior successful render. Strongest signal.
-  //   2. `adoptsFrom.module` read from disk — used for novel `.json`
-  //      URLs without a prior `deps` row.
-  //   3. The URL itself — used for novel executable files; the file
-  //      IS a module, pre-warm it directly.
-  //
-  // Cache hits are O(1) DB reads inside DefinitionLookup. Cache
-  // misses go through the read-through path
-  // (loadDefinitionCacheEntryUncached → getModuleDefinitionsViaPrerenderer
-  // → persistDefinitionCacheEntry), the same flow `lookupDefinition`
-  // uses; DefinitionLookup owns the in-flight dedup and the cross-
-  // process coalescer, so two callers asking for the same URL share
-  // one prerender.
-  //
-  // Failures here are warned but do not fail the batch — a mid-render
-  // sub-prerender will still fire on demand if pre-warm misses a
-  // module.
-  // Returns the number of modules pre-warmed. Callers fold this into the
-  // job's `totalFiles` so the dashboard progress bar covers pre-warming +
-  // the visit phase as one total, and `onModuleWarmed` advances the bar as
-  // each module lands. Returns 0 when pre-warm is skipped (in-browser, no
-  // candidates, or an unresolvable cache context), so those modules don't
-  // inflate the total.
-  private async preWarmModulesTable(
-    invalidations: URL[],
-    allRealmCardModules: string[] = [],
-    onModuleWarmed?: (progress: {
-      moduleUrl: string;
-      filesCompleted: number;
-      totalFiles: number;
-    }) => void,
-  ): Promise<number> {
-    // Pre-warm exists to keep the prerender server's affinity-scoped tab
-    // pool from deadlocking when a mid-render `lookupDefinition` fires a
-    // same-affinity sub-`prerenderModule`. The in-browser realm (host
-    // tests run a Realm + IndexRunner inside a Chrome tab) has no separate
-    // prerender server and no tab pool, so pre-warm is pointless there.
-    // It is also actively harmful: the in-browser realm shares the global
-    // card-reference prefix registry with the host, so populating the
-    // definition cache before the host registers a prefix bakes in keys
-    // the prefixed reader can't match. A real server never sees this — it
-    // only receives resolved URLs over the wire. Skip pre-warm in-browser.
-    if (isBrowserTestEnv()) {
-      return 0;
-    }
-    if (invalidations.length === 0 && allRealmCardModules.length === 0) {
-      return 0;
-    }
-    let preWarmStart = Date.now();
-
-    // Base layer: every `.gts` / `.gjs` file in the realm, regardless of
-    // whether it appears in this batch's invalidation set. Catches sibling
-    // card modules referenced by *string* in templates (e.g.
-    // `<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`)
-    // — those don't appear in any instance's runtime `deps`. Without
-    // this layer the search fires a same-affinity `prerenderModule`
-    // mid-card-render at lookup time, which is the wait-shape the
-    // PagePool's tab-materialization for module/command callers is
-    // meant to relieve. This realm-wide sweep runs only on from-scratch
-    // indexing, where the module cache is cold by definition; incremental
-    // indexing does no pre-warming (the cost of this sweep is O(realm
-    // module count), not O(files changed)).
-    //
-    // `.gts` / `.gjs` only is an optimization, not a correctness gate:
-    // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input
-    // cards). If pre-warm misses such a module, the on-demand
-    // `lookupDefinition` read-through during the visit fires a
-    // `prerenderModule` for it — safe because the PagePool now
-    // materializes a tab for the sub-prerender instead of queueing it
-    // behind the render that triggered the lookup. Restricting the
-    // sweep to the extensions where cards live almost exclusively
-    // avoids paying the prerender cost on every reindex for files that
-    // rarely define a card (typical realms have many helper `.ts`
-    // files alongside their cards).
-    let toWarm = new Set<string>(allRealmCardModules);
-
-    let hrefs = invalidations.map((u) => u.href);
-    let existingRows = await this.batch.getDependencyRows(hrefs);
-    let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
-    for (let row of existingRows) {
-      // Prefer rows that actually carry deps so the lookup below
-      // returns the strongest signal available for each URL.
-      let existing = bestByUrl.get(row.url);
-      if (!existing || (!existing.deps?.length && row.deps?.length)) {
-        bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
-      }
-    }
-
-    let novelJsonUrls: URL[] = [];
-    for (let url of invalidations) {
-      // Module files in the invalidation set are deps that instances
-      // in the same batch will consume — pre-warm them directly. This
-      // covers from-scratch and atomic-update batches where most rows
-      // have no prior `deps` data yet. Unlike the realm-wide layer
-      // above, this includes `.ts` / `.js` helpers — only the ones the
-      // batch is actually touching, so cost is bounded by invalidation
-      // size rather than realm size.
-      if (hasExecutableExtension(url.href)) {
-        toWarm.add(url.href);
-      }
-      let row = bestByUrl.get(url.href);
-      if (row?.deps?.length) {
-        for (let dep of row.deps) {
-          let resolved = canonicalURL(dep, url.href, this.#virtualNetwork);
-          // `.json` marks an instance dep and `.glimmer-scoped.css`
-          // marks an inline-styles artifact; everything else in the
-          // deps array is a module URL (stored extensionless after
-          // normalizeModuleURL / normalizeDependency).
-          if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
-            toWarm.add(resolved);
-          }
-        }
-      } else if (url.href.endsWith('.json')) {
-        novelJsonUrls.push(url);
-      }
-    }
-    for (let url of novelJsonUrls) {
-      let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
-      // adoptsFrom.module is always a module reference. The most common
-      // form is relative + extensionless (e.g. `"../author"`), which
-      // canonicalizes to an extensionless URL; gating on
-      // hasExecutableExtension would drop those entirely and leave
-      // pre-warm missing exactly the module it is supposed to prime.
-      if (adoptsFromModule) {
-        toWarm.add(adoptsFromModule);
-      }
-    }
-
-    if (toWarm.size === 0) {
-      return 0;
-    }
-
-    // Supply the cache context explicitly. The worker constructs a bare
-    // `CachingDefinitionLookup` with no registered realm, so the
-    // self-resolving `getCachedDefinitions` would return null from
-    // `buildLookupContext` and persist nothing — pre-warm would log
-    // success while doing nothing. This is the same context the read-only
-    // batch reader uses (`getModuleCacheContext` → `getCachedDefinitionsBatch`).
-    //
-    // Resolving the context fetches realm `_info`, which can transiently
-    // fail. Pre-warm is best-effort, so a failure here must degrade to a
-    // warn/skip — the visit phase still populates on demand — rather than
-    // throwing out of this method and aborting the whole indexing run.
-    let resolvedRealmURL: string;
-    let cacheScope: CacheScope;
-    let authUserId: string;
-    try {
-      ({ resolvedRealmURL, cacheScope, authUserId } =
-        await this.getModuleCacheContext());
-    } catch (err) {
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} skipping module pre-warm: could not resolve cache context for realm ${this.realmURL.href}; the visit phase will populate on demand`,
-        err,
-      );
-      return 0;
-    }
-
-    // The visit-phase reader (the realm-server's realm-scoped lookup)
-    // keys a private realm's modules cache on (realm-auth, realm-owner
-    // user id). Writing a different key — e.g. an empty user id — would
-    // replace the silent no-op with a silent *mismatch*: pre-warm would
-    // persist rows the reader never reads. A private realm with no owner
-    // user id is a misconfiguration that should never happen
-    // (`realmOwnerUserId` is derived from the realm username); if it does,
-    // skip pre-warm and let the visit phase populate on demand rather than
-    // writing keys the reader can't read.
-    if (cacheScope === 'realm-auth' && !authUserId) {
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} skipping module pre-warm for private realm ${this.realmURL.href}: empty cache user id would write cache keys the visit phase cannot read`,
-      );
-      return 0;
-    }
-
-    // Pre-warmed modules and the files visited below share one progress
-    // total, so the dashboard bar spans both phases.
-    let totalFiles = toWarm.size + invalidations.length;
-
-    // Drain the populate set with a bounded worker pool (serial by
-    // default — see DEFAULT_PREWARM_CONCURRENCY). Each populate fires a
-    // `prerenderModule` on a cache miss; DefinitionLookup owns the
-    // in-flight dedup and cross-process coalescer, so different modules
-    // run independently while same-URL callers share one prerender.
-    let urls = [...toWarm];
-    let failed = 0;
-    let warmed = 0;
-    let nextIndex = 0;
-    let concurrency = Math.max(1, Math.min(prewarmConcurrency(), urls.length));
-    let warmOne = async (): Promise<void> => {
-      // `nextIndex++` is atomic between awaits (single-threaded event
-      // loop), so each worker claims a distinct URL.
-      for (let i = nextIndex++; i < urls.length; i = nextIndex++) {
-        try {
-          await this.#definitionLookup.populateDefinitionCacheEntry({
-            moduleURL: urls[i],
-            realmURL: this.realmURL.href,
-            resolvedRealmURL,
-            cacheScope,
-            cacheUserId: authUserId,
-            prerenderUserId: this.#realmOwnerUserId,
-            priority: this.#jobPriority,
-          });
-        } catch {
-          failed += 1;
-        }
-        // Advance the shared progress total as each module lands. Under
-        // concurrency the completion order isn't the input order, but the
-        // count still climbs monotonically — all the dashboard bar needs.
-        warmed += 1;
-        onModuleWarmed?.({
-          moduleUrl: urls[i],
-          filesCompleted: warmed,
-          totalFiles,
-        });
-      }
-    };
-    await Promise.all(Array.from({ length: concurrency }, () => warmOne()));
-    if (failed > 0) {
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} ${failed} of ${urls.length} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
-      );
-    }
-
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${urls.length} failed=${failed} concurrency=${concurrency})`,
-    );
-    return warmed;
-  }
-
-  async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
-    try {
-      let fileRef = await this.#reader.readFile(url);
-      if (!fileRef?.content) {
-        return undefined;
-      }
-      let doc = JSON.parse(fileRef.content) as {
-        data?: { meta?: { adoptsFrom?: { module?: unknown } } };
-      };
-      let module = doc?.data?.meta?.adoptsFrom?.module;
-      if (typeof module !== 'string') {
-        return undefined;
-      }
-      return canonicalURL(module, url.href, this.#virtualNetwork);
-    } catch {
-      return undefined;
-    }
   }
 
   #scheduleClearCacheForNextRender() {
@@ -1110,7 +1132,7 @@ export class IndexRunner {
       dependencyResolver: this.#dependencyResolver,
       virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
-        await this.batch.updateEntry(entryURL, entry);
+        await this.#writeEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
           entryURL,
         );
@@ -1130,7 +1152,7 @@ export class IndexRunner {
     entry: InstanceEntry | InstanceErrorIndexEntry,
   ) {
     let normalizedURL = assertURLEndsWithJSON(instanceURL);
-    await this.batch.updateEntry(normalizedURL, entry);
+    await this.#writeEntry(normalizedURL, entry);
     this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
       normalizedURL,
     );
@@ -1139,6 +1161,15 @@ export class IndexRunner {
     } else {
       this.stats.instanceErrors++;
     }
+  }
+
+  // The single chokepoint every `boxel_index_working` row write goes through.
+  // Hands the row to the batch's write-behind buffer rather than upserting it
+  // inline, so the visit loop can start the next file's render while this row
+  // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
+  // times the physical writes; the job result reads `batch.writeMs`.
+  async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    await this.batch.bufferEntry(url, entry);
   }
 }
 

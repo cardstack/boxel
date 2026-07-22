@@ -5,7 +5,10 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import type { ToolRequest } from '@cardstack/runtime-common/commands';
+import {
+  AI_BOT_EXECUTOR,
+  type ToolRequest,
+} from '@cardstack/runtime-common/commands';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -21,6 +24,9 @@ export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
   @tracked toolCallStatus?: ToolCallStatus;
   @tracked toolResultFileDef?: SerializedFile;
+  // origin_server_ts of the event whose chunk last wrote toolRequest, so
+  // builder passes finishing out of order can't regress it to stale data.
+  toolRequestEventTs = 0;
 
   constructor(
     public message: Message,
@@ -57,6 +63,12 @@ export default class MessageTool {
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
     return this.toolRequest.executedBy;
+  }
+
+  // ai-bot fulfilled this tool call itself (e.g. readRealmFile), so the host
+  // shows only a status indicator for it — never an Apply button.
+  get isBotExecuted() {
+    return this.executedBy === AI_BOT_EXECUTOR;
   }
 
   get arguments() {

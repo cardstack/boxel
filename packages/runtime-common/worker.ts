@@ -38,6 +38,45 @@ export interface Stats extends JSONTypes.Object {
   totalIndexEntries: number;
 }
 
+// Wall-clock of each phase of an index job outside the per-row server render.
+// Populated by the IndexRunner and returned alongside `stats` on the job
+// result (persisted to `jobs.result.phaseTimings`), so the ~one-in-four of the
+// job wall that falls between server renders decomposes into measured buckets.
+// The per-row server render and per-visit client overhead
+// (`boxel_index.diagnostics`) account for the rest. Kept off `Stats` — which is
+// a `JSONTypes.Object` embedded in other job results and deep-compared in
+// tests — so it carries no non-deterministic timing there. All fields
+// optional: incremental jobs skip the from-scratch-only phases (mtimes read,
+// module pre-warm), and any phase that didn't run stays absent.
+export interface IndexPhaseTimings {
+  // Whole-job wall, kickoff to return.
+  totalMs?: number;
+  // Batch setup before any phase below: `IndexWriter.createBatch` (generation
+  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // slowness, so it's bucketed rather than left as residue in `totalMs`.
+  setupMs?: number;
+  // Reading the index's per-file modified times up front (from-scratch only).
+  mtimesMs?: number;
+  // Invalidation discovery: the from-scratch filesystem walk, or the
+  // incremental invalidation fan-out.
+  discoverMs?: number;
+  // Ordering the invalidation set by dependency so files precede the cards
+  // that consume them.
+  orderMs?: number;
+  // The whole serial visit loop wall. Equals Σ server render
+  // (`boxel_index.diagnostics.totalElapsedMs`) + Σ per-visit
+  // `indexVisitClientMs` + `writeMs`.
+  visitLoopMs?: number;
+  // Aggregate row-write time across the loop — the Σ of every
+  // `batch.updateEntry` INSERT. Tracked here rather than per row because a row
+  // cannot time its own write. This is the I/O the visit's tab does not need,
+  // so it is the primary candidate to overlap with the next visit.
+  writeMs?: number;
+  // The final atomic swap: `batch.done()` (realm-meta update, working → main
+  // promotion, obsolete-row prune) in one transaction.
+  swapMs?: number;
+}
+
 export interface StreamFileRef {
   stream: ByteStream;
   lastModified: number;
@@ -86,6 +125,17 @@ export interface IndexingProgressEvent {
   stats?: Stats;
 }
 
+// The job types an `indexJobsOnly` worker registers. The queue's claim
+// query only dequeues job types a worker has registered handlers for, so
+// restricting registration is what makes such a worker an indexing-only
+// lane: it can never be held by a prerender-html sweep (or any other job
+// type), no matter how the priority tiers are configured.
+export const INDEX_JOB_TYPES = [
+  'from-scratch-index',
+  'incremental-index',
+  'copy-index',
+] as const;
+
 export class Worker {
   #log = logger('worker');
   #indexWriter: IndexWriter;
@@ -102,6 +152,7 @@ export class Worker {
   #reportProgress: ((event: IndexingProgressEvent) => void) | undefined;
   #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
+  #indexJobsOnly: boolean;
   #createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -121,6 +172,7 @@ export class Worker {
     reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
+    indexJobsOnly,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -134,6 +186,9 @@ export class Worker {
     reportStatus?: (args: StatusArgs) => void;
     reportProgress?: (event: IndexingProgressEvent) => void;
     reportRealmEvent?: (event: RealmEventContent) => void;
+    // When true, register handlers only for INDEX_JOB_TYPES so this worker
+    // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
+    indexJobsOnly?: boolean;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -152,6 +207,7 @@ export class Worker {
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#indexJobsOnly = indexJobsOnly ?? false;
   }
 
   async run() {
@@ -178,33 +234,50 @@ export class Worker {
       createPrerenderAuth: this.#createPrerenderAuth,
     };
 
-    await Promise.all([
-      this.#queue.register(
-        `from-scratch-index`,
-        Tasks['fromScratchIndex'](taskArgs),
-      ),
-      this.#queue.register(
-        `incremental-index`,
-        Tasks['incrementalIndex'](taskArgs),
-      ),
-      this.#queue.register(`prerender_html`, Tasks['prerenderHtml'](taskArgs)),
-      this.#queue.register(
-        `prerender-html-reconcile`,
-        Tasks['prerenderHtmlReconcile'](taskArgs),
-      ),
-      this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
-      this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
-      this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
-      this.#queue.register(
-        `daily-credit-grant`,
-        Tasks['dailyCreditGrant'](taskArgs),
-      ),
-      this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
-      this.#queue.register(
-        `screenshot-card`,
-        Tasks['screenshotCard'](taskArgs),
-      ),
-    ]);
+    let registrations: Record<string, () => Promise<unknown> | unknown> = {
+      'from-scratch-index': () =>
+        this.#queue.register(
+          `from-scratch-index`,
+          Tasks['fromScratchIndex'](taskArgs),
+        ),
+      'incremental-index': () =>
+        this.#queue.register(
+          `incremental-index`,
+          Tasks['incrementalIndex'](taskArgs),
+        ),
+      prerender_html: () =>
+        this.#queue.register(
+          `prerender_html`,
+          Tasks['prerenderHtml'](taskArgs),
+        ),
+      'prerender-html-reconcile': () =>
+        this.#queue.register(
+          `prerender-html-reconcile`,
+          Tasks['prerenderHtmlReconcile'](taskArgs),
+        ),
+      'copy-index': () =>
+        this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
+      'lint-source': () =>
+        this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
+      'full-reindex': () =>
+        this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
+      'daily-credit-grant': () =>
+        this.#queue.register(
+          `daily-credit-grant`,
+          Tasks['dailyCreditGrant'](taskArgs),
+        ),
+      'run-command': () =>
+        this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      'screenshot-card': () =>
+        this.#queue.register(
+          `screenshot-card`,
+          Tasks['screenshotCard'](taskArgs),
+        ),
+    };
+    let jobTypes = this.#indexJobsOnly
+      ? (INDEX_JOB_TYPES as readonly string[])
+      : Object.keys(registrations);
+    await Promise.all(jobTypes.map((jobType) => registrations[jobType]()));
     await this.#queue.start();
   }
 

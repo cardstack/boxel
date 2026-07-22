@@ -6,7 +6,8 @@ import { join, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { existsSync, readJSONSync, statSync, writeFileSync } = fsExtra;
+const { existsSync, readFileSync, readJSONSync, statSync, writeFileSync } =
+  fsExtra;
 import type {
   Realm,
   Relationship,
@@ -2457,6 +2458,8 @@ module(basename(import.meta.filename), function () {
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
+          // The stored file carries only the fields the file and the patch
+          // actually specify — unset fields are not materialized into it.
           assert.deepEqual(
             card,
             {
@@ -2464,7 +2467,6 @@ module(basename(import.meta.filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Van Gogh',
-                  cardInfo,
                 },
                 meta: {
                   adoptsFrom: {
@@ -2556,13 +2558,14 @@ module(basename(import.meta.filename), function () {
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists on disk');
           let card = readJSONSync(cardFile);
+          // Only the values the patch specifies land on disk; unset nested
+          // fields (cardThumbnailURL) are not materialized into the file.
           assert.deepEqual(
             card.data.attributes?.cardInfo,
             {
               name: 'Mango Card',
               notes: 'a friendly dog',
               summary: 'good boy',
-              cardThumbnailURL: null,
             },
             'nested cardInfo values persisted to disk by file-serializer',
           );
@@ -2575,6 +2578,25 @@ module(basename(import.meta.filename), function () {
             'test',
             'person-1.json',
           );
+          // A PATCH stores the file in canonical serialized form (e.g. the
+          // adoptsFrom module ref is written without its executable
+          // extension), so a first PATCH of a hand-authored fixture may
+          // rewrite it once. Prime with one PATCH so the no-op assertions
+          // below measure the steady state.
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialStat = statSync(cardFile);
 
           let initialResponse = await request
@@ -2693,6 +2715,23 @@ module(basename(import.meta.filename), function () {
         });
 
         test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+          // Prime once so the stored file is in canonical serialized form;
+          // the no-op assertions below measure the steady state (see the
+          // no-op lastModified test).
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -2722,7 +2761,7 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('patches card when index entry is an error using pristine doc', async function (assert) {
+        test('patches card when index entry is an error', async function (assert) {
           let cardURL = `${testRealmHref}person-1`;
           let errorDoc = {
             message: 'render failed',
@@ -2975,7 +3014,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -3511,7 +3549,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -3762,7 +3799,6 @@ module(basename(import.meta.filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -3948,6 +3984,309 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
       });
+
+      module(
+        'compound fields backed by an unexported FieldDef',
+        function (hooks) {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
+            permissions: {
+              '*': ['read', 'write'],
+              '@node-test_realm:localhost': ['read', 'realm-owner'],
+            },
+            fileSystem: {
+              'log.gts': `
+              import {
+                contains,
+                containsMany,
+                field,
+                linksTo,
+                linksToMany,
+                CardDef,
+                FieldDef,
+              } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import DatetimeField from "@cardstack/base/datetime";
+
+              class Entry extends FieldDef {
+                @field kind = contains(StringField);
+                @field at = contains(DatetimeField);
+                @field headline = contains(StringField);
+                @field author = linksTo(() => Author);
+                @field coauthors = linksToMany(() => Author);
+              }
+
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+              }
+
+              export class Log extends CardDef {
+                @field logTitle = contains(StringField);
+                @field entries = containsMany(Entry);
+                @field latest = contains(Entry);
+                @field owner = linksTo(() => Author);
+              }
+            `,
+              'author-1.json': {
+                data: {
+                  attributes: {
+                    name: 'Probe Author',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+              'log-1.json': {
+                data: {
+                  attributes: {
+                    logTitle: 'Probe',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  relationships: {
+                    // `owner` resolves through the exported Log definition;
+                    // `entries.0.author` paths through the unexported Entry.
+                    // Having both ensures the serializer's relationship pass
+                    // produces a non-empty result, so a dropped nested
+                    // relationship can't hide behind the whole original
+                    // relationships object being carried over unprocessed.
+                    owner: {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                    'entries.0.author': {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              },
+            },
+            onRealmSetup,
+          });
+
+          test('PATCH preserves compound field values on disk', async function (assert) {
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Probe (edited)',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  relationships: {
+                    // JSON:API to-many `data: [...]` form nested under
+                    // the unexported compound field; must survive as
+                    // indexed `.N` link keys on disk.
+                    'entries.0.coauthors': {
+                      data: [{ id: './author-1', type: 'card' }],
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            assert.ok(existsSync(cardFile), 'card json exists on disk');
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'containsMany compound entries persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.attributes?.latest,
+              {
+                kind: 'wrap-up',
+                at: '2026-07-17T03:00:00.000Z',
+                headline: 'latest entry',
+              },
+              'contains compound value persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.author'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship nested in compound entry persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.coauthors.0'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'to-many data form nested in compound entry persisted as indexed link keys',
+            );
+            assert.deepEqual(
+              card.data.relationships?.owner,
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship on the card itself persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Probe (edited)',
+              'patched top-level attribute persisted to disk',
+            );
+          });
+
+          test('PATCH merges against the stored file even when the index lags it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            // Edit the stored file directly — no realm write, no file
+            // watcher in this fixture — so the index still reflects the
+            // original content. A PATCH of an unrelated field must keep
+            // this edit: the merge base is the stored file, and using the
+            // (lagging) index instead would silently revert it.
+            let onDisk = readJSONSync(cardFile);
+            onDisk.data.attributes.cardInfo = { notes: 'edited on disk' };
+            writeFileSync(cardFile, JSON.stringify(onDisk, null, 2));
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Patched after disk edit',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let card = readJSONSync(cardFile);
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Patched after disk edit',
+              'patched attribute persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.cardInfo?.notes,
+              'edited on disk',
+              'file-only change survives a PATCH of an unrelated field',
+            );
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'compound entries survive a PATCH of an unrelated field',
+            );
+          });
+
+          test('PATCH against a corrupt stored file fails without overwriting it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            let corruptContent = 'not a card document {';
+            writeFileSync(cardFile, corruptContent);
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Should not land',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 500, 'HTTP 500 status');
+            assert.strictEqual(
+              readFileSync(cardFile, 'utf8'),
+              corruptContent,
+              'the stored file is left untouched',
+            );
+          });
+        },
+      );
     });
 
     module('card DELETE request', function (_hooks) {
@@ -4208,7 +4547,32 @@ module(basename(import.meta.filename), function () {
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
-            'instructions.md': '# Cross-realm instructions',
+            'instructions.md': `---
+boxel:
+  kind: skill
+---
+# Cross-realm instructions`,
+            'model.gts': `
+              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+
+              export class Model extends CardDef {
+                @field cardTitle = contains(StringField);
+              }
+            `,
+            'model-4.6.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Model 4.6',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./model'),
+                    name: 'Model',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -4226,8 +4590,29 @@ module(basename(import.meta.filename), function () {
               export class SkillCard extends CardDef {
                 @field cardTitle = contains(StringField);
                 @field instructionsSource = linksTo(MarkdownDef);
+                @field model = linksTo(CardDef);
               }
             `,
+            'skill-with-model.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Skill with dotted model link',
+                },
+                relationships: {
+                  model: {
+                    links: {
+                      self: `${providerRealmURL}model-4.6`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
             'skill.json': {
               data: {
                 attributes: {
@@ -4298,6 +4683,41 @@ module(basename(import.meta.filename), function () {
         'cross-realm linked resource is a file-meta resource',
       );
       assert.strictEqual(linkedFile?.attributes?.name, 'instructions.md');
+      // Index-derived attributes must survive the cross-realm hop: a partial
+      // file-meta here gets cached by the host, where a markdown skill
+      // without `kind: 'skill'` silently stops counting as a skill.
+      assert.strictEqual(
+        linkedFile?.attributes?.kind,
+        'skill',
+        'cross-realm file-meta carries index-derived attributes',
+      );
+    });
+
+    test('serves a card linking to a cross-realm card whose id contains a dot', async function (assert) {
+      // Card ids may legitimately contain dots (e.g. a versioned
+      // ModelConfiguration). The file-link detection keys on known FileDef
+      // extensions, so ".6" must not classify this link as a file.
+      let response = await consumerRequest
+        .get('/skill-with-model')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let included = doc.included ?? [];
+      let linkedCard = included.find(
+        (resource) => resource.id === `${providerRealmURL}model-4.6`,
+      );
+      assert.ok(linkedCard, 'includes the cross-realm dotted-id card');
+      assert.strictEqual(
+        linkedCard?.attributes?.cardTitle,
+        'Model 4.6',
+        'the dotted-id link resolves as a card, not a file',
+      );
     });
   });
 

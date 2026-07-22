@@ -20,7 +20,7 @@ import {
   type SearchResultsComponentSignature,
 } from '@cardstack/runtime-common';
 
-import SearchResults from '@cardstack/host/components/card-search/search-results';
+import SearchResults from '@cardstack/host/components/search/search-results';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type StoreService from '@cardstack/host/services/store';

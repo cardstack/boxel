@@ -14,6 +14,7 @@ import type {
   DBAdapter,
   DefinitionLookup,
   LooseSingleCardDocument,
+  Prerenderer,
   Realm,
   RealmPermissions,
   RealmAdapter,
@@ -28,6 +29,7 @@ import {
   cleanWhiteSpace,
   waitUntil,
   cardInfo,
+  getTestPrerenderer,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   searchCardsForTest,
@@ -36,6 +38,7 @@ import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
+  maxPrerenderHtmlJobId,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
@@ -521,6 +524,47 @@ module(basename(import.meta.filename), function () {
         'the job completed successfully',
       );
       assert.ok(indexJob.finished_at, 'the job was marked with a finish time');
+
+      // The between-visit phase decomposition rides on the job result so the
+      // ~one-in-four of the wall the job spends outside the per-row server
+      // render is queryable per job (`jobs.result.phaseTimings`).
+      let indexResult = indexJob.result as {
+        phaseTimings?: Record<string, unknown>;
+      } | null;
+      let phaseTimings = indexResult?.phaseTimings;
+      assert.ok(
+        phaseTimings,
+        `the from-scratch index job result carries a phaseTimings breakdown, got: ${JSON.stringify(
+          indexResult,
+        )}`,
+      );
+      // The module pre-warm sweep runs on the from-scratch-spawned
+      // prerender_html job, not the index job, so `preWarmMs` is absent here
+      // and asserted on the prerender job's result below.
+      for (let phase of [
+        'totalMs',
+        'setupMs',
+        'mtimesMs',
+        'discoverMs',
+        'orderMs',
+        'visitLoopMs',
+        'writeMs',
+        'swapMs',
+      ]) {
+        assert.strictEqual(
+          typeof phaseTimings?.[phase],
+          'number',
+          `phaseTimings.${phase} is measured on the from-scratch job result, got: ${JSON.stringify(
+            phaseTimings?.[phase],
+          )}`,
+        );
+      }
+      assert.strictEqual(
+        (phaseTimings as Record<string, unknown>)?.preWarmMs,
+        undefined,
+        'the index job does not record preWarmMs — the sweep runs on the prerender job',
+      );
+
       assert.strictEqual(
         prerenderJob.job_type,
         'prerender_html',
@@ -560,6 +604,23 @@ module(basename(import.meta.filename), function () {
           (change) => change.url === `${testRealm}mango.json`,
         ),
         'the invalidation set covers the realm content',
+      );
+      assert.true(
+        (prerenderJob.args as { preWarm?: boolean }).preWarm,
+        'a from-scratch-spawned prerender job carries the pre-warm bit',
+      );
+
+      // The module pre-warm sweep's wall-clock is attributed to the job that
+      // pays it: the prerender job records `preWarmMs`, the index job does not.
+      let prerenderResult = prerenderJob.result as {
+        phaseTimings?: { preWarmMs?: unknown } | null;
+      } | null;
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.preWarmMs,
+        'number',
+        `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
+          prerenderResult,
+        )}`,
       );
     });
 
@@ -791,6 +852,43 @@ module(basename(import.meta.filename), function () {
         ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
         `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
       );
+
+      // The search-doc settle aggregates ride the same channel onto the
+      // persisted row: render.meta stamps them on every card visit.
+      let diagnostics = diagRow?.diagnostics as
+        | { searchDocSettleMs?: unknown; searchDocSettlePasses?: unknown }
+        | null
+        | undefined;
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettleMs,
+        'number',
+        `diagnostics.searchDocSettleMs persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettleMs)}`,
+      );
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettlePasses,
+        'number',
+        `diagnostics.searchDocSettlePasses persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettlePasses)}`,
+      );
+
+      // The per-visit client overhead (file read, render round-trip transport,
+      // post-render bookkeeping) rides the same channel — the part of the index
+      // job's between-render wall attributable to this row.
+      let clientMs = (
+        diagRow?.diagnostics as {
+          indexVisitClientMs?: {
+            read?: unknown;
+            renderRpc?: unknown;
+            bookkeeping?: unknown;
+          };
+        } | null
+      )?.indexVisitClientMs;
+      for (let bucket of ['read', 'renderRpc', 'bookkeeping'] as const) {
+        assert.strictEqual(
+          typeof clientMs?.[bucket],
+          'number',
+          `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
+        );
+      }
     });
 
     // Note this particular test should only be a server test as the nature of
@@ -1097,8 +1195,8 @@ module(basename(import.meta.filename), function () {
         'file entry includes contentSize',
       );
       assert.true(
-        entry?.searchDoc?._isCardInstance,
-        'file entry for a card instance json is marked _isCardInstance',
+        entry?.searchDoc?._isCardInstanceFile,
+        'file entry for a card instance json is marked _isCardInstanceFile',
       );
       assert.strictEqual(
         entry?.searchDoc?._title,
@@ -1158,8 +1256,8 @@ module(basename(import.meta.filename), function () {
         'search_doc _title is the file name',
       );
       assert.false(
-        '_isCardInstance' in searchDoc,
-        'non-card file search_doc does not carry _isCardInstance',
+        '_isCardInstanceFile' in searchDoc,
+        'non-card file search_doc does not carry _isCardInstanceFile',
       );
     });
 
@@ -2290,14 +2388,15 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('the full-realm module pre-warm sweep runs on from-scratch indexing but not on incrementals', async function (assert) {
+      test('the full-realm module pre-warm sweep runs on the from-scratch-spawned prerender job but not on incrementals', async function (assert) {
         // `fancy-person.gts` is an orphan card module: it defines a CardDef
         // (FancyPerson) but no instance adopts it and no other module
         // imports it. Because nothing ever invalidates it, the only code
         // path that can land it in the module cache is the realm-wide
-        // pre-warm sweep — which runs on from-scratch indexing and is
-        // skipped on incrementals. Its presence in the `modules` table is
-        // therefore a deterministic signal of whether the sweep ran.
+        // pre-warm sweep — which runs on the prerender_html job a from-scratch
+        // index spawns, and is skipped on incremental-spawned prerender jobs.
+        // Its presence in the `modules` table is therefore a deterministic
+        // signal of whether the sweep ran.
         let orphanAlias = `${testRealm}fancy-person`;
 
         async function isCached(moduleAlias: string): Promise<boolean> {
@@ -2308,20 +2407,29 @@ module(basename(import.meta.filename), function () {
           return rows.length > 0;
         }
 
-        // The realm was from-scratch indexed during setup; the realm-wide
-        // sweep warmed every card module, including the orphan that no
-        // instance references.
+        // The realm was from-scratch indexed during setup, and its spawned
+        // prerender job (drained before the template snapshot) ran the
+        // realm-wide sweep, warming every card module — including the orphan
+        // that no instance references.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         assert.true(
           await isCached(orphanAlias),
-          'from-scratch pre-warm caches the orphan module via the full-realm sweep',
+          'the from-scratch-spawned prerender job caches the orphan module via the full-realm sweep',
         );
 
         // Clear the cache, then run an incremental on an unrelated instance.
-        // The incremental has no realm-wide sweep, and the orphan is neither
-        // visited nor a dependency of the change, so it does not come back —
-        // only the realm-wide sweep (from-scratch) would re-cache a module
-        // that no instance consumes.
+        // The incremental-spawned prerender job has no realm-wide sweep, and
+        // the orphan is neither rendered nor a dependency of the change, so it
+        // does not come back — only the realm-wide sweep (from-scratch) would
+        // re-cache a module that no instance consumes.
         await testDbAdapter.execute('DELETE FROM modules');
+        // Baseline the HTML channel before the write so the settle below waits
+        // for the job this incremental spawns (fire-and-forget enqueue),
+        // rather than racing ahead past the already-resolved template jobs.
+        let prerenderBaseline = await maxPrerenderHtmlJobId(
+          testDbAdapter,
+          realm.url,
+        );
         await realm.write(
           'vangogh.json',
           JSON.stringify({
@@ -2333,6 +2441,12 @@ module(basename(import.meta.filename), function () {
             },
           }),
         );
+        // Drain the incremental-spawned prerender job so its renders have had
+        // every chance to touch the cache: it re-warms only what vangogh
+        // consumes (Person), never the orphan.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+          afterJobId: prerenderBaseline,
+        });
         assert.false(
           await isCached(orphanAlias),
           'incremental skips the full-realm sweep, leaving the orphan module uncached',
@@ -5061,6 +5175,214 @@ module(basename(import.meta.filename), function () {
           undefined,
           'deleted file is not retrievable',
         );
+      });
+    });
+
+    module('per-file failure isolation', function (hooks) {
+      let realm: Realm;
+      let testDbAdapter: PgAdapter;
+      // URL substring the wrapper fails prerender visits for; unset =
+      // pass everything through to the real test prerenderer.
+      let failVisitsFor: string | undefined;
+
+      let delegatePromise: Promise<Prerenderer> | undefined;
+      let delegate = () => (delegatePromise ??= getTestPrerenderer());
+      // A transport-level failure (the prerender request aborting before a
+      // response exists) can only be simulated at the Prerenderer seam —
+      // the in-band error paths all require a response document.
+      let interceptingPrerenderer: Prerenderer = {
+        async prerenderModule(args) {
+          return (await delegate()).prerenderModule(args);
+        },
+        async prerenderVisit(args) {
+          if (failVisitsFor && args.url.includes(failVisitsFor)) {
+            throw new Error(
+              'Prerender request to /prerender-visit aborted after 120000ms (simulated transport failure)',
+            );
+          }
+          return (await delegate()).prerenderVisit(args);
+        },
+        async runCommand(args) {
+          return (await delegate()).runCommand(args);
+        },
+        async releaseBatch(args) {
+          await (await delegate()).releaseBatch?.(args);
+        },
+      };
+
+      hooks.beforeEach(function () {
+        failVisitsFor = undefined;
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        mode: 'beforeEach',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        prerenderer: interceptingPrerenderer,
+        onRealmSetup({ dbAdapter, testRealm: r }) {
+          testDbAdapter = dbAdapter;
+          realm = r;
+        },
+      });
+
+      function mangoDoc(firstName: string): LooseSingleCardDocument {
+        return {
+          data: {
+            attributes: { firstName },
+            meta: {
+              adoptsFrom: {
+                module: rri('./person'),
+                name: 'Person',
+              },
+            },
+          },
+        };
+      }
+
+      async function mangoIndexRows() {
+        return (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  (pristine_doc IS NOT NULL) as has_pristine_doc,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}mango.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          has_pristine_doc: boolean;
+          error_message: string | null;
+        }[];
+      }
+
+      test('a transport-level visit failure isolates to its file: the batch still commits and the card keeps last-known-good state under an error row', async function (assert) {
+        failVisitsFor = 'mango.json';
+        await realm.write('mango.json', JSON.stringify(mangoDoc('Mang-Mang')));
+
+        let rows = await mangoIndexRows();
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both the file and instance rows exist for the failed card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(
+            row.is_deleted,
+            `the ${row.type} row is not tombstoned by the transient failure`,
+          );
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
+        let instanceRow = rows.find((row) => row.type === 'instance')!;
+        assert.true(
+          instanceRow.has_pristine_doc,
+          'the instance row preserves the last-known-good serialization',
+        );
+
+        // The failure was isolated: the same job's other work still
+        // committed. A sibling card written in the same realm version
+        // remains searchable, proving batch.done() ran.
+        let { data: others } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Van Gogh' },
+            },
+          },
+        );
+        assert.strictEqual(
+          others.length,
+          1,
+          'sibling cards are still searchable after the failed visit',
+        );
+
+        // Recovery: once the transport failure clears, a rewrite indexes
+        // normally and the error state washes out.
+        failVisitsFor = undefined;
+        await realm.write(
+          'mango.json',
+          JSON.stringify(mangoDoc('Mango Recovered')),
+        );
+        rows = await mangoIndexRows();
+        assert.true(
+          rows.every((row) => !row.has_error),
+          'the error state clears once the visit succeeds',
+        );
+        let { data: recovered } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Mango Recovered' },
+            },
+          },
+        );
+        assert.strictEqual(
+          recovered.length,
+          1,
+          'the recovered card is searchable with its new content',
+        );
+      });
+
+      test('a failed visit for a brand-new card records an instance error via the source-parse fallback', async function (assert) {
+        // A brand-new file has no prior index row, so the batch's
+        // tombstoned-types oracle can't identify it as a card — this is
+        // the path where the source re-parse fallback must decide.
+        failVisitsFor = 'pistachio.json';
+        await realm.write(
+          'pistachio.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Pistachio' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let rows = (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}pistachio.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          error_message: string | null;
+        }[];
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both file and instance error rows are recorded for the new card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(row.is_deleted, `the ${row.type} row is not deleted`);
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
       });
     });
   });

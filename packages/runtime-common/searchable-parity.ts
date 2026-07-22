@@ -1,5 +1,7 @@
 import stringify from 'safe-stable-stringify';
 
+import { SYNTHETIC_SEARCH_DOC_KEYS } from './search-doc-keys.ts';
+
 // Parity comparison between a store-driven search doc and a searchable-driven
 // one. Shared by the realm-scale validator (`scripts/searchable-parity-diff.ts`)
 // and the generation tests so both judge "parity" by exactly the same rule.
@@ -81,9 +83,9 @@ function diffValue(
 
   if (isObject(lv) && isObject(gv)) {
     let keys = new Set([...Object.keys(lv), ...Object.keys(gv)]);
-    keys.delete('_cardType');
-    keys.delete('_isCardInstance');
-    keys.delete('_title');
+    for (let syntheticKey of SYNTHETIC_SEARCH_DOC_KEYS) {
+      keys.delete(syntheticKey);
+    }
     for (let key of keys) {
       diffValue(
         path ? `${path}.${key}` : key,
@@ -118,8 +120,7 @@ function diffValue(
 
 // Compare two search docs and return a list of human-readable divergences
 // (empty when equivalent). Synthetic keys stamped after generation
-// (`_cardType`, `_title`, `_isCardInstance`) are ignored; object key order is
-// normalized.
+// (SYNTHETIC_SEARCH_DOC_KEYS) are ignored; object key order is normalized.
 export function diffDoc(
   live: SearchDoc,
   generated: SearchDoc,

@@ -21,6 +21,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
   baseFileRef,
+  baseRef,
   CardError,
   hasExecutableExtension,
   isCardError,
@@ -31,8 +32,10 @@ import {
   isSingleFileMetaDocument,
   isEntryCollectionDocument,
   isSparseItemResource,
+  loadCardDef,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
+  getTypeRefsFromFilter,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
   Deferred,
@@ -46,7 +49,10 @@ import {
   logger,
   formattedError,
   stringifyErrorForLog,
+  applySearchPageBound,
+  assertRealmsBound,
   isJsonContentType,
+  SEARCH_CONCURRENCY_CAP,
   SupportedMimeType,
   RealmPaths,
   type CardAPIForMatching,
@@ -76,6 +82,7 @@ import {
   type StoreReadType,
   type CardResource,
   type SearchEntryResults,
+  type SearchEntryScope,
   type SearchEntryWireQuery,
   type EntrySingleDocument,
   isEntrySingleDocument,
@@ -117,7 +124,7 @@ import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type ToolService from './tool-service';
 import type { SearchResource } from '../resources/search';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -223,7 +230,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
@@ -304,7 +311,7 @@ export default class StoreService extends Service implements StoreInterface {
   constructor(owner: Owner) {
     super(owner);
     this.store = this.createCardStore();
-    this.reset.register(this);
+    this.session.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
@@ -967,6 +974,28 @@ export default class StoreService extends Service implements StoreInterface {
     if (opts?.doNotPersist) {
       await this.stopAutoSaving(instance);
     }
+    // Resolve any linked-card relationships first. This can require a
+    // network fetch, and a sibling task elsewhere may mutate other fields on
+    // this same live instance while we wait. Snapshotting the instance below
+    // (for the merge + write-back further down) only after this resolves
+    // keeps that snapshot from going stale and reverting the sibling's write.
+    let linkedCards = await this.loadPatchedInstances(patch, instance.id);
+    for (let [field, value] of Object.entries(linkedCards)) {
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
+        }
+        let inner = instance;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
+      } else {
+        (instance as any)[field] = value;
+      }
+    }
     let doc = await this.cardService.serializeCard(instance, {
       omitQueryFields: true,
     });
@@ -989,23 +1018,6 @@ export default class StoreService extends Service implements StoreInterface {
     }
     if (patch.meta) {
       doc.data.meta = merge(doc.data.meta, patch.meta);
-    }
-    let linkedCards = await this.loadPatchedInstances(patch, instance.id);
-    for (let [field, value] of Object.entries(linkedCards)) {
-      if (field.includes('.')) {
-        let parts = field.split('.');
-        let leaf = parts.pop();
-        if (!leaf) {
-          throw new Error(`bug: error in field name "${field}"`);
-        }
-        let inner = instance;
-        for (let part of parts) {
-          inner = (inner as any)[part];
-        }
-        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
-      } else {
-        (instance as any)[field] = value;
-      }
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);
@@ -1036,6 +1048,11 @@ export default class StoreService extends Service implements StoreInterface {
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
+    opts?: {
+      includeMeta?: false;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      cardInitiated?: boolean;
+    },
   ): Promise<T[]>;
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
@@ -1043,6 +1060,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts: {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      cardInitiated?: boolean;
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
   async search<T extends CardDef | FileDef = CardDef>(
@@ -1051,6 +1069,11 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       includeMeta?: boolean;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      // Set only by the card `@context` surfaces (getCards + the card-facing
+      // store). Applies the caps that protect against untrusted card code —
+      // page size, realms fan-out, and the concurrency throttle — none of which
+      // constrain the host app's own direct search calls.
+      cardInitiated?: boolean;
     },
   ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
@@ -1058,17 +1081,36 @@ export default class StoreService extends Service implements StoreInterface {
         `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
       );
     }
-    let searchRealms = this.normalizeSearchRealms(realms);
+    // Host callers resolve an absent/empty realm list to every realm the user
+    // can see. Card `@context` callers arrive with the current realm already
+    // resolved into `realms` (see cardFacingStore / SearchResource); an empty
+    // list there means the card's current realm is unknown, so search nothing
+    // rather than fan out to every realm.
+    let searchRealms = opts?.cardInitiated
+      ? this.normalizeRealmPaths(realms)
+      : this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
       return opts?.includeMeta
         ? { instances: [], meta: { page: { total: 0 } } }
         : [];
     }
-    let result = await this.fetchAndHydrateSearchResults<T>(
-      query,
-      searchRealms,
-      opts?.dependencyTrackingContext,
-    );
+    if (opts?.cardInitiated) {
+      // Enforce the card-facing caps on the resolved request: the realms cap on
+      // the (already current-realm-resolved) list, and the page cap on the
+      // query. These throw a SearchBoundError the caller surfaces as a search
+      // error.
+      assertRealmsBound(searchRealms);
+      query = applySearchPageBound(query);
+    }
+    let run = () =>
+      this.fetchAndHydrateSearchResults<T>(
+        query,
+        searchRealms,
+        opts?.dependencyTrackingContext,
+      );
+    let result = opts?.cardInitiated
+      ? await this.performThrottledSearch(run)
+      : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1107,13 +1149,75 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  private normalizeSearchRealms(realms: string[] | undefined): string[] {
-    let normalizedRealms = (realms ?? [])
+  // Canonicalize a realm list to RealmPaths URLs, dropping unparseable entries.
+  // No fallback: an empty input yields an empty list (the card path relies on
+  // this to mean "search nothing" rather than "search everything").
+  private normalizeRealmPaths(realms: string[] | undefined): string[] {
+    return (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
       .filter(Boolean);
+  }
+
+  // The host default: an absent/empty realm list means every realm the user can
+  // see.
+  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+    let normalizedRealms = this.normalizeRealmPaths(realms);
     return normalizedRealms.length > 0
       ? normalizedRealms
       : this.realmServer.availableRealmIdentifiers;
+  }
+
+  // Client-side concurrency throttle for card-initiated (`@context`) item-leg
+  // searches. `getSearchResource` — the function bound as `getCards` on the
+  // card `@context` — routes its search through this task; the host app's own
+  // direct `store.search` / `getSearch` callers do not, so the trusted host is
+  // never throttled. `enqueue` + `maxConcurrency` queues (never drops) excess
+  // card searches, so a card firing many searches at once (e.g. a per-keystroke
+  // grid) can't fan a burst of concurrent `_federated-search` requests at the
+  // realm-server. The server's per-request bounds (page / realms / time) are
+  // the un-overridable backstop; this keeps well-behaved cards from tripping
+  // them in the first place.
+  private searchThrottle = task(
+    { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run `run` under the card-search concurrency throttle (`enqueue` +
+  // maxConcurrency), so no more than the cap of card-initiated searches hit the
+  // realm-server at once and the rest queue. Called from `search` when
+  // `cardInitiated`. Typed as a plain Promise since the caller only awaits the
+  // result. Public so a test can exercise the throttle with controllable work.
+  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
+    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  }
+
+  // The store handed to cards as `@context.store`, bound to the realm the
+  // `@context` was provided with (`getCurrentRealm`). It behaves exactly like
+  // the store service except `search` runs card-initiated — under the page,
+  // realms, and concurrency caps — and a search that names no realm targets the
+  // current realm instead of every realm the user can see. So a card can't
+  // dodge the caps (or fan out to all realms) by reaching for
+  // `@context.store.search` directly instead of `getCards`. Every other method
+  // delegates straight through. The host app injects the store service itself,
+  // never this view, so host search is unconstrained. `searchEntries` isn't on
+  // the card-facing `Store` interface, so the html leg needs no handling here.
+  cardFacingStore(getCurrentRealm: () => string | undefined): StoreInterface {
+    let store = this;
+    return new Proxy(store, {
+      get(target, prop) {
+        if (prop === 'search') {
+          return (query: Query, realmURLs?: string[]) => {
+            let current = getCurrentRealm();
+            let realms = realmURLs ?? (current ? [current] : ([] as string[]));
+            return target.search(query, realms, { cardInitiated: true });
+          };
+        }
+        let value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as unknown as StoreInterface;
   }
 
   private async fetchAndHydrateSearchResults<
@@ -1263,8 +1367,34 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
   ): Promise<SearchEntryResults> {
+    // Search spans card instances and files. A query with a positive
+    // *concrete* type ref already selects a kind (a card type -> instances, a
+    // FileDef type -> files), so it passes through with the default 'all'
+    // scope and its filter discriminates. An otherwise-unscoped query is
+    // pinned to 'cards' so the common "search for cards" case doesn't surface
+    // a card's dual-indexed `.json` file row (or plain files) — the choke
+    // point that replaces the former per-call-site card anchor, while leaving
+    // file/typed searches (e.g. SearchResource's file-meta queries) untouched.
+    //
+    // A BaseDef ref is *not* kind-selecting — it terminates both kinds' type
+    // chains, so it matches every row — and is pinned to 'cards' like an
+    // untyped query. Known gap: a mixed `any:` whose one branch is card-typed
+    // and another untyped counts as positively typed, so its untyped branch
+    // can still match file rows in 'all' scope; no caller composes that shape
+    // today.
+    let typeRefs = query.filter
+      ? getTypeRefsFromFilter(query.filter)
+      : undefined;
+    let hasPositiveType =
+      typeRefs?.some((r) => !r.negated && !isEqual(r.ref, baseRef)) ?? false;
+    let scope: SearchEntryScope | undefined = hasPositiveType
+      ? undefined
+      : 'cards';
     return await this.fetchSearchEntryDoc(
-      searchEntryWireQueryFromQuery(query, { fields: ['item'] }),
+      searchEntryWireQueryFromQuery(query, {
+        fields: ['item'],
+        ...(scope ? { scope } : {}),
+      }),
       realms,
     );
   }
@@ -1427,6 +1557,12 @@ export default class StoreService extends Service implements StoreInterface {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
       dependencyTracking?: RuntimeDependencyTrackingContext;
+      // Set by the `@context` providers (the card-facing `getCards`): run the
+      // search under the card caps and default a no-realm search to
+      // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
+      // support, the render-store hook), which stay unconstrained.
+      cardInitiated?: boolean;
+      getDefaultRealm?: () => string | undefined;
       seed?: {
         cards: T[];
         searchURL?: string;
@@ -1445,6 +1581,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
+    // `cardInitiated` + `getDefaultRealm` ride through `opts`: the `@context`
+    // providers pass them (card-facing `getCards`); other callers don't and stay
+    // unconstrained.
     return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
       ...opts,
       storeService: this,
@@ -1867,8 +2006,7 @@ export default class StoreService extends Service implements StoreInterface {
 
     try {
       try {
-        await this.reloadInstance(instance);
-        maybeReloadedInstance = instance;
+        maybeReloadedInstance = await this.reloadInstance(instance);
       } catch (err: any) {
         if (err.status === 404) {
           // in this case the document was invalidated in the index because the
@@ -1879,7 +2017,15 @@ export default class StoreService extends Service implements StoreInterface {
           maybeReloadedInstance = errorResponse.errors[0];
         }
       }
-      if (!isCardInstance(maybeReloadedInstance)) {
+      // Detach the original instance's autosave subscription when it's been
+      // superseded: either the reload errored, or the card's type changed and
+      // reloadInstance built a fresh instance of the new type and swapped it
+      // into the identity map. When the reload updated the same object in
+      // place (the common case), keep its subscription.
+      if (
+        !isCardInstance(maybeReloadedInstance) ||
+        maybeReloadedInstance !== instance
+      ) {
         await this.stopAutoSaving(instance);
       }
       if (maybeReloadedInstance) {
@@ -1990,6 +2136,15 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T | undefined> {
     if (!resource.id) {
       throw new Error('resource must have an id');
+    }
+    // One-shot boundary canonicalization: search `item` resources carry the
+    // index's URL-form ids, while instance and file-meta GET responses arrive
+    // canonical (RRI prefix form for mapped realms). Fold the id to canonical
+    // form here so an instance's identity — and everything keyed off it, like
+    // the markdown pill slots — doesn't depend on which path hydrated it.
+    let canonicalId = this.network.virtualNetwork.unresolveURL(resource.id);
+    if (canonicalId !== resource.id) {
+      (resource as { id: string }).id = canonicalId;
     }
 
     // Handle file-meta resources
@@ -2684,10 +2839,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private async reloadInstance(instance: CardDef): Promise<void> {
+  // Returns the refreshed instance. Usually this is the same object as the
+  // one passed in (updated in place), but when the card's type changed it is a
+  // freshly-built instance of the new type — see below.
+  private async reloadInstance(instance: CardDef): Promise<CardDef> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
-    await this.withTestWaiters(async () => {
+    return await this.withTestWaiters(async () => {
       let api = await this.cardService.getAPI();
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
@@ -2700,11 +2858,66 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
       }
+
+      // Scenario: a saved card instance changes its type — its JSON
+      // `meta.adoptsFrom` is edited to point at a different card definition
+      // (e.g. a realm index card re-pointed from CardsGrid to a custom index
+      // card). A card instance's JavaScript class is fixed at construction, so
+      // applying the new JSON to the existing object with `updateFromSerialized`
+      // would leave the old class in place and keep rendering the old type.
+      // Resolve the incoming type and, when it is not exactly the instance's
+      // class, rebuild from the new type. The comparison is exact (not a
+      // subtype check) so that re-pointing from a subclass to one of its
+      // ancestors also rebuilds instead of keeping the subclass instance.
+      let newDef: typeof BaseDef;
+      try {
+        newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(instance.id),
+        });
+      } catch (err: any) {
+        // `loadCardDef` throws a 404 CardError when the resolved module lacks
+        // the export. That's a "this client can't resolve the new type" error
+        // state for the card, not a deletion — `reloadTask` reserves a 404 for
+        // a genuinely removed instance (the 404 that `fetchJSON` throws above).
+        // Keep the error's detail but drop the 404 so it surfaces as an error
+        // state rather than a phantom delete.
+        if (isCardError(err) && err.status === 404) {
+          err.status = 422;
+        }
+        throw err;
+      }
+
+      let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
+        | typeof BaseDef
+        | undefined;
+      if (currentDef !== newDef) {
+        // Rebuild as the new type, reusing the existing local id so the
+        // identity map — and everything keyed by it, references included —
+        // keeps resolving this card to the rebuilt instance (the id-resolver
+        // also rejects a second local id for an already-known remote id).
+        // Construct directly rather than via `createFromSerialized`, whose
+        // cached-instance reuse would keep the old object when the new type is
+        // one of its ancestors; `updateFromSerialized` then deserializes into
+        // the new instance and swaps it into the identity map.
+        let rebuilt = new (newDef as typeof CardDef)({
+          id: instance.id,
+          [localIdSymbol]: instance[localIdSymbol],
+        });
+        await api.updateFromSerialized<typeof CardDef>(
+          rebuilt,
+          incomingDoc,
+          this.store,
+        );
+        return rebuilt;
+      }
+
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
         this.store,
       );
+      return instance;
     });
   }
 

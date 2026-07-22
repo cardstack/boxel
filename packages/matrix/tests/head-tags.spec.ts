@@ -85,6 +85,13 @@ test.describe('Head tags', () => {
 
     let publishedRealmURLString = `https://${user.username}.localhost:4205/new-workspace/index`;
 
+    // Publishing returns before the published realm finishes re-indexing and
+    // prerendering, so a cold navigation races that work — the served HTML can
+    // still be missing its head tags, which surfaces here as the og:title
+    // element not being found. Gate on the SSR marker so the document render is
+    // warm before the browser asks for it.
+    await waitForPublishedMarker(page, publishedRealmURLString, 'og:title');
+
     await page.goto(publishedRealmURLString);
 
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(

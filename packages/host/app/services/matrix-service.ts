@@ -58,6 +58,7 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
@@ -123,7 +124,7 @@ import type NetworkService from './network';
 import type { SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
 import type { RoomResource } from '../resources/room';
@@ -170,6 +171,11 @@ const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
+// Bound on the test-only `postLoginCompleted` transition record below. A boot
+// records one →true and a teardown one →false, so a handful of entries covers
+// even a re-entrant boot; keeping the most recent dozen is ample.
+const MAX_POST_LOGIN_TRANSITIONS = 12;
+
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private loggerService: LoggerService;
@@ -180,13 +186,28 @@ export default class MatrixService extends Service {
   @service declare private messageService: MessageService;
   @service declare private realmServer: RealmServerService;
   @service declare private router: RouterService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
   @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
-  @tracked private postLoginCompleted = false;
+  // "Post-login boot completed" now lives on SessionService as the single
+  // tracked authority (`session.isAuthenticated`). MatrixService is its only
+  // writer (via setPostLoginCompleted); everyone else reads it.
+  // Test-only provenance for the intermittent cold-boot "operator-mode renders
+  // the login form" flake: a bounded record of every `postLoginCompleted`
+  // transition (direction + reason + wall-clock + stack). The CI console output
+  // is a rolling buffer that evicts the causal reset before the post-timeout
+  // diagnostic runs, so this structured record — sampled into that diagnostic
+  // (see host tests/helpers/setup.ts) — survives to name which caller flipped
+  // the flag and when. Written only under `isTesting()`; never in production.
+  #postLoginTransitions: {
+    to: boolean;
+    reason: string;
+    atMs: number;
+    stack: string;
+  }[] = [];
   // When true, `app.boxel.realm-servers` is the authoritative source of
   // the user's realm list and `app.boxel.realms` events are ignored for
   // `setAvailableRealmIdentifiers`. Set during boot from whether that key
@@ -257,7 +278,11 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    // MatrixService is the session orchestrator, not a participant: it drives
+    // the SessionService broadcasts (notifySessionStarted/notifySessionEnded)
+    // rather than registering to receive them. Its own teardown runs via
+    // logout()'s `finally { this.resetState() }` and test teardown, so it is
+    // never double-reset by the participant registry.
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
     this.#ready = this.loadState.perform();
@@ -432,7 +457,7 @@ export default class MatrixService extends Service {
                 );
               }
               // Only do this after we've completed our overall login
-              if (this.postLoginCompleted) {
+              if (this.session.isAuthenticated) {
                 await this.loginToRealms();
                 await this.loadMoreAuthRooms(legacyRealms);
               }
@@ -482,19 +507,74 @@ export default class MatrixService extends Service {
   }
 
   get isLoggedIn() {
-    return this._client?.isLoggedIn() === true && this.postLoginCompleted;
+    return this._client?.isLoggedIn() === true && this.session.isAuthenticated;
+  }
+
+  // True when there's persisted auth to boot from but the post-login boot never
+  // finished (or was undone). `start()` sets `postLoginCompleted`, and the index
+  // route only calls `start()` once, so if `postLoginCompleted` is cleared
+  // afterward — a `resetState()` racing a re-navigation — nothing re-establishes
+  // the session and the route would strand the app on the login form. A route
+  // that sees this can re-run `start()` to recover; `start()` re-derives the
+  // client from the persisted auth, so it recovers even when `resetState()` left
+  // a bare (logged-out) client behind. A genuine logout clears the persisted
+  // auth, so this stays false there. The index route reads this on every model
+  // refresh, so it only tests for the auth key's presence — the value is never
+  // parsed here.
+  get needsPostLoginRecovery() {
+    return (
+      !this.session.isAuthenticated && Boolean(this.storage?.getItem('auth'))
+    );
   }
 
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
-  // decides to render <Auth/>. No production caller.
+  // decides to render <Auth/>, plus a compact tail of the `postLoginCompleted`
+  // transitions that got it there. No production caller.
   get loginReadinessDebug() {
+    let now = Date.now();
     return {
       authPresent: Boolean(this.getAuth()),
       clientExists: Boolean(this._client),
       clientLoggedIn: this._client?.isLoggedIn() === true,
-      postLoginCompleted: this.postLoginCompleted,
+      postLoginCompleted: this.session.isAuthenticated,
+      postLoginTransitions: this.#postLoginTransitions.map(
+        (t) =>
+          `${t.to ? '→true' : '→false'}(${t.reason}, ${now - t.atMs}ms ago)`,
+      ),
     };
+  }
+
+  // Full `postLoginCompleted` transition provenance, with stacks, for the
+  // eviction-proof timeout diagnostic. `msAgo` is computed at read time so it
+  // stays meaningful after a snapshot survives owner teardown. Test-only.
+  get postLoginTransitionsDebug() {
+    let now = Date.now();
+    return this.#postLoginTransitions.map((t) => ({
+      to: t.to,
+      reason: t.reason,
+      msAgo: now - t.atMs,
+      stack: t.stack,
+    }));
+  }
+
+  // Route every `postLoginCompleted` write through here so the transition
+  // record above captures which caller flipped it and when. The recording is
+  // `isTesting()`-gated, so in production this is just the field assignment —
+  // no runtime behavior change.
+  private setPostLoginCompleted(value: boolean, reason: string) {
+    if (isTesting()) {
+      this.#postLoginTransitions.push({
+        to: value,
+        reason,
+        atMs: Date.now(),
+        stack: new Error().stack ?? '<no stack>',
+      });
+      if (this.#postLoginTransitions.length > MAX_POST_LOGIN_TRANSITIONS) {
+        this.#postLoginTransitions.shift();
+      }
+    }
+    this.session.isAuthenticated = value;
   }
 
   // Test-only diagnostic exposing which boot path the current session is on.
@@ -611,25 +691,36 @@ export default class MatrixService extends Service {
 
   async logout() {
     let client = this._client;
+    let didResetState = false;
     try {
       // Logout should synchronously move the app into a logged-out state.
       // Waiting on background Matrix flush promises first can leave the
       // authenticated shell visible for an arbitrarily long time.
       this.clearAuth();
-      if (isTesting() && this.postLoginCompleted) {
+      if (isTesting() && this.session.isAuthenticated) {
         console.warn(
           '[login-diag] postLoginCompleted reset to false via logout()\n' +
             new Error().stack,
         );
       }
-      this.postLoginCompleted = false;
+      this.setPostLoginCompleted(false, 'logout');
       // Logout is the explicit boundary where we forget persisted workspace UI
       // state for the signed-in user. Generic reset paths must stay in-memory
       // only so tests and app reloads do not accidentally wipe durable state.
       clearLocalStorage(window.localStorage);
-      this.reset.resetAll();
+      this.session.notifySessionEnded();
       this.loaderService.resetSessionBoundary('logout');
       this.unbindEventListeners();
+      // Tear down MatrixService's own session state now — synchronously, in the
+      // same tick as the participants above — rather than deferring it to the
+      // `finally` after the awaited network logout. resetState() stops sliding
+      // sync and recreates a fresh anonymous client; deferring it left a window
+      // where (a) an in-flight /sync response could run against already-reset
+      // participants and (b) a re-login completing during the await would be
+      // silently wiped by the deferred reset. The old client is captured in
+      // `client` above, so the network logout below is unaffected.
+      this.resetState();
+      didResetState = true;
       await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
@@ -648,7 +739,11 @@ export default class MatrixService extends Service {
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
-      this.resetState();
+      // Safety net for a synchronous throw before resetState() ran above.
+      // Skipped on the normal path so we don't recreate the client twice.
+      if (!didResetState) {
+        this.resetState();
+      }
     }
   }
 
@@ -920,6 +1015,14 @@ export default class MatrixService extends Service {
       this.saveAuth(auth);
       this.bindEventListeners();
 
+      // Whether *this* start() invocation completed the post-login boot. The
+      // catch below keys off this, not the `postLoginCompleted` field, because
+      // start() can run again on an already-established session (e.g. the
+      // /connect route starts on every visit): the field would still be true
+      // from the previous run, so a fresh attempt that fails before completing
+      // would wrongly skip logout and leave revoked auth in storage.
+      let loginCompletedThisRun = false;
+
       try {
         let deviceId = this.client.getDeviceId();
         if (deviceId) {
@@ -1084,8 +1187,27 @@ export default class MatrixService extends Service {
         if (isTesting()) console.warn('[start-phase] loginToRealms');
         await this.loginToRealms();
 
-        this.postLoginCompleted = true;
+        let wasAuthenticated = this.session.isAuthenticated;
+        this.setPostLoginCompleted(true, 'start-success');
+        loginCompletedThisRun = true;
         if (isTesting()) console.warn('[start-phase] postLoginCompleted=true');
+        // Symmetric to logout()'s notifySessionEnded(): tell every session
+        // participant a session is now established so they can re-arm the
+        // session-scoped state their resetState() tore down. All login paths
+        // (boot, SSO, password, /connect, new-user) converge here. Fires after
+        // loginToRealms so realm auth is established; participants that need
+        // rooms (e.g. the AI panel) already tolerate sliding sync not having
+        // delivered them yet.
+        //
+        // Broadcast only on the not-authenticated → authenticated edge. start()
+        // re-runs on an already-established session (the /connect route runs it
+        // on every visit); re-broadcasting there would re-fire every
+        // participant's sessionStarted() with no intervening session end,
+        // breaking the "exactly once per established session" contract and
+        // duplicating their re-arm work.
+        if (!wasAuthenticated) {
+          this.session.notifySessionStarted();
+        }
 
         // If any trusted server was unreachable during boot assembly, keep
         // the reachable realms and retry the unreachable ones in the
@@ -1093,7 +1215,14 @@ export default class MatrixService extends Service {
         this.scheduleUnreachableRealmServerRetry();
       } catch (e) {
         console.log('Error starting Matrix client', e);
-        await this.logout();
+        // Only tear the session down for a failure that happened before this
+        // run completed login. A late, post-login rejection must not unwind an
+        // already-established session: logout() clears realm state the app has
+        // already populated and resets postLoginCompleted, which would strand
+        // the index route on the login form.
+        if (!loginCompletedThisRun) {
+          await this.logout();
+        }
       }
 
       let indexController = getOwner(this)!.lookup(
@@ -1240,7 +1369,7 @@ export default class MatrixService extends Service {
     } else {
       await this.realmServer.setAvailableRealmIdentifiers(realmURLs.map(ri));
     }
-    if (this.postLoginCompleted) {
+    if (this.session.isAuthenticated) {
       await this.loginToRealms();
       await this.loadMoreAuthRooms(realmURLs);
     }
@@ -1757,11 +1886,15 @@ export default class MatrixService extends Service {
       attachedFiles,
     );
 
+    let originatingDeviceId = this.client.getDeviceId() ?? undefined;
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: body || '',
       format: 'org.matrix.custom.html',
       clientGeneratedId,
+      ...(originatingDeviceId
+        ? { [APP_BOXEL_ORIGINATING_DEVICE_ID_KEY]: originatingDeviceId }
+        : {}),
       data: {
         attachedFiles: contentData.attachedFiles,
         attachedCards: contentData.attachedCards,
@@ -1987,13 +2120,13 @@ export default class MatrixService extends Service {
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
-    if (isTesting() && this.postLoginCompleted) {
+    if (isTesting() && this.session.isAuthenticated) {
       console.warn(
         '[login-diag] postLoginCompleted reset to false via resetState()\n' +
           new Error().stack,
       );
     }
-    this.postLoginCompleted = false;
+    this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
@@ -2013,7 +2146,12 @@ export default class MatrixService extends Service {
     this._systemCard = undefined;
     this._systemCardLoadFailed = false;
     this.startedAtTs = -1;
-    this.#clientReadyDeferred = new Deferred<void>();
+    // `#clientReadyDeferred` is deliberately left alone. It gates on "the SDK
+    // has loaded and a client exists" — a condition this reset preserves, since
+    // the client is recreated synchronously above whenever the SDK is loaded.
+    // Replacing it with a fresh deferred would strand every post-logout
+    // `createRealmSession()` await: `loadSDK()`, the only fulfiller, runs once
+    // at boot and never re-runs.
   }
 
   private teardownClient() {

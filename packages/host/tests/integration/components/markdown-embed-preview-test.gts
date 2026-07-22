@@ -283,4 +283,179 @@ module('Integration | markdown-embed-preview', function (hooks) {
         'no skeleton document wrapper without @showSurroundingText',
       );
   });
+
+  test('renders the broken-ref visual (not the embed) for a 404 with the card type name', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='embedded'
+          />
+        </PreviewBox>
+      </template>,
+    );
+    assert
+      .dom('[data-test-broken-link-template="embedded"]')
+      .exists('the broken-ref visual renders in place of the embed');
+    assert.dom('[data-test-broken-link-state="not-found"]').exists();
+    assert.dom('[data-test-broken-link-type]').hasText('Book');
+    assert.dom('[data-test-broken-link-url]').hasText(brokenUrl);
+    assert
+      .dom('[data-test-markdown-embed-preview]')
+      .doesNotExist('no resolved embed for a broken ref');
+  });
+
+  test('renders the broken-ref visual for a non-404 error state', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/exploded`;
+    let errorDoc = {
+      status: 500,
+      title: 'Internal Server Error',
+      message: 'TypeError: boom',
+      stack: 'Error: boom\n    at Book.render (book.gts:1:1)',
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='error'
+            @format='fitted'
+          />
+        </PreviewBox>
+      </template>,
+    );
+    assert.dom('[data-test-broken-link-template="fitted"]').exists();
+    assert.dom('[data-test-broken-link-state="error"]').exists();
+    assert
+      .dom('[data-test-broken-link-headline]')
+      .hasText('Linked card failed to load');
+  });
+
+  test('a broken file ref is labelled by its filename and reads as a file, not a card', async function (assert) {
+    let brokenUrl = `${testRealmURL}files/notes.md`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='notes.md'
+            @brokenItemType='file'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='embedded'
+          />
+        </PreviewBox>
+      </template>,
+    );
+    assert.dom('[data-test-broken-link-type]').hasText('notes.md');
+    assert
+      .dom('[data-test-broken-link-headline]')
+      .hasText('Linked file not found', 'the overlay headline names a file');
+  });
+
+  test('a fitted broken ref takes the picked tile footprint and does not clip its overlay', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    // tall-tile = 150x275
+    let tallTile: BfmSizeSpec = { format: 'fitted', width: 150, height: 275 };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='fitted'
+            @sizeSpec={{tallTile}}
+          />
+        </PreviewBox>
+      </template>,
+    );
+    let style =
+      document
+        .querySelector('[data-test-broken-link-template="fitted"]')
+        ?.getAttribute('style') ?? '';
+    assert.ok(
+      style.includes('width: 150px'),
+      `fitted broken box takes the picked width (${style})`,
+    );
+    assert.ok(
+      style.includes('height: 275px'),
+      `fitted broken box takes the picked height (${style})`,
+    );
+    // The root must not clip, or the reveal overlay would be cut off — only the
+    // inner box clips its own content.
+    assert.notOk(
+      style.includes('overflow'),
+      'the broken root does not set overflow, so the reveal overlay is not clipped',
+    );
+  });
+
+  test('an inline broken ref previews inline, matching how it serializes (not as a block)', async function (assert) {
+    let brokenUrl = `${testRealmURL}Book/deleted`;
+    let errorDoc = {
+      status: 404,
+      title: 'Not Found',
+      message: `Could not find ${brokenUrl}`,
+      additionalErrors: null,
+    };
+    await render(
+      <template>
+        <PreviewBox>
+          <MarkdownEmbedPreview
+            @brokenUrl={{brokenUrl}}
+            @brokenDisplayName='Book'
+            @errorDoc={{errorDoc}}
+            @brokenState='not-found'
+            @format='embedded'
+            @kind='inline'
+          />
+        </PreviewBox>
+      </template>,
+    );
+    let wrapper = document.querySelector('.broken-embed');
+    assert.ok(wrapper, 'the broken ref is wrapped for placement');
+    assert.strictEqual(
+      wrapper?.tagName,
+      'SPAN',
+      'inline kind wraps the broken ref in a span (inline placement), not a block div',
+    );
+    // A non-atom inline ref takes the inline-block placement class — the same
+    // treatment a resolved inline embed gets — so it flows within text instead
+    // of collapsing to a block. (Computed display can't be asserted here: the
+    // PreviewBox flex parent blockifies its items.)
+    assert.ok(
+      wrapper?.classList.contains('broken-embed--inline-embed'),
+      'an inline embedded broken ref uses the inline-block placement class',
+    );
+    assert
+      .dom('.broken-embed [data-test-broken-link-template="embedded"]')
+      .exists('the broken template renders inside the inline wrapper');
+  });
 });

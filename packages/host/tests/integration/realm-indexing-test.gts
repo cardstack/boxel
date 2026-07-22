@@ -148,7 +148,11 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let { data: cards } = await searchCardsForTest(queryEngine, {});
+    // anchored to cards — an unanchored entry query also returns the card
+    // `.json` file rows
+    let { data: cards } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
+    });
     assert.deepEqual(cards, [
       {
         id: testRRI('empty'),
@@ -1260,6 +1264,7 @@ module(`Integration | realm indexing`, function (hooks) {
               functionName: 'switch-submode_dd88',
               requiresApproval: false,
               cardTitle: 'Switch Submode',
+              definition: null,
             },
           ],
           cardDescription: null,
@@ -1301,6 +1306,7 @@ module(`Integration | realm indexing`, function (hooks) {
             functionName: 'switch-submode_dd88',
             requiresApproval: false,
             cardTitle: 'Switch Submode',
+            definition: null,
           },
         ],
         cardTheme: null,
@@ -4665,7 +4671,6 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/card-serialization',
         '@cardstack/base/contains-many-component',
         '@cardstack/base/default-templates/atom',
-        '@cardstack/base/default-templates/broken-link-template',
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',
@@ -4834,7 +4839,6 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/code-ref',
         '@cardstack/base/contains-many-component',
         '@cardstack/base/default-templates/atom',
-        '@cardstack/base/default-templates/broken-link-template',
         '@cardstack/base/default-templates/card-info',
         '@cardstack/base/default-templates/embedded',
         '@cardstack/base/default-templates/field-edit',

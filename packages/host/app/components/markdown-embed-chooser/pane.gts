@@ -8,9 +8,15 @@ import {
   BoxelSelect,
   Button,
 } from '@cardstack/boxel-ui/components';
+import type {
+  BrokenLinkErrorDoc,
+  BrokenLinkItemType,
+  BrokenLinkState,
+} from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { serializeBfmRef } from '@cardstack/runtime-common/bfm-card-references';
+import { maybeRelativeReference } from '@cardstack/runtime-common/url';
 
 import PlacementToggle from './placement-toggle';
 
@@ -25,21 +31,33 @@ export { type OptionValue };
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // Resolved instance being previewed. Its `id` is the BFM ref URL. Always a
-    // real target — the parent (tab-panel) only mounts the pane once a row is
-    // picked and its instance resolves, rendering its own placeholder until then.
-    target: CardDef | FileDef;
+    // Resolved instance being previewed. Its `id` is the BFM ref URL. Absent
+    // when the picked/preloaded ref failed to resolve — the broken-ref args
+    // below then drive the preview instead.
+    target?: CardDef | FileDef;
     // Which BFM keyword to emit: `:card[...]` vs `:file[...]`.
     refType: 'card' | 'file';
+    // Broken-ref state, set by the parent when the ref can't resolve. When
+    // `brokenUrl` is present (and `target` is not), the preview renders the
+    // broken-ref visual; the CTA still serializes `brokenUrl` so Done/Accept
+    // keep the ref.
+    brokenUrl?: string;
+    errorDoc?: BrokenLinkErrorDoc;
+    brokenState?: BrokenLinkState;
+    brokenDisplayName?: string;
+    brokenItemType?: BrokenLinkItemType;
     // The shared format/placement/size selection. Owned by the modal and shared
     // across both tabs so the choice survives a tab switch; this pane is a pure
     // view over it plus the resolved target.
     selection: EmbedFormatSelection;
+    // The editing document's own URL. The ref is relativized against it so the
+    // serialized directive is `../`-relative, matching the format-picker path.
+    documentBaseUrl?: string;
     // Receives the serialized BFM directive when the CTA is clicked. The host
     // owns actual cursor insertion.
     onInsert: (bfm: string) => void;
     // Overrides the dynamic "Insert as …" CTA label. Used in edit mode to
-    // show 'DONE' (clean) or 'ACCEPT' (dirty) per the design spec.
+    // show 'Done' (clean) or 'Accept' (dirty) per the design spec.
     ctaLabelOverride?: string;
   };
 }
@@ -58,11 +76,23 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   private get bfmString(): string {
-    let url = this.args.target.id;
+    let url = this.args.target?.id ?? this.args.brokenUrl;
     if (!url) {
       return '';
     }
-    return serializeBfmRef(this.args.refType, url, {
+    // Relativize against the editing document's URL so the inserted ref is
+    // `../`-relative — the same math the codemirror format-picker path uses.
+    // Falls back to the absolute URL when there's no base or it can't parse.
+    let ref = url;
+    let base = this.args.documentBaseUrl;
+    if (base) {
+      try {
+        ref = maybeRelativeReference(new URL(url), new URL(base), undefined);
+      } catch {
+        // Keep the absolute URL.
+      }
+    }
+    return serializeBfmRef(this.args.refType, ref, {
       kind: this.args.selection.kind,
       size: this.args.selection.sizeSpecifier,
     });
@@ -88,8 +118,18 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     this.args.selection.setKind(kind);
   }
 
+  // A fresh Custom-size pick left empty would insert a size-less bare `fitted`,
+  // so the CTA is held disabled until a valid size is entered. The `isDirty`
+  // conjunct scopes that to an actual edit: a bare `::card[url | fitted]` opened
+  // for editing seeds the Custom category with no dimensions but is a valid,
+  // supported form, so its unchanged (non-dirty) state keeps the CTA enabled.
+  private get ctaDisabled(): boolean {
+    return !this.args.selection.hasValidSize && this.args.selection.isDirty;
+  }
+
   @action
   private insert() {
+    if (this.ctaDisabled) return;
     let bfm = this.bfmString;
     if (!bfm) return;
     this.args.onInsert(bfm);
@@ -130,6 +170,11 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       <div class='markdown-embed-preview-pane__viewport'>
         <MarkdownEmbedPreview
           @target={{@target}}
+          @brokenUrl={{@brokenUrl}}
+          @brokenDisplayName={{@brokenDisplayName}}
+          @brokenItemType={{@brokenItemType}}
+          @errorDoc={{@errorDoc}}
+          @brokenState={{@brokenState}}
           @format={{@selection.previewFormat}}
           @sizeSpec={{@selection.sizeSpec}}
           @kind={{@selection.kind}}
@@ -172,6 +217,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         <Button
           @kind='primary'
           @size='small'
+          @disabled={{this.ctaDisabled}}
           class='markdown-embed-preview-pane__cta'
           data-test-markdown-embed-preview-cta
           {{on 'click' this.insert}}

@@ -11,6 +11,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import { PagePool } from '../prerender/page-pool.ts';
 import { RenderRunner } from '../prerender/render-runner.ts';
 import { BrowserManager } from '../prerender/browser-manager.ts';
@@ -1531,6 +1532,68 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('card prerender records the search-doc settle aggregates on meta.diagnostics for persistence', async function (assert) {
+        // The settle aggregates ride the same consolidated diagnostics
+        // channel as the timings and broken-link findings: render.meta
+        // stamps searchDocSettleMs / searchDocSettlePasses on every card
+        // visit, and the Prerenderer lifts them onto
+        // `response.meta.diagnostics` — the blob the indexer flattens into
+        // `boxel_index.diagnostics`. The per-field / per-link-load detail
+        // (searchDocFieldsMs / searchDocLinkLoads) is floor-bounded so its
+        // presence depends on real timings; only its shape is asserted when
+        // it appears.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}1.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(result.response.card?.error, 'prerender succeeds');
+        let diagnostics = result.response.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettleMs,
+          'number',
+          `searchDocSettleMs is stamped, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettleMs ?? -1) >= 0,
+          `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        // A card whose first walk fires no lazy getter loads settles with
+        // zero discarded passes, so 0 is the healthy floor.
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettlePasses,
+          'number',
+          `searchDocSettlePasses is stamped, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettlePasses ?? -1) >= 0,
+          `searchDocSettlePasses counts the discarded walks, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        if (diagnostics?.searchDocFieldsMs !== undefined) {
+          assert.ok(
+            Object.values(diagnostics.searchDocFieldsMs).every(
+              (ms) => typeof ms === 'number' && ms >= 1,
+            ),
+            'retained per-field timings are all at/over the persistence floor',
+          );
+        }
+        if (diagnostics?.searchDocLinkLoads !== undefined) {
+          assert.ok(
+            diagnostics.searchDocLinkLoads.every(
+              (l) =>
+                typeof l.path === 'string' &&
+                typeof l.target === 'string' &&
+                l.ms >= 1,
+            ),
+            'retained link loads carry path + target and are at/over the floor',
+          );
+        }
+      });
+
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
@@ -2622,12 +2685,7 @@ module(basename(import.meta.filename), function () {
         let alternate = url.endsWith('.json')
           ? url.replace(/\.json$/, '')
           : `${url}.json`;
-        // The isolated-HTML injection dual-reads from prerendered_html (falling
-        // back to boxel_index), so override both channels for the row.
-        await dbAdapter.execute(
-          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
-          { bind: [html, url, alternate] },
-        );
+        // The isolated-HTML injection reads from prerendered_html.
         await dbAdapter.execute(
           `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 OR url = $3`,
           { bind: [html, url, alternate] },
@@ -3207,6 +3265,45 @@ module(basename(import.meta.filename), function () {
         'auth failure not misreported as timeout',
       );
       assert.false(result.pool.timedOut, 'prerender did not time out');
+    });
+
+    test('a fused index visit mirrors an auth error onto the file half without a fallback transition', async function (assert) {
+      const cardFileURL = `${providerRealmURL}secret.json`;
+
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: providerRealmURL,
+        realm: providerRealmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+      });
+
+      assert.strictEqual(
+        response.card?.error?.error.status,
+        401,
+        'card half carries the auth error',
+      );
+      assert.strictEqual(
+        response.fileExtract?.status,
+        'error',
+        'file half is an error row',
+      );
+      assert.strictEqual(
+        response.fileExtract?.error?.error.status,
+        401,
+        'file half mirrors the auth error',
+      );
+      // A fallback extract would hit the same auth wall, so none runs — the
+      // file half is synthesized from the card error instead.
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition runs on the auth path',
+      );
+      assert.false(pool.timedOut, 'auth failure is not reported as a timeout');
+      assert.false(pool.evicted, 'auth failure does not evict the page');
     });
   });
 
@@ -4329,6 +4426,7 @@ module(basename(import.meta.filename), function () {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
             '@cardstack/base/card-api/CardDef',
+            '@cardstack/base/card-api/BaseDef',
           ]);
         });
 
@@ -7305,6 +7403,16 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            'pet.gts': `
+              import { CardDef } from '@cardstack/base/card-api';
+              const PetIcon = <template>
+                <svg data-test-icon='pet' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' /></svg>
+              </template>;
+              export class Pet extends CardDef {
+                static displayName = "Pet";
+                static icon = PetIcon;
+              }
+            `,
             'maple.json': {
               data: {
                 attributes: { name: 'Maple' },
@@ -7312,6 +7420,59 @@ module(basename(import.meta.filename), function () {
                   adoptsFrom: {
                     module: rri('./person'),
                     name: 'Person',
+                  },
+                },
+              },
+            },
+            'willow.json': {
+              data: {
+                attributes: { name: 'Willow' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'rex.json': {
+              data: {
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./pet'),
+                    name: 'Pet',
+                  },
+                },
+              },
+            },
+            'owner.gts': `
+              import { CardDef, StringField, field, contains, linksTo } from '@cardstack/base/card-api';
+              import { Person } from './person';
+              export class Owner extends CardDef {
+                static displayName = "Owner";
+                @field friend = linksTo(Person);
+                @field friendName = contains(StringField, {
+                  computeVia: function() {
+                    return this.friend.name;
+                  }
+                });
+              }
+            `,
+            'stray.json': {
+              data: {
+                attributes: {},
+                relationships: {
+                  friend: {
+                    links: {
+                      self: 'http://localhost:9000/link-to-nowhere',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./owner'),
+                    name: 'Owner',
                   },
                 },
               },
@@ -7371,6 +7532,80 @@ module(basename(import.meta.filename), function () {
       assert.ok(result.response.card, 'card sub-response populated');
       assert.notOk(result.response.fileExtract, 'fileExtract skipped');
       assert.notOk(result.response.fileRender, 'fileRender skipped');
+    });
+
+    test('client abort mid-render interrupts the in-flight visit and frees the affinity', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let ac = new AbortController();
+      let restartsBefore = prerenderer.getBrowserRestartCount();
+      let start = Date.now();
+      try {
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardFileURL,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+          // The simulated delay holds the render step in-flight so the
+          // abort lands mid-step; the matching timeout means the only
+          // way this visit ends early is the abort being observed
+          // inside the step, not at a pass boundary after the step has
+          // burned its full budget.
+          opts: { timeoutMs: 15_000, simulateTimeoutMs: 15_000 },
+          signal: ac.signal,
+          onTabAcquired: () => {
+            setTimeout(() => ac.abort('client disconnected'), 250);
+          },
+        });
+        assert.ok(false, 'visit should have been cancelled');
+      } catch (e: any) {
+        assert.strictEqual(
+          e?.name,
+          'PrerenderCancelledError',
+          'visit rejects with the cancellation error',
+        );
+        assert.strictEqual(
+          e?.state,
+          'rendering',
+          'tagged as a mid-render cancel',
+        );
+      }
+      let elapsedMs = Date.now() - start;
+      assert.ok(
+        elapsedMs < 10_000,
+        `cancelled promptly (${elapsedMs}ms) instead of waiting out the render step`,
+      );
+
+      // The cancel handler disposes the abandoned tab; the affinity
+      // itself must stay usable — the next visit gets a fresh page and
+      // renders normally.
+      let followUp = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+      assert.ok(
+        followUp.response.card?.isolatedHTML?.includes('Maple'),
+        'follow-up visit on the same affinity renders normally',
+      );
+      assert.notOk(
+        followUp.response.pageUnusableError,
+        'follow-up visit is not poisoned by the cancelled render',
+      );
+      // A restart-lane detour would also render normally (restart →
+      // retry succeeds), so the success assertions alone can't tell a
+      // clean fresh-page acquisition from recovery. The counter can:
+      // the awaited cancel disposal means the follow-up acquires a
+      // page without a browser restart.
+      assert.strictEqual(
+        prerenderer.getBrowserRestartCount(),
+        restartsBefore,
+        'follow-up visit did not pay a browser restart',
+      );
     });
 
     test('fileExtract-only visit returns only the extract', async function (assert) {
@@ -7666,6 +7901,197 @@ module(basename(import.meta.filename), function () {
         index.meta?.diagnostics?.renderFormatsMs,
         'index visit records no per-format render timings',
       );
+
+      // Per-route index timings are the index-half sibling of
+      // renderFormatsMs: they ride the index visit's meta — one number per
+      // index-half route step — while the prerender-html visit, which runs
+      // no index-half route here, reports none. The index visit of a card
+      // instance fuses the extract into its render.meta transition, so
+      // `card.meta` covers both halves (the extract's share itemized as
+      // `fileExtractMs`) and no standalone `file.fileExtract` leg exists.
+      // (No jobId is threaded, so the per-type icon memo is inactive and
+      // each icon route actually runs.)
+      let indexRoutesMs = index.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.meta,
+        'number',
+        'index visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.icon,
+        'number',
+        'index visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'index visit runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof index.meta?.diagnostics?.fileExtractMs,
+        'number',
+        'index visit itemizes the extract share of the fused meta transition',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.file?.icon,
+        'number',
+        'index visit records the file icon route timing',
+      );
+      assert.notOk(
+        html.meta?.diagnostics?.indexRoutesMs,
+        'prerender-html visit records no per-route index timings',
+      );
+      // The fused (union) visit runs meta last, after the html renders, so
+      // its extract stays a standalone transition and records its own leg.
+      let fusedIndexRoutesMs = fused.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.meta,
+        'number',
+        'fused visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.icon,
+        'number',
+        'fused visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.file?.fileExtract,
+        'number',
+        'fused visit records the standalone file extract route timing',
+      );
+    });
+
+    test('a legacy host without the fused capability gets per-pass transitions with identical output', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      const fileDefCodeRef = {
+        module: baseRRI('json-file-def'),
+        name: 'JsonFileDef',
+      };
+      let visitArgs = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index' as const,
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef,
+        } as const,
+      };
+      let legacy = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          opts: { simulateLegacyHost: true },
+        })
+      ).response;
+      let fused = (await prerenderer.prerenderVisit(visitArgs)).response;
+
+      // The legacy path pays a standalone extract transition; the fused
+      // path folds the extract into render.meta and itemizes its share.
+      assert.strictEqual(
+        typeof legacy.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        'number',
+        'legacy host records a standalone file extract transition',
+      );
+      assert.strictEqual(
+        legacy.meta?.diagnostics?.fileExtractMs,
+        undefined,
+        'legacy host has no fused extract share to itemize',
+      );
+      assert.strictEqual(
+        fused.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'fused host runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof fused.meta?.diagnostics?.fileExtractMs,
+        'number',
+        'fused host itemizes the extract share of the meta transition',
+      );
+
+      // Both strategies produce the same output.
+      assert.deepEqual(
+        fused.card?.serialized,
+        legacy.card?.serialized,
+        'serialized doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.searchDoc,
+        legacy.card?.searchDoc,
+        'search doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.types,
+        legacy.card?.types,
+        'types match the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.displayNames,
+        legacy.card?.displayNames,
+        'display names match the legacy path',
+      );
+      assert.deepEqual(
+        [...new Set(fused.card?.deps ?? [])].sort(),
+        [...new Set(legacy.card?.deps ?? [])].sort(),
+        'card deps match the legacy path as a set',
+      );
+      {
+        let { deps: fusedDeps, nonce: _n1, ...fusedRest } = fused.fileExtract!;
+        let {
+          deps: legacyDeps,
+          nonce: _n2,
+          ...legacyRest
+        } = legacy.fileExtract!;
+        assert.deepEqual(
+          fusedRest,
+          legacyRest,
+          'file extract matches the legacy path',
+        );
+        assert.deepEqual(
+          [...new Set(fusedDeps)].sort(),
+          [...new Set(legacyDeps)].sort(),
+          'file extract deps match the legacy path as a set',
+        );
+      }
+    });
+
+    test('an eviction during the fused pass ends the visit without a fallback extract', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // A render timeout is a wedged-page signal: the page gets evicted and
+      // no further transition can run on it, so the fused visit ends with
+      // the file half absent. The file row degrades to an error row for
+      // this attempt and heals on the next index of the file — the pinned
+      // trade-off for carrying the extract inside the meta transition.
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+        opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+      });
+
+      assert.true(pool.timedOut, 'the fused transition timed out');
+      assert.true(pool.evicted, 'the timeout evicted the page');
+      assert.ok(
+        response.pageUnusableError,
+        'the visit reports the page unusable',
+      );
+      assert.strictEqual(
+        response.fileExtract,
+        undefined,
+        'no fallback extract runs on an evicted page',
+      );
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition was recorded',
+      );
     });
 
     test('reuses a single pooled page for all three passes', async function (assert) {
@@ -7697,6 +8123,233 @@ module(basename(import.meta.filename), function () {
         },
       });
       assert.true(result.pool.reused, 'second visit reused the pooled page');
+    });
+
+    // Icon HTML is a pure function of the card's type (the type's static
+    // `icon` component), so an indexing job renders each type's icon once:
+    // the first index visit for a type renders it and every later visit of
+    // that type reuses the captured markup, skipping the icon route. The
+    // memo is scoped to the visit's jobId; visits without one (on-demand
+    // renders) always render the icon and never touch the memo.
+    module('index-visit icon memo', function () {
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+      let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
+        prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}${fileName}`,
+          auth: auth(),
+          visitType: 'index',
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef: {
+              module: baseRRI('json-file-def'),
+              name: 'JsonFileDef',
+            },
+            ...((extra?.renderOptions as object) ?? {}),
+          },
+          ...(extra?.jobId ? { jobId: extra.jobId as string } : {}),
+          ...(extra?.batchId ? { batchId: extra.batchId as string } : {}),
+        });
+
+      test('one job renders each type icon once and reuses it', async function (assert) {
+        let jobId = 'icon-memo-reuse.1';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.notOk(first.card?.error, 'first visit completes cleanly');
+        assert.ok(
+          first.card?.iconHTML?.startsWith('<svg'),
+          `first visit renders the card icon: ${first.card?.iconHTML}`,
+        );
+        assert.ok(
+          first.fileRender?.iconHTML,
+          'first visit renders the file icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.misses,
+          2,
+          'card + file icons each rendered once',
+        );
+        assert.strictEqual(memo?.hits, 0, 'nothing reused yet');
+        assert.strictEqual(memo?.types.length, 2, 'two type keys memoized');
+
+        let second = (await indexVisit('willow.json', { jobId })).response;
+        assert.notOk(second.card?.error, 'second visit completes cleanly');
+        assert.strictEqual(
+          second.card?.iconHTML,
+          first.card?.iconHTML,
+          'same-type card icon is reused byte-identically',
+        );
+        assert.strictEqual(
+          second.fileRender?.iconHTML,
+          first.fileRender?.iconHTML,
+          'same-type file icon is reused byte-identically',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.hits, 2, 'card + file icons each reused');
+        assert.strictEqual(memo?.misses, 2, 'no additional renders');
+
+        let third = (await indexVisit('rex.json', { jobId })).response;
+        assert.notOk(third.card?.error, 'third visit completes cleanly');
+        assert.ok(
+          third.card?.iconHTML?.includes('data-test-icon'),
+          `a different type renders its own icon: ${third.card?.iconHTML}`,
+        );
+        assert.notStrictEqual(
+          third.card?.iconHTML,
+          first.card?.iconHTML,
+          'the two card types have distinct icons',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.misses, 3, 'the new card type rendered once');
+        assert.strictEqual(memo?.hits, 3, 'its file icon was reused');
+        assert.strictEqual(memo?.types.length, 3, 'three type keys memoized');
+      });
+
+      test('a different job renders icons afresh', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-job-a.1' });
+        let memoA = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memoA?.misses, 2, 'first job rendered its icons');
+
+        let result = (
+          await indexVisit('willow.json', { jobId: 'icon-memo-job-b.1' })
+        ).response;
+        assert.ok(result.card?.iconHTML, 'card icon rendered');
+        let memoB = prerenderer.getIconMemo(affinityKey);
+        assert.notStrictEqual(
+          memoB?.jobKey,
+          memoA?.jobKey,
+          'the memo belongs to the new job',
+        );
+        assert.strictEqual(
+          memoB?.misses,
+          2,
+          'the new job rendered the icons itself',
+        );
+        assert.strictEqual(memoB?.hits, 0, 'nothing carried over');
+      });
+
+      test('a visit without a jobId never touches the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-anon.1' });
+        let before = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(before?.misses, 2, 'job memo established');
+
+        let result = (await indexVisit('willow.json')).response;
+        assert.ok(
+          result.card?.iconHTML?.startsWith('<svg'),
+          'icon still renders without a jobId',
+        );
+        let after = prerenderer.getIconMemo(affinityKey);
+        assert.deepEqual(
+          after,
+          before,
+          'the jobless visit neither read nor wrote the memo',
+        );
+      });
+
+      test('a meta error short-circuits the pass and skips the icon render', async function (assert) {
+        // `stray.json`'s `friendName` computed reads a link whose target
+        // never loads, so the meta entry errors on every visit. The pass
+        // must stop there: driving the icon render against the error
+        // route would wait out the full render timeout and evict the tab.
+        let { response, pool } = await indexVisit('stray.json', {
+          jobId: 'icon-memo-meta-error.1',
+        });
+        assert.ok(
+          response.card?.error,
+          `card error captured: ${JSON.stringify(
+            response.card?.error?.error?.message ?? null,
+          )}`,
+        );
+        assert.strictEqual(
+          response.card?.iconHTML,
+          null,
+          'icon render is skipped once the meta entry has errored',
+        );
+        // The extract normally rides the fused meta transition, which the
+        // card error lost — the fallback standalone extract transition must
+        // still produce the file row (the card error is a route-level error;
+        // the page stays fully operational).
+        assert.strictEqual(
+          response.fileExtract?.status,
+          'ready',
+          'the fallback extract still produces the file row',
+        );
+        assert.strictEqual(
+          typeof response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+          'number',
+          'the fallback extract records its standalone route timing',
+        );
+        assert.false(
+          pool.timedOut,
+          'the visit completes without a render timeout',
+        );
+        assert.false(pool.evicted, 'the page stays usable');
+      });
+
+      test('disposing the affinity drops the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-dispose.1' });
+        assert.ok(
+          prerenderer.getIconMemo(affinityKey),
+          'memo established by the visit',
+        );
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'affinity disposal drops the memo with the rest of the warm state',
+        );
+      });
+
+      test('a clearCache visit bypasses the memo read and releaseBatch drops the memo', async function (assert) {
+        let jobId = 'icon-memo-clear.1';
+        let batchId = 'icon-memo-clear-batch';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.ok(first.card?.iconHTML, 'card icon rendered');
+
+        let second = (
+          await indexVisit('willow.json', {
+            jobId,
+            batchId,
+            renderOptions: { clearCache: true },
+          })
+        ).response;
+        assert.ok(
+          second.card?.iconHTML?.startsWith('<svg'),
+          'clearCache visit renders the icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.hits,
+          0,
+          'the clearCache visit did not read the memo',
+        );
+        assert.strictEqual(
+          memo?.misses,
+          4,
+          'the clearCache visit re-rendered and re-stored both icons',
+        );
+
+        await prerenderer.releaseBatch({
+          batchId,
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'releasing the owning batch drops the memo',
+        );
+      });
     });
   });
 });

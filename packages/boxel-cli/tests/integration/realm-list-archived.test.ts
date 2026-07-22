@@ -1,26 +1,44 @@
 import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createRealm } from '../../src/commands/realm/create.ts';
-import { archiveRealm } from '../../src/commands/realm/archive.ts';
-import { listRealms } from '../../src/commands/realm/list.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// Exercises how `boxel realm list` treats archived realms: hidden by
+// default, surfaced with `--include-archived`. We create realms and
+// archive them through the installed binary, then read the list back with
+// `--json`.
+
+let home: string;
 let cleanupProfile: () => void;
+
+interface ListResult {
+  realms: { url: string; hidden: boolean; archived: boolean }[];
+  error?: string;
+}
+
+async function listCli(flags: string[] = []): Promise<ListResult> {
+  let res = await runBoxel(['realm', 'list', '--json', ...flags], { home });
+  expect(res.ok, res.stderr).toBe(true);
+  return res.json<ListResult>();
+}
+
+async function archiveCli(realmUrl: string): Promise<void> {
+  let res = await runBoxel(['realm', 'archive', realmUrl, '--yes'], { home });
+  expect(res.ok, res.stderr).toBe(true);
+}
 
 beforeAll(async () => {
   await startTestRealmServer();
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -30,42 +48,28 @@ afterAll(async () => {
 
 describe('realm list with archived realms (integration)', () => {
   it('hides archived realms by default', async () => {
-    let name = uniqueRealmName();
-    let { realmUrl } = await createRealm(name, `Test ${name}`, {
-      profileManager,
-    });
+    let { realmUrl } = await createTestRealmViaCli(home);
 
-    let beforeArchive = await listRealms({ profileManager });
+    let beforeArchive = await listCli();
     expect(beforeArchive.error).toBeUndefined();
     expect(beforeArchive.realms.map((r) => r.url)).toContain(realmUrl);
 
-    let archive = await archiveRealm({ realmUrl, profileManager });
-    expect(archive.archived).toBe(true);
+    await archiveCli(realmUrl);
 
-    let afterArchive = await listRealms({ profileManager });
+    let afterArchive = await listCli();
     expect(afterArchive.error).toBeUndefined();
     expect(afterArchive.realms.map((r) => r.url)).not.toContain(realmUrl);
 
-    let allAccessible = await listRealms({
-      allAccessible: true,
-      profileManager,
-    });
+    let allAccessible = await listCli(['--all-accessible']);
     expect(allAccessible.error).toBeUndefined();
     expect(allAccessible.realms.map((r) => r.url)).not.toContain(realmUrl);
   });
 
   it('--include-archived surfaces archived realms with an archived marker', async () => {
-    let name = uniqueRealmName();
-    let { realmUrl } = await createRealm(name, `Test ${name}`, {
-      profileManager,
-    });
-    await archiveRealm({ realmUrl, profileManager });
+    let { realmUrl } = await createTestRealmViaCli(home);
+    await archiveCli(realmUrl);
 
-    let result = await listRealms({
-      includeArchived: true,
-      profileManager,
-    });
-
+    let result = await listCli(['--include-archived']);
     expect(result.error).toBeUndefined();
     let entry = result.realms.find((r) => r.url === realmUrl);
     expect(entry).toBeDefined();
@@ -73,22 +77,12 @@ describe('realm list with archived realms (integration)', () => {
   });
 
   it('lists multiple archived realms together when --include-archived is set', async () => {
-    let nameA = uniqueRealmName();
-    let nameB = uniqueRealmName();
-    let { realmUrl: urlA } = await createRealm(nameA, `Test ${nameA}`, {
-      profileManager,
-    });
-    let { realmUrl: urlB } = await createRealm(nameB, `Test ${nameB}`, {
-      profileManager,
-    });
-    await archiveRealm({ realmUrl: urlA, profileManager });
-    await archiveRealm({ realmUrl: urlB, profileManager });
+    let { realmUrl: urlA } = await createTestRealmViaCli(home);
+    let { realmUrl: urlB } = await createTestRealmViaCli(home);
+    await archiveCli(urlA);
+    await archiveCli(urlB);
 
-    let result = await listRealms({
-      includeArchived: true,
-      profileManager,
-    });
-
+    let result = await listCli(['--include-archived']);
     expect(result.error).toBeUndefined();
     let archivedUrls = result.realms
       .filter((r) => r.archived)

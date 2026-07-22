@@ -1,24 +1,32 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { getEventListeners } from 'node:events';
 import {
   PrerenderCancelledError,
   isPrerenderCancellation,
   throwIfAborted,
+  abortable,
 } from '../prerender/prerender-cancel.ts';
 import { TabQueue } from '../prerender/page-pool.ts';
 import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
+import { withTimeout, isRenderError } from '../prerender/utils.ts';
+import type { RenderError } from '@cardstack/runtime-common';
+import type { Page } from 'puppeteer';
 
-// These tests cover the cancellation plumbing added in CS-10873 at the
-// level closest to the logic — no Chrome, no HTTP. They pin down the
-// behaviors that the manager / prerender-server rely on:
+// These tests cover the cancellation plumbing at the level closest to
+// the logic — no Chrome, no HTTP. They pin down the behaviors that the
+// manager / prerender-server rely on:
 //
 //   1. An abort delivered *while queued* produces a `'queued'`-state
 //      `PrerenderCancelledError` and releases the slot so later
 //      waiters aren't blocked behind a cancelled holder.
-//   2. An abort delivered *after* acquisition is the caller's
-//      responsibility to react to via `throwIfAborted(signal, state)`,
-//      which the render path does at pass boundaries.
+//   2. An abort delivered *mid-render* interrupts the in-flight step
+//      immediately: `withTimeout` / `abortable` race the signal, so a
+//      wedged page operation that would otherwise pin the step until
+//      its render/protocol timeout is abandoned the moment the caller
+//      disconnects, surfacing a `'rendering'`-state cancellation the
+//      prerenderer turns into tab disposal.
 //   3. The error shape is what the prerenderer's cancel-handler
 //      branches on — `name`, `state`, and the `instanceof` guard.
 //
@@ -54,6 +62,11 @@ module(basename(import.meta.filename), function () {
         err.message,
         'prerender cancelled: req-closed',
         'reason in message',
+      );
+      assert.strictEqual(
+        err.reason,
+        'req-closed',
+        'reason exposed as its own field for log lines',
       );
     });
 
@@ -108,6 +121,187 @@ module(basename(import.meta.filename), function () {
           'queued default',
         );
       }
+    });
+  });
+
+  module('withTimeout cancellation', function () {
+    // `withTimeout` only touches the page on its timeout path, and every
+    // page read there is gated on `!page.isClosed()` — so a stub that
+    // reports closed exercises the full race without Chrome.
+    let stubPage = {
+      url: () => 'http://localhost:4200/render/stub-card/1/opts/html',
+      isClosed: () => true,
+    } as unknown as Page;
+
+    test('abort mid-step interrupts the wait without burning the step timeout', async function (assert) {
+      let ac = new AbortController();
+      let start = Date.now();
+      let neverSettles = new Promise<never>(() => {});
+      let result = withTimeout(
+        stubPage,
+        () => neverSettles,
+        30_000,
+        undefined,
+        ac.signal,
+      );
+      setTimeout(() => ac.abort('client disconnected'), 20);
+      try {
+        await result;
+        assert.ok(false, 'should have thrown');
+      } catch (e) {
+        assert.true(isPrerenderCancellation(e), 'cancel error');
+        assert.strictEqual(
+          (e as PrerenderCancelledError).state,
+          'rendering',
+          'tagged as a mid-render cancel',
+        );
+        assert.ok(
+          ((e as PrerenderCancelledError).message ?? '').includes(
+            'client disconnected',
+          ),
+          'abort reason threaded into the message',
+        );
+      }
+      assert.true(
+        Date.now() - start < 10_000,
+        'interrupted well before the step timeout',
+      );
+    });
+
+    test('already-aborted signal cancels before the step starts', async function (assert) {
+      let ac = new AbortController();
+      ac.abort();
+      let started = false;
+      try {
+        await withTimeout(
+          stubPage,
+          async () => {
+            started = true;
+          },
+          1_000,
+          undefined,
+          ac.signal,
+        );
+        assert.ok(false, 'should have thrown');
+      } catch (e) {
+        assert.true(isPrerenderCancellation(e), 'cancel error');
+        assert.strictEqual((e as PrerenderCancelledError).state, 'rendering');
+      }
+      assert.false(started, 'step body never ran');
+    });
+
+    test('timeout path is unchanged when the signal never fires', async function (assert) {
+      let ac = new AbortController();
+      let result = await withTimeout(
+        stubPage,
+        () => new Promise<never>(() => {}),
+        50,
+        undefined,
+        ac.signal,
+      );
+      assert.true(isRenderError(result), 'timeout yields a render error');
+      assert.strictEqual(
+        (result as RenderError).error.title,
+        'Render timeout',
+        'canonical timeout error',
+      );
+    });
+
+    test('a completed step resolves its value and detaches the abort listener', async function (assert) {
+      let ac = new AbortController();
+      let value = await withTimeout(
+        stubPage,
+        async () => 'rendered',
+        1_000,
+        undefined,
+        ac.signal,
+      );
+      assert.strictEqual(value, 'rendered', 'value passed through');
+      // The signal spans the whole request while the race is per-step;
+      // a leaked listener per step would pile up across a visit.
+      assert.strictEqual(
+        getEventListeners(ac.signal, 'abort').length,
+        0,
+        'no listener left behind',
+      );
+    });
+  });
+
+  module('abortable', function () {
+    test('passes the value through when no signal is provided', async function (assert) {
+      assert.strictEqual(await abortable(undefined, async () => 42), 42);
+    });
+
+    test('resolves and detaches its listener when the operation completes', async function (assert) {
+      let ac = new AbortController();
+      let value = await abortable(ac.signal, async () => 'done');
+      assert.strictEqual(value, 'done');
+      assert.strictEqual(
+        getEventListeners(ac.signal, 'abort').length,
+        0,
+        'no listener left behind',
+      );
+    });
+
+    test('abort mid-operation rejects with a rendering-state cancel by default', async function (assert) {
+      let ac = new AbortController();
+      let op = abortable(ac.signal, () => new Promise<never>(() => {}));
+      setTimeout(() => ac.abort('client disconnected'), 20);
+      try {
+        await op;
+        assert.ok(false, 'should have thrown');
+      } catch (e) {
+        assert.true(isPrerenderCancellation(e), 'cancel error');
+        assert.strictEqual((e as PrerenderCancelledError).state, 'rendering');
+        assert.ok(
+          ((e as PrerenderCancelledError).message ?? '').includes(
+            'client disconnected',
+          ),
+          'reason threaded through',
+        );
+      }
+    });
+
+    test('already-aborted signal rejects before the operation starts', async function (assert) {
+      let ac = new AbortController();
+      ac.abort();
+      let started = false;
+      try {
+        await abortable(ac.signal, async () => {
+          started = true;
+        });
+        assert.ok(false, 'should have thrown');
+      } catch (e) {
+        assert.true(isPrerenderCancellation(e), 'cancel error');
+      }
+      assert.false(started, 'operation never ran');
+    });
+
+    test('the abandoned operation rejecting later does not surface anywhere', async function (assert) {
+      // Once the page is disposed, the abandoned CDP call rejects —
+      // that rejection must be absorbed by the settled race, not
+      // escape as an unhandled rejection (which fails the suite).
+      let ac = new AbortController();
+      let rejectLater!: (err: Error) => void;
+      let op = abortable(
+        ac.signal,
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            rejectLater = reject;
+          }),
+      );
+      ac.abort();
+      try {
+        await op;
+        assert.ok(false, 'should have thrown');
+      } catch (e) {
+        assert.true(isPrerenderCancellation(e), 'cancel error');
+      }
+      rejectLater(new Error('Protocol error (Target closed)'));
+      // Give the microtask queue a turn — an unhandled rejection here
+      // would be reported by the test harness.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.ok(true, 'late rejection absorbed');
     });
   });
 

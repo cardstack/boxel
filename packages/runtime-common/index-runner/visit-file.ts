@@ -10,6 +10,7 @@ import {
   type Batch,
   type Diagnostics,
   type FileRenderResponse,
+  type IndexVisitClientTimings,
   type JobInfo,
   type LocalPath,
   type LooseCardResource,
@@ -24,7 +25,7 @@ import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
-interface VisitFileOptions {
+interface RenderFileForIndexingOptions {
   url: URL;
   realmURL: URL;
   ignoreMap: Map<string, Ignore>;
@@ -49,16 +50,47 @@ interface VisitFileOptions {
   consumeClearCacheForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
+}
+
+// The tab-bound half of a visit: everything `renderFileForIndexing` produces
+// from the file read + prerender round-trip(s), handed to
+// `routeIndexVisitResult` for the DB-bound half (bookkeeping + row writes).
+// Splitting the two lets the index loop keep the next visit's render in flight
+// while this visit's writes drain — the tab is the scarce resource, and the
+// writes/bookkeeping use only the worker + DB, so they ride in the shadow of a
+// render that happens anyway.
+export interface IndexVisitRenderResult {
+  localPath: LocalPath;
+  lastModified: number;
+  resourceCreatedAt: number;
+  // Recorded as the file-index row's `hasModulePrerender` hint.
+  isModule: boolean;
+  // Present when the file parsed as a card resource — drives the extra
+  // `instance` row.
+  parsedCardResource: LooseCardResource | undefined;
+  // Merged card sub-result (search-doc side from the index visit, HTML side
+  // from the prerender-html visit). Undefined when no visit produced one.
+  card: RenderResponse | undefined;
+  fileExtract: RenderVisitResponse['fileExtract'];
+  fileRender: FileRenderResponse | undefined;
+  // A page-unusable/auth short-circuit reported by either visit. Used to
+  // synthesize a card error entry when a card resource produced no card
+  // result.
+  pageUnusableError: RenderVisitResponse['pageUnusableError'];
+  // Timing / diagnostic payload flattened from the visits' `response.meta`
+  // (server timings + host-side breadcrumbs + HTTP requestId). Persisted onto
+  // `boxel_index.diagnostics` so operators can investigate slow renders after
+  // the fact.
+  diagnostics: Diagnostics | undefined;
+}
+
+interface RouteIndexVisitCallbacks {
   indexCardWithResult(args: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
     renderResult: NonNullable<RenderVisitResponse['card']>;
-    // Timing / diagnostic payload flattened from the visits'
-    // `response.meta` (server timings + host-side breadcrumbs +
-    // HTTP requestId). Persisted onto `boxel_index.diagnostics`
-    // so operators can investigate slow renders after the fact.
     diagnostics?: Diagnostics;
   }): Promise<void>;
   indexFileWithResults(args: {
@@ -75,9 +107,9 @@ interface VisitFileOptions {
   }): Promise<void>;
 }
 
-// Visits a file for indexing as two consolidated prerender visits along the
-// search-doc/HTML seam, then routes the merged sub-results into the
-// card/file indexers:
+// Renders a file for indexing as two consolidated prerender visits along the
+// search-doc/HTML seam, returning the merged sub-results for
+// `routeIndexVisitResult` to write:
 //
 //   1. the index visit — file extract, card meta (search doc / serialized /
 //      types / display names / deps) and the card + file icons. Never runs
@@ -89,8 +121,11 @@ interface VisitFileOptions {
 //
 // The merged writes are identical to what a single fused visit produces;
 // the seam separates HTML production from search-doc production so each can
-// run on its own channel.
-export async function visitFileForIndexing({
+// run on its own channel. This function touches only the reader + prerender
+// tab (never the index tables), so the caller can start the next file's
+// render before this one's row writes land. Returns `undefined` when the
+// file is ignored or belongs to a different realm.
+export async function renderFileForIndexing({
   url,
   realmURL,
   ignoreMap,
@@ -106,11 +141,9 @@ export async function visitFileForIndexing({
   consumeClearCacheForRender,
   logDebug,
   logWarn,
-  indexCardWithResult,
-  indexFileWithResults,
-}: VisitFileOptions): Promise<void> {
+}: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
   if (isIgnored(realmURL, ignoreMap, url)) {
-    return;
+    return undefined;
   }
   let start = Date.now();
   logDebug(`${jobIdentity(jobInfo)} begin visit of file ${url.href}`);
@@ -122,7 +155,7 @@ export async function visitFileForIndexing({
     logDebug(
       `${jobIdentity(jobInfo)} Visit of ${url.href} skipped (different realm than ${realmURL.href})`,
     );
-    return;
+    return undefined;
   }
 
   let fileRef = await reader.readFile(url);
@@ -227,6 +260,13 @@ export async function visitFileForIndexing({
     ...(fileContentSize !== undefined ? { fileContentSize } : {}),
   };
 
+  // Everything up to here — the file read, parse, and file-metadata lookups —
+  // is the visit's pre-render client overhead. The render round-trip and the
+  // post-render bookkeeping are measured separately and persisted on the row's
+  // diagnostics so the index job's between-render wall is attributable per row
+  // (see IndexVisitClientTimings).
+  let readMs = Date.now() - start;
+  let renderStart = Date.now();
   let indexResponse: RenderVisitResponse;
   try {
     indexResponse = await prerenderer.prerenderVisit({
@@ -249,9 +289,7 @@ export async function visitFileForIndexing({
   // or when there is nothing for it to render. In split mode
   // (`batch.splitPrerenderHtml`) it is skipped entirely: HTML runs on its
   // own channel in the `prerender_html` job, and this index pass writes
-  // only the search-doc half (the HTML columns land NULL on
-  // `boxel_index_working`, which the dual-read never serves when a
-  // `prerendered_html` row exists).
+  // only the search-doc half.
   let htmlResponse: RenderVisitResponse | undefined;
   let htmlFileData = indexResponse.fileExtract?.resource
     ? { resource: indexResponse.fileExtract.resource, fileDefCodeRef }
@@ -289,6 +327,15 @@ export async function visitFileForIndexing({
     }
   }
 
+  // Client-observed wall of the render round-trip(s), minus the server's own
+  // `totalElapsedMs`, is the transport overhead (serialization + wire hop +
+  // waits the server doesn't count). Both visits contribute when the fused
+  // path runs both; in split mode only the index visit ran.
+  let renderClientMs = Date.now() - renderStart;
+  let serverRenderMs =
+    (indexResponse.meta?.diagnostics?.totalElapsedMs ?? 0) +
+    (htmlResponse?.meta?.diagnostics?.totalElapsedMs ?? 0);
+
   let card = mergeCardVisitResults(indexResponse.card, htmlResponse?.card);
   let fileRenderResult = mergeFileRenderVisitResults(
     indexResponse.fileRender,
@@ -296,10 +343,56 @@ export async function visitFileForIndexing({
   );
   let pageUnusableError =
     indexResponse.pageUnusableError ?? htmlResponse?.pageUnusableError;
-  let diagnostics = mergeVisitDiagnostics(
-    flattenPrerenderMeta(indexResponse.meta),
-    flattenPrerenderMeta(htmlResponse?.meta),
+  let diagnostics = attachIndexVisitClientTimings(
+    mergeVisitDiagnostics(
+      flattenPrerenderMeta(indexResponse.meta),
+      flattenPrerenderMeta(htmlResponse?.meta),
+    ),
+    {
+      read: readMs,
+      renderRpc: Math.max(0, renderClientMs - serverRenderMs),
+    },
   );
+
+  logDebug(
+    `${jobIdentity(jobInfo)} completed render of file ${url.href} in ${Date.now() - start}ms`,
+  );
+
+  return {
+    localPath,
+    lastModified,
+    resourceCreatedAt,
+    isModule,
+    parsedCardResource,
+    card,
+    fileExtract: indexResponse.fileExtract,
+    fileRender: fileRenderResult,
+    pageUnusableError,
+    diagnostics,
+  };
+}
+
+// The DB-bound half of a visit: route the merged render sub-results into the
+// card/file indexers, which do the post-render bookkeeping (dependency-error
+// propagation) and write the rows. Kept separate from `renderFileForIndexing`
+// so the index loop can overlap this visit's writes with the next visit's
+// render.
+export async function routeIndexVisitResult(
+  result: IndexVisitRenderResult,
+  { indexCardWithResult, indexFileWithResults }: RouteIndexVisitCallbacks,
+): Promise<void> {
+  let {
+    localPath,
+    lastModified,
+    resourceCreatedAt,
+    isModule,
+    parsedCardResource,
+    card,
+    fileExtract,
+    fileRender,
+    pageUnusableError,
+    diagnostics,
+  } = result;
 
   // Route card result when we parsed a card resource. If the visits
   // short-circuited (page-unusable/auth), the card sub-result may be
@@ -349,14 +442,31 @@ export async function visitFileForIndexing({
     resourceCreatedAt,
     hasModulePrerender: isModule,
     isCardInstance: Boolean(parsedCardResource),
-    extractResult: indexResponse.fileExtract,
-    renderResult: fileRenderResult,
+    extractResult: fileExtract,
+    renderResult: fileRender,
     diagnostics,
   });
+}
 
-  logDebug(
-    `${jobIdentity(jobInfo)} completed visit of file ${url.href} in ${Date.now() - start}ms`,
-  );
+// Fold the pre-render + transport client overhead into the row's diagnostics
+// blob, creating one if the render produced none. `bookkeeping` is filled in
+// later by the card / file indexers, just before each row write, since it
+// spans work that happens downstream of this merge.
+function attachIndexVisitClientTimings(
+  diagnostics: Diagnostics | undefined,
+  timings: IndexVisitClientTimings,
+): Diagnostics | undefined {
+  let measured = Object.entries(timings).filter(([, v]) => v !== undefined);
+  if (measured.length === 0) {
+    return diagnostics;
+  }
+  return {
+    ...(diagnostics ?? {}),
+    indexVisitClientMs: {
+      ...(diagnostics?.indexVisitClientMs ?? {}),
+      ...Object.fromEntries(measured),
+    },
+  };
 }
 
 // Reassemble the two visits' card sub-results into the single RenderResponse

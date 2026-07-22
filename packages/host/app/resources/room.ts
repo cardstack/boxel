@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -153,7 +154,34 @@ export class RoomResource extends Resource<Args> {
 
   processingLastStartedAt = 0;
 
+  // `modify` restarts `processRoomTask` on every timeline/room-state
+  // invalidation. A restart storm — processing whose own effects re-invalidate
+  // the deps thunk — keeps the runloop occupied so `settled()` never resolves,
+  // hanging any awaited test helper with no console output at all. Track the
+  // restart rate (testing only) so a silent test hang can be attributed to (or
+  // cleared of) a processing loop from CI output alone.
+  private processingRestartWindowStartedAt = 0;
+  private processingRestartsInWindow = 0;
+
+  private notePerformForRestartTrace(roomId: string) {
+    if (!isTesting()) {
+      return;
+    }
+    let now = Date.now();
+    if (now - this.processingRestartWindowStartedAt > 1_000) {
+      if (this.processingRestartsInWindow > 20) {
+        console.log(
+          `[room-processing-trace] processRoomTask restarted ${this.processingRestartsInWindow} times in the last second for room ${roomId}`,
+        );
+      }
+      this.processingRestartWindowStartedAt = now;
+      this.processingRestartsInWindow = 0;
+    }
+    this.processingRestartsInWindow++;
+  }
+
   private processRoomTask = restartableTask(async (roomId: string) => {
+    this.notePerformForRestartTrace(roomId);
     this.processingLastStartedAt = Date.now();
     try {
       this.matrixRoom = roomId

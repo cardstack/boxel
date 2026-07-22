@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   isCardInstance,
   baseFileRef,
+  baseRef,
   isCardResource,
   isFileMetaResource,
   type Loader,
@@ -95,6 +96,25 @@ module('Integration | store search public API', function (hooks) {
         'the instance is resident in the store',
       );
     }
+    assert.deepEqual(
+      instances.map((instance) => (instance as any).title).sort(),
+      ['Mango', 'Van Gogh'],
+    );
+  });
+
+  test('search with a BaseDef type filter stays pinned to card instances', async function (assert) {
+    // BaseDef terminates both kinds' type chains, so as a filter it matches
+    // file rows too — but it selects no kind, so `search` pins the 'cards'
+    // scope for it just like an untyped query.
+    let instances = await storeService.search<CardDefType>(
+      { filter: { type: baseRef } },
+      [testRealmURL],
+    );
+
+    assert.true(
+      instances.every((instance) => isCardInstance(instance)),
+      'every result is a card instance — no plain files, no dual-indexed `.json` file rows',
+    );
     assert.deepEqual(
       instances.map((instance) => (instance as any).title).sort(),
       ['Mango', 'Van Gogh'],
@@ -212,6 +232,28 @@ module('Integration | store search public API', function (hooks) {
     assert.true(
       (doc.included ?? []).some((resource) => isFileMetaResource(resource)),
       'file-meta items ride in included',
+    );
+  });
+
+  test('a file is matchable by eq on its id (the unified card/file identity key)', async function (assert) {
+    // The file-indexer stamps `id` (= the file URL) into the file search_doc,
+    // so a file is addressable by `eq: { id }` the same way a card instance is.
+    let fileURL = `${testRealmURL}files/hello.txt`;
+    let doc = await storeService.searchEntries(
+      {
+        filter: {
+          'item.on': baseFileRef,
+          eq: { 'item.id': fileURL },
+        },
+        fields: { entry: ['item'] },
+      },
+      [testRealmURL],
+    );
+
+    assert.deepEqual(
+      doc.data.map((entry) => entry.id),
+      [fileURL],
+      'exactly the file with that id is returned',
     );
   });
 

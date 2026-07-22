@@ -17,6 +17,9 @@ import {
 
 const args = process.argv;
 const migrationsDir = resolve(join(import.meta.dirname, '..', 'migrations'));
+const removalMigrationsDir = resolve(
+  join(import.meta.dirname, '..', 'migrations-removal'),
+);
 const sqliteSchemaDir = resolve(
   join(import.meta.dirname, '..', '..', 'host', 'config', 'schema'),
 );
@@ -290,11 +293,17 @@ function prepareDump(sql: string): string {
 }
 
 function getSchemaFilename(): string {
-  let files = readdirSync(migrationsDir);
-  // Only timestamped migration files — ignores non-migration entries in the
-  // dir such as `package.json` (pins the dir to type:commonjs) and
-  // `.eslintrc.js`. Must stay in sync with getLatestSchemaFile in
-  // packages/host/config/environment.js, which validates the schema file name.
+  // Latest timestamped migration across BOTH phases: additive migrations in
+  // migrations/ and destructive ones in migrations-removal/ (applied
+  // post-deploy). Only timestamped migration files count — ignores
+  // non-migration entries such as `package.json` (pins the dir to
+  // type:commonjs) and `.eslintrc.js`. Must stay in sync with
+  // getLatestSchemaFile in packages/host/config/environment.js, which validates
+  // the schema file name.
+  let files = [
+    ...readdirSync(migrationsDir),
+    ...readdirSync(removalMigrationsDir),
+  ];
   let lastFile = files
     .filter((f) => /^\d+_/.test(f))
     .sort()

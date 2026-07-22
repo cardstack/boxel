@@ -567,12 +567,10 @@ export class SearchEntriesResource extends Resource<Args> {
     // A member with a rendering is a candidate only when an event names it at
     // a newer generation than it holds; one with no rendering yet is always a
     // candidate (the upgrade opportunity this event may be announcing).
-    // Content that changes WITHOUT a generation advance (a dual-read fallback
-    // row whose real HTML lands at the generation the fallback already
-    // reported, or a generation reused after a failed commit) is invisible to
-    // this gate — and equally to the composite validator, which would `304`
-    // such a member anyway — so those heal on the next generation advance
-    // rather than here.
+    // Content that changes WITHOUT a generation advance (a generation reused
+    // after a failed commit) is invisible to this gate — and equally to the
+    // composite validator, which would `304` such a member anyway — so those
+    // heal on the next generation advance rather than here.
     let candidates = this._entries.filter((member) => {
       let eventGeneration = invalidationGenerationFor(member, invalidations);
       if (eventGeneration === undefined) {

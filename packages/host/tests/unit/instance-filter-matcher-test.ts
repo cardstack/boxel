@@ -21,7 +21,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 import { testRealmURL, p } from '../helpers';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardDef, FileDef } from '@cardstack/base/card-api';
 
 let { resolvedBaseRealmURL } = ENV;
 
@@ -33,6 +33,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
   let catRef: CodeRef;
   let eventRef: CodeRef;
   let cards: Record<string, CardDef> = {};
+  let fileDef: FileDef;
 
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
@@ -80,6 +81,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
       linksToMany,
       CardDef,
       FieldDef,
+      FileDef,
       setCardAsSavedForTest,
     } = cardApi;
     let { default: StringField } = string;
@@ -168,6 +170,15 @@ module('Unit | instance-filter-matcher', function (hooks) {
       card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
+
+    let fileURL = `${testRealmURL}files/hello.md`;
+    fileDef = new FileDef({
+      id: fileURL,
+      sourceUrl: fileURL,
+      url: fileURL,
+      name: 'hello.md',
+      contentType: 'text/markdown',
+    });
   });
 
   function match(card: CardDef, filter: Filter) {
@@ -648,6 +659,124 @@ module('Unit | instance-filter-matcher', function (hooks) {
       sorted.map((c) => c.id),
       [mango.id, ringo.id],
       'mango sorts before ringo by URL',
+    );
+  });
+
+  // -- synthetic search-doc keys (server parity) ------------------------------
+  // The engine lets filters/sorts address `_title`, `_cardType`, and
+  // `_isCardInstanceFile` even though they are stamped into the search doc, not
+  // real fields. Without a client shim the matcher resolves them to nothing and
+  // the reconciler blanks correct server results — these guard that parity.
+
+  test('_title contains resolves to the card title', function (assert) {
+    let { mangoBirthday, vangoghBirthday } = cards;
+    assert.strictEqual(
+      match(mangoBirthday, { contains: { _title: 'Mango' } }),
+      'match',
+      "mangoBirthday's title contains Mango",
+    );
+    assert.strictEqual(
+      match(vangoghBirthday, { contains: { _title: 'Mango' } }),
+      'no-match',
+      "vangoghBirthday's title does not contain Mango",
+    );
+  });
+
+  test('_title comparator orders by the card title, not URL', function (assert) {
+    let { mangoBirthday, vangoghBirthday } = cards;
+    let sort: Sort = [{ on: eventRef, by: '_title', direction: 'asc' }];
+    let sorted = [vangoghBirthday, mangoBirthday].sort(
+      makeInstanceComparator(sort, api),
+    );
+    assert.deepEqual(
+      sorted.map((c) => (c as any).cardTitle),
+      ["Mango's Birthday", "Van Gogh's Birthday"],
+      'A-Z by title (would be URL order without the _title shim)',
+    );
+  });
+
+  test('_cardType is non-null for a card instance', function (assert) {
+    let { mango } = cards;
+    // cards-grid relies on `not: { eq: { _cardType: null } }` matching cards;
+    // the shim must make `_cardType` resolve to a non-null value.
+    assert.strictEqual(
+      match(mango, { eq: { _cardType: null } }),
+      'no-match',
+      '_cardType is not null on a hydrated card',
+    );
+    assert.strictEqual(
+      match(mango, { not: { eq: { _cardType: null } } }),
+      'match',
+    );
+  });
+
+  test('_isCardInstanceFile: false matches a hydrated card (the dedup filter keeps cards)', function (assert) {
+    let { mango } = cards;
+    assert.strictEqual(
+      match(mango, { eq: { _isCardInstanceFile: false } }),
+      'match',
+      'a hydrated card is not a card-instance file, so the dedup keeps it',
+    );
+    assert.strictEqual(
+      match(mango, { eq: { _isCardInstanceFile: true } }),
+      'no-match',
+    );
+  });
+
+  test('isClientEvaluable keeps shimmed synthetic keys but rejects unshimmed underscore keys', function (assert) {
+    assert.true(
+      isClientEvaluable({ eq: { _isCardInstanceFile: false } }),
+      'a shimmed synthetic key stays client-evaluable',
+    );
+    assert.true(isClientEvaluable({ contains: { _title: 'x' } }));
+    assert.true(isClientEvaluable({ eq: { name: 'Mango' } }), 'a real field');
+    assert.true(
+      isClientEvaluable({ eq: { id: 'x' } }),
+      'the id identity key is a real field and stays client-evaluable (so file id filters route through the matcher, not server-only)',
+    );
+    assert.false(
+      isClientEvaluable({ eq: { _mysteryServerKey: 1 } }),
+      'an unshimmed underscore key forces server-only evaluation',
+    );
+  });
+
+  // -- file rows: the unified `id` identity key -------------------------------
+  // The file-indexer stamps `id` (= the file URL) into a file's search doc, so a
+  // mixed card/file query can address either kind by `eq: { id }`. `id` is a
+  // real FileDef field (not a synthetic key), so the client matcher resolves it
+  // via the normal field path — but guard it, because live reconciliation of a
+  // file id filter would drop correct rows if it ever diverged from the server.
+
+  test('eq on id matches a FileDef by its url', function (assert) {
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { eq: { id: `${testRealmURL}files/hello.md` } },
+        api,
+      ),
+      'match',
+      'a file matches its own id',
+    );
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { eq: { id: `${testRealmURL}files/other.md` } },
+        api,
+      ),
+      'no-match',
+      'a file does not match a different id',
+    );
+  });
+
+  test('not: eq on id excludes a FileDef by its url (the already-selected exclusion)', function (assert) {
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        fileDef,
+        { not: { eq: { id: `${testRealmURL}files/hello.md` } } },
+        api,
+      ),
+      'no-match',
+      'excluding a file by its id removes it',
     );
   });
 });

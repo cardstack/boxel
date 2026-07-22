@@ -2,13 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { realmHistory } from '../../src/commands/realm/history.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
+
+// `boxel realm history <local-dir>` views, creates, and restores local
+// checkpoints in the workspace's `.boxel-history/` git repo — pure local,
+// no realm server. We drive the installed binary; checkpoint setup and
+// on-disk verification stay in-process via `CheckpointManager` (the command
+// has no `--json`, so its own output is asserted from stdout/stderr).
 
 let workspaceDir: string;
 
 function writeFile(relPath: string, content: string): void {
-  const full = path.join(workspaceDir, relPath);
+  let full = path.join(workspaceDir, relPath);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, content, 'utf8');
 }
@@ -24,49 +30,76 @@ afterEach(() => {
 describe('realm history (integration)', () => {
   describe('view mode', () => {
     it('returns an empty list for an uninitialized workspace', async () => {
-      const result = await realmHistory(workspaceDir);
-      expect(result.ok).toBe(true);
-      expect(result.checkpoints).toEqual([]);
+      let res = await runBoxel(['realm', 'history', workspaceDir]);
+      expect(res.ok, res.stderr).toBe(true);
+      expect(res.stdout).toContain('No checkpoints found.');
     });
 
     it('lists checkpoints in reverse-chronological order', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'first');
-      await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
+      let manual = await cm.createCheckpoint('manual', [
+        { file: 'a.gts', status: 'added' },
+      ]);
       writeFile('b.gts', 'second');
-      await cm.createCheckpoint('local', [{ file: 'b.gts', status: 'added' }]);
+      let local = await cm.createCheckpoint('local', [
+        { file: 'b.gts', status: 'added' },
+      ]);
 
-      const result = await realmHistory(workspaceDir);
+      let res = await runBoxel(['realm', 'history', workspaceDir]);
 
-      expect(result.ok).toBe(true);
-      expect(result.checkpoints).toBeDefined();
-      expect(result.checkpoints!.length).toBe(2);
-      expect(result.checkpoints![0].source).toBe('local');
-      expect(result.checkpoints![1].source).toBe('manual');
-      expect(result.truncated).toBe(false);
+      expect(res.ok, res.stderr).toBe(true);
+      // Newest-first: the local checkpoint is listed before the manual one.
+      expect(res.stdout).toContain(local!.shortHash);
+      expect(res.stdout).toContain(manual!.shortHash);
+      expect(res.stdout.indexOf(local!.shortHash)).toBeLessThan(
+        res.stdout.indexOf(manual!.shortHash),
+      );
+      // truncated=false → no truncation note.
+      expect(res.stdout).not.toContain('Showing first');
     });
 
     it('returns truncated=true when checkpoints exceed limit', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', '1');
-      await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
+      let cp1 = await cm.createCheckpoint('manual', [
+        { file: 'a.gts', status: 'added' },
+      ]);
       writeFile('a.gts', '2');
-      await cm.createCheckpoint('manual', [
+      let cp2 = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'modified' },
       ]);
       writeFile('a.gts', '3');
-      await cm.createCheckpoint('manual', [
+      let cp3 = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'modified' },
       ]);
 
-      const capped = await realmHistory(workspaceDir, { limit: 2 });
-      expect(capped.ok).toBe(true);
-      expect(capped.checkpoints!.length).toBe(2);
-      expect(capped.truncated).toBe(true);
+      let capped = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '--limit',
+        '2',
+      ]);
+      expect(capped.ok, capped.stderr).toBe(true);
+      // Newest two are shown, the oldest omitted, and truncation is noted.
+      expect(capped.stdout).toContain(cp3!.shortHash);
+      expect(capped.stdout).toContain(cp2!.shortHash);
+      expect(capped.stdout).not.toContain(cp1!.shortHash);
+      expect(capped.stdout).toContain('Showing first 2 checkpoints');
 
-      const all = await realmHistory(workspaceDir, { limit: 10 });
-      expect(all.checkpoints!.length).toBe(3);
-      expect(all.truncated).toBe(false);
+      let all = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '--limit',
+        '10',
+      ]);
+      expect(all.ok, all.stderr).toBe(true);
+      expect(all.stdout).toContain(cp1!.shortHash);
+      expect(all.stdout).toContain(cp2!.shortHash);
+      expect(all.stdout).toContain(cp3!.shortHash);
+      expect(all.stdout).not.toContain('Showing first');
     });
   });
 
@@ -74,50 +107,71 @@ describe('realm history (integration)', () => {
     it('creates a checkpoint with the provided message', async () => {
       writeFile('a.gts', 'a');
 
-      const result = await realmHistory(workspaceDir, {
-        message: 'before cleanup',
-      });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-m',
+        'before cleanup',
+      ]);
+      expect(res.ok, res.stderr).toBe(true);
 
-      expect(result.ok).toBe(true);
-      expect(result.created).toBeDefined();
-      expect(result.created!.source).toBe('manual');
-
-      const cps = await new CheckpointManager(workspaceDir).getCheckpoints();
+      let cps = await new CheckpointManager(workspaceDir).getCheckpoints();
       expect(cps[0].message.trim()).toBe('before cleanup');
+      expect(cps[0].source).toBe('manual');
     });
 
     it('initializes the history repo on first use', async () => {
       writeFile('a.gts', 'a');
-      const historyDir = path.join(workspaceDir, '.boxel-history', '.git');
+      let historyDir = path.join(workspaceDir, '.boxel-history', '.git');
       expect(fs.existsSync(historyDir)).toBe(false);
 
-      const result = await realmHistory(workspaceDir, { message: 'first' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-m',
+        'first',
+      ]);
 
-      expect(result.ok).toBe(true);
+      expect(res.ok, res.stderr).toBe(true);
       expect(fs.existsSync(historyDir)).toBe(true);
     });
 
     it('returns an error when there are no changes to checkpoint', async () => {
       writeFile('a.gts', 'a');
-      await realmHistory(workspaceDir, { message: 'first' });
+      let first = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-m',
+        'first',
+      ]);
+      expect(first.ok, first.stderr).toBe(true);
 
-      const result = await realmHistory(workspaceDir, { message: 'second' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-m',
+        'second',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('No changes to checkpoint');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No changes to checkpoint');
     });
 
     it('rejects an empty message', async () => {
       writeFile('a.gts', 'a');
-      const result = await realmHistory(workspaceDir, { message: '   ' });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('--message must not be empty');
+      let res = await runBoxel(['realm', 'history', workspaceDir, '-m', '   ']);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('--message must not be empty');
     });
   });
 
   describe('restore (-r)', () => {
     it('restores by 1-based index', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'original');
       await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
       writeFile('a.gts', 'modified');
@@ -128,10 +182,17 @@ describe('realm history (integration)', () => {
       ]);
 
       // Index 2 is the older "original" checkpoint; getCheckpoints is newest-first.
-      const result = await realmHistory(workspaceDir, { restore: '2' });
+      // Non-interactive stdin isn't a TTY, so `--restore` requires `--yes`.
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '2',
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(true);
-      expect(result.restored).toBeDefined();
+      expect(res.ok, res.stderr).toBe(true);
       expect(fs.readFileSync(path.join(workspaceDir, 'a.gts'), 'utf8')).toBe(
         'original',
       );
@@ -139,9 +200,9 @@ describe('realm history (integration)', () => {
     });
 
     it('restores by short hash', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'original');
-      const target = await cm.createCheckpoint('manual', [
+      let target = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'added' },
       ]);
       writeFile('a.gts', 'modified');
@@ -149,21 +210,26 @@ describe('realm history (integration)', () => {
         { file: 'a.gts', status: 'modified' },
       ]);
 
-      const result = await realmHistory(workspaceDir, {
-        restore: target!.shortHash,
-      });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        target!.shortHash,
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(true);
-      expect(result.restored?.hash).toBe(target!.hash);
+      expect(res.ok, res.stderr).toBe(true);
+      expect(res.stdout).toContain(target!.shortHash);
       expect(fs.readFileSync(path.join(workspaceDir, 'a.gts'), 'utf8')).toBe(
         'original',
       );
     });
 
     it('restores by full hash', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'original');
-      const target = await cm.createCheckpoint('manual', [
+      let target = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'added' },
       ]);
       writeFile('a.gts', 'modified');
@@ -172,19 +238,24 @@ describe('realm history (integration)', () => {
       ]);
 
       expect(target!.hash.length).toBe(40);
-      const result = await realmHistory(workspaceDir, {
-        restore: target!.hash,
-      });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        target!.hash,
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(true);
-      expect(result.restored?.hash).toBe(target!.hash);
+      expect(res.ok, res.stderr).toBe(true);
+      expect(res.stdout).toContain(target!.shortHash);
       expect(fs.readFileSync(path.join(workspaceDir, 'a.gts'), 'utf8')).toBe(
         'original',
       );
     });
 
     it('returns an error for an out-of-range numeric index', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'a');
       await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
       writeFile('b.gts', 'b');
@@ -192,16 +263,23 @@ describe('realm history (integration)', () => {
 
       // Digit-only refs are always treated as index lookups; they must not
       // silently match a short hash whose prefix happens to be digits.
-      const result = await realmHistory(workspaceDir, { restore: '99' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '99',
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Checkpoint not found');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Checkpoint not found');
     });
 
     it('preserves untracked dotfiles across restore', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'original');
-      const target = await cm.createCheckpoint('manual', [
+      let target = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'added' },
       ]);
       writeFile('.gitkeep', 'marker');
@@ -210,60 +288,93 @@ describe('realm history (integration)', () => {
         { file: 'a.gts', status: 'modified' },
       ]);
 
-      const result = await realmHistory(workspaceDir, {
-        restore: target!.shortHash,
-      });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        target!.shortHash,
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(true);
-      const dotfilePath = path.join(workspaceDir, '.gitkeep');
+      expect(res.ok, res.stderr).toBe(true);
+      let dotfilePath = path.join(workspaceDir, '.gitkeep');
       expect(fs.existsSync(dotfilePath)).toBe(true);
       expect(fs.readFileSync(dotfilePath, 'utf8')).toBe('marker');
     });
 
     it('returns an error for an invalid reference', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'a');
       await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
 
-      const result = await realmHistory(workspaceDir, { restore: 'deadbeef' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        'deadbeef',
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Checkpoint not found');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Checkpoint not found');
     });
 
     it('returns an error when the workspace has no history', async () => {
-      const result = await realmHistory(workspaceDir, { restore: '1' });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('No checkpoint history');
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '1',
+        '-y',
+      ]);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No checkpoint history');
     });
 
     it('rejects an empty restore ref instead of restoring the newest', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'a');
       await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
       writeFile('b.gts', 'b');
       await cm.createCheckpoint('manual', [{ file: 'b.gts', status: 'added' }]);
 
-      const result = await realmHistory(workspaceDir, { restore: '' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '',
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Checkpoint not found');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Checkpoint not found');
       expect(fs.existsSync(path.join(workspaceDir, 'b.gts'))).toBe(true);
     });
 
     it('rejects a whitespace-only restore ref', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'a');
       await cm.createCheckpoint('manual', [{ file: 'a.gts', status: 'added' }]);
 
-      const result = await realmHistory(workspaceDir, { restore: '   ' });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '   ',
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Checkpoint not found');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Checkpoint not found');
     });
 
     it('rejects an ambiguous hash prefix', async () => {
-      const cm = new CheckpointManager(workspaceDir);
+      let cm = new CheckpointManager(workspaceDir);
       // Create enough checkpoints that some non-digit hex prefix collides.
       // Digit-only refs are treated as index lookups, not hash prefixes.
       for (let i = 0; i < 40; i++) {
@@ -272,53 +383,70 @@ describe('realm history (integration)', () => {
           { file: 'a.gts', status: i === 0 ? 'added' : 'modified' },
         ]);
       }
-      const cps = await cm.getCheckpoints(100);
-      const counts = new Map<string, number>();
-      for (const cp of cps) {
-        const c = cp.hash[0];
+      let cps = await cm.getCheckpoints(100);
+      let counts = new Map<string, number>();
+      for (let cp of cps) {
+        let c = cp.hash[0];
         if (/[a-f]/.test(c)) counts.set(c, (counts.get(c) ?? 0) + 1);
       }
-      const ambiguousPrefix = [...counts.entries()].find(
-        ([, n]) => n >= 2,
-      )?.[0];
+      let ambiguousPrefix = [...counts.entries()].find(([, n]) => n >= 2)?.[0];
       expect(ambiguousPrefix).toBeDefined();
 
-      const result = await realmHistory(workspaceDir, {
-        restore: ambiguousPrefix!,
-      });
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        ambiguousPrefix!,
+        '-y',
+      ]);
 
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Ambiguous reference');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Ambiguous reference');
     });
   });
 
   describe('argument validation', () => {
     it('rejects a missing workspace directory', async () => {
-      const result = await realmHistory(
+      let res = await runBoxel([
+        'realm',
+        'history',
         path.join(workspaceDir, 'does-not-exist'),
-      );
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Directory not found');
+      ]);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Directory not found');
     });
 
     it('rejects --restore and --message together', async () => {
-      const result = await realmHistory(workspaceDir, {
-        restore: '1',
-        message: 'oops',
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Only one of --restore or --message');
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        '-r',
+        '1',
+        '-m',
+        'oops',
+      ]);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Only one of --restore or --message');
     });
 
     it.each([
-      ['zero', 0],
-      ['negative', -1],
-      ['non-integer', 1.5],
-      ['NaN', Number.NaN],
+      ['zero', '0'],
+      ['negative', '-1'],
+      ['non-integer', '1.5'],
+      ['NaN', 'NaN'],
     ])('rejects an invalid limit (%s)', async (_name, limit) => {
-      const result = await realmHistory(workspaceDir, { limit });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('positive integer');
+      // `--limit=<v>` binds the value so a leading-`-` value isn't parsed as
+      // a flag; all four are rejected by the CLI's positive-integer check.
+      let res = await runBoxel([
+        'realm',
+        'history',
+        workspaceDir,
+        `--limit=${limit}`,
+      ]);
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('positive integer');
     });
   });
 });

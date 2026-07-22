@@ -61,7 +61,7 @@ import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import consumeContext from '../../helpers/consume-context';
 
-import { removeFileExtension } from '../../utils/card-search/types';
+import { removeCardJsonExtension } from '../../utils/search/types';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -580,7 +580,7 @@ export default class InteractSubmode extends Component {
           .map((cardDefOrId) => {
             let raw =
               typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-            return raw ? removeFileExtension(raw) : undefined;
+            return raw ? removeCardJsonExtension(raw) : undefined;
           })
           .filter(Boolean) as string[];
 

@@ -40,7 +40,6 @@ import {
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
-  GetCardsContextName,
   type getCard,
   type getCards,
   chooseCard,
@@ -80,7 +79,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
-import SearchResults from '../../../card-search/search-results';
+import SearchResults from '../../../search/search-results';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
@@ -124,7 +123,6 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
-  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private toolService: ToolService;
@@ -366,7 +364,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.args.isFileDef) {
       return;
     }
-    this.fileSearchResults = this.getCards(
+    // Host code-submode UI searches the store directly (uncapped); the card
+    // caps live on the `@context` surfaces this component does not consume.
+    this.fileSearchResults = this.store.getSearchResource(
       this,
       () => this.fileMetaQuery,
       () => this.realmServer.availableRealmIdentifiers,

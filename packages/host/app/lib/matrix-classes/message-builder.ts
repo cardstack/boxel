@@ -11,7 +11,7 @@ import { type ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   AI_BOT_EXECUTOR,
-  decodeCommandRequest,
+  decodeToolRequest,
 } from '@cardstack/runtime-common/commands';
 import {
   getToolRequests,
@@ -32,6 +32,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
+  findDiscoveredToolSkillUrl,
   getSkillSourceTools,
   loadSkillSource,
 } from '@cardstack/host/lib/skill-tools';
@@ -249,18 +250,36 @@ export default class MessageBuilder {
         this.event.content as CardMessageContent,
       ) ?? [];
     for (let encodedCommandRequest of encodedCommandRequests) {
+      // A request without an id yet (its first streamed chunk) can't be
+      // matched to later chunks or to its result — skip it; a later replace
+      // always carries the id.
+      if (!encodedCommandRequest.id) {
+        continue;
+      }
       let command = message.tools.find(
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.toolRequest = decodeCommandRequest(encodedCommandRequest);
+        this.applyToolRequestChunk(command, encodedCommandRequest);
       } else {
-        message.tools.push(
-          await this.buildMessageCommand(
-            message,
-            decodeCommandRequest(encodedCommandRequest),
-          ),
+        let built = await this.buildMessageCommand(
+          message,
+          decodeToolRequest(encodedCommandRequest),
         );
+        built.toolRequestEventTs = this.event.origin_server_ts;
+        // buildMessageCommand awaits network loads (resolving the tool's
+        // declaring skill), so a concurrent build for a later replace of the
+        // same message can land first. Re-check before pushing: a duplicate
+        // MessageTool for the same request would never receive its result
+        // (results attach to the first match) and would spin forever.
+        let existing = message.tools.find(
+          (c) => c.toolRequest.id === encodedCommandRequest.id,
+        );
+        if (existing) {
+          this.applyToolRequestChunk(existing, encodedCommandRequest);
+        } else {
+          message.tools.push(built);
+        }
       }
     }
   }
@@ -298,6 +317,21 @@ export default class MessageBuilder {
     message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
+  // Builder passes finishing out of order must not regress a MessageTool's
+  // request to an older event's chunk — validation and auto-execution would
+  // then run against stale arguments. Apply a chunk only when its event is
+  // at least as new as the one that last wrote the request.
+  private applyToolRequestChunk(
+    tool: MessageTool,
+    encodedToolRequest: Partial<EncodedToolRequest>,
+  ) {
+    if (this.event.origin_server_ts < tool.toolRequestEventTs) {
+      return;
+    }
+    tool.toolRequest = decodeToolRequest(encodedToolRequest);
+    tool.toolRequestEventTs = this.event.origin_server_ts;
+  }
+
   private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let toolRequests =
@@ -307,10 +341,19 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageTool>();
     for (let toolRequest of toolRequests) {
+      // Same guard as updateMessage: a request chunk without an id yet
+      // can't be matched to later chunks or to its result, so building it
+      // would strand a permanently-unresolved MessageTool. This path also
+      // sees such chunks — e.g. a reload that makes the streaming edit the
+      // first loaded event for the message.
+      if (!toolRequest.id) {
+        continue;
+      }
       let command = await this.buildMessageCommand(
         message,
-        decodeCommandRequest(toolRequest),
+        decodeToolRequest(toolRequest),
       );
+      command.toolRequestEventTs = this.event.origin_server_ts;
       commands.push(command);
     }
     return commands;
@@ -375,6 +418,42 @@ export default class MessageBuilder {
         if (toolRequest.name === candidateSkillTool.functionName) {
           skillTool = candidateSkillTool;
           break findCommand;
+        }
+      }
+    }
+
+    // Tool from a read (not enabled) skill: the model may call a tool it
+    // discovered by reading a skill file via readRealmFile. The bot's result
+    // event names the declaring skill, but that annotation is strictly a
+    // lookup hint, never an authorization — the codeRef the host executes is
+    // re-derived here from the skill's realm-indexed frontmatter, loaded
+    // through the store with the user's own permissions. A forged annotation
+    // can't execute anything the named skill doesn't declare, and a skill the
+    // user can't read resolves nothing; either way the tool stays unresolved
+    // and surfaces through the existing unrecognized-command failure path.
+    // `requiresApproval` likewise comes from the verified declaration (absent
+    // means approval required), exactly as for enabled skills.
+    if (!skillTool && toolRequest.name) {
+      let sourceSkillUrl = findDiscoveredToolSkillUrl(
+        this.builderContext.events,
+        toolRequest.name,
+      );
+      if (sourceSkillUrl) {
+        // The URL comes from a bot event, so a load blowing up on a
+        // malformed or unreadable id must degrade to "unresolved tool", not
+        // break message building for the whole timeline.
+        try {
+          let source = await loadSkillSource(this.store, sourceSkillUrl);
+          if (source) {
+            skillTool = getSkillSourceTools(source).find(
+              (candidate) => candidate.functionName === toolRequest.name,
+            );
+          }
+        } catch (e) {
+          console.warn(
+            `could not load skill ${sourceSkillUrl} to resolve tool "${toolRequest.name}":`,
+            e,
+          );
         }
       }
     }

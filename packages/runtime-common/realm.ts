@@ -1,7 +1,14 @@
 import { Deferred } from './deferred.ts';
+import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
+import {
+  applyServerSearchPageBound,
+  isItemLegSearch,
+  runWithSearchTimeBudget,
+  SearchBoundError,
+} from './search-bounds.ts';
 import {
   fieldsetFromParam,
   htmlQueryFromParams,
@@ -1171,7 +1178,7 @@ export class Realm {
   }
 
   private async readinessCheck(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ) {
     await this.#startedUp.promise;
@@ -1180,10 +1187,38 @@ export class Realm {
     // resolved #startedUp, so awaiting it alone would report ready before the
     // reindex of the swapped files completes. Also await any in-flight full or
     // incremental index so a publish poll only succeeds once the just-published
-    // content is indexed and viewable.
+    // content is indexed.
     let inflight = this.indexing();
     if (inflight) {
       await inflight;
+    }
+
+    // Opt-in: also await the published HTML being live for the current
+    // generation. Indexing makes a realm searchable; prerendering makes it
+    // viewable — and for a published realm the HTML is the deliverable. That
+    // work lands on a separate (fire-and-forget) channel, so the publish flow
+    // sets `awaitPrerenderHtml` to hold readiness until the rendered HTML
+    // exists, not just the index. Left off by default so createRealm / boot
+    // readiness stay index-only and fast.
+    if (
+      new URL(request.url).searchParams.get('awaitPrerenderHtml') === 'true'
+    ) {
+      let htmlReady = await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
+      if (!htmlReady) {
+        // The current generation's HTML never became live within budget (a
+        // stuck/failed render, or a queue backlog longer than the wait). Report
+        // not-ready rather than a false 200 so a poller keeps waiting and a
+        // single-shot caller sees the failure instead of treating the publish
+        // as complete on an unrendered realm.
+        return createResponse({
+          body: null,
+          init: {
+            headers: { 'content-type': 'text/html', 'Retry-After': '1' },
+            status: 503,
+          },
+          requestContext,
+        });
+      }
     }
 
     return createResponse({
@@ -1442,6 +1477,19 @@ export class Realm {
         if (opts.onSettled) {
           await opts.onSettled([...invalidations], { generation });
         }
+      },
+      onFailed: async () => {
+        // A failed job may still have swapped setup-phase error docs into
+        // boxel_index for the URLs it was handed. Run the same cache wipe the
+        // success path does and broadcast those URLs, so local and peer
+        // readers — and live subscribers — see the error state now rather
+        // than after the next successful swap. Broadcasting is safe when
+        // nothing landed: subscribers re-fetch and find the rows unchanged.
+        await this.clearRealmIndexCachesAndBroadcast();
+        this.broadcastIncrementalInvalidationEvent(
+          urls.map((url) => url.href.replace(/\.json$/, '')),
+          { clientRequestId: opts?.clientRequestId ?? null },
+        );
       },
     });
 
@@ -1903,7 +1951,7 @@ export class Realm {
   //
   // HTTP route handlers in this file that need their READ to be inside the
   // same critical section as the write (the `/_atomic` precheck and
-  // `patchCardInstance`'s indexEntry read) take the lock themselves at the
+  // `patchCardInstance`'s existing-file read) take the lock themselves at the
   // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
   // through the public methods would deadlock (a second
   // `pg_advisory_xact_lock` on the same key would block on its own pinned
@@ -4722,35 +4770,42 @@ export class Realm {
       }
     }
 
-    // CS-11125: serialize concurrent PATCHes against the same realm so the
-    // indexEntry read, merge, and write are all inside one critical
+    // Serialize concurrent PATCHes against the same realm so the
+    // existing-file read, merge, and write are all inside one critical
     // section. Without the lock, two replicas could both read the same
-    // `original` from boxel_index, compute independent merges, and the
-    // second writer's merge would silently lose the first's changes.
-    // writeMany below uses the default `waitForIndex: true`, so once the
-    // lock releases the index reflects the just-committed state and the
-    // next waiter's `indexEntry` read sees it.
+    // `original`, compute independent merges, and the second writer's
+    // merge would silently lose the first's changes.
     //
     // Inside the lock we invoke `_batchWriteUnlocked` rather than the
     // public `writeMany` — re-entering the lock through the public method
     // would block on a different pinned pool connection.
     return await this.#dbAdapter.withWriteLock(this.url, async () => {
       let primarySerialization: LooseSingleCardDocument | undefined;
-      let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
-        includeErrors: true,
-      });
-      if (!indexEntry) {
+      // The merge base is the stored source file, not the index. The
+      // index is downstream of the file and can lag it — a backlogged or
+      // in-flight index job would hand us a stale `pristine_doc`, and
+      // merging the patch over stale state silently reverts every field
+      // the index hasn't caught up on. The file is written inside this
+      // same write lock, so it is always current.
+      let existingFile = await this.readFileAsText(`${localPath}.json`);
+      if (!existingFile) {
         return notFound(request, requestContext);
       }
-      let original = cloneDeep(
-        indexEntry.instance ?? {
-          type: 'card',
-          meta: { adoptsFrom: patch.meta.adoptsFrom },
-        },
-      ) as CardResource;
-      original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-      original.meta.adoptsFrom =
-        original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+      let original: CardResource;
+      try {
+        let existingDoc = JSON.parse(existingFile.content);
+        if (!isCardResource(existingDoc?.data)) {
+          throw new Error('stored file is not a card document');
+        }
+        original = cloneDeep(existingDoc.data) as CardResource;
+      } catch (err: any) {
+        return systemError({
+          requestContext,
+          message: `cannot apply patch, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
+          additionalError: err,
+          id: instanceURL,
+        });
+      }
       delete original.meta.lastModified;
       let originalClone = cloneDeep(original);
 
@@ -5663,6 +5718,7 @@ export class Realm {
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
+      ...(opts?.signal ? { signal: opts.signal } : {}),
     };
     return await this.#realmIndexQueryEngine.searchEntries(
       searchEntryQuery,
@@ -5706,14 +5762,36 @@ export class Realm {
     try {
       let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
       let duringPrerender = isDuringPrerenderRequest(request);
-      let doc = await this.searchEntries(searchEntryQuery, {
-        cacheOnlyDefinitions: duringPrerender,
-        // Inside a prerender the search skips the `loadLinks`
-        // relationship-assembly pass entirely: the host re-resolves every
-        // result from its raw card+source file, so the transitive
-        // `included[]` expansion is throwaway work in this path.
-        omitIncluded: duringPrerender,
-      });
+      // Two bounds hold server-side on the live item leg (never during
+      // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
+      // and the wall-clock time budget. Both hold for every caller — a page
+      // ceiling bounds the result set even when the client card cap was
+      // skipped, and a wall-clock cutoff can't live client-side. The realms and
+      // concurrency caps stay on the card `@context` surface.
+      let itemLegBounded =
+        isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
+      // Reject an over-ceiling explicit page (400, caught below); clamp an
+      // absent page so the query carries a LIMIT.
+      if (itemLegBounded) {
+        searchEntryQuery.itemQuery = applyServerSearchPageBound(
+          searchEntryQuery.itemQuery,
+        );
+      }
+      let runSearch = (signal?: AbortSignal) =>
+        this.searchEntries(searchEntryQuery, {
+          cacheOnlyDefinitions: duringPrerender,
+          // Inside a prerender the search skips the `loadLinks`
+          // relationship-assembly pass entirely: the host re-resolves every
+          // result from its raw card+source file, so the transitive
+          // `included[]` expansion is throwaway work in this path.
+          omitIncluded: duringPrerender,
+          ...(signal ? { signal } : {}),
+        });
+      // Cut an over-budget item-leg search off (408) rather than run it to
+      // completion; the signal stops the `loadLinks` fan-out promptly.
+      let doc = itemLegBounded
+        ? await runWithSearchTimeBudget(runSearch)
+        : await runSearch();
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -5722,6 +5800,16 @@ export class Realm {
         requestContext,
       });
     } catch (e) {
+      if (e instanceof SearchBoundError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message, e.status)),
+          init: {
+            status: e.status,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
       if (e instanceof SearchRequestError) {
         return createResponse({
           body: JSON.stringify(buildSearchErrorBody(e.message)),
@@ -5920,10 +6008,17 @@ export class Realm {
     // +source POSTs, an immediately-following publishability call could
     // otherwise see a stale snapshot and miss real violations (e.g. a
     // leaky card that just landed but isn't indexed yet).
+    //
+    // The drain's wait is unbounded: the incremental job it awaits can sit
+    // queued behind other realms' work when the worker pool is saturated.
+    // The timing log below attributes a slow or empty-looking report to
+    // the drain vs. the scan itself.
+    let drainStartMs = Date.now();
     let pending = this.incrementalIndexing();
     if (pending) {
       await pending;
     }
+    let drainMs = Date.now() - drainStartMs;
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
@@ -6264,6 +6359,14 @@ export class Realm {
     let publishable =
       privateDependencyViolations.length === 0 && errorViolations.length === 0;
 
+    this.#log.info(
+      `publishability for ${sourceRealmURL}: drained incremental indexing ` +
+        `in ${drainMs}ms; ${rootResources.length} instances scanned, ` +
+        `${errorRows.length} error rows, ` +
+        `${privateDependencyViolations.length} private-dependency violations, ` +
+        `publishable=${publishable}`,
+    );
+
     let doc = {
       data: {
         type: 'realm-publishability',
@@ -6313,6 +6416,10 @@ export class Realm {
       `    AND jsonb_array_length(diagnostics->'brokenLinks') > 0`,
       `  )`,
       `  OR jsonb_typeof(diagnostics->'frontmatterParseError') = 'object'`,
+      `  OR (`,
+      `    jsonb_typeof(diagnostics->'toolSchemaErrors') = 'array'`,
+      `    AND jsonb_array_length(diagnostics->'toolSchemaErrors') > 0`,
+      `  )`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
@@ -6335,10 +6442,17 @@ export class Realm {
           row.diagnostics.frontmatterParseError !== null
             ? (row.diagnostics.frontmatterParseError as Record<string, unknown>)
             : null;
+        let toolSchemaErrors =
+          row.diagnostics && Array.isArray(row.diagnostics.toolSchemaErrors)
+            ? (row.diagnostics.toolSchemaErrors as unknown[])
+            : null;
         // Source of truth is the row's `has_error` column — the SQL above
-        // filters on it, so we mirror that filter when branching. Using
-        // `row.error_doc != null` here would silently drop any row where
-        // `has_error = TRUE` but `error_doc` is NULL.
+        // filters on `has_error = TRUE` OR diagnostic findings
+        // (brokenLinks / frontmatterParseError / toolSchemaErrors), so a row
+        // can arrive here with `has_error = FALSE` but non-empty diagnostics.
+        // We branch on `has_error` to distinguish indexing errors from
+        // diagnostic-only rows. Using `row.error_doc != null` here would
+        // silently drop any row where `has_error = TRUE` but `error_doc` is NULL.
         let hasError = row.has_error === true;
         // A single boxel_index row can carry more than one independent
         // finding — e.g. a markdown skill with both unparseable frontmatter
@@ -6354,6 +6468,9 @@ export class Realm {
         //   dead linksTo/linksToMany targets surfaced by render.meta.
         // 'frontmatter-error' = the index row is healthy but the file's YAML
         //   frontmatter wouldn't parse, so anything it declared was dropped.
+        // 'tool-schema-error' = the index row is healthy but one or more of
+        //   the skill's frontmatter tools failed schema generation, so those
+        //   tools won't be callable until fixed.
         // All classes share the (entryType, url) key; the discriminator lets
         // consumers branch on which attributes to read.
         let baseAttributes = {
@@ -6362,7 +6479,11 @@ export class Realm {
           diagnostics: row.diagnostics,
         };
         let findings: {
-          type: 'indexing-error' | 'broken-link' | 'frontmatter-error';
+          type:
+            | 'indexing-error'
+            | 'broken-link'
+            | 'frontmatter-error'
+            | 'tool-schema-error';
           attributes: Record<string, unknown>;
         }[] = [];
         if (hasError) {
@@ -6379,6 +6500,12 @@ export class Realm {
             findings.push({
               type: 'frontmatter-error',
               attributes: { ...baseAttributes, frontmatterParseError },
+            });
+          }
+          if (toolSchemaErrors && toolSchemaErrors.length > 0) {
+            findings.push({
+              type: 'tool-schema-error',
+              attributes: { ...baseAttributes, toolSchemaErrors },
             });
           }
           if (brokenLinks && brokenLinks.length > 0) {

@@ -155,7 +155,7 @@ export default class EmbedFormatSelection {
 
   // Frozen snapshot of the seeded state, captured once on construction from the
   // edit-mode preload. `isDirty` compares against it so the parent can flip the
-  // CTA between DONE and ACCEPT.
+  // CTA between Done and Accept.
   private initialSelectedValue: OptionValue;
   private initialKind: 'inline' | 'block';
   private initialWidthInput: string;
@@ -276,6 +276,18 @@ export default class EmbedFormatSelection {
       default:
         return undefined;
     }
+  }
+
+  // A Custom-size fitted embed must carry at least one explicit dimension —
+  // otherwise it serializes to the size-less bare `fitted`, which defeats the
+  // point of the Custom option. Every named format (atom/embedded/isolated and
+  // the fixed fitted variants) already carries its size, so it is always
+  // insertable; the consumer disables the insert CTA when this is false.
+  get hasValidSize(): boolean {
+    if (this.category !== 'custom') {
+      return true;
+    }
+    return this.width !== undefined || this.height !== undefined;
   }
 
   // True once any format/placement/size field has diverged from the seeded

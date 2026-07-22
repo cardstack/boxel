@@ -13,7 +13,9 @@ import {
   executeReadRealmFile,
   fileLabelFromUrl,
   type ReadRealmFileArgs,
+  type ReadRealmFileTool,
 } from './read-realm-file.ts';
+import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 
 let log = logger('ai-bot:read-realm-file');
@@ -98,8 +100,11 @@ async function uploadTextToMatrix(
 // are named in the result's failureReason: the result stays `applied` while at
 // least one file came back (so the successful content isn't thrown away), and
 // resolves as invalid only when nothing did — either way a partial or failed
-// read never reads as a clean one. Returns one outcome per call; never throws
-// (a publish failure is logged so the turn still settles).
+// read never reads as a clean one. failureReason also names any skill tools
+// that were declared but couldn't be offered (no usable indexed definition),
+// so a degraded skill read never looks like a tool-less one. Returns one
+// outcome per call; never throws (a publish failure is logged so the turn
+// still settles).
 export async function fulfillReadRealmFileCalls(
   botToolCalls: ChatCompletionMessageToolCall[],
   deps: ReadRealmFileFulfillmentDeps,
@@ -119,8 +124,48 @@ export async function fulfillReadRealmFileCalls(
 }
 
 type FileRead =
-  | { url: string; attachment: Record<string, unknown> }
+  | {
+      url: string;
+      attachment: Record<string, unknown>;
+      // Definitions of the tools the read file's indexed frontmatter
+      // declares, when the file is a skill whose index row carries usable
+      // (schema-stamped) entries.
+      discoveredTools?: DiscoveredToolDefinition[];
+      // Present when the file declares tools that could not be offered
+      // (no usable stamped definition in the index); rides the result's
+      // failureReason so the model learns the skill's tools are unavailable
+      // and why, instead of hunting for a tool that will never appear.
+      degradedToolsNote?: string;
+    }
   | { url: string; error: string };
+
+// The read's tool entries that are usable as LLM tool definitions, tagged
+// with the skill file they came from. Entries without a well-formed
+// definition (e.g. a skill indexed before schema enrichment) are dropped
+// here — the prompt can only offer a tool it has a definition for.
+function discoveredToolDefinitions(
+  url: string,
+  tools: ReadRealmFileTool[] | undefined,
+): DiscoveredToolDefinition[] {
+  return (tools ?? [])
+    .filter(
+      (tool) =>
+        tool.definition?.type === 'function' &&
+        typeof tool.definition.function?.name === 'string' &&
+        tool.definition.function.name.length > 0,
+    )
+    .map((tool) => ({
+      sourceSkillUrl: url,
+      ...(tool.codeRef ? { codeRef: tool.codeRef } : {}),
+      ...(typeof tool.functionName === 'string'
+        ? { functionName: tool.functionName }
+        : {}),
+      ...(typeof tool.requiresApproval === 'boolean'
+        ? { requiresApproval: tool.requiresApproval }
+        : {}),
+      definition: tool.definition as DiscoveredToolDefinition['definition'],
+    }));
+}
 
 // Reads and uploads a single file of a call. An upload failure is folded into
 // the same shape as a read failure so the caller reports both alike.
@@ -144,6 +189,13 @@ async function readAndUpload(
     log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
     return { url, error: `could not store ${url} for reading` };
   }
+  let declaredToolCount = result.tools?.length ?? 0;
+  let discoveredTools = discoveredToolDefinitions(url, result.tools);
+  let degradedToolCount = declaredToolCount - discoveredTools.length;
+  let degradedToolsNote =
+    degradedToolCount > 0
+      ? `${url}: ${degradedToolCount} of ${declaredToolCount} tools declared by this skill lack a usable definition in the realm's index, so they cannot be offered as callable tools. This usually means the realm's index is stale — suggest that the user reindex the realm.`
+      : undefined;
   return {
     url,
     attachment: {
@@ -153,6 +205,8 @@ async function readAndUpload(
       contentType: READ_FILE_CONTENT_TYPE,
       contentSize: Buffer.byteLength(result.content),
     },
+    ...(discoveredTools.length ? { discoveredTools } : {}),
+    ...(degradedToolsNote ? { degradedToolsNote } : {}),
   };
 }
 
@@ -187,25 +241,37 @@ async function fulfillOne(
   let reads = await Promise.all(
     urls.map((url) => readAndUpload(url, deps, upload)),
   );
-  let attachedFiles = reads
+  let successfulReads = reads.filter(
+    (read): read is Extract<FileRead, { attachment: object }> =>
+      'attachment' in read,
+  );
+  let attachedFiles = successfulReads.map((read) => read.attachment);
+  // Tool definitions the read skills contributed ride the result event next
+  // to the attachments, so prompt assembly can offer them on later turns
+  // from room events alone. Kept out of attachedFiles: those entries are
+  // SerializedFileDefs consumed by the attachment-download path (and the
+  // timeline), which must not change shape.
+  let discoveredTools = successfulReads.flatMap(
+    (read) => read.discoveredTools ?? [],
+  );
+  let readFailures = reads
     .filter(
-      (read): read is Extract<FileRead, { attachment: object }> =>
-        'attachment' in read,
+      (read): read is Extract<FileRead, { error: string }> => 'error' in read,
     )
-    .map((read) => read.attachment);
+    // Most read errors already name the file; prefix the ones (e.g. realm
+    // access errors) that don't, so the model knows which URL to retry.
+    .map((read) =>
+      read.error.includes(read.url) ? read.error : `${read.url}: ${read.error}`,
+    );
+  // Degraded-tool notes share failureReason with read failures: it is the
+  // one channel prompt assembly already folds into the model-visible tool
+  // message, on failed and applied results alike. They stay out of the
+  // outcome's ok/error, which report file reads only.
+  let degradedToolsNotes = successfulReads
+    .map((read) => read.degradedToolsNote)
+    .filter((note): note is string => Boolean(note));
   let failureReason =
-    reads
-      .filter(
-        (read): read is Extract<FileRead, { error: string }> => 'error' in read,
-      )
-      // Most read errors already name the file; prefix the ones (e.g. realm
-      // access errors) that don't, so the model knows which URL to retry.
-      .map((read) =>
-        read.error.includes(read.url)
-          ? read.error
-          : `${read.url}: ${read.error}`,
-      )
-      .join('\n') || undefined;
+    [...readFailures, ...degradedToolsNotes].join('\n') || undefined;
 
   if (attachedFiles.length === 0) {
     return await publishFailure(call.id, failureReason!, deps);
@@ -223,12 +289,13 @@ async function fulfillOne(
     data: {
       context: { agentId: deps.agentId },
       attachedFiles,
+      ...(discoveredTools.length ? { discoveredTools } : {}),
     },
   });
   return {
     commandRequestId: call.id,
-    ok: !failureReason,
-    ...(failureReason ? { error: failureReason } : {}),
+    ok: readFailures.length === 0,
+    ...(readFailures.length ? { error: readFailures.join('\n') } : {}),
   };
 }
 

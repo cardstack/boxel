@@ -5,7 +5,7 @@ import {
   type SingleCardDocument,
 } from '../index.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
-import { canonicalURL } from './dependency-url.ts';
+import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 import { normalizeRelationshipDependency } from './dependency-normalization.ts';
 
 export type RelationshipSource =
@@ -17,16 +17,20 @@ export type RelationshipSource =
 export class RelationshipDependencyExtractor {
   #realmURL: URL;
   #virtualNetwork: VirtualNetwork;
+  #canonicalURLMemo: CanonicalURLMemo;
 
   constructor({
     realmURL,
     virtualNetwork,
+    canonicalURLMemo,
   }: {
     realmURL: URL;
     virtualNetwork: VirtualNetwork;
+    canonicalURLMemo: CanonicalURLMemo;
   }) {
     this.#realmURL = realmURL;
     this.#virtualNetwork = virtualNetwork;
+    this.#canonicalURLMemo = canonicalURLMemo;
   }
 
   extractDirectRelationshipDeps(
@@ -72,6 +76,7 @@ export class RelationshipDependencyExtractor {
       relativeTo.href,
       relativeTo.href,
       this.#virtualNetwork,
+      this.#canonicalURLMemo,
     );
     selfUrls.add(canonicalSelf);
     selfUrls.add(
@@ -80,6 +85,7 @@ export class RelationshipDependencyExtractor {
         relativeTo,
         this.#realmURL,
         this.#virtualNetwork,
+        this.#canonicalURLMemo,
       ),
     );
     if (canonicalSelf.endsWith('.json')) {
@@ -112,6 +118,7 @@ export class RelationshipDependencyExtractor {
           relativeTo,
           this.#realmURL,
           this.#virtualNetwork,
+          this.#canonicalURLMemo,
         );
         if (normalized && !selfUrls.has(normalized)) {
           deps.add(normalized);
@@ -189,6 +196,7 @@ export class RelationshipDependencyExtractor {
         relativeTo,
         this.#realmURL,
         this.#virtualNetwork,
+        this.#canonicalURLMemo,
       );
       if (normalized) {
         deps.add(normalized);
@@ -201,6 +209,7 @@ export class RelationshipDependencyExtractor {
         relativeTo,
         this.#realmURL,
         this.#virtualNetwork,
+        this.#canonicalURLMemo,
       );
       if (normalized) {
         deps.add(normalized);

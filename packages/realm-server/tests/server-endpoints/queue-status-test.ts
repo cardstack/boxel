@@ -49,7 +49,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           .get('/_queue-status')
           .set(
             'Authorization',
-            `Bearer ${monitoringAuthToken(REALM_SERVER_SECRET_SEED)}`,
+            `Bearer ${await monitoringAuthToken(REALM_SERVER_SECRET_SEED)}`,
           );
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;

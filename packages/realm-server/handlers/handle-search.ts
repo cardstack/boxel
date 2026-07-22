@@ -1,11 +1,15 @@
 import type Koa from 'koa';
 import {
+  applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
+  isItemLegSearch,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
+  runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
+  SearchBoundError,
   SearchRequestError,
   searchEntryRealms,
   sanitizeLoggingCorrelationId,
@@ -107,6 +111,35 @@ export default function handleSearch(opts: {
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
+    // Two bounds are enforced server-side on the live item leg (never during
+    // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
+    // (applied just below) and the wall-clock time budget (further down). Both
+    // hold for every caller — a wall-clock cutoff can't live client-side, and a
+    // page ceiling must bound the result set even when the client card cap was
+    // skipped. The realms fan-out and concurrency caps stay client-side on the
+    // card `@context` surface, since the trusted host must be free to exceed
+    // them.
+    let itemLegBounded =
+      isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
+
+    // The server hard page ceiling. An explicit item-leg page over the ceiling
+    // is rejected fast (400); an absent page is clamped so the query carries a
+    // LIMIT and the server never assembles/serializes an unbounded result set.
+    if (itemLegBounded) {
+      try {
+        parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
+      } catch (e) {
+        if (e instanceof SearchBoundError) {
+          await setContextResponse(
+            ctxt,
+            buildSearchErrorResponse(e.message, e.status),
+          );
+          return;
+        }
+        throw e;
+      }
+    }
+
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
     // member folds into `opts` — the parsed fieldset, the applied (bound or
@@ -127,6 +160,15 @@ export default function handleSearch(opts: {
     if (parsed.cardUrls?.length) {
       cacheKeyOpts.cardUrls = parsed.cardUrls;
     }
+    // `scope` changes which row kinds the response contains, so it must key the
+    // cache — otherwise a `scope: 'cards'` and a `scope: 'all'` request for the
+    // same query would collide on one ETag/body. An explicit `'all'` folds the
+    // same as an absent scope (both mean the default), so the two spellings
+    // share one cache entry/ETag — which also keeps the key identical to
+    // pre-scope requests.
+    if (parsed.scope && parsed.scope !== 'all') {
+      cacheKeyOpts.scope = parsed.scope;
+    }
 
     // `loggingCorrelationId` / `timings` deliberately stay OUT of the
     // cache-key opts (per-request values would make every key unique) and
@@ -143,18 +185,31 @@ export default function handleSearch(opts: {
     // Lazy-mount inside runSearch so cache hits (304 / cached body) skip the
     // lazy-mount work entirely.
     let runSearch = async () => {
-      let resolveRealms = () =>
-        resolveRealmsForFederatedRequest(reconciler, realmList, {
-          consumingRealm,
+      let doRun = async (signal?: AbortSignal) => {
+        let resolveRealms = () =>
+          resolveRealmsForFederatedRequest(reconciler, realmList, {
+            consumingRealm,
+          });
+        let realmInstances = timings
+          ? await timings.time('resolveRealms', resolveRealms)
+          : await resolveRealms();
+        let doc = await searchEntryRealms(realmInstances, parsed, {
+          ...runSearchOpts,
+          ...(signal ? { signal } : {}),
         });
-      let realmInstances = timings
-        ? await timings.time('resolveRealms', resolveRealms)
-        : await resolveRealms();
-      let doc = await searchEntryRealms(realmInstances, parsed, runSearchOpts);
-      // Serialize compact: an entry doc can run to many MB, so indentation
-      // whitespace is pure wire overhead the consumer parses straight back off.
-      let stringify = async () => JSON.stringify(doc);
-      return timings ? await timings.time('stringify', stringify) : stringify();
+        // If the budget already fired, skip stringifying a document we're about
+        // to discard (the time-budget race has already resolved with the 408).
+        signal?.throwIfAborted();
+        // Serialize compact: an entry doc can run to many MB, so indentation
+        // whitespace is pure wire overhead the consumer parses straight back off.
+        let stringify = async () => JSON.stringify(doc);
+        return timings
+          ? await timings.time('stringify', stringify)
+          : stringify();
+      };
+      // Cut an over-budget item-leg search off (408) rather than run it to
+      // completion; the signal stops the `loadLinks` fan-out promptly.
+      return itemLegBounded ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
     let emitTimeline = () => {
@@ -170,16 +225,31 @@ export default function handleSearch(opts: {
     };
 
     let jobId = searchCache ? prerenderJobId : null;
-    await respondWithJobScopedSearchCache(ctxt, {
-      searchCache,
-      jobId,
-      consumingRealm,
-      realms: realmList,
-      query: parsed.itemQuery,
-      opts: cacheKeyOpts,
-      runSearch,
-      emitTimeline,
-    });
+    try {
+      await respondWithJobScopedSearchCache(ctxt, {
+        searchCache,
+        jobId,
+        consumingRealm,
+        realms: realmList,
+        query: parsed.itemQuery,
+        opts: cacheKeyOpts,
+        runSearch,
+        emitTimeline,
+      });
+    } catch (e) {
+      // The per-request time budget fired inside `runSearch`. A bounded search
+      // is never cacheable (cacheable ⟹ during-prerender ⟹ not bounded), so
+      // this only surfaces on the fresh-compute path and leaves no cache entry.
+      if (e instanceof SearchBoundError) {
+        await setContextResponse(
+          ctxt,
+          buildSearchErrorResponse(e.message, e.status),
+        );
+        emitTimeline();
+        return;
+      }
+      throw e;
+    }
   };
 }
 

@@ -75,6 +75,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     <ThemeDashboard
       class='brand-guide'
       @themeCss={{@model.cssVariables}}
+      @themeId={{@model.id}}
       @sections={{this.sectionsWithContent}}
       @isDarkMode={{this.isDarkMode}}
     >

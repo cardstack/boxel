@@ -6,3 +6,10 @@ bundled-test-harness/
 bundled-realms/
 *.tgz
 *.log
+
+# Card-code fixtures for `boxel parse`. These are intentionally card
+# authoring code (inline <template>, field decorators) and one file with
+# a deliberate type error — meant to be type-checked by glint via the
+# CLI, not linted as CLI source. eslint's TS parser chokes on the
+# template tags and the repo's no-decorators rule fires on `@field`.
+tests/fixtures/parse/

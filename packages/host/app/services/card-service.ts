@@ -25,7 +25,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   BaseDef,
@@ -62,7 +62,7 @@ export default class CardService extends Service {
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // This error will be used by check-correctness command to report size limit errors
@@ -85,14 +85,14 @@ export default class CardService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;
@@ -104,7 +104,7 @@ export default class CardService extends Service {
     let loader = this.loaderService.loader;
     if (!this.loaderToSearchableLoadingCache.has(loader)) {
       let searchablePromise = loader.import<typeof Searchable>(
-        'https://cardstack.com/base/searchable',
+        '@cardstack/base/searchable',
       );
       this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
       return searchablePromise;

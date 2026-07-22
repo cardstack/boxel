@@ -1,19 +1,16 @@
 import type Owner from '@ember/owner';
 import { next } from '@ember/runloop';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { consume } from 'ember-provide-consume-context';
-
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import {
-  GetCardsContextName,
-  type getCards,
-  type Query,
-} from '@cardstack/runtime-common';
+import type { getCards, Query } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
+
+import type StoreService from '@cardstack/host/services/store';
 
 interface Signature {
   Args: {
@@ -33,12 +30,15 @@ export default class SpecSearch extends Component<Signature> {
     {{/if}}
   </template>
 
-  @consume(GetCardsContextName) declare private getCards: getCards;
+  @service declare private store: StoreService;
 
   @tracked private specResults: ReturnType<getCards> | undefined;
 
+  // Host code-submode UI searches through the store directly (uncapped). The
+  // card caps live on the `@context` surfaces (`getCards` / `@context.store`),
+  // which this host component does not consume.
   private searchSpec = () => {
-    this.specResults = this.getCards(
+    this.specResults = this.store.getSearchResource(
       this,
       () => this.args.query,
       () => this.args.realms,

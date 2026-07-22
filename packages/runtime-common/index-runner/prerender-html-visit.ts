@@ -3,12 +3,15 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   flattenPrerenderHtmlVisitMeta,
+  hasCardExtension,
+  isBrowserTestEnv,
   isCardResource,
   jobIdentity,
   logger,
   modulesConsumedInMeta,
   RealmPaths,
   type Batch,
+  type DefinitionLookup,
   type IndexWriter,
   type JobInfo,
   type LooseCardResource,
@@ -21,9 +24,19 @@ import {
 } from '../index.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
 import { uniqueDeps } from './dependency-collections.ts';
+import {
+  preWarmModulesTable,
+  resolveModuleCacheContext,
+} from './prewarm-modules.ts';
 
 export interface PrerenderHtmlPassArgs {
   realmURL: URL;
@@ -39,9 +52,20 @@ export interface PrerenderHtmlPassArgs {
   // every visit so each prerender tab this pass touches resets its loader
   // exactly once when the realm's module surface changed.
   loaderEpoch: string;
+  // True when a from-scratch index pass spawned this job: run the realm-wide
+  // module pre-warm sweep before the format renders begin. False on
+  // incremental spawns — the sweep is O(realm module count).
+  preWarm: boolean;
   indexWriter: IndexWriter;
+  definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   reader: Reader;
+  // Authed fetch, used only to resolve the realm's module-cache scope for
+  // pre-warm (public vs private + owner user id).
+  fetch: typeof globalThis.fetch;
+  // The realm owner the pre-warm's sub-`prerenderModule` renders as, and the
+  // user id a private realm's cache is keyed on.
+  realmOwnerUserId: string;
   prerenderer: Prerenderer;
   auth: string;
   jobInfo: JobInfo;
@@ -53,6 +77,10 @@ export interface PrerenderHtmlPassResult {
   invalidations: string[];
   generation: number;
   stats: Stats;
+  // The pre-warm sweep's wall-clock, present only when it ran (a from-scratch-
+  // spawned pass outside the browser). Surfaces on the job result so
+  // dashboards attribute the sweep to the job that pays it.
+  preWarmMs?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
@@ -61,16 +89,24 @@ export interface PrerenderHtmlPassResult {
 // 'prerender-html' visit that renders from card+source (it never reads
 // `boxel_index`), writing HTML or render-error rows into
 // `prerendered_html_working`; 'delete' URLs are never visited so their
-// tombstones survive. `batch.done()` swaps the set into production under the
-// monotonic generation guard.
+// tombstones survive. A visit that fails without producing a response
+// document at all (its prerender request aborting/timing out, a reader
+// error) lands error rows too, via the same per-URL isolation the index
+// loop applies (`handleVisitFailure`) — one URL's failure never discards
+// the rest of the batch. `batch.done()` swaps the set into production under
+// the monotonic generation guard.
 export async function runPrerenderHtmlPass({
   realmURL,
   changes,
   generation,
   loaderEpoch,
+  preWarm,
   indexWriter,
+  definitionLookup,
   virtualNetwork,
   reader,
+  fetch,
+  realmOwnerUserId,
   prerenderer,
   auth,
   jobInfo,
@@ -115,11 +151,13 @@ export async function runPrerenderHtmlPass({
     generation,
   });
 
-  // Unlike the index runner — which announces a zero total and lets the
-  // first `file-visited` fill it in once invalidation discovery runs — this
-  // job's URL set arrives fully computed in its args, so the progress row
-  // carries the real denominator from the start. The jobType matches the
-  // queue's `jobs.job_type` value so both spell the job the same way.
+  // The job's URL set arrives fully computed in its args, so the progress row
+  // opens with the render denominator rather than the index runner's zero. A
+  // from-scratch-spawned job then grows this total during pre-warm below (the
+  // sweep's module count isn't known until its dep analysis runs), so the
+  // `file-visited` events carry the combined total — the event sink adopts the
+  // latest `totalFiles` it sees. The jobType matches the queue's
+  // `jobs.job_type` value so both spell the job the same way.
   onProgress?.({
     type: 'indexing-started',
     realmURL: realmURL.href,
@@ -133,6 +171,101 @@ export async function runPrerenderHtmlPass({
     [...operations].map(([url, operation]) => ({ url, operation })),
   );
   let filesCompleted = 0;
+
+  // Pre-warm the module definition cache before the format renders fire. The
+  // realm-wide `.gts` / `.gjs` sweep is the layer that matters here: it primes
+  // the sibling card modules referenced by *string* in query-backed field
+  // renders (`<Search @query={{filter: {type: {module: '.../author.gts', name: 'Author'}}}}>`),
+  // so a mid-render `lookupDefinition` hits a populated row instead of spawning
+  // a same-affinity sub-`prerenderModule` that would stall the tab pool.
+  //
+  // Runs only when a from-scratch pass spawned this job (`preWarm`) — the sweep
+  // is O(realm module count). Skipped in the browser: host tests run a Realm
+  // inside a Chrome tab with no separate prerender server and no tab pool, and
+  // populating the definition cache there bakes in keys the host's
+  // card-reference-prefix reader can't match. The realm-wide list is re-derived
+  // from `reader.mtimes()` rather than threaded through args — it mirrors the
+  // index job's own source of truth and keeps the job payload from carrying an
+  // O(realm) module list through every coalesce merge. Pre-warmed modules and
+  // the files rendered below share one `totalFiles`, so the dashboard bar spans
+  // both phases. Best-effort: a failure is warned and the format renders
+  // populate the cache on demand. A retried job re-sweeps the whole realm (the
+  // visit loop's resume-skip has no pre-warm analog), which is cheap — the
+  // second attempt's populate calls hit the cache as O(1) reads, no re-renders.
+  let preWarmMs: number | undefined;
+  if (preWarm && !isBrowserTestEnv()) {
+    let preWarmStart = Date.now();
+    try {
+      let filesystemMtimes = await reader.mtimes();
+      let allRealmCardModules =
+        Object.keys(filesystemMtimes).filter(hasCardExtension);
+      // Info, not debug: the sweep can hold this worker for minutes on a
+      // module-heavy realm, and with few workers everything queued behind it
+      // waits that long. CI logs need the sweep's span attributable without a
+      // log-level override.
+      log.info(
+        `${jobTag} module pre-warm sweep starting (${allRealmCardModules.length} realm card modules)`,
+      );
+      let updateURLs = [...operations]
+        .filter(([, operation]) => operation === 'update')
+        .map(([url]) => new URL(url));
+      let preWarmedCount = await preWarmModulesTable({
+        realmURL,
+        invalidations: updateURLs,
+        allRealmCardModules,
+        definitionLookup,
+        virtualNetwork,
+        reader,
+        getDependencyRows: (urls) => batch.getDependencyRows(urls),
+        getModuleCacheContext: () =>
+          resolveModuleCacheContext({ fetch, realmURL, realmOwnerUserId }),
+        prerenderUserId: realmOwnerUserId,
+        jobPriority: jobPriority ?? 0,
+        jobInfo,
+        log,
+        perfLog,
+        onModuleWarmed: ({ moduleUrl, warmedCount, totalToWarm }) => {
+          filesCompleted = warmedCount;
+          totalFiles = totalToWarm + operations.size;
+          onProgress?.({
+            type: 'file-visited',
+            realmURL: realmURL.href,
+            jobId: jobInfo.jobId,
+            url: moduleUrl,
+            filesCompleted,
+            totalFiles,
+          });
+        },
+      });
+      totalFiles = preWarmedCount + operations.size;
+      log.info(
+        `${jobTag} module pre-warm sweep completed (${preWarmedCount} modules warmed) in ${Date.now() - preWarmStart} ms`,
+      );
+    } catch (e) {
+      log.warn(
+        `${jobTag} module pre-warm failed; the format renders will populate the definition cache on demand: ${(e as Error)?.message}`,
+      );
+    }
+    preWarmMs = Date.now() - preWarmStart;
+  }
+
+  // One batched read of every rendered URL's content hash/size so the
+  // per-visit getContentMeta lookups are served from memory rather than a DB
+  // round-trip each. Deletes aren't visited, so they're excluded; URLs outside
+  // this realm are skipped the same way the visit skips them.
+  let prefetchPaths: string[] = [];
+  for (let [href, operation] of operations) {
+    if (operation === 'delete') {
+      continue;
+    }
+    try {
+      prefetchPaths.push(realmPaths.local(new URL(href)));
+    } catch (_e) {
+      // different realm — not visited
+    }
+  }
+  await batch.prefetchFileMeta(prefetchPaths);
+
   let resumedRows = batch.resumedRows;
   let resumedSkipped = 0;
   let tombstoned = 0;
@@ -148,22 +281,34 @@ export async function runPrerenderHtmlPass({
         // authoritative for this job.
         resumedSkipped++;
       } else {
-        await visitForPrerenderedHtml({
-          url: new URL(href),
-          realmURL,
-          realmPaths,
-          reader,
-          batch,
-          prerenderer,
-          virtualNetwork,
-          auth,
-          batchId,
-          jobInfo,
-          jobPriority,
-          loaderEpoch,
-          stats,
-          log,
-        });
+        try {
+          await visitForPrerenderedHtml({
+            url: new URL(href),
+            realmURL,
+            realmPaths,
+            reader,
+            batch,
+            prerenderer,
+            virtualNetwork,
+            auth,
+            batchId,
+            jobInfo,
+            jobPriority,
+            loaderEpoch,
+            stats,
+            log,
+          });
+        } catch (err) {
+          await handleVisitFailure({
+            url: new URL(href),
+            err,
+            batch,
+            reader,
+            jobInfo,
+            stats,
+            log,
+          });
+        }
       }
       filesCompleted++;
       onProgress?.({
@@ -213,7 +358,12 @@ export async function runPrerenderHtmlPass({
       stats.instanceErrors + stats.fileErrors
     } errors, ${tombstoned} tombstoned) in ${Date.now() - start} ms`,
   );
-  return { invalidations: batch.invalidations, generation, stats };
+  return {
+    invalidations: batch.invalidations,
+    generation,
+    stats,
+    ...(preWarmMs !== undefined ? { preWarmMs } : {}),
+  };
 }
 
 async function visitForPrerenderedHtml({
@@ -404,5 +554,105 @@ async function visitForPrerenderedHtml({
       ...(diagnostics ? { diagnostics } : {}),
     });
     stats.filesIndexed++;
+  }
+}
+
+// Per-URL failure isolation, mirroring the index visit loop's
+// (`IndexRunner`'s) handling of the same class of failure. A
+// transport-level failure of the visit — its prerender request timing out /
+// aborting before a response document exists, or a reader/network error —
+// never reaches the in-band error-entry construction in
+// `visitForPrerenderedHtml`; the visit rejects instead. Left uncaught, one
+// URL's failure propagates out of the visit loop, skips `batch.done()`, and
+// discards every other rendered URL's rows for the whole job — and because
+// nothing is persisted for the failed URL either, the reconcile sweep reads
+// it as "never attempted" and re-enqueues the identical batch every tick.
+// Persisting error rows contains the failure to this URL: they carry the
+// batch's generation and the last-known-good HTML is preserved beneath the
+// error like any other render failure's row.
+//
+// The error is marked `visitRequestFailure` because this failure describes
+// the request, not the content — the render never returned a verdict, so a
+// retry can legitimately succeed (e.g. an abort under temporary prerender
+// congestion). The reconcile sweep gives such rows a bounded retry lane:
+// re-rendered at most `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive
+// times, spaced by the sweep cadence, then terminal exactly like a
+// deterministic render error. The bound is what protects the fleet — each
+// retry of a genuinely pathological visit burns its realm's prerender
+// affinity lane for the full request timeout, so retries must converge to
+// "recorded error, move on" rather than repeat indefinitely.
+async function handleVisitFailure({
+  url,
+  err,
+  batch,
+  reader,
+  jobInfo,
+  stats,
+  log,
+}: {
+  url: URL;
+  err: unknown;
+  batch: Batch;
+  reader: Reader;
+  jobInfo: JobInfo;
+  stats: Stats;
+  log: ReturnType<typeof logger>;
+}): Promise<void> {
+  if (isCardError(err) && err.status === 404) {
+    log.info(
+      `${jobIdentity(jobInfo)} tried to prerender file ${url.href}, but it no longer exists`,
+    );
+    return;
+  }
+  let message = coerceErrorMessage(
+    err,
+    `Prerendering failed for ${url.href} with no error message (${jobIdentity(jobInfo)})`,
+  );
+  log.warn(
+    `${jobIdentity(jobInfo)} failed to prerender ${url.href}, recording error rows: ${message}`,
+  );
+  let error = isCardError(err)
+    ? serializableError(err)
+    : serializableError(
+        Object.assign(new CardError(message, { status: 500 }), {
+          stack: (err as Error)?.stack,
+        }),
+      );
+  error.message = message;
+  error.visitRequestFailure = true;
+  await batch.updatePrerenderedHtmlEntry(url, { type: 'file-error', error });
+  stats.fileErrors++;
+  // The up-front seeding tombstoned every type this URL previously had in
+  // `prerendered_html` — for an existing card that's both `instance` and
+  // `file`. Overwriting only the `file` tombstone above would let the swap
+  // promote the untouched `instance` tombstone, silently removing a
+  // previously-good card's HTML over a transient failure. The batch records
+  // which live row types it tombstoned, so an existing card is protected
+  // even when the file can't be read — which may be exactly how the visit
+  // failed. Re-parsing the source is only the fallback for a URL with no
+  // prior rendering, which has no row to protect but should still surface
+  // its failure as an instance error when it's a card.
+  let isCardInstance =
+    batch.prerenderedHtmlTombstonedLiveTypes(url.href)?.includes('instance') ??
+    false;
+  if (!isCardInstance && url.href.endsWith('.json')) {
+    try {
+      let fileRef = await reader.readFile(url);
+      let resource = fileRef?.content
+        ? (JSON.parse(fileRef.content)?.data as unknown)
+        : undefined;
+      isCardInstance = Boolean(resource && isCardResource(resource));
+    } catch (parseErr) {
+      log.warn(
+        `${jobIdentity(jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+      );
+    }
+  }
+  if (isCardInstance) {
+    await batch.updatePrerenderedHtmlEntry(url, {
+      type: 'instance-error',
+      error,
+    });
+    stats.instanceErrors++;
   }
 }

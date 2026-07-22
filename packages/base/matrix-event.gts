@@ -20,6 +20,7 @@ import type {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -250,6 +251,7 @@ export interface CardMessageContent {
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
+  [APP_BOXEL_ORIGINATING_DEVICE_ID_KEY]?: string;
   [APP_BOXEL_TOOL_REQUESTS_KEY]?: Partial<EncodedToolRequest>[];
   // Replay-only: messages written before the command → tool rename carry
   // their requests under this key. Read via `getToolRequests`; never write.
@@ -341,6 +343,22 @@ export interface ToolDefinitionSchema {
 
 export type ToolResultStatus = 'applied' | 'failed' | 'invalid';
 
+// One tool definition the bot discovered by reading a skill markdown file
+// (readRealmFile): the entry from the skill's indexed frontmatter, tagged
+// with the skill file it came from. Embedded on the read's result event so
+// prompt assembly can offer the tool on later turns from room events alone
+// (event-sourced, replay-correct), and so execution can verify a call
+// against the declaring skill's indexed frontmatter via `sourceSkillUrl`.
+export interface DiscoveredToolDefinition {
+  // The skill markdown file the definition came from (the readRealmFile URL).
+  sourceSkillUrl: string;
+  codeRef?: { module?: string; name?: string };
+  functionName?: string;
+  requiresApproval?: boolean;
+  // The ready-to-use LLM tool definition stamped on the skill's file-meta.
+  definition: Tool;
+}
+
 export interface ToolResultWithOutputContent {
   'm.relates_to': {
     rel_type: ToolResultRelType;
@@ -350,7 +368,8 @@ export interface ToolResultWithOutputContent {
   commandRequestId: string;
   // Present if status is 'failed' or 'invalid', or on an 'applied' result
   // where part of the work failed (e.g. a multi-file read that fetched only
-  // some of its files).
+  // some of its files, or a skill read whose declared tools lack usable
+  // indexed definitions and so cannot be offered).
   failureReason?: string;
   data: {
     // we retrieve the content on the server side by downloading the file
@@ -358,6 +377,11 @@ export interface ToolResultWithOutputContent {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+    // Tool definitions discovered by the read this result reports (present
+    // only on readRealmFile results whose files carried usable definitions).
+    // Timeline rendering ignores this key; prompt assembly's getTools reads
+    // it.
+    discoveredTools?: DiscoveredToolDefinition[];
   };
   msgtype: ToolResultWithOutputMsgtype;
 }

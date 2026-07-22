@@ -366,6 +366,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'change-cards-in-stack',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -634,6 +635,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'result-event-dispatch',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -719,6 +721,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'search-result-dispatch',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -1171,6 +1174,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
+          id: 'view-code-panel-status',
           name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
@@ -2070,6 +2074,150 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       ),
       'failureReason surfaces the stuck-processing cause for the invalidToolCallState alert',
     );
+  });
+
+  test('an invalid result is terminal for auto-execution: a later drain pass does not re-resolve the request', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getService('matrix-service');
+    let toolService = getService('tool-service');
+
+    // Capture result events without forwarding them. The swallowed event
+    // recreates the window where the invalid result has not round-tripped
+    // into the room resource yet, so the MessageTool's status still reads
+    // 'ready' — the window in which a second drain pass used to re-validate
+    // the request and post a contradictory second result (CS-12103's
+    // invalid-then-applied signature).
+    let captured: Array<{ toolCallId: string; status: string }> = [];
+    let originalSend = matrixService.sendToolResultEvent.bind(matrixService);
+    (matrixService as any).sendToolResultEvent = async (params: any) => {
+      captured.push({ toolCallId: params.toolCallId, status: params.status });
+    };
+    try {
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Do the thing',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'cs-12103-invalid-terminal',
+            name: 'no-such-command',
+            arguments: JSON.stringify({
+              description: 'do it',
+              attributes: {},
+            }),
+          },
+        ],
+        data: {
+          context: {
+            agentId: matrixService.agentId,
+          },
+        },
+      });
+      await settled();
+
+      assert.deepEqual(
+        captured,
+        [{ toolCallId: 'cs-12103-invalid-terminal', status: 'invalid' }],
+        'validation resolves the request invalid exactly once',
+      );
+      assert.true(
+        toolService.claimedToolRequestIds.has('cs-12103-invalid-terminal'),
+        'the terminal resolution is recorded locally, not just in the (still in-flight) result event',
+      );
+
+      // A later pass over the same event — e.g. a trailing m.replace
+      // re-queuing it — must not re-validate a request the model has
+      // already been told failed.
+      toolService.queueEventForToolProcessing({
+        event_id: eventId,
+        room_id: roomId,
+        content: {} as any,
+      });
+      await settled();
+
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the resolved request gets no second result and is not executed',
+      );
+    } finally {
+      (matrixService as any).sendToolResultEvent = originalSend;
+    }
+  });
+
+  test('overlapping drain passes resolve a tool request exactly once', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getService('matrix-service');
+    let toolService = getService('tool-service');
+
+    // Capture result events without forwarding them, so room state never
+    // reflects the first resolution and cannot mask a second one — each
+    // pass sees the request exactly as its concurrent sibling does.
+    let captured: Array<{ toolCallId: string; status: string }> = [];
+    let originalSend = matrixService.sendToolResultEvent.bind(matrixService);
+    (matrixService as any).sendToolResultEvent = async (params: any) => {
+      captured.push({ toolCallId: params.toolCallId, status: params.status });
+    };
+    // The message arrives owned by a different agent, so the timeline-driven
+    // drain leaves it unresolved; the deliberately-overlapping passes below
+    // are then the only resolvers in play.
+    let overlapAgentId = 'overlap-test-agent';
+    let originalAgentId = matrixService.agentId;
+    try {
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Do the thing',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'overlap-victim',
+            name: 'checkCorrectness',
+            arguments: 'not parseable json, so validation resolves invalid',
+          },
+        ],
+        data: {
+          context: {
+            agentId: overlapAgentId,
+          },
+        },
+      });
+      await settled();
+      assert.strictEqual(
+        captured.length,
+        0,
+        'the not-our-agent message is left unresolved by the timeline drain',
+      );
+
+      matrixService.agentId = overlapAgentId;
+
+      // Reproduce the window where two drain passes run concurrently over
+      // the same request: the drain's flush promise releases every waiter
+      // at once, so a pass can start while another is parked inside
+      // validate() — after that pass checked the guards but before it
+      // recorded any resolution. Pass one is started and given one
+      // microtask to snapshot the queue and park inside validate; pass two
+      // then processes the re-queued event during that window.
+      let svc = toolService as any;
+      svc.toolProcessingEventQueue.push(`${roomId}|${eventId}`);
+      let firstPass = svc.drainToolProcessingQueue();
+      await Promise.resolve();
+      svc.flushToolProcessingQueue = undefined;
+      svc.toolProcessingEventQueue.push(`${roomId}|${eventId}`);
+      let secondPass = svc.drainToolProcessingQueue();
+      await Promise.all([firstPass, secondPass]);
+      await settled();
+
+      assert.deepEqual(
+        captured,
+        [{ toolCallId: 'overlap-victim', status: 'invalid' }],
+        'the request gets exactly one terminal result across both passes',
+      );
+    } finally {
+      matrixService.agentId = originalAgentId;
+      (matrixService as any).sendToolResultEvent = originalSend;
+    }
   });
 
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {

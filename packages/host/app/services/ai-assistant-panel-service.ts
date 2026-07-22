@@ -36,7 +36,7 @@ import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
@@ -59,7 +59,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
@@ -74,11 +74,30 @@ export default class AiAssistantPanelService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    // resetState() BEFORE register(): register() can synchronously replay
+    // sessionStarted() (when a session is already established), and that arms
+    // loadRoomsTask. resetState() cancels loadRoomsTask, so registering first
+    // would immediately cancel the arm. No explicit arming here — the replay
+    // (or MatrixService's notifySessionStarted() broadcast at boot) covers it.
     this.resetState();
-    if (this.isOpen) {
-      this.loadRoomsTask.perform();
+    this.session.register(this);
+  }
+
+  sessionStarted() {
+    this.ensureRoomsLoaded();
+  }
+
+  // Enter a room if the panel is open and nothing is loaded/loading yet. Used
+  // by the session-start hook (re-arm after re-login, and boot replay); leaves
+  // an already-current room untouched so a passive broadcast never clobbers it.
+  private ensureRoomsLoaded() {
+    if (!this.isOpen) {
+      return;
     }
+    if (!this.matrixService.currentRoomId && !this.loadRoomsTask.isRunning) {
+      return this.loadRoomsTask.perform();
+    }
+    return undefined;
   }
 
   resetState() {
@@ -211,6 +230,11 @@ export default class AiAssistantPanelService extends Service {
   @action
   openPanel() {
     this.operatorModeStateService.openAiAssistant();
+    // Always re-run enterRoomInitially on an explicit open so the panel
+    // reselects the right room (persisted → latest → new) each time — the
+    // user may have switched or the persisted room may have changed while
+    // closed. (ensureRoomsLoaded()'s "leave the current room alone" guard is
+    // only for the passive session-start hook.)
     return this.loadRoomsTask.perform();
   }
 

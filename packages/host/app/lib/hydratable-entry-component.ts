@@ -14,7 +14,7 @@ import type {
 
 import HydratableCard, {
   type HydrationMode,
-} from '../components/card-search/hydratable-card';
+} from '../components/search/hydratable-card';
 
 import type { HTMLComponent } from './html-component';
 import type { ComponentLike } from '@glint/template';

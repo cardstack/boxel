@@ -193,10 +193,83 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     let docText = editorEl
       ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()
       : undefined;
+    // The picked Pet lives in a sibling directory to the edited Note, so the
+    // inserted ref is relativized against the document — `../Pet/mango` — the
+    // same form the `/`-search format-picker path produces.
     assert.strictEqual(
       docText,
-      `:card[${mangoId}]`,
-      'source carries the inserted inline atom directive',
+      `:card[../Pet/mango]`,
+      'source carries the inserted inline atom directive, relativized to the document',
+    );
+  });
+
+  test('Custom-size fitted holds Accept disabled until a valid size is entered', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+    await waitFor('[data-test-toolbar="add-embed"]', { timeout: 5000 });
+
+    await click('[data-test-toolbar="add-embed"]');
+    await click('[data-test-toolbar-embed="card"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+    );
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+
+    // Selecting Custom size with no dimensions must hold the CTA disabled so a
+    // size-less bare `fitted` directive can't be inserted.
+    await click('[data-test-markdown-embed-preview-format-select]');
+    await waitFor('[data-test-format-option="custom"]', { timeout: 5000 });
+    await click('[data-test-format-option="custom"]');
+    await waitFor('[data-test-markdown-embed-preview-size]', { timeout: 5000 });
+    assert
+      .dom('[data-test-markdown-embed-preview-cta]')
+      .isDisabled('Accept is disabled while Custom size has no dimensions');
+
+    // A size that matches no named variant keeps the selection on Custom; once
+    // entered, the CTA unlocks and inserts a directive carrying those dims.
+    await fillIn('[data-test-markdown-embed-preview-width]', '512');
+    await fillIn('[data-test-markdown-embed-preview-height]', '384');
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let docText = editorEl
+      ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()?.trim()
+      : undefined;
+    assert.strictEqual(
+      docText,
+      `::card[../Pet/mango | w:512 h:384]`,
+      'custom fitted inserts the entered width and height',
     );
   });
 
@@ -294,6 +367,57 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     await click('[data-test-close-modal]');
     await waitUntil(
       () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+  });
+
+  test('editing an existing bare fitted embed keeps Done enabled and re-inserts it unchanged', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
+    assert.ok(view, 'codemirror view is reachable');
+    view!.focus();
+
+    // A bare `::card[url | fitted]` (no dimensions) is a valid supported form.
+    // Opening the chooser on it seeds the Custom category with no size, so the
+    // size gate must not disable Done for the unchanged edit — the gate only
+    // blocks a fresh, dirty Custom pick.
+    view!.dispatch({
+      changes: { from: 0, insert: `::card[../Pet/mango | fitted]` },
+    });
+    view!.dispatch({ selection: { anchor: 3, head: 3 } });
+
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+    await waitFor('[data-test-markdown-embed-preview-cta]', { timeout: 5000 });
+
+    assert
+      .dom('[data-test-markdown-embed-preview-cta]')
+      .isNotDisabled('Done stays enabled for an unchanged bare fitted embed');
+
+    await click('[data-test-markdown-embed-preview-cta]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let docText = cmContext.EditorView.findFromDOM(editorEl!)
+      ?.state.doc.toString()
+      ?.trim();
+    assert.strictEqual(
+      docText,
+      `::card[../Pet/mango | fitted]`,
+      'accepting the unchanged edit re-inserts the bare fitted directive',
     );
   });
 

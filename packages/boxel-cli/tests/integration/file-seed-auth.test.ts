@@ -1,18 +1,19 @@
 import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { read } from '../../src/commands/file/read.ts';
-import { write } from '../../src/commands/file/write.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   realmSecretSeed,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
 // The test realm grants `'*': ['read','write']`, so any token validly signed
 // with `realmSecretSeed` may read and write — which is what the seed-auth path
-// produces (a locally-minted JWT, no Matrix login).
+// produces (a locally-minted JWT, no Matrix login). The CLI takes the seed via
+// `--realm-secret-seed` reading `BOXEL_REALM_SECRET_SEED` from the env
+// (run-boxel strips inherited BOXEL_* vars, so we opt it back in explicitly).
 let realmUrl: string;
 
 beforeAll(async () => {
@@ -28,37 +29,57 @@ afterAll(async () => {
 
 describe('file read/write with seed-based auth (integration)', () => {
   it('writes then reads a file authenticating via the seed (no Matrix profile)', async () => {
-    // Empty profile: no Matrix login exists, so success proves the seed path.
-    let { profileManager, cleanup } = createTestProfileDir();
+    // Empty profile home: no Matrix login exists, so success proves the seed
+    // path.
+    let { home, cleanup } = createTestHome();
     try {
-      let writeResult = await write(
-        realmUrl,
-        'seed-roundtrip.gts',
-        'export const seeded = 42;\n',
-        { realmSecretSeed, profileManager },
+      let writeRes = await runBoxel(
+        [
+          'file',
+          'write',
+          'seed-roundtrip.gts',
+          '--realm',
+          realmUrl,
+          '--realm-secret-seed',
+        ],
+        {
+          home,
+          input: 'export const seeded = 42;\n',
+          env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed },
+        },
       );
-      expect(writeResult.error).toBeUndefined();
-      expect(writeResult.ok).toBe(true);
+      expect(writeRes.ok, writeRes.stderr).toBe(true);
 
-      let readResult = await read(realmUrl, 'seed-roundtrip.gts', {
-        realmSecretSeed,
-        profileManager,
-      });
-      expect(readResult.ok).toBe(true);
-      expect(readResult.content).toContain('seeded = 42');
+      let readRes = await runBoxel(
+        [
+          'file',
+          'read',
+          'seed-roundtrip.gts',
+          '--realm',
+          realmUrl,
+          '--realm-secret-seed',
+          '--json',
+        ],
+        { home, env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed } },
+      );
+      expect(readRes.ok, readRes.stderr).toBe(true);
+      let result = readRes.json<{ ok: boolean; content?: string }>();
+      expect(result.ok).toBe(true);
+      expect(result.content).toContain('seeded = 42');
     } finally {
       cleanup();
     }
   });
 
   it('fails cleanly with "No active profile" when neither a seed nor a profile is configured', async () => {
-    let { profileManager, cleanup } = createTestProfileDir();
+    let { home, cleanup } = createTestHome();
     try {
-      let result = await read(realmUrl, 'seed-existing.gts', {
-        profileManager,
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('No active profile');
+      let res = await runBoxel(
+        ['file', 'read', 'seed-existing.gts', '--realm', realmUrl],
+        { home },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
     } finally {
       cleanup();
     }

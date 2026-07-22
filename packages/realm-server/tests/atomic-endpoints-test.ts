@@ -909,6 +909,134 @@ module(basename(import.meta.filename), function () {
             testRealmAdapter.write = originalWrite;
           }
         });
+
+        test('waitForIndex write preserves compound field values backed by an unexported FieldDef', async function (assert) {
+          let logSource = `
+              import {
+                contains,
+                containsMany,
+                field,
+                CardDef,
+                FieldDef,
+              } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import DatetimeField from "@cardstack/base/datetime";
+
+              class Entry extends FieldDef {
+                @field kind = contains(StringField);
+                @field at = contains(DatetimeField);
+                @field headline = contains(StringField);
+              }
+
+              export class Log extends CardDef {
+                @field logTitle = contains(StringField);
+                @field entries = containsMany(Entry);
+              }
+              `.trim();
+          let moduleDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: 'log.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: logSource,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          await request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(moduleDoc))
+            .expect(201);
+
+          // Instance pushed as a raw `source` resource — the shape realm
+          // sync tools send — so the handler re-serializes it through
+          // fileSerialization before writing to disk.
+          let instanceContent = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  logTitle: 'Probe',
+                  entries: [
+                    {
+                      kind: 'phase',
+                      at: '2026-07-17T02:45:29.259Z',
+                      headline: 'probe entry',
+                    },
+                  ],
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../log',
+                    name: 'Log',
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          );
+          let instanceDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: 'Log/log-1.json',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: instanceContent,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(instanceDoc));
+          assert.strictEqual(
+            response.status,
+            201,
+            `expected 201, got ${response.status}: ${JSON.stringify(response.body)}`,
+          );
+
+          let sourceResponse = await request
+            .get('/Log/log-1.json')
+            .set('Accept', SupportedMimeType.CardSource);
+          assert.strictEqual(sourceResponse.status, 200);
+          let storedDoc = JSON.parse(sourceResponse.text);
+          assert.deepEqual(
+            storedDoc.data.attributes?.entries,
+            [
+              {
+                kind: 'phase',
+                at: '2026-07-17T02:45:29.259Z',
+                headline: 'probe entry',
+              },
+            ],
+            'containsMany compound entries survive the waitForIndex write',
+          );
+          assert.strictEqual(
+            storedDoc.data.attributes?.logTitle,
+            'Probe',
+            'top-level attribute survives the waitForIndex write',
+          );
+        });
       });
       module('error handling', function (hooks) {
         setupPermissionedRealmCached(hooks, {

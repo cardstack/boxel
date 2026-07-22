@@ -2,7 +2,12 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
-import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  BrokenLinkTemplate,
+  CopyButton,
+  type BrokenLinkFormat,
+} from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
   type MenuItemOptions,
@@ -97,6 +102,7 @@ import {
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
+  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -113,9 +119,6 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
-import BrokenLinkTemplate, {
-  type BrokenLinkFormat,
-} from './default-templates/broken-link-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
@@ -208,6 +211,7 @@ import {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
+import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
 import type { FileMetaResource } from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
@@ -373,6 +377,10 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  // Host bridge for the markdown editor's embed chooser. Provided by
+  // operator-mode; absent in contexts with no chooser modal (prerender,
+  // freestyle), so consumers guard on it.
+  markdownEmbedChooser?: MarkdownEmbedChooser;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';
@@ -501,11 +509,13 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
-  // The VirtualNetwork that owns this store's realm mappings, used for
-  // prefix/RRI resolution during (de)serialization. Required — every store
-  // implementation must supply one (production stores, test stubs, the
-  // FallbackCardStore).
-  virtualNetwork: VirtualNetwork;
+  // Resolve a (possibly relative or RRI) reference to a real, fetchable URL.
+  // Stores expose URL-resolution capability — never the VirtualNetwork object
+  // itself — so card code can satisfy boundaries that require a real URL (an
+  // `<img src>`, `new URL(...)`) without holding the network. Returns
+  // undefined when the reference can't be resolved (no network available, or
+  // an unresolvable reference) so callers can degrade to URL math.
+  resolveURL(reference: string, base?: string): URL | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -513,13 +523,27 @@ export interface CardStore {
   setCardNonTracked(id: string, instance: CardDef): void;
   setFileMetaNonTracked(id: string, instance: FileDef): void;
   makeTracked(id: string): void;
+  // `untracked` opts out of the store's load-generation tracking: safe only
+  // for a caller that awaits this promise inline and folds the resolved
+  // document into its own output, so the load-settle machinery (which exists
+  // to catch loads fired and abandoned by field getters) has nothing to wait
+  // for. The searchable generator's targeted link loads use this — it lets a
+  // walk whose targets all resolve immediately read as settled without a
+  // confirmation pass. Stores that don't implement the option simply keep
+  // tracking, which costs an extra settle pass and nothing else.
   loadCardDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
@@ -1611,6 +1635,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  @displayName={{cardTypeName broken.reference}}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
@@ -3933,15 +3958,24 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
-
+  // Loader identities and dependency lists are in canonical RRI form, while
+  // the dependency tracker keys module nodes by http(s) URL and drops
+  // anything else — so convert at this boundary via the loader's
+  // tracking-key form.
   let loader = Loader.getLoaderFor(ctor);
+  trackRuntimeModuleDependency(
+    loader ? loader.dependencyTrackingKey(identity.module) : identity.module,
+    dependencyTrackingContext,
+  );
   if (!loader) {
     return;
   }
 
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
-    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
+    trackRuntimeModuleDependency(
+      loader.dependencyTrackingKey(dep),
+      dependencyTrackingContext,
+    );
   }
 }
 
@@ -4814,25 +4848,16 @@ function getStore(instance: BaseDef): CardStore {
 // real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
 // AI source-file reader's `new URL(...)`) use this rather than reaching for the
 // VirtualNetwork object directly — they get back a URL, not the network itself.
-// Resolves through the instance's own store's VirtualNetwork, which may carry
-// realm mappings the module loader's does not (e.g. a card deserialized with an
+// Resolves through the instance's own store, which may carry realm mappings
+// the module loader's network does not (e.g. a card deserialized with an
 // explicit store). Returns undefined when none is available, or when the
 // reference can't be resolved, so callers can degrade to URL math.
 export function resolveInstanceURL(
   instance: CardDef,
   reference: string,
 ): URL | undefined {
-  let virtualNetwork: VirtualNetwork | undefined;
   try {
-    virtualNetwork = getStore(instance).virtualNetwork;
-  } catch {
-    return undefined;
-  }
-  if (!virtualNetwork) {
-    return undefined;
-  }
-  try {
-    return virtualNetwork.resolveURL(
+    return getStore(instance).resolveURL(
       reference,
       instance.id ?? instance[relativeTo],
     );
@@ -4871,14 +4896,31 @@ class FallbackCardStore implements CardStore {
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  get virtualNetwork(): VirtualNetwork {
+  #requireVirtualNetwork(): VirtualNetwork {
     let vn = myLoader().getVirtualNetwork();
     if (!vn) {
       throw new Error(
-        `FallbackCardStore.virtualNetwork requires the active Loader to have a VirtualNetwork`,
+        `FallbackCardStore requires the active Loader to have a VirtualNetwork`,
       );
     }
     return vn;
+  }
+
+  resolveURL(reference: string, base?: string): URL | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    if (!vn) {
+      return undefined;
+    }
+    try {
+      return vn.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
   }
 
   getCard(id: string) {
@@ -4939,7 +4981,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url, this.virtualNetwork);
+    let promise = loadCardDocument(fetch, url, this.#requireVirtualNetwork());
     this.trackLoad(promise);
     return await promise;
   }
@@ -4949,7 +4991,11 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url, this.virtualNetwork);
+    let promise = loadFileMetaDocument(
+      fetch,
+      url,
+      this.#requireVirtualNetwork(),
+    );
     this.trackLoad(promise);
     return await promise;
   }

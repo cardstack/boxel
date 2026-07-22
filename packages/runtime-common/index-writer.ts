@@ -20,6 +20,7 @@ import {
   getCreatedTime,
   ensureFileCreatedAt,
   getContentMeta,
+  getFileMetaForPaths,
 } from './file-meta.ts';
 import {
   type Expression,
@@ -51,26 +52,6 @@ import {
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
-
-// Non-primary-key columns of `prerendered_html(_working)` — everything the
-// dual-write upserts overwrite on conflict. The PK is (url, realm_url, type).
-const PRERENDERED_HTML_MUTABLE_COLUMNS = [
-  'file_alias',
-  'fitted_html',
-  'embedded_html',
-  'atom_html',
-  'head_html',
-  'isolated_html',
-  'markdown',
-  'deps',
-  'last_known_good_deps',
-  'generation',
-  'is_deleted',
-  'error_doc',
-  'rendered_at',
-  'diagnostics',
-  'job_id',
-];
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -124,6 +105,11 @@ export interface InstanceEntry {
   resourceCreatedAt: number;
   resource: CardResource;
   searchData: Record<string, any>;
+  // The visit's HTML half. A fused batch's `updateEntry` lands these on the
+  // prerendered_html channel; a split-mode index visit produces none (its
+  // spawned `prerender_html` job renders them on its own channel instead).
+  // `iconHTML` is the exception — the icon renders in the index visit and is
+  // written to `boxel_index.icon_html` in both modes.
   isolatedHtml?: string;
   headHtml?: string;
   embeddedHtml?: Record<string, string>;
@@ -189,6 +175,8 @@ export interface FileEntry {
   resource?: FileMetaResource | null;
   types?: string[];
   displayNames?: string[];
+  // See InstanceEntry: the visit's HTML half, landed on the prerendered_html
+  // channel by a fused batch; `iconHTML` goes to `boxel_index.icon_html`.
   isolatedHtml?: string;
   headHtml?: string;
   embeddedHtml?: Record<string, string>;
@@ -241,6 +229,36 @@ export interface PrerenderedHtmlChange {
   operation: 'update' | 'delete';
 }
 
+// The HTML half of a fused-visit index entry, in the shape the
+// prerendered_html writer consumes. A fused visit produces one combined
+// index+render diagnostics blob; the whole blob rides on both channels'
+// rows.
+function prerenderedHtmlEntryFrom(
+  entry: SearchIndexEntry,
+  diagnostics: Diagnostics,
+): PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry {
+  if (isErrorEntry(entry)) {
+    return { type: entry.type, error: entry.error, diagnostics };
+  }
+  return {
+    type: entry.type,
+    isolatedHtml: entry.isolatedHtml ?? null,
+    headHtml: entry.headHtml ?? null,
+    embeddedHtml: entry.embeddedHtml ?? null,
+    fittedHtml: entry.fittedHtml ?? null,
+    atomHtml: entry.atomHtml ?? null,
+    markdown: entry.markdown ?? null,
+    deps: [...entry.deps],
+    diagnostics,
+  };
+}
+
+// Rows held in the write-behind buffer before a flush is forced (see
+// `Batch.bufferEntry`). Dependency reads flush earlier; this only bounds
+// memory across long runs of dependency-free files. Renders dwarf the writes,
+// so even a forced flush lands in a render's shadow.
+const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -254,6 +272,11 @@ export class Batch {
   // changed mid-attempt is re-visited rather than silently resumed
   // with stale content.
   #resumedRows = new Map<string, number | null>();
+  #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
+  #prerenderedHtmlTombstonedLiveTypes = new Map<
+    string,
+    PrerenderedHtmlTable['type'][]
+  >();
   // Correlation ID minted once per Batch and stamped into every row's
   // `diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE diagnostics->>'invalidationId' = '...'`
@@ -264,19 +287,30 @@ export class Batch {
   // of each incremental `invalidate()` call so the ID identifies a
   // single triggering change, not the whole batch lifetime.
   #currentInvalidationId: string;
+  // Write-behind buffer for the index visit loop (see `bufferEntry`). Rows
+  // accumulate here so the prerender tab renders the next file while these
+  // drain; `#writeBufferUrls` mirrors their URLs for the dependency-read
+  // flush check in `getDependencyRows`.
+  #writeBuffer: { url: URL; entry: SearchIndexEntry }[] = [];
+  #writeBufferUrls = new Set<string>();
+  // Aggregate wall of every physical `boxel_index_working` write in this
+  // batch, surfaced on the job result's `phaseTimings.writeMs`.
+  #writeMs = 0;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   // The source realm of a copy batch, set by `copyFrom`. `applyBatchUpdates`
-  // uses it to overlay the destination's prerendered HTML from the source
-  // realm's `prerendered_html` rows after the `boxel_index` projection runs.
+  // uses it to fill the destination's prerendered_html channel from the
+  // source realm's `prerendered_html` rows.
   #copyFromSourceRealm: URL | undefined;
   // When true (the server/Postgres path), HTML prerendering runs as a separate
   // `prerender_html` job, so this index batch writes only `boxel_index` and
   // leaves the `prerendered_html` channel to that job. When false (the fused
   // path — the SQLite in-browser/test realm, which has no separate worker), the
-  // batch keeps projecting HTML into `prerendered_html` inline. Defaults to
-  // `dbAdapter.kind === 'pg'`; a copy batch keeps the projection either way
-  // (guarded by `#copyFromSourceRealm` in `applyBatchUpdates`).
+  // batch writes each entry's HTML half into `prerendered_html_working` inline
+  // (in `updateEntry`, with tombstones mirrored in `tombstoneEntries`).
+  // Defaults to `dbAdapter.kind === 'pg'`; a copy batch fills the channel
+  // either way via `copyPrerenderedHtmlFrom` (guarded by
+  // `#copyFromSourceRealm` in `applyBatchUpdates`).
   #splitPrerenderHtml: boolean;
   // When true, this batch is the `prerender_html` job's batch: it writes only
   // the `prerendered_html` channel (not `boxel_index`), stamps the carried
@@ -291,6 +325,20 @@ export class Batch {
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
   #scannedInvalidationCount = 0;
+  // Created-at + content hash/size for files this batch will visit, loaded in
+  // one query by `prefetchFileMeta` so the per-visit `ensureFileCreatedAt` /
+  // `getContentMeta` lookups the index loop makes are served from memory rather
+  // than a DB round-trip each. Only files with a persisted `realm_file_meta`
+  // row are present; a miss falls back to the per-path read, so both lookups
+  // behave identically whether or not the batch prefetched.
+  #fileMetaCache = new Map<
+    string,
+    {
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    }
+  >();
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -481,6 +529,60 @@ export class Batch {
   }
 
   /**
+   * Row types `tombstoneEntries` overwrote with tombstones this pass,
+   * restricted to rows that were live (not already deleted) in the
+   * production index. IndexRunner's per-file failure isolation consults
+   * this to decide whether a failed URL had a card instance to protect —
+   * the index is a more reliable oracle than re-reading the file, since
+   * the read path may be exactly what failed.
+   */
+  tombstonedLiveTypes(url: string): BoxelIndexTable['type'][] | undefined {
+    return this.#tombstonedLiveTypes.get(url);
+  }
+
+  // Populate `#tombstonedLiveTypes` for `urls` straight from the production
+  // index, WITHOUT tombstoning or computing a fan-out — the same live-type
+  // memory `invalidate()` records, but for a batch that never invalidated.
+  // The setup-phase failure recovery uses a fresh batch (it must not reuse the
+  // in-flight batch, whose working table holds fan-out tombstones a `done()`
+  // would promote); that fresh batch has no tombstone memory, so without this
+  // it would fall back to re-reading each file to decide "was this a card?".
+  // Any URL it then failed to re-classify (a read blip, non-card on-disk
+  // content) would leave the in-flight batch's `instance` tombstone in the
+  // shared working table to be promoted — silently deleting a previously-good
+  // card. Seeding from the index (the reliable oracle) closes that.
+  async seedLiveTypesFromProduction(urls: URL[]): Promise<void> {
+    await this.ready;
+    if (urls.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingIndexTypes(urls.map((u) => u.href));
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#tombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
+  }
+
+  /**
+   * The prerendered_html analog of `tombstonedLiveTypes`: row types
+   * `tombstonePrerenderedHtmlEntries` overwrote with tombstones this pass,
+   * restricted to rows that were live in production `prerendered_html`.
+   * The prerender-html visit loop's per-URL failure isolation consults
+   * this to decide whether a failed URL had a card instance to protect —
+   * the rendered table is a more reliable oracle than re-reading the
+   * file, since the read path may be exactly what failed.
+   */
+  prerenderedHtmlTombstonedLiveTypes(
+    url: string,
+  ): PrerenderedHtmlTable['type'][] | undefined {
+    return this.#prerenderedHtmlTombstonedLiveTypes.get(url);
+  }
+
+  /**
    * Drop URLs from the resumed-row map. Call this when the caller has
    * concluded the previous attempt's content for those URLs is no
    * longer authoritative — typically because the file has been
@@ -509,19 +611,56 @@ export class Batch {
     return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
-  // Ensure a created_at row exists for this file in realm_file_meta and return it
+  // Load created_at + content hash/size for a set of files in one query so the
+  // per-visit `ensureFileCreatedAt` / `getContentMeta` lookups are served from
+  // memory. The visit loop knows its whole URL set up front, so one batched
+  // read replaces two DB round-trips per visit — the same shape as
+  // `getModifiedTimes` fetching mtimes up front. The cached hash/size is a
+  // snapshot as of this call: a file rewritten between the prefetch and its
+  // visit (`persistFileMeta` overwrites the columns) is served the pre-rewrite
+  // values, and the concurrent write's own incremental pass re-indexes it with
+  // the current metadata — the same eventual-consistency the per-visit read had
+  // over the narrower read-file-to-lookup window. Calling this again merges
+  // fresh rows in, so overlapping sets are safe.
+  async prefetchFileMeta(localPaths: string[]): Promise<void> {
+    let fetched = await getFileMetaForPaths(
+      this.#dbAdapter,
+      this.realmURL.href,
+      localPaths,
+    );
+    for (let [path, meta] of fetched) {
+      this.#fileMetaCache.set(path, meta);
+    }
+  }
+
+  // Ensure a created_at row exists for this file in realm_file_meta and return
+  // it. A prefetched hit means the row already exists, so its created_at is
+  // returned without a round-trip; a miss falls through to the per-path
+  // ensure-and-read, which also creates the row when the file has none.
   async ensureFileCreatedAt(localPath: string): Promise<number> {
+    let cached = this.#fileMetaCache.get(localPath);
+    if (cached) {
+      return cached.createdAt;
+    }
     return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
   // Look up the content hash and size persisted at write time for a given file
-  // path, in a single row lookup. Either value is undefined when the realm has
-  // no recorded value (e.g. files written before file-meta hashing existed, or
-  // a no-op rewrite that left the columns untouched).
+  // path. Served from the prefetch cache when available; otherwise a single row
+  // lookup. Either value is undefined when the realm has no recorded value
+  // (e.g. files written before file-meta hashing existed, or a no-op rewrite
+  // that left the columns untouched).
   async getContentMeta(localPath: string): Promise<{
     contentHash: string | undefined;
     contentSize: number | undefined;
   }> {
+    let cached = this.#fileMetaCache.get(localPath);
+    if (cached) {
+      return {
+        contentHash: cached.contentHash,
+        contentSize: cached.contentSize,
+      };
+    }
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
   }
 
@@ -594,12 +733,6 @@ export class Batch {
           realmURL: this.realmURL.href as RealmIdentifier,
         };
       }
-      entry.fitted_html = entry.fitted_html
-        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
-        : entry.fitted_html;
-      entry.embedded_html = entry.embedded_html
-        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
-        : entry.embedded_html;
       this.updateIds(entry.search_doc, sourceRealmURL);
       if (entry.error_doc) {
         entry.error_doc = this.normalizeErrorDoc(
@@ -629,20 +762,18 @@ export class Batch {
       ),
     ]);
 
-    // `applyBatchUpdates` overlays the source realm's prerendered HTML after the
-    // `boxel_index` projection runs.
+    // `applyBatchUpdates` fills the destination's prerendered_html channel
+    // from the source realm's `prerendered_html` rows.
     this.#copyFromSourceRealm = sourceRealmURL;
   }
 
-  // Overlay the source realm's `prerendered_html` rows onto the destination's
+  // Copy the source realm's `prerendered_html` rows onto the destination's
   // `prerendered_html_working`, so a copied realm keeps its prerendered HTML
-  // without re-rendering — sourced from the `prerendered_html` channel rather
-  // than the `boxel_index` HTML columns. Runs after the `boxel_index`
-  // projection in `applyBatchUpdates` and overwrites the rows it covers, so a
-  // rendering that exists in the source's `prerendered_html` wins, while a row
-  // absent there keeps the `boxel_index`-projected HTML (the copy fills every
-  // row and leaves no gap). Mirrors the `boxel_index` copy's transforms — URL
-  // rewrite (`url`, `realm_url`, `file_alias`), render-type-key rewrite of
+  // without re-rendering. Runs from `applyBatchUpdates` just before the
+  // channel swap. A destination URL whose source has no `prerendered_html`
+  // row gets none — it reads as unrendered and the catch-up sweep enqueues
+  // its render. Mirrors the `boxel_index` copy's transforms — URL rewrite
+  // (`url`, `realm_url`, `file_alias`), render-type-key rewrite of
   // `fitted_html` / `embedded_html`, deps rewrite (scoped-CSS URLs ride in
   // `deps`), and `error_doc` normalization — and stamps the destination
   // generation so the copied instances read as fresh
@@ -696,8 +827,9 @@ export class Batch {
       return valueExpressions;
     });
     if (!columns) {
-      // Source realm has no prerendered HTML to overlay (e.g. never rendered);
-      // the `boxel_index` projection already filled the working rows.
+      // Source realm has no prerendered HTML to copy (e.g. never rendered);
+      // the destination reads as unrendered and the catch-up sweep enqueues
+      // its renders.
       return;
     }
 
@@ -711,6 +843,96 @@ export class Batch {
     ]);
   }
 
+  // Enqueue a row write behind the write buffer instead of upserting it
+  // inline. The index visit loop routes its writes here so the prerender tab
+  // can start the next file's render while these rows drain. The URL joins
+  // `#invalidations` synchronously — the swap in `done()`, the resume marker,
+  // and the dependency-error skip all key off it, so buffering must not defer
+  // that — while the physical upsert is held until `flushWriteBuffer`. The one
+  // mid-pass reader of buffered rows, dependency-error bookkeeping via
+  // `getDependencyRows`, flushes the buffer first when it queries a
+  // still-buffered URL, so a dependent never reads a stale row for a
+  // dependency written earlier in the same pass.
+  async bufferEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    if (this.#prerenderHtmlOnly) {
+      throw new Error(
+        `a prerenderHtmlOnly batch writes only the prerendered_html channel — use updatePrerenderedHtmlEntry`,
+      );
+    }
+    if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
+      // TODO this is a workaround for CS-6886. after we have solved that issue we can
+      // drop this band-aid
+      return;
+    }
+    this.#assertErrorEntryHasMessage(url, entry);
+    this.#invalidations.add(url.href);
+    this.#writeBuffer.push({ url, entry });
+    this.#writeBufferUrls.add(url.href);
+    // Bound memory for long runs of dependency-free files; dependency reads
+    // flush earlier. Renders dwarf the writes, so a forced flush here still
+    // rides in the shadow of the render that started before it.
+    if (this.#writeBuffer.length >= WRITE_BUFFER_FLUSH_THRESHOLD) {
+      await this.flushWriteBuffer();
+    }
+  }
+
+  // Drain the write buffer. In split mode (server / pg) the batch writes only
+  // `boxel_index`, so the held rows coalesce into multi-row upserts grouped by
+  // column signature — instance/file success rows share one signature, error
+  // rows fold in the last-known-good production columns and group separately —
+  // turning one round-trip per row into a handful per drain. In fused mode
+  // (SQLite) each row also lands its HTML half on the `prerendered_html`
+  // channel, so the proven per-row path runs instead.
+  async flushWriteBuffer(): Promise<void> {
+    if (this.#writeBuffer.length === 0) {
+      return;
+    }
+    let buffered = this.#writeBuffer;
+    let start = Date.now();
+    try {
+      if (this.#splitPrerenderHtml) {
+        // Last write wins when the same (url, type) was buffered twice: a
+        // single multi-row upsert can't touch one conflict target twice.
+        let deduped = new Map<string, { url: URL; entry: SearchIndexEntry }>();
+        for (let item of buffered) {
+          deduped.set(`${item.url.href}|${rowType(item.entry)}`, item);
+        }
+        let prepared = await Promise.all(
+          [...deduped.values()].map(({ url, entry }) =>
+            this.#prepareIndexRow(url, entry),
+          ),
+        );
+        await this.#upsertIndexRows(prepared);
+      } else {
+        for (let { url, entry } of buffered) {
+          await this.#writeEntryNow(url, entry);
+        }
+      }
+      // Clear only after the rows have durably landed. If a write throws, the
+      // buffer is retained so the healthy rows in it aren't lost: a later
+      // flush (the next dependency read, the size cap, or `done()`) retries
+      // them. `done()` flushes before it promotes, so a persistent failure
+      // surfaces there and aborts the batch before any swap — rather than
+      // dropping the buffered rows while their URLs stay in the invalidation
+      // set, which would let the swap promote tombstones or stale rows.
+      this.#writeBuffer = [];
+      this.#writeBufferUrls.clear();
+    } finally {
+      this.#writeMs += Date.now() - start;
+    }
+  }
+
+  // Aggregate wall of every physical `boxel_index_working` write in this
+  // batch — the single-row `updateEntry` path plus every `flushWriteBuffer`
+  // drain — surfaced on the job result's `phaseTimings.writeMs`.
+  get writeMs(): number {
+    return this.#writeMs;
+  }
+
+  // Immediate single-row write, for callers outside the buffered index loop
+  // (realm copy fix-ups, tests). Runs the same guards + invalidation
+  // bookkeeping the buffered path does, then writes without waiting for a
+  // flush.
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       throw new Error(
@@ -722,15 +944,25 @@ export class Batch {
       // drop this band-aid
       return;
     }
-    // An instance-error / file-error entry whose `.error.message` is
-    // empty would persist as a row with `has_error = true` and an
-    // error_doc that is null or missing the human-readable text. Such
-    // a row is invisible to UI and DB-only triage, and historically
-    // produced indexing jobs that re-reserved indefinitely without
-    // ever rejecting. Throw at the boundary so the caller's stderr log
-    // carries the underlying render error and the worker can finalize
-    // the reservation against the per-job cap instead of silently
-    // writing a black-hole row.
+    this.#assertErrorEntryHasMessage(url, entry);
+    this.#invalidations.add(url.href);
+    let start = Date.now();
+    try {
+      await this.#writeEntryNow(url, entry);
+    } finally {
+      this.#writeMs += Date.now() - start;
+    }
+  }
+
+  // An instance-error / file-error entry whose `.error.message` is empty would
+  // persist as a row with `has_error = true` and an error_doc that is null or
+  // missing the human-readable text. Such a row is invisible to UI and DB-only
+  // triage, and historically produced indexing jobs that re-reserved
+  // indefinitely without ever rejecting. Throw at the boundary so the caller's
+  // stderr log carries the underlying render error and the worker can finalize
+  // the reservation against the per-job cap instead of silently writing a
+  // black-hole row.
+  #assertErrorEntryHasMessage(url: URL, entry: SearchIndexEntry): void {
     if (
       isErrorEntry(entry) &&
       (!entry.error ||
@@ -744,27 +976,124 @@ export class Batch {
           `failure text.`,
       );
     }
+  }
+
+  // Physically write one prepared row. On the fused path the entry's HTML half
+  // lands first: the boxel_index_working row is the resume marker
+  // (`loadResumedRows` skips URLs it finds), so writing it last means a crash
+  // between the two writes re-visits the URL rather than resuming a row whose
+  // rendering never landed. (A split-mode batch writes no HTML — its spawned
+  // `prerender_html` job owns that channel.)
+  async #writeEntryNow(url: URL, entry: SearchIndexEntry): Promise<void> {
+    let { preparedEntry, htmlEntry } = await this.#prepareIndexRow(url, entry);
+    if (!this.#splitPrerenderHtml) {
+      await this.writePrerenderedHtmlRow(url, htmlEntry);
+    }
+    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
+      jsonFields: this.#jsonColumnNames(),
+    });
+    await this.#query([
+      ...upsert(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+  }
+
+  // Coalesce prepared rows into multi-row upserts. `asExpressions` derives the
+  // column list from an object's keys, and one multi-row `VALUES` clause
+  // requires every row to present the same columns in the same order — so
+  // group by column signature and emit one upsert per group (success
+  // instance/file rows fall in one group; error rows, which fold in the
+  // last-known-good production columns, may each form their own).
+  async #upsertIndexRows(rows: PreparedIndexRow[]): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+    let jsonFields = this.#jsonColumnNames();
+    let groups = new Map<string, PreparedIndexRow[]>();
+    for (let row of rows) {
+      let signature = Object.keys(row.preparedEntry).sort().join(',');
+      let group = groups.get(signature);
+      if (group) {
+        group.push(row);
+      } else {
+        groups.set(signature, [row]);
+      }
+    }
+    for (let group of groups.values()) {
+      if (group.length === 1) {
+        let { nameExpressions, valueExpressions } = asExpressions(
+          group[0].preparedEntry,
+          { jsonFields },
+        );
+        await this.#query([
+          ...upsert(
+            'boxel_index_working',
+            'boxel_index_working_pkey',
+            nameExpressions,
+            valueExpressions,
+          ),
+        ]);
+        continue;
+      }
+      // One stable column order shared by every row in the group, so each
+      // row's values align with the single `nameExpressions` list.
+      let columns = Object.keys(group[0].preparedEntry).sort();
+      let nameExpressions = columns.map((column) => [column]);
+      // Keep each INSERT within the adapter's bind-parameter ceiling: one
+      // multi-row upsert binds `rows * columns` params, and SQLite caps that
+      // (~999) — reachable when a batch flushes in split mode under SQLite
+      // (forced in tests) — while Postgres tolerates far more. Chunk the group
+      // so the statement stays under the limit, mirroring the per-adapter
+      // chunking in `getDependencyRows`.
+      let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+      let rowsPerUpsert = Math.max(1, Math.floor(bindBudget / columns.length));
+      for (let i = 0; i < group.length; i += rowsPerUpsert) {
+        let slice = group.slice(i, i + rowsPerUpsert);
+        let valueExpressions = slice.map(
+          (row) =>
+            asExpressions(orderKeys(row.preparedEntry, columns), { jsonFields })
+              .valueExpressions,
+        );
+        await this.#query([
+          ...upsertMultipleRows(
+            'boxel_index_working',
+            'boxel_index_working_pkey',
+            nameExpressions,
+            valueExpressions,
+          ),
+        ]);
+      }
+    }
+  }
+
+  #jsonColumnNames(): string[] {
+    return [...Object.entries(coerceTypes)]
+      .filter(([, type]) => type === 'JSON')
+      .map(([column]) => column);
+  }
+
+  // Build the sanitized `boxel_index_working` row payload — and the paired
+  // `prerendered_html` entry the fused path writes — for an entry, without
+  // performing the upsert.
+  //
+  // The per-row diagnostics blob is assembled here: render-side fields come
+  // from the Prerenderer's `response.meta` (already flattened in
+  // `visit-file.ts`); the write-side `invalidationId` (minted once per Batch,
+  // so every row from the same pass shares a queryable correlation key) and
+  // `indexedAt` are stamped now. The canonical storage is the `diagnostics`
+  // column; for error rows the blob is ALSO mirrored onto
+  // `error_doc.diagnostics` so the UI read path keeps working unchanged.
+  // jsonb-illegal bytes are stripped once, over the whole row, by the
+  // `sanitizeForJsonb` at the end.
+  async #prepareIndexRow(
+    url: URL,
+    entry: SearchIndexEntry,
+  ): Promise<PreparedIndexRow> {
     let href = url.href;
-    this.#invalidations.add(url.href);
-    // Build the per-row diagnostics blob. Render-side fields
-    // come from the Prerenderer's `response.meta` (already flattened
-    // in `visit-file.ts`); write-side stamps are added here:
-    //
-    //   - `invalidationId` — minted once per Batch (covers both
-    //     incremental `invalidate()` calls and fromScratch), so every
-    //     row from the same indexing pass shares a queryable
-    //     correlation key.
-    //   - `indexedAt` — wall-clock the write happened.
-    //
-    // The canonical storage is the `diagnostics` column. For
-    // error rows we ALSO mirror the blob onto `error_doc.diagnostics`
-    // so the UI read path (error doc → CardErrorJSONAPI.meta.
-    // diagnostics via `formattedError`) keeps working unchanged —
-    // no schema rename needed. The column remains source of truth;
-    // the error-doc copy is derived.
-    // jsonb-illegal bytes are stripped once at the write boundary below
-    // (see the sanitizeForJsonb call before asExpressions), so this and every
-    // other content column is covered in one place.
     let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       invalidationId: this.#currentInvalidationId,
@@ -796,13 +1125,7 @@ export class Batch {
           type: 'instance',
           pristine_doc: entry.resource,
           search_doc: entry.searchData,
-          isolated_html: entry.isolatedHtml,
-          head_html: entry.headHtml ?? null,
-          embedded_html: entry.embeddedHtml,
-          fitted_html: entry.fittedHtml,
-          atom_html: entry.atomHtml,
           icon_html: entry.iconHTML,
-          markdown: entry.markdown ?? null,
           deps: [...entry.deps],
           last_known_good_deps: [...entry.deps],
           types: entry.types,
@@ -823,13 +1146,7 @@ export class Batch {
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
           display_names: entry.displayNames ?? null,
-          isolated_html: entry.isolatedHtml ?? null,
-          head_html: entry.headHtml ?? null,
-          embedded_html: entry.embeddedHtml ?? null,
-          fitted_html: entry.fittedHtml ?? null,
-          atom_html: entry.atomHtml ?? null,
           icon_html: entry.iconHTML ?? null,
-          markdown: entry.markdown ?? null,
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
@@ -847,7 +1164,7 @@ export class Batch {
           // favor the last known good types over the types derived from the error state
           ...production,
           // Assign search_doc AFTER the production spread so the freshly-stamped
-          // synthetic keys (`_title`, `_isCardInstance`, `_cardType`) survive
+          // synthetic keys (`_title`, `_isCardInstanceFile`, `_cardType`) survive
           // rather than being clobbered by the last-known-good doc. Overlaying
           // the current searchData onto that doc keeps an instance's rich fields
           // when it degrades to a sparse error searchData, while a file /
@@ -928,23 +1245,10 @@ export class Batch {
     // display_names, diagnostics, error_doc) in one place, including rendered
     // card content that can carry a split emoji surrogate or a stray NUL folded
     // in from an upstream resolver.
-    let { nameExpressions, valueExpressions } = asExpressions(
-      sanitizeForJsonb(preparedEntry),
-      {
-        jsonFields: [...Object.entries(coerceTypes)]
-          .filter(([_, type]) => type === 'JSON')
-          .map(([column]) => column),
-      },
-    );
-
-    await this.#query([
-      ...upsert(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
+    return {
+      preparedEntry: sanitizeForJsonb(preparedEntry) as Record<string, unknown>,
+      htmlEntry: prerenderedHtmlEntryFrom(entry, diagnostics),
+    };
   }
 
   // Seed a prerenderHtmlOnly batch's invalidation set from the changes the
@@ -977,53 +1281,7 @@ export class Batch {
     if (toTombstone.length === 0) {
       return;
     }
-    let existingTypes = await this.existingPrerenderedHtmlTypes(toTombstone);
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'generation',
-      'realm_url',
-      'is_deleted',
-      'error_doc',
-      'diagnostics',
-      'rendered_at',
-      'job_id',
-    ].map((c) => [c]);
-    let now = Date.now();
-    let jobIdValue = this.jobInfo?.jobId ?? null;
-    let rows = toTombstone.flatMap((id) => {
-      let types = existingTypes.get(id);
-      if (!types || types.length === 0) {
-        // Nothing rendered for this URL yet — there is no row to hide.
-        return [];
-      }
-      return types.map((type) =>
-        [
-          id,
-          trimExecutableExtension(rri(id)),
-          type,
-          this.generation,
-          this.realmURL.href,
-          true, // is_deleted
-          null, // error_doc — a tombstone clears any prior render error
-          null, // diagnostics — likewise cleared; they described the render this tombstone hides
-          now,
-          jobIdValue,
-        ].map((v) => [param(v)]),
-      );
-    });
-    if (rows.length === 0) {
-      return;
-    }
-    await this.#query([
-      ...upsertMultipleRows(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.tombstonePrerenderedHtmlEntries(toTombstone);
   }
 
   // Upsert one rendered (or render-error) row into
@@ -1043,6 +1301,16 @@ export class Batch {
         `updatePrerenderedHtmlEntry is only valid on a prerenderHtmlOnly batch`,
       );
     }
+    await this.writePrerenderedHtmlRow(url, entry);
+  }
+
+  // The prerendered_html row write shared by the two producers of renderings:
+  // a `prerenderHtmlOnly` batch (via `updatePrerenderedHtmlEntry`) and a fused
+  // batch (via `updateEntry`, which lands each visit's HTML half here inline).
+  private async writePrerenderedHtmlRow(
+    url: URL,
+    entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
+  ): Promise<void> {
     if (!new RealmPaths(this.realmURL, this.virtualNetwork).inRealm(url)) {
       return;
     }
@@ -1104,6 +1372,17 @@ export class Batch {
           },
           url,
         );
+        if (errorDoc.visitRequestFailure) {
+          // Consecutive-failure bookkeeping for the reconcile sweep's
+          // bounded retry lane: extend the prior row's run when it was also
+          // a visit-request failure, otherwise this write starts a run of
+          // one. A successful render ends the run by replacing the row
+          // outright, so no explicit clear is needed.
+          let priorRun = production?.error_doc?.visitRequestFailure
+            ? (production.error_doc.consecutiveVisitFailures ?? 1)
+            : 0;
+          errorDoc.consecutiveVisitFailures = priorRun + 1;
+        }
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,
@@ -1180,13 +1459,17 @@ export class Batch {
 
   private async existingPrerenderedHtmlTypes(
     invalidations: string[],
-  ): Promise<Map<string, PrerenderedHtmlTable['type'][]>> {
+  ): Promise<
+    Map<string, { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]>
+  > {
     if (invalidations.length === 0) {
       return new Map();
     }
     let uniqueInvalidations = [...new Set(invalidations)];
+    // One row per (url, type) — the table's primary key is
+    // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT DISTINCT url, type FROM prerendered_html WHERE',
+      'SELECT url, type, is_deleted FROM prerendered_html WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -1196,20 +1479,42 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<PrerenderedHtmlTable, 'url' | 'type'>[];
-    let typesByUrl = new Map<string, PrerenderedHtmlTable['type'][]>();
+    ] as Expression)) as Pick<
+      PrerenderedHtmlTable,
+      'url' | 'type' | 'is_deleted'
+    >[];
+    let typesByUrl = new Map<
+      string,
+      { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]
+    >();
     for (let row of rows) {
+      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
       let existing = typesByUrl.get(row.url);
       if (existing) {
-        existing.push(row.type);
+        existing.push(entry);
       } else {
-        typesByUrl.set(row.url, [row.type]);
+        typesByUrl.set(row.url, [entry]);
       }
     }
     return typesByUrl;
   }
 
-  async done(): Promise<{ totalIndexEntries: number }> {
+  async done(opts?: {
+    // Write the previous generation's realm_meta value at this batch's
+    // generation instead of recomputing it from `boxel_index_working`. The
+    // setup-phase failure recovery finalizes while the working table still
+    // holds the failed pass's un-promoted fan-out tombstones; a recompute
+    // over that state would undercount live dependents in the type summary
+    // until the next successful pass. Its error rows don't change the
+    // realm's type counts, so the prior summary is the accurate one — and a
+    // row must exist at this generation, because reads join realm_meta to
+    // realm_generations.current_generation.
+    carryForwardRealmMeta?: true;
+  }): Promise<{ totalIndexEntries: number }> {
+    // Drain any rows the visit loop left buffered before the swap reads the
+    // working table. A no-op for a prerenderHtmlOnly batch (which never
+    // buffers) and for a pass whose last write already forced a flush.
+    await this.flushWriteBuffer();
     if (this.#prerenderHtmlOnly) {
       // A prerenderHtmlOnly batch touches nothing but the prerendered_html
       // channel: no realm_meta, no realm_generations bump, no boxel_index
@@ -1221,13 +1526,60 @@ export class Batch {
       return { totalIndexEntries: this.#invalidations.size };
     }
     await this.#query(['BEGIN']);
-    await this.updateRealmMeta();
+    if (opts?.carryForwardRealmMeta) {
+      await this.carryForwardRealmMeta();
+    } else {
+      await this.updateRealmMeta();
+    }
     await this.applyBatchUpdates();
     await this.pruneObsoleteEntries();
     await this.#query(['COMMIT']);
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
+  }
+
+  // Re-stamp the current committed generation's realm_meta value at this
+  // batch's generation. Runs inside done()'s transaction before
+  // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
+  // still resolves the prior row here. Falls back to a fresh compute when no
+  // prior row exists (a realm that has never completed a pass).
+  private async carryForwardRealmMeta(): Promise<void> {
+    let [row] = (await this.#query([
+      `SELECT rm.value
+       FROM realm_meta rm
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
+       WHERE`,
+      ...every([['rm.realm_url =', param(this.realmURL.href)]]),
+      `LIMIT 1`,
+    ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
+    if (!row) {
+      await this.updateRealmMeta();
+      return;
+    }
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        realm_url: this.realmURL.href,
+        generation: this.generation,
+        value: row.value,
+        indexed_at: unixTime(new Date().getTime()),
+      } as Omit<RealmMetaTable, 'indexed_at'> & {
+        indexed_at: number;
+      },
+      {
+        jsonFields: ['value'],
+      },
+    );
+    await this.#query([
+      ...upsert(
+        'realm_meta',
+        'realm_meta_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
   }
 
   #query(expression: Expression) {
@@ -1416,33 +1768,23 @@ export class Batch {
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
 
-      // Populate `prerendered_html` from this pass, UNLESS this is a split-mode
-      // index pass — in which case HTML flows only through the `prerender_html`
-      // job and the index visit produced no HTML columns, so projecting them
-      // would clobber good rows with empty HTML. A copy always runs this block
-      // (it produces HTML via `copyFrom` + the overlay below); the fused path
-      // (SQLite) always runs it (it renders HTML inline).
+      // Publish this pass's `prerendered_html_working` rows, UNLESS this is a
+      // split-mode index pass — in which case HTML flows only through the
+      // `prerender_html` job, this pass wrote nothing to the channel, and the
+      // job's own swap publishes it. The fused path (SQLite) lands each
+      // visit's HTML half in `prerendered_html_working` via `updateEntry`
+      // (tombstones via `tombstoneEntries`); a copy fills the channel from
+      // the source realm's rows below.
       if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
-        // Mirror every invalidated URL's HTML onto prerendered_html_working in one
-        // projection from boxel_index_working — the authoritative, complete source
-        // for the invalidation set. Doing it here (rather than per updateEntry)
-        // also covers rows a resumed job wrote in a prior attempt that this
-        // attempt never revisits, and rows written between the backfill migration
-        // and the dual-write deploy, so the swap below can never silently skip a
-        // promoted URL.
-        await this.syncPrerenderedHtmlFromWorking([...this.#invalidations]);
-
-        // For a copy, overlay the source realm's `prerendered_html` on top of the
-        // projection: a rendering the source has in `prerendered_html` overwrites
-        // the `boxel_index`-projected row (matched per `(url, type)`), and a row
-        // the source lacks there keeps the projected HTML — so the copy sources
-        // HTML from `prerendered_html` and also fills every row, leaving no
-        // stale destination row behind.
+        // For a copy, overlay the source realm's `prerendered_html` rows onto
+        // the destination's working table. A destination URL whose source has
+        // no `prerendered_html` row gets none either — it reads as unrendered
+        // and the catch-up sweep enqueues its render.
         if (this.#copyFromSourceRealm) {
           await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
         }
 
-        // Swap the mirrored HTML rows into production in the same
+        // Swap the working HTML rows into production in the same
         // transaction, keyed by the same invalidation set and generation.
         await this.promotePrerenderedHtmlWorking();
       }
@@ -1495,61 +1837,6 @@ export class Batch {
         ? ['WHERE prerendered_html.generation <= EXCLUDED.generation']
         : []),
     ] as Expression);
-  }
-
-  // Dual-write: project `boxel_index_working` rows onto `prerendered_html_working`
-  // for the given URLs. During the fused indexing pass `boxel_index_working`
-  // holds the HTML (the read path still reads it); this mirrors it onto the
-  // dedicated prerendered_html channel — carrying tombstones (`is_deleted`),
-  // the last-known-good HTML preserved through error cycles, and the row's
-  // `diagnostics` (a fused pass produces one combined index+render blob, so
-  // the projection carries that whole blob rather than a render-only split),
-  // with `rendered_at` seeded from the source row's `indexed_at`. Called from
-  // `applyBatchUpdates` over the whole invalidation set just before the
-  // production swap, so the projection is complete for every promoted row.
-  // Deriving from the already-persisted row reuses the error-path
-  // last-known-good merge that `updateEntry` computed and avoids
-  // re-serializing the HTML through JS.
-  private async syncPrerenderedHtmlFromWorking(urls: string[]): Promise<void> {
-    if (urls.length === 0) {
-      return;
-    }
-    let uniqueUrls = [...new Set(urls)];
-    // SQLite has a lower bound-parameter limit than Postgres; chunk the URL
-    // list to keep the IN-clause within safe bounds for both adapters.
-    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
-    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
-      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
-      await this.#query([
-        `INSERT INTO prerendered_html_working (
-           url, file_alias, realm_url, type,
-           fitted_html, embedded_html, atom_html, head_html, isolated_html,
-           markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, diagnostics, rendered_at, job_id
-         )
-         SELECT
-           url, file_alias, realm_url, type,
-           fitted_html, embedded_html, atom_html, head_html, isolated_html,
-           markdown, deps, last_known_good_deps,
-           generation, is_deleted, error_doc, diagnostics, indexed_at, job_id
-         FROM boxel_index_working WHERE`,
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          [
-            'url IN',
-            ...addExplicitParens(
-              separatedByCommas(urlBatch.map((url) => [param(url)])),
-            ),
-          ],
-        ]),
-        `ON CONFLICT ON CONSTRAINT prerendered_html_working_pkey DO UPDATE SET`,
-        ...separatedByCommas(
-          PRERENDERED_HTML_MUTABLE_COLUMNS.map((name) => [
-            `${name}=EXCLUDED.${name}`,
-          ]),
-        ),
-      ] as Expression);
-    }
   }
 
   private async pruneObsoleteEntries() {
@@ -1618,6 +1905,14 @@ export class Batch {
       return;
     }
     let existingTypes = await this.existingIndexTypes(toTombstone);
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#tombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
     // `has_error` and `error_doc` are listed (with explicit false / null
     // values per row) so the upsert's ON CONFLICT SET clause clears them.
     // The primary key is `(url, realm_url, type)` — no `generation` —
@@ -1655,10 +1950,13 @@ export class Batch {
       if (!types || types.length === 0) {
         return [];
       }
-      return types.map((type) =>
+      return types.map(({ type }) =>
         [
           id,
-          trimExecutableExtension(rri(id)),
+          // The same file_alias form `updateEntry` writes, so a tombstone
+          // upsert doesn't swap the row's alias to a `.json`-suffixed
+          // variant that alias-keyed lookups (`urlsMatchingSeed*`) miss.
+          trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
           this.generation,
           this.realmURL.href,
@@ -1684,17 +1982,97 @@ export class Batch {
         rows,
       ),
     ]);
+
+    // On the fused path this batch owns the prerendered_html channel too, so
+    // the deletion must tombstone both. (A split-mode batch leaves the
+    // channel to its spawned `prerender_html` job, whose
+    // `seedPrerenderedHtmlInvalidations` tombstones it.)
+    if (!this.#splitPrerenderHtml) {
+      await this.tombstonePrerenderedHtmlEntries(toTombstone);
+    }
+  }
+
+  // Tombstone the prerendered_html channel for the given URLs — the
+  // `prerendered_html_working` analog of `tombstoneEntries`, written by a
+  // prerenderHtmlOnly batch's seeding and by a fused batch alongside its
+  // boxel_index tombstones. Only URLs with existing prerendered_html rows
+  // get one (there is no rendering to hide otherwise), and the tombstone
+  // clears any prior render error / diagnostics. The visit loop's writes
+  // overwrite survivors, so only genuinely deleted URLs stay tombstoned
+  // through the swap.
+  private async tombstonePrerenderedHtmlEntries(urls: string[]): Promise<void> {
+    let existingTypes = await this.existingPrerenderedHtmlTypes(urls);
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#prerenderedHtmlTombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'generation',
+      'realm_url',
+      'is_deleted',
+      'error_doc',
+      'diagnostics',
+      'rendered_at',
+      'job_id',
+    ].map((c) => [c]);
+    let now = Date.now();
+    let jobIdValue = this.jobInfo?.jobId ?? null;
+    let rows = urls.flatMap((id) => {
+      let types = existingTypes.get(id);
+      if (!types || types.length === 0) {
+        return [];
+      }
+      return types.map(({ type }) =>
+        [
+          id,
+          // The same file_alias form the live prerendered_html writes use, so
+          // alias-keyed consumers (e.g. the itemsThatReference deps scan) see
+          // one alias per URL whether the row is live or tombstoned.
+          trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
+          type,
+          this.generation,
+          this.realmURL.href,
+          true, // is_deleted
+          null, // error_doc — a tombstone clears any prior render error
+          null, // diagnostics — likewise cleared; they described the render this tombstone hides
+          now,
+          jobIdValue,
+        ].map((v) => [param(v)]),
+      );
+    });
+    if (rows.length === 0) {
+      return;
+    }
+    await this.#query([
+      ...upsertMultipleRows(
+        'prerendered_html_working',
+        'prerendered_html_working_pkey',
+        columns,
+        rows,
+      ),
+    ]);
   }
 
   private async existingIndexTypes(
     invalidations: string[],
-  ): Promise<Map<string, BoxelIndexTable['type'][]>> {
+  ): Promise<
+    Map<string, { type: BoxelIndexTable['type']; isDeleted: boolean }[]>
+  > {
     if (invalidations.length === 0) {
       return new Map();
     }
     let uniqueInvalidations = [...new Set(invalidations)];
+    // One row per (url, type) — the table's primary key is
+    // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT DISTINCT url, type FROM boxel_index WHERE',
+      'SELECT url, type, is_deleted FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -1704,14 +2082,18 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type'>[];
-    let typesByUrl = new Map<string, BoxelIndexTable['type'][]>();
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'is_deleted'>[];
+    let typesByUrl = new Map<
+      string,
+      { type: BoxelIndexTable['type']; isDeleted: boolean }[]
+    >();
     for (let row of rows) {
+      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
       let existing = typesByUrl.get(row.url);
       if (existing) {
-        existing.push(row.type);
+        existing.push(entry);
       } else {
-        typesByUrl.set(row.url, [row.type]);
+        typesByUrl.set(row.url, [entry]);
       }
     }
     return typesByUrl;
@@ -1913,6 +2295,18 @@ export class Batch {
     }
 
     let uniqueUrls = [...new Set(urls)];
+    // Dependency-error bookkeeping is the only mid-pass reader of this pass's
+    // own writes. Flush the write-behind buffer when this query would touch a
+    // still-buffered URL so the dependent sees the dependency's row. The check
+    // matches on the same URL strings the SQL below binds into `url IN (...)`,
+    // so it flushes exactly when the query could otherwise miss a held row —
+    // and skips the flush (preserving batching) when it wouldn't.
+    if (
+      this.#writeBuffer.length > 0 &&
+      uniqueUrls.some((url) => this.#writeBufferUrls.has(url))
+    ) {
+      await this.flushWriteBuffer();
+    }
     // SQLite has a lower parameter limit than Postgres. Chunk URL lookups to
     // keep IN-clause parameter counts within safe bounds for both adapters.
     let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
@@ -2268,4 +2662,32 @@ function baseTypeFromError(entry: {
     case 'file-error':
       return 'file';
   }
+}
+
+// The `boxel_index` row type an entry lands under — the pkey is
+// (url, realm_url, type), so this keys the flush dedup that keeps a single
+// multi-row upsert from touching one conflict target twice.
+function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
+  return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
+}
+
+// A `boxel_index_working` row payload built but not yet upserted, plus the
+// paired `prerendered_html` entry the fused path writes for it.
+interface PreparedIndexRow {
+  preparedEntry: Record<string, unknown>;
+  htmlEntry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry;
+}
+
+// Return a copy of `obj` with its keys in `keys` order, so a batch of rows
+// sharing the same key set serializes to value tuples aligned with one shared
+// column list.
+function orderKeys(
+  obj: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> {
+  let ordered: Record<string, unknown> = {};
+  for (let key of keys) {
+    ordered[key] = obj[key];
+  }
+  return ordered;
 }

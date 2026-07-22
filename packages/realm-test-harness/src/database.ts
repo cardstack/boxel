@@ -391,20 +391,15 @@ export async function rewriteClonedRealmServerUrls(
                error_doc = replace(error_doc::text, $1, $2)::jsonb,
                deps = replace(deps::text, $1, $2)::jsonb,
                types = replace(types::text, $1, $2)::jsonb,
-               isolated_html = replace(isolated_html, $1, $2),
-               embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
-               atom_html = replace(atom_html, $1, $2),
-               fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
                display_names = replace(display_names::text, $1, $2)::jsonb,
                icon_html = replace(icon_html, $1, $2),
-               head_html = replace(head_html, $1, $2),
                last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb`,
           [fromURL, toURL],
         );
 
-        // prerendered_html carries the same URL-bearing HTML/deps columns as
-        // boxel_index (dual-written); rewrite them so a cloned harness DB stays
-        // consistent with the rewritten realm-server URL.
+        // prerendered_html holds the URL-bearing HTML/deps columns; rewrite
+        // them so a cloned harness DB stays consistent with the rewritten
+        // realm-server URL.
         for (let table of ['prerendered_html', 'prerendered_html_working']) {
           await client.query(
             `UPDATE ${table}
@@ -505,16 +500,11 @@ export async function rebuildWorkingIndexFromIndex(
              deps,
              types,
              icon_html,
-             isolated_html,
              indexed_at,
              is_deleted,
              last_modified,
-             embedded_html,
-             atom_html,
-             fitted_html,
              display_names,
              resource_created_at,
-             head_html,
              has_error,
              last_known_good_deps
            )
@@ -530,16 +520,11 @@ export async function rebuildWorkingIndexFromIndex(
              deps,
              types,
              icon_html,
-             isolated_html,
              indexed_at,
              is_deleted,
              last_modified,
-             embedded_html,
-             atom_html,
-             fitted_html,
              display_names,
              resource_created_at,
-             head_html,
              has_error,
              last_known_good_deps
            FROM boxel_index`,
@@ -738,35 +723,147 @@ function startIndexingProgressReporter(
   };
 }
 
+// A combined-template build reaches "realm server ready" once the pinned base
+// realm is indexed, but the non-pinned user realms are still
+// from-scratch-indexing when this wait begins — and after each realm's index
+// job resolves, its whole-realm prerender_html job (every card's HTML) drains
+// through the same queue. On a slow or loaded runner that legitimately-remaining
+// work runs well past a 30s window, so a tight timeout kills a build that is in
+// fact still making steady progress (the indexing progress reporter keeps
+// printing throughout). Budget generously, matching the realm-server multi-realm
+// helper that drains the identical prerender_html tail. Override via env for
+// local iteration; a malformed override (empty string coerces to 0,
+// non-numeric to NaN) is ignored rather than allowed to collapse the wait into
+// an immediate failure.
+const QUEUE_IDLE_TIMEOUT_MS = (() => {
+  let override = Number(process.env.TEST_HARNESS_QUEUE_IDLE_TIMEOUT_MS);
+  return Number.isFinite(override) && override > 0 ? override : 300_000;
+})();
+
 export async function waitForQueueIdle(databaseName: string): Promise<void> {
   await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
-    await waitUntil(
-      async () => {
-        let client = new PgClient(pgAdminConnectionConfig(databaseName));
-        try {
-          await client.connect();
-          let {
-            rows: [{ count: unfulfilledJobs }],
-          } = await client.query<{ count: number }>(
-            `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
-          );
-          let {
-            rows: [{ count: activeReservations }],
-          } = await client.query<{ count: number }>(
-            `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
-          );
-          return unfulfilledJobs === 0 && activeReservations === 0;
-        } finally {
-          await client.end();
-        }
-      },
-      {
-        timeout: 30_000,
-        interval: 100,
-        timeoutMessage: `Timed out waiting for queue to become idle in ${databaseName}`,
-      },
-    );
+    try {
+      await waitUntil(
+        async () => {
+          let client = new PgClient(pgAdminConnectionConfig(databaseName));
+          try {
+            await client.connect();
+            // A rejected job means the template would snapshot with silently
+            // missing data (e.g. absent prerendered HTML) and resurface later
+            // as confusing failures in unrelated tests. Fail here, loudly and
+            // immediately, instead of draining the full timeout first.
+            let { rows: rejected } = await client.query<{
+              id: number;
+              job_type: string;
+            }>(
+              `SELECT id, job_type FROM jobs WHERE status = 'rejected' ORDER BY id`,
+            );
+            if (rejected.length > 0) {
+              let sampleLimit = 20;
+              let sample = rejected
+                .slice(0, sampleLimit)
+                .map((row) => `${row.job_type}#${row.id}`)
+                .join(', ');
+              let overflow =
+                rejected.length > sampleLimit
+                  ? ` (+${rejected.length - sampleLimit} more)`
+                  : '';
+              throw new Error(
+                `${rejected.length} job(s) rejected while waiting for queue to become idle in ${databaseName}: ${sample}${overflow}`,
+              );
+            }
+            let {
+              rows: [{ count: unfulfilledJobs }],
+            } = await client.query<{ count: number }>(
+              `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+            );
+            let {
+              rows: [{ count: activeReservations }],
+            } = await client.query<{ count: number }>(
+              `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
+            );
+            return unfulfilledJobs === 0 && activeReservations === 0;
+          } finally {
+            await client.end();
+          }
+        },
+        {
+          timeout: QUEUE_IDLE_TIMEOUT_MS,
+          interval: 100,
+          timeoutMessage: `Timed out waiting for queue to become idle in ${databaseName}`,
+        },
+      );
+    } catch (error) {
+      // Whether we timed out or bailed on a rejected job, dump what the queue
+      // still holds so the next CI failure is diagnosable in one pass — is it a
+      // slow-but-progressing prerender_html drain (raise the budget) or a
+      // genuinely wedged worker holding a reservation (a real bug)?
+      let backlog = await describeQueueBacklog(databaseName).catch(
+        (e) =>
+          `  (failed to gather queue diagnostics: ${(e as Error).message})`,
+      );
+      let err = error instanceof Error ? error : new Error(String(error));
+      err.message = `${err.message}\n${backlog}`;
+      throw err;
+    }
   });
+}
+
+// Snapshot of what the queue still holds, for the waitForQueueIdle failure
+// path. Best-effort: any query error is reported inline rather than masking the
+// original timeout / rejection.
+async function describeQueueBacklog(databaseName: string): Promise<string> {
+  let client = new PgClient(pgAdminConnectionConfig(databaseName));
+  try {
+    await client.connect();
+    let { rows: statusRows } = await client.query<{
+      status: string;
+      job_type: string;
+      count: number;
+    }>(
+      `SELECT status, job_type, COUNT(*)::int AS count
+         FROM jobs
+        WHERE status IN ('unfulfilled', 'rejected')
+        GROUP BY status, job_type
+        ORDER BY status, count DESC`,
+    );
+    let { rows: reservationRows } = await client.query<{
+      job_id: number;
+      job_type: string | null;
+      worker_id: string | null;
+      age_s: number | null;
+      locked_for_s: number | null;
+    }>(
+      `SELECT jr.job_id, j.job_type, jr.worker_id,
+              EXTRACT(EPOCH FROM (now() - jr.created_at))::int AS age_s,
+              EXTRACT(EPOCH FROM (jr.locked_until - now()))::int AS locked_for_s
+         FROM job_reservations jr
+         LEFT JOIN jobs j ON j.id = jr.job_id
+        WHERE jr.completed_at IS NULL
+        ORDER BY jr.created_at ASC
+        LIMIT 20`,
+    );
+    let jobs =
+      statusRows.length > 0
+        ? statusRows
+            .map((r) => `${r.job_type}[${r.status}]=${r.count}`)
+            .join(', ')
+        : 'none';
+    let reservations =
+      reservationRows.length > 0
+        ? reservationRows
+            .map(
+              (r) =>
+                `job ${r.job_id} (${r.job_type ?? '?'}) worker=${
+                  r.worker_id ?? '?'
+                } age=${r.age_s ?? '?'}s locked_for=${r.locked_for_s ?? '?'}s`,
+            )
+            .join('\n    ')
+        : 'none';
+    return `  pending jobs: ${jobs}\n  in-flight reservations (oldest first):\n    ${reservations}`;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
 
 /**

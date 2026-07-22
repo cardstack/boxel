@@ -1221,7 +1221,7 @@ importers:
         version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
       http-server:
         specifier: ^14.1.1
-        version: 14.1.1
+        version: 14.1.1(debug@4.3.4)
       lucide-static:
         specifier: ^0.447.0
         version: 0.447.0
@@ -2477,6 +2477,9 @@ importers:
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.3
+      matrix-js-sdk:
+        specifier: 'catalog:'
+        version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
       pg:
         specifier: 'catalog:'
         version: 8.21.0
@@ -2555,6 +2558,9 @@ importers:
       sql-parser-cst:
         specifier: 'catalog:'
         version: 0.28.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/realm-server:
     dependencies:
@@ -2735,7 +2741,7 @@ importers:
         version: 11.1.0
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1
+        version: 14.1.1(debug@4.3.4)
       js-yaml:
         specifier: 'catalog:'
         version: 4.2.0
@@ -2828,7 +2834,7 @@ importers:
         version: 3.2.0
       wait-on:
         specifier: ^9.0.4
-        version: 9.0.10
+        version: 9.0.10(debug@4.3.4)
       wtfnode:
         specifier: ^0.10.1
         version: 0.10.1
@@ -20606,7 +20612,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.18.0:
+  axios@1.18.0(debug@4.3.4):
     dependencies:
       follow-redirects: 1.16.0(debug@4.3.4)
       form-data: 4.0.6
@@ -22878,7 +22884,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.3.4)
       inflection: 2.0.1
       inquirer: 9.3.8(@types/node@24.13.2)
       is-git-url: 1.0.0
@@ -23020,7 +23026,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.3.4)
       inflection: 3.0.2
       inquirer: 13.4.3(@types/node@25.9.3)
       is-git-url: 1.0.0
@@ -25381,7 +25387,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1:
+  http-proxy@1.18.1(debug@4.3.4):
     dependencies:
       eventemitter3: 4.0.7
       follow-redirects: 1.16.0(debug@4.3.4)
@@ -25389,14 +25395,14 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  http-server@14.1.1:
+  http-server@14.1.1(debug@4.3.4):
     dependencies:
       basic-auth: 2.0.1
       chalk: 4.1.2
       corser: 2.0.1
       he: 1.2.0
       html-encoding-sniffer: 3.0.0
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.3.4)
       mime: 1.6.0
       minimist: 1.2.8
       opener: 1.5.2
@@ -26152,7 +26158,7 @@ snapshots:
 
   koa-proxies@0.12.4(koa@2.16.4):
     dependencies:
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.3.4)
       koa: 2.16.4
       path-match: 1.2.4
       uuid: 8.3.2
@@ -29214,7 +29220,7 @@ snapshots:
       execa: 9.6.1
       express: 5.2.1
       glob: 13.0.6
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.3.4)
       js-yaml: 4.2.0
       lodash: 4.18.1
       minimatch: 10.2.5
@@ -30014,9 +30020,9 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  wait-on@9.0.10:
+  wait-on@9.0.10(debug@4.3.4):
     dependencies:
-      axios: 1.18.0
+      axios: 1.18.0(debug@4.3.4)
       joi: 18.2.1
       lodash: 4.18.1
       minimist: 1.2.8

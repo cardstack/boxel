@@ -61,6 +61,11 @@ export class Prerenderer {
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
   #restartInFlight: Promise<void> | null = null;
+  // Count of actual browser restarts performed (coalesced callers share
+  // one). Read by tests to assert a flow did NOT pay a restart — e.g. a
+  // visit following a cancelled render must acquire a fresh page rather
+  // than detour through the restart recovery lane.
+  #browserRestartCount = 0;
   // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
   // `{ batchId, since }` for the batch that currently owns the affinity's
   // warm loader. See `#gateClearCache` for the full policy. Populated on
@@ -110,6 +115,14 @@ export class Prerenderer {
             `batch ownership cleared for ${affinityKey} due to affinity disposal`,
           );
         }
+        // Drop the affinity's icon memo with the rest of its warm state.
+        // Disposal also clears the ownership entry above, which makes the
+        // owner-matched clear in `releaseBatch` a no-op for this affinity —
+        // without this, a job whose affinity is disposed mid-run (cancel,
+        // idle eviction, capacity pressure) would leave its memo behind
+        // until another job for the same realm replaced it. A still-running
+        // job just re-renders each type's icon once as the memo re-warms.
+        this.#renderRunner.clearIconMemo(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({
@@ -235,11 +248,30 @@ export class Prerenderer {
     let elapsed = Date.now() - startedAt;
     log.info(
       `render cancelled after ${elapsed}ms in state=${err.state} ` +
-        `affinity=${affinityKey} target=${target}`,
+        `affinity=${affinityKey} target=${target} ` +
+        `reason=${err.reason ?? '<none>'}`,
     );
     if (err.state === 'rendering') {
       try {
-        await this.#pagePool.disposeAffinity(affinityKey);
+        // Closing the page is what interrupts any CDP call the
+        // cancelled render abandoned mid-flight. The teardown is
+        // awaited: the caller is gone, so nothing is delayed by
+        // waiting, and by the time the cancellation propagates the
+        // pool's slot accounting has already released this page —
+        // the affinity's next visit materializes a fresh page
+        // instead of racing a background close at the pool ceiling
+        // (which reads as "no standby available" and needlessly
+        // routes that visit through the browser-restart recovery
+        // lane). That guarantee is scoped to visits arriving after
+        // this disposal: a waiter already holding the tab-queue
+        // lease when the cancel lands still receives the doomed
+        // page, since the lease handoff carries no revalidation.
+        // The shared BrowserContext is retained so the next visit
+        // reuses the warm HTTP cache rather than paying the cold
+        // module-source waterfall.
+        await this.#pagePool.disposeAffinity(affinityKey, {
+          retainSharedContext: true,
+        });
         this.#renderRunner.clearAuthCache(affinityKey);
       } catch (disposeErr: any) {
         log.warn(
@@ -265,8 +297,19 @@ export class Prerenderer {
     let owner = this.#batchOwnership.get(affinityKey);
     if (owner?.batchId === batchId) {
       this.#batchOwnership.delete(affinityKey);
+      // The job's icon memo has no readers once its batch releases the
+      // affinity (a later job carries a different job key), so drop it
+      // rather than letting it idle until the next job replaces it.
+      this.#renderRunner.clearIconMemo(affinityKey);
       log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
     }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this; it's a debugging surface, not a
+  // stable API.
+  getBrowserRestartCount(): number {
+    return this.#browserRestartCount;
   }
 
   // Read-only observability accessor used by tests. Callers outside of
@@ -277,6 +320,13 @@ export class Prerenderer {
   ): { batchId: string; since: number } | undefined {
     let owner = this.#batchOwnership.get(affinityKey);
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getIconMemo(affinityKey: string) {
+    return this.#renderRunner.getIconMemo(affinityKey);
   }
 
   // Back-compat static re-export: older callers / tests reference
@@ -627,7 +677,12 @@ export class Prerenderer {
 
   async prerenderVisit(
     rawArgs: PrerenderVisitArgs & {
-      opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+      opts?: {
+        timeoutMs?: number;
+        simulateTimeoutMs?: number;
+        // Test-only: see the matching field on `prerenderVisitAttempt`.
+        simulateLegacyHost?: true;
+      };
       signal?: AbortSignal;
       // Test-only hook fired right after a page is acquired and its
       // bucket has been reset. Used by tests that need to seed the
@@ -871,6 +926,7 @@ export class Prerenderer {
 
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
+    this.#browserRestartCount++;
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
     await this.#pagePool.warmStandbys().catch((e) => {

@@ -80,9 +80,17 @@ process.on('unhandledRejection', (reason: unknown) => {
             return String(reason);
           }
         })();
-  console.error(
-    `Unhandled promise rejection during test [${testName}]:\n${detail}`,
-  );
+  // Write synchronously to fd 2: the re-throw below turns this into an
+  // uncaughtException that exits the process immediately, and a buffered
+  // console.error to a pipe (as on CI) can be dropped before it flushes,
+  // leaving a nonzero exit with no visible cause. fs.writeSync always flushes
+  // before returning.
+  let message = `Unhandled promise rejection during test [${testName}]:\n${detail}\n`;
+  try {
+    (require('node:fs') as typeof import('node:fs')).writeSync(2, message);
+  } catch {
+    console.error(message);
+  }
   throw reason;
 });
 
@@ -215,6 +223,7 @@ import 'decorator-transforms/globals';
 import '../setup-logger.ts'; // This should be first
 
 const ALL_TEST_FILES: string[] = [
+  './atomic-batch-indexing-test',
   './atomic-endpoints-test',
   './auth-client-test',
   './billing-test',
@@ -237,6 +246,7 @@ const ALL_TEST_FILES: string[] = [
   './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
+  './prewarm-query-field-test',
   './prerender-html-split-test',
   './prerender-html-split-integration-test',
   './prerender-html-reconcile-test',
@@ -309,6 +319,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/run-command-endpoint-test',
   './server-endpoints/screenshot-card-endpoint-test',
   './server-endpoints/search-test',
+  './server-endpoints/skill-validation-test',
   './serve-index-test',
   './server-config-test',
   './server-endpoints/info-test',
@@ -333,6 +344,7 @@ const ALL_TEST_FILES: string[] = [
   './package-shim-handler-test',
   './command-parsing-utils-test',
   './command-function-name-test',
+  './tool-request-decoding-test',
   './query-matches-filter-test',
   './parse-search-url-test',
   './matches-filter-integration-test',
@@ -341,7 +353,9 @@ const ALL_TEST_FILES: string[] = [
   './superseded-search-surface-removed-test',
   './search-entry-test',
   './search-entries-engine-test',
+  './search-bounds-test',
   './coerce-error-message-test',
+  './canonical-url-memo-test',
   './realm-operations-test',
   './resolve-published-realm-url-test',
   './fallback-models-test',
@@ -364,6 +378,7 @@ const ALL_TEST_FILES: string[] = [
   './worker-request-signature-test',
   './worker-request-forwarder-test',
   './worker-reader-test',
+  './worker-job-registration-test',
   './realm-index-updater-test',
 ];
 

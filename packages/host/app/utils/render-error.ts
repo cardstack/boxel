@@ -12,8 +12,14 @@ import {
   isCardErrorJSONAPI,
   serializableError,
 } from '@cardstack/runtime-common/error';
+// Re-exported so existing host imports of `friendlyCardType` from this module
+// keep working; the implementation lives in runtime-common so the index stamp
+// and the client-side matcher share one definition.
+import { friendlyCardType } from '@cardstack/runtime-common/helpers/card-type-display-name';
 
 import type { CardDef } from '@cardstack/base/card-api';
+
+export { friendlyCardType };
 
 export interface RenderErrorContext {
   cardId?: string;
@@ -211,10 +217,6 @@ export class RenderCardTypeTracker {
   clear() {
     this.#cardTypes.clear();
   }
-}
-
-export function friendlyCardType(card: typeof CardDef): string {
-  return card.displayName === 'Card' ? card.name : card.displayName;
 }
 
 export function mergeDeps(

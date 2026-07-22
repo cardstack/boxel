@@ -30,17 +30,16 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import { getFilterTypeRefs } from '@cardstack/host/utils/card-search/type-filter';
-import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
+import { getFilterTypeRefs } from '@cardstack/host/utils/search/type-filter';
+import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
 
-import SearchPanel from '../card-search/panel';
-
 import ModalContainer from '../modal-container';
+import SearchPanel from '../search/panel';
 
 import { Submodes } from '../submode-switcher';
 
@@ -118,6 +117,7 @@ export default class CardChooserModal extends Component<Signature> {
             @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
             @lockSelectedRealms={{state.lockConsumingRealm}}
+            @cardsOnly={{true}}
             as |Bar Content|
           >
             <ModalContainer
@@ -146,6 +146,7 @@ export default class CardChooserModal extends Component<Signature> {
               <:content>
                 <Content
                   @isCompact={{false}}
+                  @cardsOnly={{true}}
                   @handleSelect={{this.selectFromSearch}}
                   @onSubmit={{this.submitFromSearch}}
                   @selectedCards={{state.selectedCards}}
@@ -383,8 +384,10 @@ export default class CardChooserModal extends Component<Signature> {
       });
       let preselectedCardUrl: string | undefined;
       if (opts?.preselectedCardTypeQuery) {
+        // The result is used as a card instance; store.search pins
+        // `scope: 'cards'`, so the raw query resolves to card instances only.
         let instances: CardDef[] = await this.store.search(
-          opts.preselectedCardTypeQuery!,
+          opts.preselectedCardTypeQuery,
           this.realmServer.availableRealmIdentifiers,
         );
         if (instances?.[0]?.id) {
