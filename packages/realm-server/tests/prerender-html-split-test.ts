@@ -414,11 +414,12 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  // Prerender-html floors one tier below its initiator so a worker pool that
-  // floors at the indexing tier reserves itself to indexing and never carries
-  // a render sweep (see queue.ts and the user-index lane in worker-manager).
-  // The two initiator tiers mirror each other. Guard the relationship so it
-  // can't quietly collapse back to co-equal.
+  // Prerender-html normally floors one tier below its initiator so a worker
+  // pool that floors at the indexing tier reserves itself to indexing and
+  // never carries a render sweep (see queue.ts and the user-index lane in
+  // worker-manager). The two initiator tiers mirror each other. The sole
+  // co-equal case is a publish-awaited render (a publish blocks on its HTML).
+  // Guard both the gap and the exception so neither drifts.
   module('priority tiers', function () {
     test('prerender-html floors strictly below its initiator in both tiers', function (assert) {
       assert.ok(
@@ -450,6 +451,28 @@ module(basename(import.meta.filename), function () {
         prerenderHtmlPriority(systemInitiatedPriority),
         systemInitiatedPrerenderHtmlPriority,
         'a system-initiated index pass spawns system-initiated prerender-html',
+      );
+    });
+
+    test('a publish-awaited render runs co-equal with indexing, but only for user work', function (assert) {
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority, { awaitedByPublish: true }),
+        userInitiatedPriority,
+        'a publish-awaited user render is lifted to the indexing tier',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority, {
+          awaitedByPublish: false,
+        }),
+        userInitiatedPrerenderHtmlPriority,
+        'a non-publish user render stays one tier below indexing',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(systemInitiatedPriority, {
+          awaitedByPublish: true,
+        }),
+        systemInitiatedPrerenderHtmlPriority,
+        'the publish exception never lifts system-initiated work',
       );
     });
   });

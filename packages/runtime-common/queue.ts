@@ -8,28 +8,36 @@ import type { Deferred } from './deferred.ts';
 //
 // The tiers:
 //
-//   | priority | job                                       |
-//   | -------- | ----------------------------------------- |
-//   | 10       | user-initiated job (non-prerender-html)   |
-//   |  9       | user-initiated prerender-html             |
-//   |  1       | system-initiated job (non-prerender-html) |
-//   |  0       | system-initiated prerender-html           |
+//   | priority | job                                                     |
+//   | -------- | ------------------------------------------------------- |
+//   | 10       | user indexing (+ any user job); publish-awaited render  |
+//   |  9       | user prerender-html (the common case)                   |
+//   |  1       | system indexing (+ any system job)                      |
+//   |  0       | system prerender-html                                   |
 //
-// Prerender-html sits one tier below its initiator so a pool's floor can
-// admit an initiator's indexing work with or without its (orders-of-magnitude
-// slower) HTML rendering. The two initiator tiers are mirror images: user
-// prerender-html (9) is to user indexing (10) as system prerender-html (0) is
-// to system indexing (1). That gap is load-bearing, not cosmetic — HTML
-// rendering is a distinct job family kept off the indexing hot path, and only
-// because it floors one notch below indexing can a pool reserve itself to
-// indexing alone (see the user-index lane in worker-manager). Indexing gates
-// realm provisioning and every write's read-your-writes drain, so a render
-// sweep must never occupy the workers an index job needs; raising
-// prerender-html to its initiator's tier would dissolve that separation. The
-// high-priority pool floors at `userInitiatedPrerenderHtmlPriority`, serving
-// all user-initiated work — prerender-html included — and never system-tier
-// jobs; the all-priority pool floors at `systemInitiatedPrerenderHtmlPriority`
-// and serves everything.
+// Prerender-html normally floors one tier below its initiator so a pool's
+// floor can admit an initiator's indexing work with or without its
+// (orders-of-magnitude slower) HTML rendering. The two initiator tiers mirror
+// each other: user prerender-html (9) is to user indexing (10) as system
+// prerender-html (0) is to system indexing (1). That gap is load-bearing —
+// HTML rendering is a distinct job family kept off the indexing hot path, and
+// only because it floors below indexing can a pool reserve itself to indexing
+// by flooring at the indexing tier (see the user-index lane in worker-manager).
+// Indexing gates realm provisioning and every write's read-your-writes drain,
+// so a render sweep must never occupy the workers an index job needs.
+//
+// One render escapes that gap: a publish does not report its realm ready until
+// the published HTML exists, so a publish-awaited render is on the publish's
+// critical path and runs co-equal with indexing (10) — the prerender server
+// then admits it ahead of ordinary user renders. It reaches the indexing tier
+// only in priority; the user-index lane still excludes it by job type
+// (`--indexJobsOnly`), so a publish render can never hold the workers indexing
+// reserves.
+//
+// The high-priority pool floors at `userInitiatedPrerenderHtmlPriority` (9),
+// serving all user-initiated work — both render tiers and user indexing — and
+// never system-tier jobs; the all-priority pool floors at
+// `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
 export const systemInitiatedPriority = 1;

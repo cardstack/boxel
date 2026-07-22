@@ -93,17 +93,17 @@ If you pick the wrong category you waste a day. The diagnostic fields in the [Cl
 Every prerender request — visit, module, run-command — carries a numeric `priority` that flows from the originating worker job all the way to the per-tab queue, the per-affinity file-admission semaphore, and the per-server render semaphore. The value is the worker-job priority of the job that produced the render, so it splits by both initiator (user vs. system) and job family (indexing vs. prerender-html):
 
 - **`10` — `userInitiatedPriority`**. A user-initiated index visit: the `_reindex` endpoint, ad-hoc card publishes, manual UI-driven reindex actions.
-- **`9` — `userInitiatedPrerenderHtmlPriority`**. The HTML render a user-initiated index pass spawns — one tier below the index visit so it stays off the indexing hot path.
+- **`9` — `userInitiatedPrerenderHtmlPriority`**. The HTML render a user-initiated index pass spawns — one tier below the index visit so it stays off the indexing hot path. **Exception:** a render a publish is awaiting (published-realm readiness gates on it) is lifted to `10`, co-equal with indexing, so the prerender server admits it ahead of ordinary user renders.
 - **`1` — `systemInitiatedPriority`**. A system-initiated index visit: scheduled full-reindex sweeps, `_full-reindex` runs, the worker's continuous reindex queue. The default worker-job priority for any code path that doesn't explicitly opt in.
 - **`0` — `systemInitiatedPrerenderHtmlPriority`**. The HTML render a system-initiated index pass spawns — the background floor only the all-priority worker pool takes.
 
-The two job families land on different diagnostics tables: an index-visit row on `boxel_index.diagnostics` carries 10 or 1; the prerender-html render it spawns, on `prerendered_html.diagnostics`, carries 9 or 0 — one notch below its initiator in both cases.
+The two job families land on different diagnostics tables: an index-visit row on `boxel_index.diagnostics` carries 10 or 1; the prerender-html render it spawns, on `prerendered_html.diagnostics`, carries 9 or 0 — one notch below its initiator — except a publish-awaited render, which carries 10. So `priority=10` can show up on either table: an index visit, or a publish's HTML render.
 
 Higher priority dequeues first; FIFO is preserved within a priority bucket. There is **no preemption** — an in-flight lower-priority render runs to completion. The next free slot goes to the highest-priority queued waiter.
 
 Why this matters for triage:
 
-1. **Reading a stuck render**: a user-initiated render (10 on an index visit, 9 on a prerender-html visit) is a UX-facing request. If it's stuck on `waits.tabQueueMs` or `waits.semaphoreMs`, that's the saturation event priority routing was designed to mitigate. A system-initiated render (1 or 0) stuck on the same wait is background work — operationally less urgent and often expected during a deliberate reindex burst.
+1. **Reading a stuck render**: a user-initiated render (10 on an index visit or a publish-awaited render, 9 on an ordinary user render) is a UX-facing request. If it's stuck on `waits.tabQueueMs` or `waits.semaphoreMs`, that's the saturation event priority routing was designed to mitigate. A system-initiated render (1 or 0) stuck on the same wait is background work — operationally less urgent and often expected during a deliberate reindex burst.
 
 2. **Distinguishing capacity issues from priority misrouting**: a user-priority row that waited >1s in `tabQueueMs` while the affinity's `prerender-queue-snapshot` shows it queued behind same-or-higher-priority work is a **capacity** problem — the user-priority workload exceeded the fleet. The same row queued behind strictly lower-priority (background) work, with manager-side priority routing live in the build, is a **routing** failure — the manager picked the wrong server, or the file render the row was queued behind isn't releasing. These need different fixes.
 
@@ -1345,10 +1345,11 @@ WHERE realm_url = 'https://localhost:4201/user/your-realm/'
                                  // visits carry 10 (userInitiatedPriority) or 1
                                  // (systemInitiatedPriority); the prerender-html render
                                  // they spawn carries 9 or 0 — one tier below its
-                                 // initiator. Read in post-mortems alongside `tabQueueMs`
-                                 // to tell whether priority routing put a high-priority
-                                 // render at the head of the queue. May be absent on
-                                 // older rows that predate the threading.
+                                 // initiator — except a publish-awaited render, lifted to
+                                 // 10. Read in post-mortems alongside `tabQueueMs` to tell
+                                 // whether priority routing put a high-priority render at
+                                 // the head of the queue. May be absent on older rows that
+                                 // predate the threading.
   "tabReused": false,            // did this render land on a warm same-affinity tab (true)
                                  // or a freshly spawned / commandeered tab (false)?
                                  // Triage signal: a slow render with `tabReused: false`

@@ -606,7 +606,10 @@ export default function handlePublishRealm({
             queue,
             dbAdapter,
             userInitiatedPriority,
-            { clearLastModified: true },
+            // This publish is blocked on the published realm's HTML (readiness
+            // gates on it), so the prerender-html job this pass spawns runs
+            // co-equal with indexing rather than one tier below.
+            { clearLastModified: true, awaitedByPublish: true },
           );
 
           return { lastPublishedAt, publishedRealmId, isNewRealm };
@@ -654,7 +657,12 @@ export default function handlePublishRealm({
           (await reconciler.lookupOrMount(publishedRealmURL));
         if (publishedRealm) {
           void publishedRealm
-            .fullIndex(userInitiatedPriority, { clearLastModified: true })
+            .fullIndex(userInitiatedPriority, {
+              clearLastModified: true,
+              // Republish is awaiting this HTML for readiness, so its render
+              // runs co-equal with indexing (see prerenderHtmlPriority).
+              awaitedByPublish: true,
+            })
             .catch((err: unknown) => {
               log.error(
                 `background publish reindex failed for ${publishedRealmURL}: ${

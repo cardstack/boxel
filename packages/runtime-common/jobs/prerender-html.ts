@@ -11,16 +11,30 @@ import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
-// A prerender-html job takes the tier one notch below the index pass that
-// spawned it: a user-initiated index (userInitiatedPriority) yields
+// A prerender-html job normally floors one tier below the index pass that
+// spawned it — a user-initiated index (userInitiatedPriority) yields
 // userInitiatedPrerenderHtmlPriority, anything lower yields
-// systemInitiatedPrerenderHtmlPriority. Keeping HTML rendering one tier below
-// its initiator is what holds it off the indexing hot path — see the tier
-// table in queue.ts for why the gap is load-bearing.
-export function prerenderHtmlPriority(spawningPriority: number): number {
-  return spawningPriority >= userInitiatedPriority
-    ? userInitiatedPrerenderHtmlPriority
-    : systemInitiatedPrerenderHtmlPriority;
+// systemInitiatedPrerenderHtmlPriority — which holds HTML rendering off the
+// indexing hot path (see the tier table in queue.ts for why the gap is
+// load-bearing).
+//
+// The exception is a render a publish is waiting on: a publish does not
+// report the realm ready until its HTML exists, so that render is on the
+// publish's critical path rather than a background follow-on. It runs
+// co-equal with indexing (userInitiatedPriority) so the prerender server
+// admits it ahead of ordinary user renders. The dedicated user-index worker
+// lane still excludes it by job type (see worker-manager), so co-equal here
+// never lets a publish render hold the workers indexing reserves.
+export function prerenderHtmlPriority(
+  spawningPriority: number,
+  opts?: { awaitedByPublish?: boolean },
+): number {
+  if (spawningPriority < userInitiatedPriority) {
+    return systemInitiatedPrerenderHtmlPriority;
+  }
+  return opts?.awaitedByPublish
+    ? userInitiatedPriority
+    : userInitiatedPrerenderHtmlPriority;
 }
 
 export interface PrerenderHtmlEnqueueArgs {
@@ -32,6 +46,11 @@ export interface PrerenderHtmlEnqueueArgs {
   spawningJobId: number | null;
   spawningPriority: number;
   timeoutSec: number;
+  // True only when a publish is awaiting this HTML. Lifts the job to the
+  // indexing tier (co-equal) instead of one notch below it, so the publish's
+  // critical-path render is admitted ahead of ordinary user renders. See
+  // prerenderHtmlPriority.
+  awaitedByPublish?: boolean;
   // True when a from-scratch index pass spawned this job. The realm-wide
   // module pre-warm sweep — O(realm module count) — runs at the start of the
   // job only when set; incremental spawns leave it false.
@@ -183,6 +202,7 @@ export async function enqueuePrerenderHtmlJob(
     spawningPriority,
     timeoutSec,
     preWarm,
+    awaitedByPublish,
   }: PrerenderHtmlEnqueueArgs,
 ): Promise<Job<PgPrimitive>> {
   let args: PrerenderHtmlArgs = {
@@ -200,7 +220,7 @@ export async function enqueuePrerenderHtmlJob(
     // Separate from `indexing:${realmURL}` so HTML work never blocks
     // indexing.
     concurrencyGroup: prerenderHtmlConcurrencyGroup(realmURL),
-    priority: prerenderHtmlPriority(spawningPriority),
+    priority: prerenderHtmlPriority(spawningPriority, { awaitedByPublish }),
     timeout: timeoutSec,
     args,
   });

@@ -1601,7 +1601,10 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+  async fullIndex(
+    priority?: number,
+    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
+  ) {
     // Clear the realmInfo cache before re-indexing so cards rendered
     // during this pass read /realm.json from the now-populated index
     // rather than a stale "Unnamed Workspace" cached during an earlier
@@ -1612,7 +1615,10 @@ export class Realm {
     this.invalidateCachedRealmInfo();
     let { completed } = this.#realmIndexUpdater.publishFullIndex(
       priority ?? systemInitiatedPriority,
-      { clearLastModified: opts?.clearLastModified },
+      {
+        clearLastModified: opts?.clearLastModified,
+        awaitedByPublish: opts?.awaitedByPublish,
+      },
     );
     await completed;
     // The from-scratch swap has landed in boxel_index: drop searchCards
