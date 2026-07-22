@@ -25,7 +25,6 @@ import {
   isMatrixError,
   type MatrixError,
 } from '@cardstack/host/lib/matrix-utils';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
@@ -225,7 +224,6 @@ export default class Login extends Component<Signature> {
   @tracked private password: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private exchangingSsoToken = false;
-  @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare router: RouterService;
 
@@ -240,9 +238,7 @@ export default class Login extends Component<Signature> {
           JSON.stringify(this.matrixService.loginReadinessDebug),
       );
     }
-    if (this.environmentService.googleAuthEnabled) {
-      this.detectGoogleSso.perform();
-    }
+    this.detectGoogleSso.perform();
     // Synchronously flip into the SSO-exchanging state if the URL has a
     // loginToken — the task itself is async (awaits matrix-sdk load + token
     // exchange + matrixService.start), and without this the password form
@@ -254,7 +250,7 @@ export default class Login extends Component<Signature> {
   }
 
   private get showGoogleButton() {
-    return this.environmentService.googleAuthEnabled && this.googleSsoAvailable;
+    return this.googleSsoAvailable;
   }
 
   private get isLoginButtonDisabled() {
