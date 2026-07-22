@@ -12,6 +12,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   isCardInstance,
+  logger,
   rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -85,6 +86,8 @@ export type RoomSkill = {
   isActive: boolean;
 };
 
+const responseStreamLog = logger('matrix:response-stream');
+
 interface Args {
   named: {
     roomId: string | undefined;
@@ -102,8 +105,12 @@ export class RoomResource extends Resource<Args> {
   // Highest to-device preview `sequence` applied per streaming message
   // (keyed by parentEventId). Previews carry full accumulated state, so an
   // out-of-order or duplicate delivery is simply dropped rather than regressing
-  // the message to older content.
+  // the message to older content. Both maps are pruned when a message finalizes
+  // (see hydrateResponseStreamPreview) and cleared in teardown().
   #lastPreviewSequence = new Map<string, number>();
+  // Serializes preview applies per streaming message so their async tool-request
+  // builds land in sequence order rather than promise-completion order.
+  #previewApplyChain = new Map<string, Promise<void>>();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -148,6 +155,7 @@ export class RoomResource extends Resource<Args> {
     this.#responseStreamPreviewDisposer?.();
     this.#responseStreamPreviewDisposer = undefined;
     this.#lastPreviewSequence.clear();
+    this.#previewApplyChain.clear();
     for (let id of this.#skillIds ?? []) {
       this.store.dropReference(id);
     }
@@ -738,9 +746,16 @@ export class RoomResource extends Resource<Args> {
   // it mirrors lets us reuse MessageBuilder.updateMessage — including its tool
   // request chunk merging — and its `setUpdated(new Date())` resets the
   // streaming stall timeout so long responses don't trip the fallback.
-  private async hydrateResponseStreamPreview(
-    payload: AppBoxelResponseStreamContent,
-  ) {
+  //
+  // This method gates an incoming preview (roomId / staleness / duplicate)
+  // synchronously and then enqueues its apply on a per-message chain. The gate
+  // must be synchronous: it decides ordering by arrival, and
+  // applyResponseStreamPreview awaits async tool-request builds, so without
+  // serialization two overlapping previews would resolve their tool args in
+  // promise-completion order rather than sequence order (every synthetic event
+  // pins the same origin_server_ts, so MessageBuilder.applyToolRequestChunk's
+  // timestamp guard can't reorder them).
+  private hydrateResponseStreamPreview(payload: AppBoxelResponseStreamContent) {
     if (!payload || payload.roomId !== this.roomId) {
       return;
     }
@@ -750,6 +765,13 @@ export class RoomResource extends Resource<Args> {
     // cases the room-event path is authoritative and reconciles the true state,
     // so there is nothing for an ephemeral preview to add.
     if (!message || message.isStreamingOfEventFinished) {
+      // Once the message is finalized its tracking entries are dead — prune
+      // them opportunistically so a long-lived room doesn't accumulate one per
+      // AI turn (teardown() is the backstop).
+      if (message?.isStreamingOfEventFinished) {
+        this.#lastPreviewSequence.delete(payload.parentEventId);
+        this.#previewApplyChain.delete(payload.parentEventId);
+      }
       return;
     }
     let lastSequence =
@@ -759,37 +781,69 @@ export class RoomResource extends Resource<Args> {
     }
     this.#lastPreviewSequence.set(payload.parentEventId, payload.sequence);
 
-    let author = this.upsertRoomMember({
-      roomId: payload.roomId,
-      userId: this.matrixService.aiBotUserId,
-    });
-    // origin_server_ts is pinned to the message's creation time so a preview
-    // never advances past — and thus never suppresses (see
-    // MessageBuilder.applyToolRequestChunk) — the real, later final room edit.
-    let syntheticEvent = {
-      type: 'm.room.message',
-      event_id: payload.parentEventId,
-      room_id: payload.roomId,
-      sender: this.matrixService.aiBotUserId,
-      origin_server_ts: message.created.getTime(),
-      content: {
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        body: payload.body,
-        [APP_BOXEL_REASONING_CONTENT_KEY]: payload.reasoning,
-        [APP_BOXEL_TOOL_REQUESTS_KEY]: payload.toolRequests,
-        isStreamingFinished: false,
-      },
-    } as unknown as CardMessageEvent;
+    let previous =
+      this.#previewApplyChain.get(payload.parentEventId) ?? Promise.resolve();
+    let next = previous.then(() =>
+      this.applyResponseStreamPreview(message, payload),
+    );
+    this.#previewApplyChain.set(payload.parentEventId, next);
+  }
 
-    let messageBuilder = new MessageBuilder(syntheticEvent, getOwner(this)!, {
-      roomId: payload.roomId,
-      effectiveEventId: payload.parentEventId,
-      author,
-      index: message.index ?? 0,
-      events: this.events,
-      skills: this.skills,
-    });
-    await messageBuilder.updateMessage(message);
+  private async applyResponseStreamPreview(
+    message: Message,
+    payload: AppBoxelResponseStreamContent,
+  ) {
+    try {
+      let author = this.upsertRoomMember({
+        roomId: payload.roomId,
+        userId: this.matrixService.aiBotUserId,
+      });
+      // origin_server_ts is pinned to the message's creation time so a preview
+      // never advances past — and thus never suppresses (see
+      // MessageBuilder.applyToolRequestChunk) — the real, later final room edit.
+      //
+      // A preview intentionally owns only body / reasoning / toolRequests. The
+      // other fields updateMessage writes (attachedCards/Files, continuationOf,
+      // hasContinuation, status, reloadBillingData) are reset to empty/false on
+      // every apply because the synthetic event doesn't carry them; that's
+      // benign for a streaming response — the final room edit restores the truth
+      // — but a placeholder that legitimately carried any of those would have it
+      // wiped until finalization.
+      let syntheticEvent = {
+        type: 'm.room.message',
+        event_id: payload.parentEventId,
+        room_id: payload.roomId,
+        sender: this.matrixService.aiBotUserId,
+        origin_server_ts: message.created.getTime(),
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: payload.body,
+          [APP_BOXEL_REASONING_CONTENT_KEY]: payload.reasoning,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: payload.toolRequests,
+          isStreamingFinished: false,
+        },
+      } as unknown as CardMessageEvent;
+
+      let messageBuilder = new MessageBuilder(syntheticEvent, getOwner(this)!, {
+        roomId: payload.roomId,
+        effectiveEventId: payload.parentEventId,
+        author,
+        index: message.index ?? 0,
+        events: this.events,
+        skills: this.skills,
+      });
+      await messageBuilder.updateMessage(message);
+    } catch (err) {
+      // A dropped preview is harmless — the final room edit reconciles the true
+      // state — so swallow (mirroring ai-bot's best-effort sendToDevicePreview)
+      // rather than surface an unhandled rejection from this fire-and-forget
+      // handler. updateMessage can throw when a new tool id triggers an async
+      // skill/loader resolve.
+      responseStreamLog.debug(
+        `dropped response-stream preview (seq ${payload.sequence}) for ${payload.parentEventId}`,
+        err,
+      );
+    }
   }
 
   private async updateMessageCommandResult({
