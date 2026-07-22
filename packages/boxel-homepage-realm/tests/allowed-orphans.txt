@@ -1,0 +1,4 @@
+# Instances deliberately not linked from any routed page.
+# cards-grid is the workbench grid.
+# Prune entries as they get wired in or deleted; new orphans fail the test.
+cards-grid.json
