@@ -1926,7 +1926,17 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
   }
 }
 
-// Exported for testing (CS-10498 regression test)
+// Rewrite the references inside a served single-card document into their
+// portable relative form: the primary resource and each `included[]` resource
+// have their module deps (`adoptsFrom`, field code refs) and instance/
+// relationship URLs relativized against that resource's OWN id. This is one
+// application of the codebase-wide rule that every resource's references are
+// relative to its own id, independent of the document that delivers it —
+// collection responses (`/_search`) already carry that own-id-relative form
+// natively, so they are not rebased here. A consumer inverts the rule the same
+// way everywhere: resolve a resource's references against that resource's own
+// id (`data.id` / `included[].id`), never against the enclosing document. See
+// relativizeResource. Exported for testing.
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
@@ -1979,6 +1989,11 @@ function relativizeResource(
   let resourceURL = resource.id
     ? virtualNetwork.toURL(resource.id)
     : primaryURL;
+  // Every reference in this resource — instance/relationship URLs and module
+  // deps — is relativized against the resource's own id (`resourceURL`), so the
+  // resource reads the same whether it is a document's primary or embedded in
+  // another document's `included[]`. For the primary resource `resourceURL` is
+  // the primary URL, so only `included[]` / collection members shift base.
   visitInstanceURLs(resource, (url, setURL) => {
     // Scoped RRIs (e.g. @cardstack/catalog/foo) are already in their canonical
     // portable form — don't resolve or relativize them. A scoped reference is
@@ -1989,7 +2004,7 @@ function relativizeResource(
       return;
     }
     let urlObj = virtualNetwork.resolveURL(url, resourceURL);
-    setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
+    setURL(maybeRelativeReference(urlObj, resourceURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Scoped RRIs are already in canonical portable form — see the note in the
@@ -2001,7 +2016,7 @@ function relativizeResource(
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,
-        primaryURL,
+        resourceURL,
         realmURL,
       ) as RealmResourceIdentifier,
     );

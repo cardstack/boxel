@@ -6269,6 +6269,130 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
+    test("resolves a nested linked card's relative adoptsFrom module against its own id, not the parent card's", async function (assert) {
+      // A linked card in a subdirectory carries an `adoptsFrom.module` relative
+      // to its own id (a card's type is intrinsic to the card, independent of
+      // the document that delivered it). When it is hydrated out of a parent
+      // card's document, its module must still resolve against the linked card's
+      // own id — resolving against the parent's base would fetch a module one
+      // directory off and present the existing card as Card Not Found.
+      class SubSection extends CardDef {
+        @field label = contains(StringField);
+      }
+      class Section extends CardDef {
+        @field label = contains(StringField);
+        @field detail = linksTo(SubSection);
+      }
+      class Workspace extends CardDef {
+        @field label = contains(StringField);
+        @field entryPoints = linksToMany(Section);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Workspace },
+          'sections/section.gts': { Section },
+          'sections/subs/sub-section.gts': { SubSection },
+        },
+      });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          id: `${testRealmURL}index`,
+          type: 'card',
+          attributes: {
+            label: 'Sample workspace',
+            cardInfo: {},
+          },
+          relationships: {
+            'entryPoints.0': {
+              links: {
+                self: `${testRealmURL}sections/section-1`,
+              },
+              data: {
+                id: `${testRealmURL}sections/section-1`,
+                type: 'card',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Workspace',
+            },
+          },
+        },
+        included: [
+          {
+            id: testRRI('sections/section-1'),
+            type: 'card',
+            attributes: {
+              label: 'Section one',
+              cardInfo: {},
+            },
+            relationships: {
+              detail: {
+                links: {
+                  self: `${testRealmURL}sections/subs/sub-section-1`,
+                },
+                data: {
+                  id: `${testRealmURL}sections/subs/sub-section-1`,
+                  type: 'card',
+                },
+              },
+            },
+            meta: {
+              // Relative to the section's own id (sections/section-1); resolving
+              // against the workspace root (index) would look one directory up.
+              adoptsFrom: {
+                module: rri('./section'),
+                name: 'Section',
+              },
+            },
+          },
+          {
+            id: testRRI('sections/subs/sub-section-1'),
+            type: 'card',
+            attributes: {
+              label: 'Detail one',
+              cardInfo: {},
+            },
+            meta: {
+              // Relative to the sub-section's own id
+              // (sections/subs/sub-section-1); resolving against the parent
+              // section (sections/) would look one directory up.
+              adoptsFrom: {
+                module: rri('./sub-section'),
+                name: 'SubSection',
+              },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Workspace>(
+        doc.data,
+        doc,
+        rri(`${testRealmURL}index`),
+      );
+
+      assert.ok(card instanceof Workspace, 'card is an instance of Workspace');
+      let { entryPoints } = card;
+      assert.strictEqual(entryPoints.length, 1, 'entryPoints has 1 item');
+      let [section] = entryPoints;
+      if (section instanceof Section) {
+        assert.true(isSaved(section), 'Section card is saved');
+        assert.strictEqual(section.label, 'Section one');
+        let { detail } = section;
+        if (detail instanceof SubSection) {
+          assert.true(isSaved(detail), 'SubSection card is saved');
+          assert.strictEqual(detail.label, 'Detail one');
+        } else {
+          assert.ok(false, 'section "detail" is not an instance of SubSection');
+        }
+      } else {
+        assert.ok(false, 'entryPoints[0] is not an instance of Section');
+      }
+    });
+
     test('can deserialize a linksToMany relationship from array format', async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
