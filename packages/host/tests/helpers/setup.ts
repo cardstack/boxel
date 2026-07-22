@@ -763,12 +763,27 @@ export function setupApplicationTest(hooks: NestedHooks) {
     resetServiceIfPresent(this.owner, 'service:matrix-service');
     resetServiceIfPresent(this.owner, 'service:operator-mode-state-service');
     await settled();
-    (
-      this.owner.lookup('service:session') as SessionService | undefined
-    )?.notifySessionEnded();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
+}
+
+// A SessionParticipant whose resetState()/sessionStarted() threw during this
+// test was buffered by SessionService rather than thrown or floated (a
+// synchronous throw is swallowed by MatrixService.start()/logout(); a floated
+// rejection can be blamed on the next test). Drain the buffer here — after the
+// teardown notifySessionEnded() above has run — so the failure lands
+// deterministically on the test that actually caused it.
+function failOnParticipantErrors(session: SessionService | undefined) {
+  let errors = session?.takeParticipantErrorsForTest?.() ?? [];
+  if (errors.length > 0) {
+    throw errors[0];
+  }
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
@@ -788,11 +803,13 @@ export function setupRenderingTest(hooks: NestedHooks) {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
     resetServiceIfPresent(this.owner, 'service:matrix-service');
     await settled();
-    (
-      this.owner.lookup('service:session') as SessionService | undefined
-    )?.notifySessionEnded();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
 }
 

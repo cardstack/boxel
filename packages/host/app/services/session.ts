@@ -44,6 +44,10 @@ export default class SessionService extends Service {
 
   private participants: SessionParticipant[] = [];
 
+  // Test-only buffer of participant errors caught during a broadcast. See
+  // surfaceInTests() / takeParticipantErrorsForTest().
+  #participantErrorsForTest: unknown[] = [];
+
   register(participant: SessionParticipant) {
     this.participants.push(participant);
     if (this.isAuthenticated) {
@@ -100,28 +104,27 @@ export default class SessionService extends Service {
 
   // In production a broken participant must not break login/logout for the
   // rest of the registry, so its error is only logged. In tests that same
-  // swallowing hides real failures — teardown cleans state between tests via
-  // notifySessionEnded(), so a silently-failing resetState() surfaces later as
-  // an unrelated flake. Re-raise, but only after the full broadcast has run, so
-  // the isolation guarantee holds in both environments.
+  // swallowing hides real failures. We can't rethrow synchronously here: both
+  // broadcast sites (MatrixService.start()/logout()) call the notify methods
+  // inside their own try/catch and would swallow it. Floating a rejection
+  // dodges the try/catch but surfaces non-deterministically — it can be
+  // attributed to the *next* test's unhandledrejection hook rather than the one
+  // whose participant threw. So buffer instead: the test harness drains this in
+  // afterEach and fails the responsible test deterministically.
   private surfaceInTests(errors: unknown[]) {
     if (errors.length > 0 && isTesting()) {
-      this.reraiseParticipantErrorsInTests(errors);
+      this.#participantErrorsForTest.push(...errors);
     }
   }
 
-  // Re-raise participant errors asynchronously rather than throwing here.
-  // Both production broadcast sites (MatrixService.start() and logout()) call
-  // the notify methods inside their own try/catch; a synchronous throw would be
-  // swallowed there and the test would pass despite a broken participant. A
-  // floated rejection can't be caught by those callers and is failed by the
-  // harness's `unhandledrejection` hook, so the surfacing works on every call
-  // path. Public + overridable so unit tests can observe the surfaced errors
-  // without the floated rejection failing the asserting test.
-  reraiseParticipantErrorsInTests(errors: unknown[]) {
-    for (let e of errors) {
-      void Promise.reject(e);
-    }
+  // Test-only. Returns the participant errors buffered since the last call and
+  // clears them. The test harness (setup.ts afterEach) calls this after the
+  // broadcast and fails the test if anything was buffered; unit tests read it
+  // directly to assert a broken participant was surfaced.
+  takeParticipantErrorsForTest(): unknown[] {
+    let errors = this.#participantErrorsForTest;
+    this.#participantErrorsForTest = [];
+    return errors;
   }
 }
 

@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type SessionService from '@cardstack/host/services/session';
 
 import {
   testRealmURL,
@@ -68,6 +69,44 @@ module(
         result,
         TIMEOUT,
         'createRealmSession settles after resetState — the clientReadyDeferred barrier survives the reset rather than being left pending',
+      );
+    });
+
+    test('start() on an already-established session does not re-broadcast sessionStarted', async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      let session = getService('session') as SessionService;
+      await matrixService.ready;
+
+      assert.true(
+        session.isAuthenticated,
+        'the session is established after boot',
+      );
+
+      let replays = 0;
+      session.register({
+        resetState() {},
+        sessionStarted() {
+          replays++;
+        },
+      });
+      // register() replays sessionStarted() once immediately because the
+      // session is already established — that is the baseline, not a
+      // re-broadcast.
+      assert.strictEqual(
+        replays,
+        1,
+        'the late registrant is replayed once on register',
+      );
+
+      // Re-running start() on the still-authenticated session (the /connect
+      // route does this on every visit) must not re-fire the broadcast — the
+      // edge guard only broadcasts on the unauthenticated → authenticated edge.
+      await matrixService.start();
+
+      assert.strictEqual(
+        replays,
+        1,
+        'a second start() on an already-authenticated session does not re-fire sessionStarted',
       );
     });
   },

@@ -57,6 +57,13 @@ export default class BillingService extends Service {
     // an explicit catch: the SessionService broadcast's try/catch only guards
     // synchronous throws, so an unhandled fetch rejection would otherwise
     // escape here.
+    //
+    // On a cold boot this can issue a second /_user fetch alongside the index
+    // route's initializeSubscriptionData(). That duplicate is accepted, not a
+    // bug to coalesce away: this eager load is what repopulates the cleared
+    // data on re-login, where the index route's model() may not re-run.
+    // Coalescing was tried and reverted (it regressed the profile popover to
+    // stale credits) — see the note on loadSubscriptionData().
     this.loadSubscriptionData().catch((e) => {
       console.error('Failed to load subscription data on session start', e);
     });

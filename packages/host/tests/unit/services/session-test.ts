@@ -55,13 +55,6 @@ module('Unit | Service | session', function (hooks) {
 
   test('a throwing sessionStarted() does not block later participants', function (assert) {
     let session = getSession(this);
-    // Capture the surfaced errors instead of letting them float as unhandled
-    // rejections (which would fail this test). The production seam re-raises
-    // asynchronously so the broadcast callers' try/catch can't swallow it.
-    let surfaced: unknown[] = [];
-    session.reraiseParticipantErrorsInTests = (errors) => {
-      surfaced.push(...errors);
-    };
     let thrower: SessionParticipant = {
       resetState() {},
       sessionStarted() {
@@ -83,10 +76,10 @@ module('Unit | Service | session', function (hooks) {
       session.isAuthenticated,
       'the session is still marked established',
     );
-    // In tests the participant error is surfaced (after the full broadcast) so
-    // a broken participant fails loudly instead of being swallowed.
+    // The participant error is buffered (not thrown mid-broadcast) so a broken
+    // participant fails loudly in afterEach instead of being swallowed.
     assert.deepEqual(
-      surfaced.map((e) => (e as Error).message),
+      session.takeParticipantErrorsForTest().map((e) => (e as Error).message),
       ['boom'],
       'the participant error is surfaced in the test environment',
     );
@@ -94,10 +87,6 @@ module('Unit | Service | session', function (hooks) {
 
   test('a throwing resetState() does not block later participants', function (assert) {
     let session = getSession(this);
-    let surfaced: unknown[] = [];
-    session.reraiseParticipantErrorsInTests = (errors) => {
-      surfaced.push(...errors);
-    };
     let thrower: SessionParticipant = {
       resetState() {
         throw new Error('boom');
@@ -118,9 +107,56 @@ module('Unit | Service | session', function (hooks) {
     // A broken resetState() surfaces so it fails the test that caused it
     // instead of leaking state into a later, unrelated test.
     assert.deepEqual(
-      surfaced.map((e) => (e as Error).message),
+      session.takeParticipantErrorsForTest().map((e) => (e as Error).message),
       ['boom'],
       'the participant error is surfaced in the test environment',
+    );
+  });
+
+  test('a participant registered during a broadcast is not double-invoked', function (assert) {
+    let session = getSession(this);
+    let late = new RecordingParticipant();
+    // `first`'s sessionStarted() lazily registers `late` mid-broadcast — the
+    // shape that happens when a sessionStarted() hook first-injects another
+    // participant service. register() replays sessionStarted() on `late`
+    // immediately (session already established); the snapshot iteration in
+    // notifySessionStarted() must then NOT reach `late` again from its loop.
+    let first: SessionParticipant = {
+      resetState() {},
+      sessionStarted() {
+        session.register(late);
+      },
+    };
+    session.register(first);
+
+    session.notifySessionStarted();
+
+    assert.strictEqual(
+      late.startedCount,
+      1,
+      'the mid-broadcast registrant got exactly one sessionStarted (the replay), not a second from the live loop',
+    );
+  });
+
+  test('a participant registered during notifySessionEnded is not reset by the same broadcast', function (assert) {
+    let session = getSession(this);
+    let late = new RecordingParticipant();
+    let first: SessionParticipant = {
+      resetState() {
+        session.register(late);
+      },
+    };
+    session.register(first);
+
+    session.notifySessionEnded();
+
+    // register() replays only sessionStarted(), never resetState(), and the
+    // snapshot iteration keeps the teardown loop from reaching a registrant
+    // appended mid-broadcast — so `late` is not reset here.
+    assert.strictEqual(
+      late.resetCount,
+      0,
+      'the mid-teardown registrant is not reached by the same resetState broadcast',
     );
   });
 
@@ -147,10 +183,6 @@ module('Unit | Service | session', function (hooks) {
 
   test('a throwing replay on late registration resurfaces in tests', function (assert) {
     let session = getSession(this);
-    let surfaced: unknown[] = [];
-    session.reraiseParticipantErrorsInTests = (errors) => {
-      surfaced.push(...errors);
-    };
     session.notifySessionStarted();
 
     let thrower: SessionParticipant = {
@@ -163,7 +195,7 @@ module('Unit | Service | session', function (hooks) {
     session.register(thrower);
 
     assert.deepEqual(
-      surfaced.map((e) => (e as Error).message),
+      session.takeParticipantErrorsForTest().map((e) => (e as Error).message),
       ['boom'],
       'the replay error is surfaced in the test environment',
     );
