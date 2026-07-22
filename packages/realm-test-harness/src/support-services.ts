@@ -58,6 +58,11 @@ function ensureBoxelUIReady(hostPackageDir: string): void {
 
   let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
 
+  // boxel-ui's type build imports icon components from boxel-icons, so
+  // boxel-icons must be fully built (including its declarations) first. This
+  // runs before ensureIconsReady would otherwise reach it, and is idempotent.
+  ensureBoxelIconsDist();
+
   // Fall back to building boxel-ui.
   supportLog.info(`building boxel-ui dist at ${boxelUIAddonDir}...`);
   let result = spawnSync('pnpm', ['build'], {
@@ -708,73 +713,106 @@ function buildChildExitDiagnostic(buffers: {
 }
 
 /**
- * Ensure boxel-icons dist exists. In a worktree, symlink from the root repo
+ * Ensure boxel-icons is built — both the runtime `dist` (served to the host)
+ * and its type `declarations`. In a worktree, symlink dist from the root repo
  * if available, otherwise build.
+ *
+ * The declarations matter because boxel-ui's type build imports icon
+ * components from `@cardstack/boxel-icons/*`. Without the icon `.d.ts` files,
+ * `nodenext` resolution falls through the exports map to the built `dist/*.js`
+ * and infers each icon's default export as a bare `object`, which is not a
+ * Glint-invokable component — boxel-ui's build then fails with "Type 'object'
+ * is not assignable to type 'Icon'" on every icon usage. Note that neither a
+ * pre-existing `dist` nor the root-repo symlink brings the declarations along,
+ * so a dist-only state still needs a `build:types`.
  */
 function ensureBoxelIconsDist(): void {
   let distDir = join(boxelIconsDir, 'dist');
-  if (
+  let distExists = () =>
     existsSync(join(distDir, '@cardstack')) ||
-    existsSync(join(distDir, 'index.html'))
-  ) {
+    existsSync(join(distDir, 'index.html'));
+  let declarationsExist = () =>
+    existsSync(join(boxelIconsDir, 'declarations', 'types.d.ts'));
+
+  if (distExists() && declarationsExist()) {
     return;
   }
 
-  // Try to symlink from root repo (fast path for worktrees).
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
-    let rootRepoIconsDistDir = join(
-      rootRepoCheckoutDir,
-      'packages',
-      'boxel-icons',
-      'dist',
-    );
-    if (existsSync(join(rootRepoIconsDistDir, '@cardstack'))) {
-      supportLog.info(
-        `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
+  if (!distExists()) {
+    // Try to symlink dist from root repo (fast path for worktrees).
+    let rootRepoCheckoutDir = findRootRepoCheckoutDir();
+    if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
+      let rootRepoIconsDistDir = join(
+        rootRepoCheckoutDir,
+        'packages',
+        'boxel-icons',
+        'dist',
       );
-      try {
-        if (existsSync(distDir)) {
-          rmSync(distDir, { recursive: true, force: true });
-        }
-        symlinkSync(rootRepoIconsDistDir, distDir);
-        if (existsSync(join(distDir, '@cardstack'))) {
-          return;
-        }
-      } catch (error) {
-        supportLog.debug(
-          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+      if (existsSync(join(rootRepoIconsDistDir, '@cardstack'))) {
+        supportLog.info(
+          `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
         );
+        try {
+          if (existsSync(distDir)) {
+            rmSync(distDir, { recursive: true, force: true });
+          }
+          symlinkSync(rootRepoIconsDistDir, distDir);
+        } catch (error) {
+          supportLog.debug(
+            `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     }
   }
 
-  // Remove any leftover symlink so the build writes into the worktree,
-  // not through a symlink into the root repo.
-  if (existsSync(distDir)) {
-    rmSync(distDir, { recursive: true, force: true });
+  if (!distExists()) {
+    // No dist anywhere — build it (which also emits the declarations). Remove
+    // any leftover symlink first so the build writes into the worktree, not
+    // through a symlink into the root repo.
+    if (existsSync(distDir)) {
+      rmSync(distDir, { recursive: true, force: true });
+    }
+    supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
+    let result = spawnSync('pnpm', ['build'], {
+      cwd: boxelIconsDir,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
+          `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
+      );
+    }
+    if (!distExists()) {
+      throw new Error(
+        `Built boxel-icons at ${boxelIconsDir} but dist output is missing at ${distDir}`,
+      );
+    }
   }
 
-  // Fall back to building boxel-icons.
-  supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
-  let result = spawnSync('pnpm', ['build'], {
-    cwd: boxelIconsDir,
-    stdio: 'inherit',
-    env: process.env,
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
-        `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
-    );
-  }
-  if (
-    !existsSync(join(distDir, '@cardstack')) &&
-    !existsSync(join(distDir, 'index.html'))
-  ) {
-    throw new Error(
-      `Built boxel-icons at ${boxelIconsDir} but dist output is missing at ${distDir}`,
-    );
+  if (!declarationsExist()) {
+    // dist was provided pre-built or via the symlink above, neither of which
+    // brings the declarations. Emit just the declarations rather than redoing
+    // the (slow) rollup dist build.
+    supportLog.info(`building boxel-icons declarations at ${boxelIconsDir}...`);
+    let result = spawnSync('pnpm', ['build:types'], {
+      cwd: boxelIconsDir,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `Failed to build boxel-icons declarations at ${boxelIconsDir} (exit code ${result.status}). ` +
+          `Run \`cd ${boxelIconsDir} && pnpm build:types\` manually to diagnose.`,
+      );
+    }
+    if (!declarationsExist()) {
+      throw new Error(
+        `Built boxel-icons declarations at ${boxelIconsDir} but declarations are missing`,
+      );
+    }
   }
 }
 
