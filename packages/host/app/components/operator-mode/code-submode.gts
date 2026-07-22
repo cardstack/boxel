@@ -912,7 +912,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanel>
             {{else}}
               <ResizablePanel
-                @defaultLengthFraction={{this.defaultPanelWidths.emptyCodeModePanel}}
+                @defaultSize={{this.defaultPanelWidths.emptyCodeModePanel}}
               >
                 <InnerContainer
                   class='empty-container'

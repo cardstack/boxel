@@ -19,7 +19,7 @@ interface Signature {
     offset?: number;
     placement?: MiddlewareState['placement'];
     size?: BoxelButtonSize;
-    textToCopy: string;
+    textToCopy: string | null | undefined;
     tooltipText?: string;
     variant?: BoxelButtonKind;
     width?: string;
@@ -31,6 +31,9 @@ export default class CopyButton extends Component<Signature> {
   @tracked private recentlyCopied = false;
 
   @action private async copyToClipboard() {
+    if (this.args.textToCopy == null) {
+      return;
+    }
     try {
       await navigator.clipboard.writeText(this.args.textToCopy);
       this.recentlyCopied = true;

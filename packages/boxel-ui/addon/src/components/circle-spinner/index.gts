@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import IconCircle from '../../icons/icon-circle.gts';
 
 interface Signature {
-  Element: SVGElement;
+  Element: SVGSVGElement;
 }
 
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes

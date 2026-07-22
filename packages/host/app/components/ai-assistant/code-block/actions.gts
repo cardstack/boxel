@@ -1,6 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 
+import type Component from '@glimmer/component';
+
 import { CopyButton } from '@cardstack/boxel-ui/components';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
@@ -11,6 +13,9 @@ import ApplyCodePatchButton, {
 
 import type { ComponentLike } from '@glint/template';
 
+type AsComponentLike<C> =
+  C extends Component<infer Sig> ? ComponentLike<Sig> : never;
+
 export interface CodeBlockActionsSignature {
   Args: {
     codeData?: Partial<CodeData>;
@@ -18,7 +23,7 @@ export interface CodeBlockActionsSignature {
   Blocks: {
     default: [
       {
-        copyCode: CopyButton;
+        copyCode: AsComponentLike<CopyButton>;
         applyCodePatch: ComponentLike<ApplyCodePatchButtonSignature>;
       },
     ];
