@@ -671,16 +671,19 @@ let adapter: PgAdapter;
   // is set.
   eventSink.setAdapter(adapter);
 
-  // Each pool's minimum priority is a dequeue floor: its workers only
-  // claim jobs at or above it, oldest-first among those. The user-index
-  // pool floors at the user-initiated indexing tier and registers only the
+  // Each pool's minimum priority is a dequeue floor: its workers only claim
+  // jobs at or above it, oldest-first among those. The user-index pool is
+  // opt-in — it exists only when `--userIndexCount` > 0 (0 by default). When
+  // run, it floors at the user-initiated indexing tier and registers only the
   // indexing job types (`--indexJobsOnly`), giving index jobs a lane no
-  // prerender-html sweep can hold. Both guards carry weight: the floor keeps
-  // out ordinary user prerender-html (one tier below), and the job-type
-  // filter keeps out a publish-awaited render (which runs co-equal with
-  // indexing, so the floor alone would admit it). Indexing gates realm
-  // provisioning and every write's read-your-writes drain, so it must stay
-  // responsive even when long render sweeps saturate the high-priority pool.
+  // prerender-html sweep can hold; both guards carry weight there — the floor
+  // keeps out ordinary user prerender-html (one tier below), and the job-type
+  // filter keeps out a publish-awaited render (co-equal at the indexing tier,
+  // which the floor alone would admit). The contended matrix test stack runs
+  // this lane to keep realm provisioning responsive under indexing
+  // back-pressure; deployments that leave `--userIndexCount` at 0 rely on
+  // high-priority-pool capacity, plus the render-tier gap that keeps HTML
+  // rendering behind indexing in the prerender server's own admission queue.
   //
   // The high-priority pool floors at the user-initiated prerender-html tier
   // (one below indexing), so it serves all user-initiated work — user

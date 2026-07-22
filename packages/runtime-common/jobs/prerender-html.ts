@@ -22,9 +22,10 @@ import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 // report the realm ready until its HTML exists, so that render is on the
 // publish's critical path rather than a background follow-on. It runs
 // co-equal with indexing (userInitiatedPriority) so the prerender server
-// admits it ahead of ordinary user renders. The dedicated user-index worker
-// lane still excludes it by job type (see worker-manager), so co-equal here
-// never lets a publish render hold the workers indexing reserves.
+// admits it ahead of ordinary user renders. Where a dedicated index lane is
+// configured (worker-manager's opt-in `--indexJobsOnly` pool), that lane's
+// job-type filter — not the priority floor — is what keeps a co-equal publish
+// render out of it.
 export function prerenderHtmlPriority(
   spawningPriority: number,
   opts?: { awaitedByPublish?: boolean },
