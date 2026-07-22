@@ -36,6 +36,7 @@ import type * as TimeFieldModule from '@cardstack/base/time';
 import type * as DurationFieldModule from '@cardstack/base/time/duration';
 import type * as RelativeTimeFieldModule from '@cardstack/base/time/relative-time';
 import type * as TimeRangeFieldModule from '@cardstack/base/time/time-range';
+import type * as WorkspaceModule from '@cardstack/base/workspace';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -126,6 +127,9 @@ let PhoneNumberField: PhoneNumberField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
+
+type Workspace = (typeof WorkspaceModule)['Workspace'];
+let Workspace: Workspace;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
@@ -347,6 +351,10 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>('@cardstack/base/cards-grid')
   ).CardsGrid;
 
+  Workspace = (
+    await loader.import<typeof WorkspaceModule>('@cardstack/base/workspace')
+  ).Workspace;
+
   Skill = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .Skill;
 
@@ -452,6 +460,7 @@ export {
   RichMarkdownField,
   PhoneNumberField,
   CardsGrid,
+  Workspace,
   SystemCard,
   ModelConfiguration,
   FileDef,
