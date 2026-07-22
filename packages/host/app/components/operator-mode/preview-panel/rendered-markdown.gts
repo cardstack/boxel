@@ -33,7 +33,11 @@ import {
   rri,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
-import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+import {
+  isMarkdownOverRenderLimit,
+  markdownOversizedNoticeHtml,
+  markdownToHtml,
+} from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
@@ -130,7 +134,14 @@ export default class RenderedMarkdown extends Component<Signature> {
 
   @cached
   get renderedHtml() {
-    let html = markdownToHtml(this.args.content);
+    let content = this.args.content;
+    // Skip the parse entirely for over-limit content so a multi-MB `.md` file
+    // or field value cannot block the render thread on the synchronous
+    // parse + sanitize + DOMParser pipeline.
+    if (isMarkdownOverRenderLimit(content)) {
+      return htmlSafe(markdownOversizedNoticeHtml(content));
+    }
+    let html = markdownToHtml(content);
     html = wrapTablesHtml(html);
 
     // Strip text from BFM refs (card and file) so raw URLs don't flash before
@@ -562,6 +573,25 @@ export default class RenderedMarkdown extends Component<Signature> {
           font-size: var(--markdown-font-size, inherit);
           font-family: var(--markdown-font-family, inherit);
           overflow: hidden;
+        }
+
+        /* Over-limit content notice + truncated plain-text preview */
+        .markdown-content :deep(.markdown-oversized-notice) {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-style: italic;
+          color: var(--boxel-500);
+        }
+        .markdown-content :deep(.markdown-oversized-preview) {
+          max-height: 20rem;
+          overflow: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-family: var(--md-mono);
+          font-size: 0.8125em;
+          background-color: var(--md-muted);
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
         }
 
         /* Heading */

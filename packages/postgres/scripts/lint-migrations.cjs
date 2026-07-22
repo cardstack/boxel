@@ -6,11 +6,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const migrationsDir = path.join(__dirname, '..', 'migrations');
-const files = fs
-  .readdirSync(migrationsDir)
-  .filter((file) => file.endsWith('.js'))
-  .sort();
+// Both phases: additive migrations in migrations/ and destructive ones in
+// migrations-removal/ (applied post-deploy).
+const migrationDirs = [
+  path.join(__dirname, '..', 'migrations'),
+  path.join(__dirname, '..', 'migrations-removal'),
+];
+const files = migrationDirs.flatMap((dir) =>
+  fs
+    .readdirSync(dir)
+    .filter((file) => file.endsWith('.js'))
+    .sort(),
+);
 
 const suspicious = [];
 

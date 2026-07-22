@@ -2,7 +2,7 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
-import type ResetService from './reset';
+import type SessionService from './session';
 import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 export interface DisplayedErrorProvider {
@@ -10,12 +10,12 @@ export interface DisplayedErrorProvider {
 }
 
 export default class ErrorDisplayService extends Service {
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
   errorProviders: Set<DisplayedErrorProvider> = new Set();
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

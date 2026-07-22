@@ -33,23 +33,80 @@ print_start_diagnostics() {
     --filter "name=${TEST_PG_CONTAINER}" \
     --filter "name=${TEST_PG_SEED_CONTAINER}" >&2 || true
 
-  echo "=== Port ${TEST_PG_PORT} listeners ===" >&2
+  # Show sockets in ANY state on the port, not just LISTEN: when the bind fails
+  # with "address already in use" but nothing is LISTENing, the port is not held
+  # by a userland socket at all — it is Docker's own docker-proxy / NAT state
+  # from a just-removed container that has not finished tearing down.
+  echo "=== Port ${TEST_PG_PORT} sockets (all states) ===" >&2
   if command -v ss >/dev/null 2>&1; then
-    ss -ltnp "( sport = :${TEST_PG_PORT} )" >&2 || true
+    ss -tanp "( sport = :${TEST_PG_PORT} or dport = :${TEST_PG_PORT} )" >&2 || true
   elif command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"${TEST_PG_PORT}" -sTCP:LISTEN >&2 || true
+    lsof -nP -iTCP:"${TEST_PG_PORT}" >&2 || true
   else
     echo "Neither ss nor lsof is available for port diagnostics" >&2
+  fi
+
+  # A lingering DNAT rule for the port is the fingerprint of the teardown race:
+  # docker-proxy is gone but the netfilter rule that reserves the host port has
+  # not been reaped yet. Surface it so a future failure is diagnosable at a glance.
+  # Match the port as a whole word (grep -w) so it catches every rendering
+  # (`--dport 55436` from iptables -S, `dpt:55436` from -L, bare `55436` from
+  # nft) without matching 554360 — and stays portable, since \b as a word
+  # boundary is a GNU-grep extension, not POSIX ERE.
+  echo "=== Docker NAT rules for :${TEST_PG_PORT} ===" >&2
+  if command -v iptables >/dev/null 2>&1; then
+    { iptables -t nat -S 2>/dev/null || sudo -n iptables -t nat -S 2>/dev/null; } \
+      | grep -w "${TEST_PG_PORT}" >&2 \
+      || echo "(no matching iptables NAT rule)" >&2
+  fi
+  if command -v nft >/dev/null 2>&1; then
+    { nft list ruleset 2>/dev/null || sudo -n nft list ruleset 2>/dev/null; } \
+      | grep -w "${TEST_PG_PORT}" >&2 || true
   fi
 
   echo "=== ${TEST_PG_CONTAINER} logs (if present) ===" >&2
   docker logs "$TEST_PG_CONTAINER" >&2 || true
 }
 
+# Clear whatever a failed `docker run` left behind before the next attempt.
+reap_port_holder() {
+  # The failed run leaves the container in "Created" state (it never got its
+  # network sandbox), so remove it to start the next attempt clean.
+  docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
+
+  # Almost always the port is held by Docker's netfilter/proxy state rather than
+  # a live process, so this rarely fires. When something IS bound to the port,
+  # only reap it if it is unambiguously a stale docker-proxy for THIS port — a
+  # developer's unrelated service (or another test Postgres) must be left alone
+  # to surface as diagnostics, never killed.
+  if command -v ss >/dev/null 2>&1; then
+    local holder_pid holder_cmd holder_args
+    holder_pid="$(ss -H -tanp "( sport = :${TEST_PG_PORT} )" 2>/dev/null \
+      | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
+    if [ -n "${holder_pid:-}" ]; then
+      holder_cmd="$(ps -o comm= -p "$holder_pid" 2>/dev/null || true)"
+      holder_args="$(tr '\0' ' ' < "/proc/${holder_pid}/cmdline" 2>/dev/null || true)"
+      if [ "$holder_cmd" = "docker-proxy" ] \
+        && printf '%s' "$holder_args" | grep -q -- "-host-port ${TEST_PG_PORT}"; then
+        echo "Reaping stale docker-proxy (pid ${holder_pid}) for 127.0.0.1:${TEST_PG_PORT}" >&2
+        kill "$holder_pid" 2>/dev/null || true
+      else
+        echo "Port ${TEST_PG_PORT} held by non-docker-proxy pid ${holder_pid} (${holder_cmd:-unknown}); leaving it alone" >&2
+      fi
+    fi
+  fi
+}
+
+# On "address already in use" with no listener, the port is pinned by Docker's
+# own docker-proxy / iptables-DNAT teardown lagging behind a just-removed
+# container (the seed-build container is torn down immediately before this bind).
+# There is nothing to reap in userland — dockerd just needs a quiet window to
+# finish reconciling. A fixed 1s retry keeps the daemon churning and never lets
+# it settle, so back off with escalating waits and give it real room.
 cid=""
 start_err=""
 container_ref="$TEST_PG_CONTAINER"
-max_attempts=5
+max_attempts=6
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
   start_err_file="$(mktemp)"
@@ -66,9 +123,11 @@ while [ "$attempt" -le "$max_attempts" ]; do
 
   if printf '%s' "$start_err" | grep -qi 'address already in use'; then
     if [ "$attempt" -lt "$max_attempts" ]; then
-      echo "Port ${TEST_PG_PORT} still in use, retrying container start (${attempt}/${max_attempts})..." >&2
-      docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
-      sleep 1
+      backoff=$((attempt * 2))
+      [ "$backoff" -gt 8 ] && backoff=8
+      echo "Port ${TEST_PG_PORT} reported in use (no listener = Docker teardown race), reaping and waiting ${backoff}s before retry (${attempt}/${max_attempts})..." >&2
+      reap_port_holder
+      sleep "$backoff"
       attempt=$((attempt + 1))
       continue
     fi

@@ -123,7 +123,7 @@ import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type ToolService from './tool-service';
 import type { SearchResource } from '../resources/search';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -229,7 +229,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
@@ -310,7 +310,7 @@ export default class StoreService extends Service implements StoreInterface {
   constructor(owner: Owner) {
     super(owner);
     this.store = this.createCardStore();
-    this.reset.register(this);
+    this.session.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);

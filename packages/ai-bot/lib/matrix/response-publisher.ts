@@ -19,7 +19,7 @@ import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
-function toCommandRequest(
+export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;

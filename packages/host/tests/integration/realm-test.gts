@@ -988,11 +988,8 @@ module('Integration | realm', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              email: null,
-              posts: null,
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
-              cardInfo,
             },
             meta: {
               adoptsFrom: {
@@ -1170,7 +1167,6 @@ module('Integration | realm', function (hooks) {
             ],
             sponsors: ['Burton'],
             posts: [],
-            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -1233,6 +1229,9 @@ module('Integration | realm', function (hooks) {
             relationships: {
               'pets.0': {
                 links: { self: `${testRealmURL}dir/van-gogh` },
+              },
+              'pets.1': {
+                links: { self: `${testRealmURL}dir/mango` },
               },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
@@ -1388,7 +1387,7 @@ module('Integration | realm', function (hooks) {
       {
         data: {
           type: 'card',
-          attributes: { firstName: 'Jackie', cardInfo },
+          attributes: { firstName: 'Jackie' },
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
@@ -2331,7 +2330,6 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
-            cardInfo,
           },
           relationships: {
             owner: {
@@ -2495,7 +2493,6 @@ module('Integration | realm', function (hooks) {
               model: 'C300',
               year: '2024',
             },
-            cardInfo,
           },
           meta: {
             adoptsFrom: {

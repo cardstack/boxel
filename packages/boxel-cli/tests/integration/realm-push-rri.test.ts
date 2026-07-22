@@ -3,25 +3,25 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { pushCommand } from '../../src/commands/realm/push.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
 // A realm with a registered prefix mapping serves its document ids in RRI
 // form (`@cli-test/prefixed/...`) rather than as URLs — the shape that made
 // `realm push` crash after uploading (raw ids leaked into the succeeded list
 // and were treated as local file paths). This suite pushes against such a
-// realm end to end.
+// realm end to end through the installed CLI binary.
 
 const REALM_PREFIX = '@cli-test/prefixed/';
 
-let profileManager: ProfileManager;
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 let localDirs: string[] = [];
@@ -58,10 +58,10 @@ beforeAll(async () => {
     realmPrefixes: { [REALM_PREFIX]: realmUrl },
   });
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -76,27 +76,32 @@ describe('realm push against a prefix-form RRI realm (integration)', () => {
   it('the realm serves atomic result ids in prefix form', async () => {
     // Pins the precondition the regression test below relies on: if the
     // server stops answering in RRI form, this fails rather than the suite
-    // silently testing the URL-form path.
-    let response = await profileManager.authedRealmFetch(`${realmUrl}_atomic`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        Accept: 'application/vnd.api+json',
-      },
-      body: JSON.stringify({
-        'atomic:operations': [
-          {
-            op: 'add',
-            href: `${realmUrl}precondition-check.txt`,
-            data: {
-              type: 'source',
-              attributes: { content: 'x\n' },
-              meta: {},
+    // silently testing the URL-form path. This is a direct realm-state
+    // probe, so it stays an in-process fetch (using the profile the CLI
+    // authenticated against).
+    let response = await reloadProfile(home).authedRealmFetch(
+      `${realmUrl}_atomic`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          'atomic:operations': [
+            {
+              op: 'add',
+              href: `${realmUrl}precondition-check.txt`,
+              data: {
+                type: 'source',
+                attributes: { content: 'x\n' },
+                meta: {},
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      },
+    );
     expect(response.status).toBe(201);
     let body = (await response.json()) as {
       'atomic:results': Array<{ data?: { id?: string } }>;
@@ -111,7 +116,8 @@ describe('realm push against a prefix-form RRI realm (integration)', () => {
     writeLocalFile(localDir, 'hello.txt', 'hello\n');
     writeLocalFile(localDir, 'nested/card.gts', 'export const x = 1;\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runBoxel(['realm', 'push', localDir, realmUrl], { home });
+    expect(res.ok, res.stderr).toBe(true);
 
     let manifest = readManifest(localDir);
     expect(manifest.realmUrl).toBe(realmUrl);

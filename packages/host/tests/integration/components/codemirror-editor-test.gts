@@ -442,6 +442,143 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  // ── BFM format/size threading (CS-12112) ──
+
+  async function collectTargets(content: string): Promise<{
+    targets: CardWidgetTarget[];
+    element: HTMLElement;
+    destroy: () => void;
+  }> {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    let targets: CardWidgetTarget[] = [];
+    let state = cmContext.createEditorState({
+      content,
+      onDocChange: () => {},
+      onCardTargetsChange: (t: CardWidgetTarget[]) => {
+        targets = t;
+      },
+      onOpenCardSearch: () => {},
+    });
+    let view = new cmContext.EditorView({ state, parent: element });
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await settled();
+    return {
+      targets,
+      element,
+      destroy: () => {
+        view.destroy();
+        element.remove();
+      },
+    };
+  }
+
+  test('block fitted embed with explicit size threads format + size style', async function (assert) {
+    let { targets, element, destroy } = await collectTargets(
+      '::card[https://example.com/cards/1 | fitted w:400 h:300]',
+    );
+    try {
+      let target = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(target?.format, 'fitted', 'format is fitted');
+      assert.ok(
+        target?.style?.includes('width: 400px'),
+        'style carries the width',
+      );
+      assert.ok(
+        target?.style?.includes('height: 300px'),
+        'style carries the height',
+      );
+      assert.ok(
+        target?.style?.includes('overflow: hidden'),
+        'fitted style carries overflow: hidden',
+      );
+
+      let widget = element.querySelector('.cm-card-widget--block');
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-format'),
+        'fitted',
+        'widget DOM carries the format attribute',
+      );
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-width'),
+        '400',
+        'widget DOM carries the width attribute',
+      );
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-height'),
+        '300',
+        'widget DOM carries the height attribute',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('block isolated embed threads isolated format with no size style', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      '::card[https://example.com/cards/1 | isolated]',
+    );
+    try {
+      let target = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(target?.format, 'isolated', 'format is isolated');
+      assert.notOk(target?.style, 'isolated embed has no inline size style');
+    } finally {
+      destroy();
+    }
+  });
+
+  test('embeds without a size spec fall back to atom (inline) / embedded (block)', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      ':card[https://example.com/cards/1] and\n\n::card[https://example.com/cards/2]',
+    );
+    try {
+      let inline = targets.find((t) => t.kind === 'inline');
+      let block = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(inline?.format, 'atom', 'inline default is atom');
+      assert.strictEqual(
+        block?.format,
+        'embedded',
+        'block default is embedded',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('file embeds thread format + size style like card embeds', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      '::file[https://example.com/files/a.pdf | fitted w:400 h:300]\n\n::file[https://example.com/files/b.pdf | isolated]',
+    );
+    try {
+      let fitted = targets.find(
+        (t) => t.refType === 'file' && t.format === 'fitted',
+      );
+      assert.ok(fitted, 'a fitted file target is present');
+      assert.strictEqual(fitted?.refType, 'file', 'refType is file');
+      assert.ok(
+        fitted?.style?.includes('width: 400px'),
+        'file fitted target carries the width',
+      );
+      assert.ok(
+        fitted?.style?.includes('height: 300px'),
+        'file fitted target carries the height',
+      );
+      assert.ok(
+        fitted?.style?.includes('overflow: hidden'),
+        'file fitted target carries overflow: hidden',
+      );
+
+      let isolated = targets.find(
+        (t) => t.refType === 'file' && t.format === 'isolated',
+      );
+      assert.ok(isolated, 'isolated file target is present');
+      assert.notOk(isolated?.style, 'isolated file target has no size style');
+    } finally {
+      destroy();
+    }
+  });
+
   // ── Text insertion for card refs ──
 
   test('inserting :card[URL] text creates inline card ref', async function (assert) {

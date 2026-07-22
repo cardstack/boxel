@@ -25,7 +25,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   BaseDef,
@@ -62,7 +62,7 @@ export default class CardService extends Service {
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // This error will be used by check-correctness command to report size limit errors
@@ -85,7 +85,7 @@ export default class CardService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   async getAPI(): Promise<typeof CardAPI> {

@@ -3,44 +3,72 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { lint } from '../../src/commands/file/lint.ts';
-import { write } from '../../src/commands/file/write.ts';
-import { createRealm } from '../../src/commands/realm/create.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel file lint <path> --realm <url>` sources code either from a local
+// `--file` or by fetching <path> from the realm, POSTs it to the realm's
+// `_lint` endpoint, and (with --json) prints `{ ok, fixed, output, messages }`
+// on stdout. With --fix it writes the auto-fixed output back to the source.
+// We drive the installed binary and verify realm state in-process.
+
+interface LintJson {
+  ok: boolean;
+  error?: string;
+  fixed?: boolean;
+  output?: string;
+  messages?: {
+    ruleId: string | null;
+    severity: 1 | 2;
+    message: string;
+    line: number;
+    column: number;
+  }[];
+}
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
+let verifyPm: ProfileManager;
 
-async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
+/**
+ * Lint `source` (staged in a throwaway local file) with `--json`, returning
+ * the parsed lint result. `--file` is how the CLI accepts arbitrary source
+ * that doesn't already live in the realm.
+ */
+async function lintSource(source: string, filename: string): Promise<LintJson> {
+  let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-lint-'));
+  let file = path.join(dir, filename);
+  fs.writeFileSync(file, source, 'utf-8');
+  try {
+    let res = await runBoxel(
+      ['file', 'lint', filename, '--realm', realmUrl, '--file', file, '--json'],
+      { home },
+    );
+    return res.json<LintJson>();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-  return entry[0];
 }
 
 beforeAll(async () => {
   await startTestRealmServer();
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
+  verifyPm = reloadProfile(home);
 
-  realmUrl = await createTestRealm();
+  ({ realmUrl } = await createTestRealmViaCli(home));
 });
 
 afterAll(async () => {
@@ -51,7 +79,7 @@ afterAll(async () => {
 describe('file lint (integration)', () => {
   it('lints source via the realm _lint endpoint and returns a result', async () => {
     let source = 'export const x = 1;\n';
-    let result = await lint(realmUrl, source, 'test.gts', { profileManager });
+    let result = await lintSource(source, 'test.gts');
 
     expect(result.ok).toBe(true);
     expect(result).toHaveProperty('messages');
@@ -65,7 +93,7 @@ export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
 `;
-    let result = await lint(realmUrl, source, 'test.gts', { profileManager });
+    let result = await lintSource(source, 'test.gts');
 
     expect(result.ok).toBe(true);
     expect(result.fixed).toBe(true);
@@ -82,7 +110,7 @@ export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
 `;
-    let result = await lint(realmUrl, source, 'test.gts', { profileManager });
+    let result = await lintSource(source, 'test.gts');
 
     expect(result.ok).toBe(true);
     expect(result.fixed).toBe(true);
@@ -105,7 +133,7 @@ export class MyCard extends CardDef {
   </style>
 </template>
 `;
-    let result = await lint(realmUrl, source, 'test.gts', { profileManager });
+    let result = await lintSource(source, 'test.gts');
 
     expect(result.ok).toBe(true);
     expect(result.messages).toBeDefined();
@@ -123,24 +151,26 @@ export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
 `;
-      let tmpFile = path.join(
-        fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-fix-')),
-        'test-card.gts',
-      );
+      let tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-fix-'));
+      let tmpFile = path.join(tmpDir, 'test-card.gts');
       fs.writeFileSync(tmpFile, unfixedSource, 'utf-8');
 
       try {
-        let source = fs.readFileSync(tmpFile, 'utf-8');
-        let result = await lint(realmUrl, source, 'test-card.gts', {
-          profileManager,
-        });
-
-        expect(result.ok).toBe(true);
-        expect(result.fixed).toBe(true);
-        expect(result.output).toBeDefined();
-
-        // Simulate what the CLI --fix does for local files
-        fs.writeFileSync(tmpFile, result.output!, 'utf-8');
+        // --fix rewrites the local file in place with the auto-fixed output.
+        let res = await runBoxel(
+          [
+            'file',
+            'lint',
+            'test-card.gts',
+            '--realm',
+            realmUrl,
+            '--file',
+            tmpFile,
+            '--fix',
+          ],
+          { home },
+        );
+        expect(res.ok, res.stderr).toBe(true);
 
         let fixedContent = fs.readFileSync(tmpFile, 'utf-8');
         expect(fixedContent).toContain('import StringField from');
@@ -148,20 +178,30 @@ export class MyCard extends CardDef {
           '  @field name = contains(StringField);',
         );
 
-        // Lint the fixed content again — should have no more fixable changes
-        let secondPass = await lint(realmUrl, fixedContent, 'test-card.gts', {
-          profileManager,
-        });
-        expect(secondPass.ok).toBe(true);
-        expect(secondPass.fixed).toBe(false);
+        // Lint the fixed content again — should have no more fixable changes.
+        let secondPass = await runBoxel(
+          [
+            'file',
+            'lint',
+            'test-card.gts',
+            '--realm',
+            realmUrl,
+            '--file',
+            tmpFile,
+            '--json',
+          ],
+          { home },
+        );
+        expect(secondPass.ok, secondPass.stderr).toBe(true);
+        expect(secondPass.json<LintJson>().fixed).toBe(false);
       } finally {
-        fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
+        fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     });
   });
 
   describe('--fix without --file (realm file)', () => {
-    it('writes fixed output back to the realm via write()', async () => {
+    it('writes fixed output back to the realm', async () => {
       let unfixedSource = `import{CardDef}from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
@@ -169,29 +209,28 @@ export class MyCard extends CardDef {
 `;
       let filePath = 'fix-test-card.gts';
 
-      // Upload unfixed source to the realm
-      let uploadResult = await write(realmUrl, filePath, unfixedSource, {
-        profileManager,
+      // Upload unfixed source to the realm (setup stays in-process).
+      let uploadUrl = new URL(filePath, realmUrl).href;
+      let upload = await verifyPm.authedRealmFetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+          'Content-Type': 'application/vnd.card+source',
+        },
+        body: unfixedSource,
       });
-      expect(uploadResult.ok).toBe(true);
+      expect(upload.ok, `upload failed: ${upload.status}`).toBe(true);
 
-      // Lint it
-      let result = await lint(realmUrl, unfixedSource, filePath, {
-        profileManager,
-      });
-      expect(result.ok).toBe(true);
-      expect(result.fixed).toBe(true);
-      expect(result.output).toBeDefined();
+      // --fix without --file reads the file from the realm, lints it, and
+      // writes the auto-fixed output back to the realm.
+      let res = await runBoxel(
+        ['file', 'lint', filePath, '--realm', realmUrl, '--fix'],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
 
-      // Simulate what the CLI --fix does for realm files
-      let writeResult = await write(realmUrl, filePath, result.output!, {
-        profileManager,
-      });
-      expect(writeResult.ok).toBe(true);
-
-      // Read the file back from the realm and verify it's fixed
-      let readUrl = new URL(filePath, realmUrl).href;
-      let response = await profileManager.authedRealmFetch(readUrl, {
+      // Read the file back from the realm and verify it's fixed.
+      let response = await verifyPm.authedRealmFetch(uploadUrl, {
         method: 'GET',
         headers: { Accept: 'application/vnd.card+source' },
       });
@@ -203,17 +242,30 @@ export class MyCard extends CardDef {
   });
 
   it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    let srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-lint-src-'));
+    let srcFile = path.join(srcDir, 'test.gts');
+    fs.writeFileSync(srcFile, 'let x = 1;', 'utf-8');
 
     try {
-      let result = await lint(realmUrl, 'let x = 1;', 'test.gts', {
-        profileManager: emptyManager,
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('No active profile');
+      let res = await runBoxel(
+        [
+          'file',
+          'lint',
+          'test.gts',
+          '--realm',
+          realmUrl,
+          '--file',
+          srcFile,
+          '--json',
+        ],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
     } finally {
-      fs.rmSync(emptyDir, { recursive: true, force: true });
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+      fs.rmSync(srcDir, { recursive: true, force: true });
     }
   });
 });

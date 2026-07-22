@@ -7,14 +7,13 @@ import {
   getTestPrerenderer,
   stopTestPrerenderServer,
 } from '#realm-server/tests/helpers/index';
-import { ingestCard } from '../../src/commands/realm/ingest-card.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupJwtTestProfile,
 } from '../helpers/integration.ts';
+import { runBoxel, type BoxelResult } from '../helpers/run-boxel.ts';
 
 // Ingest against a real realm server with real card indexing: the realm is
 // seeded with an entry card whose dependency graph spans an ad hoc nested
@@ -127,10 +126,39 @@ const EXPECTED_INGESTED = [
 ];
 
 let realmHref: string;
-let profileManager: ProfileManager;
+let home: string;
 let cleanupProfile: () => void;
 let localDir: string;
-let result: { files: string[]; error?: string };
+let ingestResult: BoxelResult;
+
+// The set of files the CLI actually wrote into a local dir, relative to
+// it. Excludes the `.boxel-history` checkpoint metadata `boxel realm
+// ingest-card` also writes, so this reflects exactly the ingested card
+// graph — the subprocess boundary means we verify the copied set from
+// disk rather than from a returned `files` array.
+function listIngested(dir: string): string[] {
+  let out: string[] = [];
+  let walk = (rel: string) => {
+    for (let entry of fs.readdirSync(path.join(dir, rel), {
+      withFileTypes: true,
+    })) {
+      if (
+        entry.name === '.boxel-history' ||
+        entry.name === '.boxel-sync.json'
+      ) {
+        continue;
+      }
+      let childRel = rel ? path.join(rel, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        walk(childRel);
+      } else {
+        out.push(childRel);
+      }
+    }
+  };
+  walk('');
+  return out.sort();
+}
 
 beforeAll(async () => {
   let { realms } = await startTestRealmServer({
@@ -148,19 +176,26 @@ beforeAll(async () => {
   });
   realmHref = realms.find((r) => r.url === testRealmURL.href)!.url;
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupJwtTestProfile(profileManager, {
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupJwtTestProfile(testHome.profileManager, {
     user: ownerUserId,
     realmServerUrl: `${testRealmURL.origin}/`,
   });
 
   localDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-ingest-int-'));
-  result = await ingestCard(`${realmHref}widgets/gadget/gadget`, localDir, {
-    realm: realmHref,
-    profileManager,
-  });
+  ingestResult = await runBoxel(
+    [
+      'realm',
+      'ingest-card',
+      `${realmHref}widgets/gadget/gadget`,
+      localDir,
+      '--realm',
+      realmHref,
+    ],
+    { home, timeout: 600_000 },
+  );
 }, 600_000);
 
 afterAll(async () => {
@@ -177,8 +212,8 @@ afterAll(async () => {
 
 describe('realm ingest-card (integration)', () => {
   it('ingests the entry card graph: modules across nested dirs, test, instance, and Spec', () => {
-    expect(result.error, `ingest failed: ${result.error}`).toBeUndefined();
-    expect(result.files).toEqual(EXPECTED_INGESTED);
+    expect(ingestResult.ok, ingestResult.stderr).toBe(true);
+    expect(listIngested(localDir)).toEqual(EXPECTED_INGESTED);
   });
 
   it('preserves the directory structure so relative refs still resolve', () => {
@@ -205,22 +240,22 @@ describe('realm ingest-card (integration)', () => {
   it('ingests via non-URL @cardstack/ identifiers for both the card and --realm', async () => {
     // `@cardstack/<realm>/` resolves against the profile's realm-server
     // URL, so these identifiers name the same realm as realmHref. The card
-    // identifier and the realm option resolve independently in ingestCard.
+    // argument and the --realm option resolve independently.
     let rriDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-ingest-rri-'));
     try {
-      let rriResult = await ingestCard(
-        '@cardstack/test/widgets/gadget/gadget',
-        rriDir,
-        {
-          realm: '@cardstack/test/',
-          profileManager,
-        },
+      let rriResult = await runBoxel(
+        [
+          'realm',
+          'ingest-card',
+          '@cardstack/test/widgets/gadget/gadget',
+          rriDir,
+          '--realm',
+          '@cardstack/test/',
+        ],
+        { home, timeout: 120_000 },
       );
-      expect(
-        rriResult.error,
-        `ingest failed: ${rriResult.error}`,
-      ).toBeUndefined();
-      expect(rriResult.files).toEqual(EXPECTED_INGESTED);
+      expect(rriResult.ok, rriResult.stderr).toBe(true);
+      expect(listIngested(rriDir)).toEqual(EXPECTED_INGESTED);
     } finally {
       fs.rmSync(rriDir, { recursive: true, force: true });
     }

@@ -33,7 +33,7 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -46,7 +46,7 @@ export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -56,7 +56,7 @@ export default class HostModeService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

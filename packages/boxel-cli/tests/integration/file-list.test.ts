@@ -3,17 +3,24 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { listFiles } from '../../src/commands/file/list.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel file list --realm <url> --json` prints `{ filenames, error? }` on
+// stdout. We drive the installed binary and parse its JSON payload.
+
+interface ListJson {
+  filenames: string[];
+  error?: string;
+}
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 
@@ -28,10 +35,10 @@ beforeAll(async () => {
 
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -41,8 +48,12 @@ afterAll(async () => {
 
 describe('file list (integration)', () => {
   it('returns sorted filenames including seeded files', async () => {
-    let result = await listFiles(realmUrl, { profileManager });
+    let res = await runBoxel(['file', 'list', '--realm', realmUrl, '--json'], {
+      home,
+    });
+    expect(res.ok, res.stderr).toBe(true);
 
+    let result = res.json<ListJson>();
     expect(result.error).toBeUndefined();
     expect(result.filenames).toContain('hello.gts');
     expect(result.filenames).toContain('world.json');
@@ -52,19 +63,31 @@ describe('file list (integration)', () => {
   });
 
   it('returns error for an unreachable realm', async () => {
-    let result = await listFiles('http://127.0.0.1:1/', { profileManager });
+    let res = await runBoxel(
+      ['file', 'list', '--realm', 'http://127.0.0.1:1/', '--json'],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+
+    let result = res.json<ListJson>();
     expect(result.filenames).toEqual([]);
     expect(result.error).toBeDefined();
   });
 
   it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        ['file', 'list', '--realm', realmUrl, '--json'],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
 
-    let result = await listFiles(realmUrl, { profileManager: emptyManager });
-    expect(result.filenames).toEqual([]);
-    expect(result.error).toContain('No active profile');
-
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+      let result = res.json<ListJson>();
+      expect(result.filenames).toEqual([]);
+      expect(result.error).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });

@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
+import { htmlSafe } from '@ember/template';
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
@@ -16,7 +17,10 @@ import {
   CardContextName,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
-import { type BfmRefRange } from '@cardstack/runtime-common/bfm-card-references';
+import {
+  type BfmRefFormat,
+  type BfmRefRange,
+} from '@cardstack/runtime-common/bfm-card-references';
 import { consume } from 'ember-provide-consume-context';
 import {
   type BaseDef,
@@ -47,10 +51,13 @@ import PencilIcon from '@cardstack/boxel-icons/pencil';
 interface CardWidgetTarget {
   element: HTMLElement;
   cardId: string;
-  format: 'atom' | 'embedded';
+  format: BfmRefFormat;
   kind: 'inline' | 'block';
   // 'card' refs resolve to CardDef instances; 'file' refs to FileDef instances.
   refType: 'card' | 'file';
+  // Inline sizing derived from the directive's size specifier (width/height plus
+  // `overflow: hidden` for fitted). Undefined for non-fitted formats.
+  style?: string;
 }
 
 interface CardRenderTarget extends CardWidgetTarget {
@@ -995,7 +1002,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           t.cardId === pending[i].cardId &&
           t.kind === pending[i].kind &&
           t.refType === pending[i].refType &&
-          t.element === pending[i].element,
+          t.element === pending[i].element &&
+          // A size-only edit changes format/style without touching url/kind/
+          // refType/element — include them so the preview actually re-renders.
+          t.format === pending[i].format &&
+          t.style === pending[i].style,
       )
     ) {
       return;
@@ -1339,7 +1350,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 }}
                   {{#if (isInline target.kind)}}
                     <span
-                      class='codemirror-card-slot codemirror-card-slot--inline'
+                      class='codemirror-card-slot
+                        {{if
+                          (eq target.format 'atom')
+                          'codemirror-card-slot--inline'
+                          'codemirror-card-slot--inline-embed'
+                        }}'
+                      style={{if target.style (htmlSafe target.style)}}
                       data-test-codemirror-file-slot-inline={{if
                         (eq target.refType 'file')
                         ''
@@ -1363,6 +1380,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   {{else}}
                     <div
                       class='codemirror-card-slot codemirror-card-slot--block'
+                      style={{if target.style (htmlSafe target.style)}}
                       data-test-codemirror-file-slot-block={{if
                         (eq target.refType 'file')
                         ''
@@ -1634,6 +1652,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           padding: 1px 6px;
           font-size: 0.85em;
           cursor: pointer;
+        }
+
+        /* Inline embeds with an explicit non-atom format flow inline-block so a
+           sized card sits in the text run without the atom pill's flex chrome,
+           mirroring the saved/preview markdown renderers. */
+        .codemirror-editor :deep(.codemirror-card-slot--inline-embed) {
+          display: inline-block;
+          vertical-align: middle;
         }
 
         .codemirror-editor :deep(.codemirror-card-slot--block) {

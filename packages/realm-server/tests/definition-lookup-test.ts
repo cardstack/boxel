@@ -4,15 +4,20 @@ import { basename } from 'path';
 import {
   CachingDefinitionLookup,
   internalKeyFor,
+  logger,
   trimExecutableExtension,
   type ErrorEntry,
+  type JobInfo,
   type ModuleDefinitionResult,
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
   type Prerenderer,
+  type Reader,
   rri,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { preWarmModulesTable } from '@cardstack/runtime-common/index-runner/prewarm-modules';
+import type { DependencyIndexRow } from '@cardstack/runtime-common/index-writer';
 import {
   setupPermissionedRealmsCached,
   createVirtualNetwork,
@@ -2716,6 +2721,140 @@ module(basename(import.meta.filename), function () {
         rows.length,
         0,
         'pre-warm persisted no row (no error_doc) for the failed module',
+      );
+    });
+
+    test('pre-warm sweep warms only realm-own modules, skipping cross-realm deps', async function (assert) {
+      // The populate keys every row on the job realm's cache context, while
+      // the render-phase reader keys a module's row on the realm the module
+      // lives in. A cross-realm dep (a base module, an icon module) pulled in
+      // through the deps layer must therefore be skipped: warming it would
+      // fire a real prerender and persist a row under a key no reader ever
+      // consults — for a realm whose instances depend on the shared base
+      // modules, that is ~a hundred wasted serial prerenders on the critical
+      // path of every fresh publish.
+      let virtualNetwork = createVirtualNetwork();
+      let prerenderedModuleUrls: string[] = [];
+      let capturingPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderedModuleUrls.push(args.url);
+          let moduleURL = new URL(args.url);
+          let modulePathWithoutExtension = moduleURL.href.replace(
+            /\.(gts|ts)$/,
+            '',
+          );
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {
+              [`${modulePathWithoutExtension}/Example`]: {
+                type: 'definition',
+                moduleURL: moduleURL.href,
+                definition: {
+                  type: 'card-def',
+                  codeRef: { module: rri(moduleURL.href), name: 'Example' },
+                  displayName: 'Example',
+                  fields: {},
+                  fieldDefs: {},
+                },
+                types: [],
+              },
+            },
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        capturingPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+
+      let sweepModule = `${realmURL}pet.gts`;
+      let realmOwnHelper = `${realmURL}lib/helpers.ts`;
+      let baseDep = 'https://cardstack.com/base/card-api';
+      let iconDep =
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rocket';
+      let instanceUrl = `${realmURL}Pet/1.json`;
+      // Never consulted: the instance's deps row below supplies the dep
+      // signal, so the novel-`.json` disk fallback stays untaken.
+      let unusedReader: Reader = {
+        readFile: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        readStream: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        mtimes: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+      };
+      let jobInfo: JobInfo = { jobId: 1, reservationId: 1, priority: 10 };
+
+      let warmed = await preWarmModulesTable({
+        realmURL: new URL(realmURL),
+        invalidations: [new URL(instanceUrl)],
+        allRealmCardModules: [sweepModule],
+        definitionLookup: workerLookup,
+        virtualNetwork,
+        reader: unusedReader,
+        getDependencyRows: async () =>
+          [
+            {
+              url: instanceUrl,
+              type: 'instance',
+              deps: [realmOwnHelper, baseDep, iconDep],
+              hasError: false,
+              isDeleted: false,
+              errorDoc: null,
+            },
+          ] as DependencyIndexRow[],
+        getModuleCacheContext: async () => ({
+          resolvedRealmURL: realmURL,
+          cacheScope: 'realm-auth' as const,
+          authUserId: testUserId,
+        }),
+        prerenderUserId: testUserId,
+        jobPriority: 10,
+        jobInfo,
+        log: logger('test-prewarm'),
+        perfLog: logger('test-prewarm-perf'),
+      });
+
+      assert.strictEqual(
+        warmed,
+        2,
+        'only the realm-own modules were warmed (sweep module + deps-layer helper)',
+      );
+      assert.deepEqual(
+        prerenderedModuleUrls.sort(),
+        [sweepModule, realmOwnHelper].sort(),
+        'the prerenderer fired only for realm-own modules',
+      );
+      let rows = (await adapter.execute(`SELECT url FROM modules`)) as {
+        url: string;
+      }[];
+      assert.strictEqual(
+        rows.length,
+        2,
+        'exactly the two realm-own modules were persisted',
+      );
+      assert.ok(
+        rows.every((row) => row.url.startsWith(realmURL)),
+        `every persisted module row is realm-own (got: ${rows
+          .map((row) => row.url)
+          .join(', ')})`,
       );
     });
   });

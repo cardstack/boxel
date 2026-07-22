@@ -26,7 +26,7 @@ import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmInfoService from './realm-info-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 const log = logger('loader-service');
 
@@ -34,14 +34,14 @@ export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
     if (isTesting()) {
       // clears the fetch cache and SSR-injected scoped styles in between tests
       this.resetState();
