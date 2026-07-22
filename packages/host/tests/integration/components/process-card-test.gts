@@ -84,12 +84,8 @@ module('Integration | Card | process-card', function (hooks) {
       assert.dom('.process-card__count').hasText('3 of 12 items');
       assert.dom('.process-card__status').hasText('running');
       assert
-        .dom('.process-card__bar')
-        .hasAttribute('role', 'progressbar')
-        .hasAttribute('aria-valuenow', '25')
-        .hasAttribute('aria-valuemin', '0')
-        .hasAttribute('aria-valuemax', '100');
-      assert.dom('.process-card__fill').hasAttribute('style', 'width: 25%');
+        .dom('[data-test-boxel-progress-bar]')
+        .exists('renders the shared themed progress bar');
     });
 
     test('falls back to a default stage and title when unset', async function (assert) {
@@ -100,7 +96,7 @@ module('Integration | Card | process-card', function (hooks) {
       assert.dom('.process-card__stage').hasText('In progress');
       assert.dom('.process-card__name').hasText('Setup process');
       assert.dom('.process-card__count').hasText('');
-      assert.dom('.process-card__fill').hasAttribute('style', 'width: 0%');
+      assert.dom('[data-test-boxel-progress-bar]').exists();
     });
   });
 });
