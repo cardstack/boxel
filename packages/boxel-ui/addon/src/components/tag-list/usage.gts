@@ -6,7 +6,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { cssVar } from '../../helpers.ts';
+import { cssVar } from '../../helpers.gts';
 import TagList, { type TagItem } from './index.gts';
 
 export default class TagListUsage extends Component {

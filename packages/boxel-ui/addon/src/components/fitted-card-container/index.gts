@@ -6,7 +6,7 @@ import {
   fittedFormatById,
   fittedFormatIds,
   sanitizeHtmlSafe,
-} from '../../helpers.ts';
+} from '../../helpers.gts';
 
 interface Signature {
   Args: {

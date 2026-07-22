@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, concat, hash } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 
-import { cn, eq, not, or, sanitizeHtml } from '../../helpers.ts';
+import { cn, eq, not, or, sanitizeHtml } from '../../helpers.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
 export type BoxelButtonKind =
