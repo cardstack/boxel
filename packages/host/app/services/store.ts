@@ -1612,6 +1612,46 @@ export default class StoreService extends Service implements StoreInterface {
     return a === b || this.peek(a) === this.peek(b);
   }
 
+  // TEMPORARY hang tripwire (CS-11450 instance-id canonicalization): converts a
+  // silent store-key-divergence hang into a fast, self-describing failure so CI
+  // pinpoints the divergent key instead of timing out the shard after ~75min.
+  // Remove once the keying is confirmed consistent.
+  async #awaitWithTripwire<T>(
+    promise: Promise<T>,
+    label: string,
+    key: string,
+  ): Promise<T> {
+    let settled = false;
+    promise.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let tripwire = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        let diag =
+          `[HANG-TRIPWIRE] ${label} unsettled after 90s. ` +
+          `awaited key=${JSON.stringify(key)} ` +
+          `asURL(key)=${JSON.stringify(asURL(key, this.network.virtualNetwork))} ` +
+          `inflightGetCards=${JSON.stringify([...this.inflightGetCards.keys()])} ` +
+          `inflightCardLoads=${JSON.stringify([...this.inflightCardLoads.keys()])} ` +
+          `referenceCount=${JSON.stringify([...this.referenceCount.keys()])}`;
+        console.error(diag);
+        reject(new Error(diag));
+      }, 90_000);
+    });
+    try {
+      return await Promise.race([promise, tripwire]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
   async waitForCardLoad(cardId: string): Promise<void> {
     let normalizedId = asURL(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
@@ -1619,7 +1659,11 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let inflightLoad = this.inflightCardLoads.get(normalizedId);
     if (inflightLoad) {
-      await inflightLoad.promise;
+      await this.#awaitWithTripwire(
+        inflightLoad.promise,
+        'waitForCardLoad',
+        normalizedId,
+      );
     }
   }
 
@@ -1688,9 +1732,13 @@ export default class StoreService extends Service implements StoreInterface {
         }
         let instanceOrError = this.peekError(url) ?? this.peek(url);
         if (!instanceOrError) {
-          instanceOrError = await this.getCardInstance({
-            idOrDoc: url,
-          });
+          instanceOrError = await this.#awaitWithTripwire(
+            this.getCardInstance({
+              idOrDoc: url,
+            }),
+            'wireUpNewReference:getCardInstance',
+            url,
+          );
           this.setIdentityContext(instanceOrError);
         }
         await this.startAutoSaving(instanceOrError);
