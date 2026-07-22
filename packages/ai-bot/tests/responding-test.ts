@@ -399,9 +399,76 @@ module('Responding', (hooks) => {
       assert.equal(telemetry.canceled, false, 'not canceled');
       assert.equal(telemetry.roomId, 'room-id', 'roomId recorded');
       assert.equal(telemetry.agentId, 'abc123agentId', 'agentId recorded');
+      assert.ok(
+        telemetry.streamMs !== undefined &&
+          telemetry.streamMs <= telemetry.durationMs,
+        'streamMs isolates the streaming window and is no larger than whole-turn durationMs',
+      );
     } finally {
       delete process.env.AI_BOT_STREAMING_MODE;
     }
+  });
+
+  test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {
+    // Default mode is room-edits with no preview target — the "before" side of
+    // the streaming-mode comparison, where each mid-turn edit is its own room
+    // event. Pins that this stays high, so a regression that stopped counting
+    // mid-turn edits can't silently collapse it to ~2 like the other modes.
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'room-edits', 'default mode is room-edits');
+    assert.ok(
+      telemetry.roomEvents > 2,
+      `room-edits emits a room event per mid-turn edit (got ${telemetry.roomEvents})`,
+    );
+    assert.equal(
+      telemetry.toDeviceEvents,
+      0,
+      'room-edits never uses the to-device channel',
+    );
+  });
+
+  test('per-turn telemetry is emitted once for a turn that errors without finalize', async () => {
+    // Several error paths in main.ts end a turn via onError() without ever
+    // calling finalize(); those turns still emit room events, so telemetry has
+    // to land from onError() too or the comparison loses them. Count actual
+    // emissions (guard-passes), not method invocations, by watching the
+    // telemetryLogged flag flip.
+    let emits = 0;
+    const responderAny = responder as unknown as {
+      logTurnTelemetry: () => void;
+      telemetryLogged: boolean;
+    };
+    const original = responderAny.logTurnTelemetry.bind(responder);
+    responderAny.logTurnTelemetry = () => {
+      const before = responderAny.telemetryLogged;
+      original();
+      if (!before && responderAny.telemetryLogged) {
+        emits++;
+      }
+    };
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial'));
+    await clock.tickAsync(300);
+    assert.equal(emits, 0, 'nothing is logged mid-turn');
+
+    await responder.onError('boom');
+    assert.equal(emits, 1, 'the error path emits the telemetry line');
+    assert.ok(
+      responder.turnTelemetry.roomEvents >= 2,
+      'the errored turn reports the room events it emitted (placeholder + error)',
+    );
+
+    // A late finalize() must not emit a second line for the same turn.
+    await responder.finalize();
+    assert.equal(emits, 1, 'the once-per-turn guard suppresses a duplicate');
   });
 
   test('`to-device` streaming mode without a target device falls back to `off` behavior', async () => {

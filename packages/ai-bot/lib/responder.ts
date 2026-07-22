@@ -59,14 +59,18 @@ export class Responder {
   private streamPreviewTarget: { userId: string; deviceId: string } | undefined;
   private _streamPreviewSequence = 0;
 
-  // Per-turn telemetry, logged once from finalize() to compare streaming modes.
-  // startedAt is set at construction — the turn boundary as the Responder sees
-  // it. Room-event count lives on the publisher; to-device previews and token
-  // usage are tallied here.
+  // Per-turn telemetry, logged once per turn to compare streaming modes.
+  // startedAt is the turn boundary as the Responder sees it (construction, i.e.
+  // before prompt construction and the per-user cost-lock wait); streamStartedAt
+  // marks the first chunk, so streamMs isolates the generation+streaming+finalize
+  // window from that mode-independent pre-generation time. Room-event count lives
+  // on the publisher; to-device previews and token usage are tallied here.
   private startedAt = Date.now();
+  private streamStartedAt: number | undefined;
   private toDeviceEventsEmitted = 0;
   private promptTokens: number | undefined;
   private completionTokens: number | undefined;
+  private telemetryLogged = false;
 
   constructor(
     client: MatrixClient,
@@ -244,6 +248,10 @@ export class Responder {
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
     snapshot: ChatCompletionSnapshot,
   ) {
+    // Mark the start of the streaming window on the first chunk so streamMs
+    // measures generation+streaming+finalize, not the pre-generation wait.
+    this.streamStartedAt ??= Date.now();
+
     // reasoning does not support snapshots, so we need to handle the delta
     const newReasoningContent = (
       chunk.choices?.[0]?.delta as { reasoning?: string }
@@ -315,7 +323,14 @@ export class Responder {
         agentId: this.matrixResponsePublisher.agentId,
       },
     });
-    return await this.matrixResponsePublisher.sendError(error, opts);
+    let result = await this.matrixResponsePublisher.sendError(error, opts);
+    // An errored turn still emits room events (the placeholder + this error
+    // event, plus any mid-turn edits already sent), and several error paths in
+    // main.ts end the turn here without ever calling finalize(). Log telemetry
+    // so that room-event volume is not missing from the comparison; the guard
+    // in logTurnTelemetry keeps it to a single line when finalize() also runs.
+    this.logTurnTelemetry();
+    return result;
   }
 
   async flush() {
@@ -357,10 +372,17 @@ export class Responder {
 
   // Per-turn measurements used to compare streaming modes. Exposed as a getter
   // so tests can assert the counts directly rather than parse the log line.
+  // durationMs is whole-turn wall-clock (includes pre-generation queue/lock
+  // wait); streamMs isolates the streaming window and is undefined for turns
+  // that errored before the first chunk.
   get turnTelemetry() {
     return {
       mode: this.streamingMode,
       durationMs: Date.now() - this.startedAt,
+      streamMs:
+        this.streamStartedAt === undefined
+          ? undefined
+          : Date.now() - this.streamStartedAt,
       roomEvents: this.matrixResponsePublisher.roomEventsEmitted,
       toDeviceEvents: this.toDeviceEventsEmitted,
       promptTokens: this.promptTokens,
@@ -375,11 +397,19 @@ export class Responder {
   // One structured, greppable line per turn so a scripted load run can compare
   // Matrix event volume and latency across streaming modes in Loki. Keep it
   // single-line key=value to stay consistent with the repo's other
-  // request-timing channels (e.g. realm:requests `dur=`).
+  // request-timing channels (e.g. realm:requests `dur=`). Fires at most once
+  // per turn — from finalize() on the normal/canceled paths, or from onError()
+  // on the error paths that never finalize — so every turn that emitted room
+  // events also emits exactly one line.
   private logTurnTelemetry() {
+    if (this.telemetryLogged) {
+      return;
+    }
+    this.telemetryLogged = true;
     let t = this.turnTelemetry;
     log.info(
       `[turn-telemetry] mode=${t.mode} durationMs=${t.durationMs} ` +
+        `streamMs=${t.streamMs ?? ''} ` +
         `roomEvents=${t.roomEvents} toDeviceEvents=${t.toDeviceEvents} ` +
         `promptTokens=${t.promptTokens ?? ''} ` +
         `completionTokens=${t.completionTokens ?? ''} ` +
