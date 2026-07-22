@@ -1899,6 +1899,30 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'serves the generic shell for a non-public realm',
         );
       });
+
+      test('a non-public realm does not disclose bare routes to a generic Accept header', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        // The bare-path gate consults the routing map for */* requests; if it
+        // did so without checking public read, a real route would answer 200
+        // (generic shell) while a non-route 404s — enumerating private routes.
+        let routed = await request
+          .get(`${publishedRealmPath}pricing`) // a real rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+        let bogus = await request
+          .get(`${publishedRealmPath}not-a-route`) // no rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          routed.status,
+          bogus.status,
+          `a routed and a non-routed bare path are indistinguishable on a non-public realm (routed=${routed.status}, bogus=${bogus.status})`,
+        );
+      });
     },
   );
 });

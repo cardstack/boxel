@@ -255,8 +255,18 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // module resolver (→ 404) when the path also matches no routing
           // rule. Without this, the bare form 404s while the trailing-slash
           // form — which skips this gate via isIndexRequest — renders.
+          //
+          // The rule match is additionally gated on public read: consulting
+          // the routing map for a non-public realm would leak which bare
+          // paths are configured routes via the 200-vs-404 difference (a real
+          // route falls through to the generic 200 shell, a non-route 404s).
+          // Requiring public read makes routed and non-routed bare paths
+          // behave identically (both next() → 404) on a non-public realm.
           let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
-          if (!matchedRule) {
+          if (
+            !matchedRule ||
+            !(await hasPublicPermissions(matchedRule.realm, routingDeps))
+          ) {
             return next();
           }
         }
