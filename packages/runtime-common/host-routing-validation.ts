@@ -9,10 +9,13 @@ const VALID_PATH_PATTERN = /^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/;
  * Canonical form of a routing rule path: a trailing slash is stripped so
  * `/pricing/` and `/pricing` compare and match identically, with the realm
  * root `/` preserved. This is the single source of truth for that
- * normalization — `Realm.getHostRoutingMap` uses it to build the map, and
- * `findDuplicateRoutingPaths` / `validateRoutingPath` use it so the editor's
- * collision detection and advisories agree with how routes actually resolve.
- * Callers that care about surrounding whitespace should `trim()` first.
+ * normalization across every place a route path is compared:
+ * `Realm.getHostRoutingMap` uses it to build the map, `findDuplicateRoutingPaths`
+ * / `validateRoutingPath` use it so the editor's collision detection and
+ * advisories agree with how routes resolve, and the host's
+ * `HostModeService.resolveRoutedPath` uses it to match the injected map keys
+ * against the browser path. Callers that care about surrounding whitespace
+ * should `trim()` first.
  */
 export function normalizeRoutingPath(path: string): string {
   return path.replace(/\/+$/, '') || '/';
