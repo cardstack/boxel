@@ -262,10 +262,10 @@ export class Prerenderer {
         // instead of racing a background close at the pool ceiling
         // (which reads as "no standby available" and needlessly
         // routes that visit through the browser-restart recovery
-        // lane). That guarantee is scoped to visits arriving after
-        // this disposal: a waiter already holding the tab-queue
-        // lease when the cancel lands still receives the doomed
-        // page, since the lease handoff carries no revalidation.
+        // lane). A waiter that received the tab-queue lease in the
+        // window between release and this disposal is covered too:
+        // PagePool revalidates the lease after acquire and re-selects
+        // a live page rather than handing back the doomed one.
         // The shared BrowserContext is retained so the next visit
         // reuses the warm HTTP cache rather than paying the cold
         // module-source waterfall.
