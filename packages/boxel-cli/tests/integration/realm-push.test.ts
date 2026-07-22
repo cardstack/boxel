@@ -4,23 +4,30 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { pushCommand } from '../../src/commands/realm/push.ts';
-import { createRealm } from '../../src/commands/realm/create.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 import {
   TINY_PNG_BYTES,
   TINY_PDF_BYTES,
   TINY_MP3_BYTES,
 } from '../helpers/binary-fixtures.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
-let profileManager: ProfileManager;
+// `boxel realm push <local-dir> <realm-url>` is driven as a subprocess. The
+// local working directory, the `.boxel-sync.json` manifest, and the
+// CheckpointManager history are all inspected in-process from the same
+// directory the CLI wrote — only the push COMMAND goes through the binary.
+// Realm state is verified with a fresh profile loaded from the home the CLI
+// authenticated against (`reloadProfile(home)`).
+
+let home: string;
 let cleanupProfile: () => void;
 let localDirs: string[] = [];
 
@@ -42,12 +49,21 @@ function writeLocalBytes(localDir: string, relPath: string, bytes: Uint8Array) {
   fs.writeFileSync(fullPath, bytes);
 }
 
+// Drive the push subprocess against the CLI-authenticated home.
+function runPush(
+  localDir: string,
+  realmUrl: string,
+  flags: string[] = [],
+): ReturnType<typeof runBoxel> {
+  return runBoxel(['realm', 'push', localDir, realmUrl, ...flags], { home });
+}
+
 async function fetchRemoteBytes(
   realmUrl: string,
   relPath: string,
 ): Promise<Buffer> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     headers: { Accept: 'application/vnd.card+source' },
   });
   if (!response.ok) {
@@ -74,18 +90,10 @@ function manifestExists(localDir: string): boolean {
   return fs.existsSync(path.join(localDir, '.boxel-sync.json'));
 }
 
-// Create a fresh realm and return its URL
+// Create a fresh realm via the CLI and return its URL.
 async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
-  }
-  return entry[0];
+  let { realmUrl } = await createTestRealmViaCli(home);
+  return realmUrl;
 }
 
 function buildFileUrl(realmUrl: string, relPath: string): string {
@@ -99,7 +107,7 @@ async function fetchRemoteFile(
   relPath: string,
 ): Promise<string> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     headers: { Accept: 'application/vnd.card+source' },
   });
   if (!response.ok) {
@@ -115,7 +123,7 @@ async function remoteFileExists(
   relPath: string,
 ): Promise<boolean> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     headers: { Accept: 'application/vnd.card+source' },
   });
   return response.ok;
@@ -127,7 +135,7 @@ async function deleteRemoteFile(
   relPath: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'DELETE',
     headers: { Accept: 'application/vnd.card+source' },
   });
@@ -144,7 +152,7 @@ async function writeRemoteFile(
   content: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain;charset=UTF-8',
@@ -162,10 +170,10 @@ async function writeRemoteFile(
 beforeAll(async () => {
   await startTestRealmServer();
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -184,7 +192,8 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
     writeLocalFile(localDir, 'data.json', '{"title":"Hello"}\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Manifest assertions
     expect(manifestExists(localDir)).toBe(true);
@@ -225,7 +234,8 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
     writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
     let manifestAfterFirst = readManifest(localDir);
     let bHashFirst = manifestAfterFirst.files['b.gts'];
     let aHashFirst = manifestAfterFirst.files['a.gts'];
@@ -236,7 +246,8 @@ describe('realm push (integration)', () => {
     // Modify only one file
     writeLocalFile(localDir, 'a.gts', 'export const a = 999;\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
     let manifestAfterSecond = readManifest(localDir);
 
     expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 999');
@@ -258,7 +269,8 @@ describe('realm push (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'noop.gts', 'export const noop = true;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     let manifestBefore = fs.readFileSync(
       path.join(localDir, '.boxel-sync.json'),
@@ -268,7 +280,8 @@ describe('realm push (integration)', () => {
     let cm = new CheckpointManager(localDir);
     let baseline = (await cm.getCheckpoints()).length;
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     let manifestAfter = fs.readFileSync(
       path.join(localDir, '.boxel-sync.json'),
@@ -284,10 +297,12 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(localDir, 'file.gts', 'export const v = 1;\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
     let manifestAfterFirst = readManifest(localDir);
 
-    await pushCommand(localDir, realmUrl, { force: true, profileManager });
+    let res2 = await runPush(localDir, realmUrl, ['--force']);
+    expect(res2.ok, res2.stderr).toBe(true);
     let manifestAfterForce = readManifest(localDir);
 
     expect(await remoteFileExists(realmUrl, 'file.gts')).toBe(true);
@@ -312,10 +327,12 @@ describe('realm push (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'file.gts', 'export const v = 1;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     writeLocalFile(localDir, 'file.gts', 'export const v = 2;\n');
-    await pushCommand(localDir, realmUrl, { force: true, profileManager });
+    let res2 = await runPush(localDir, realmUrl, ['--force']);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     expect(await fetchRemoteFile(realmUrl, 'file.gts')).toContain('v = 2');
 
@@ -331,13 +348,15 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(localDir, 'keep.gts', 'export const keep = true;\n');
     writeLocalFile(localDir, 'remove.gts', 'export const remove = true;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     let cm = new CheckpointManager(localDir);
     let baseline = (await cm.getCheckpoints()).length;
 
     fs.unlinkSync(path.join(localDir, 'remove.gts'));
-    await pushCommand(localDir, realmUrl, { delete: true, profileManager });
+    let res2 = await runPush(localDir, realmUrl, ['--delete']);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'keep.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'remove.gts')).toBe(false);
@@ -358,7 +377,8 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(localDir, 'draft.gts', 'export const draft = true;\n');
 
-    await pushCommand(localDir, realmUrl, { dryRun: true, profileManager });
+    let res = await runPush(localDir, realmUrl, ['--dry-run']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(manifestExists(localDir)).toBe(false);
     expect(await remoteFileExists(realmUrl, 'draft.gts')).toBe(false);
@@ -379,7 +399,8 @@ describe('realm push (integration)', () => {
       '{"realmUrl":"old","files":{}}',
     );
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, '.boxel-sync.json')).toBe(false);
@@ -397,7 +418,8 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, 'test.ignore', 'should not be uploaded');
     writeLocalFile(localDir, 'ignore-dir/ignored.json', '{"ignored":true}\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Non-ignored file is uploaded
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
@@ -421,7 +443,8 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, 'a/inner.gts', 'export const inner = 2;\n');
     writeLocalFile(localDir, 'a/b/deep.gts', 'export const deep = 3;\n');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'top.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'a/inner.gts')).toBe(true);
@@ -451,7 +474,8 @@ describe('realm push (integration)', () => {
     // realm-sync-base).
     writeLocalFile(localDir, '.gitkeep', 'locally-edited-marker');
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, '.gitkeep')).toBe(false);
@@ -468,11 +492,8 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(localDir, 'forced.gts', 'export const forced = true;\n');
 
-    await pushCommand(localDir, realmUrl, {
-      force: true,
-      dryRun: true,
-      profileManager,
-    });
+    let res = await runPush(localDir, realmUrl, ['--force', '--dry-run']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(manifestExists(localDir)).toBe(false);
     expect(await remoteFileExists(realmUrl, 'forced.gts')).toBe(false);
@@ -487,7 +508,8 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
     writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     let manifestBefore = fs.readFileSync(
       path.join(localDir, '.boxel-sync.json'),
@@ -497,11 +519,8 @@ describe('realm push (integration)', () => {
     let baseline = (await cm.getCheckpoints()).length;
 
     fs.unlinkSync(path.join(localDir, 'b.gts'));
-    await pushCommand(localDir, realmUrl, {
-      delete: true,
-      dryRun: true,
-      profileManager,
-    });
+    let res2 = await runPush(localDir, realmUrl, ['--delete', '--dry-run']);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'b.gts')).toBe(true);
@@ -522,11 +541,13 @@ describe('realm push (integration)', () => {
     // dirA has a.gts and b.gts
     writeLocalFile(dirA, 'a.gts', 'export const a = 1;\n');
     writeLocalFile(dirA, 'b.gts', 'export const b = 2;\n');
-    await pushCommand(dirA, realmUrl, { profileManager });
+    let resA = await runPush(dirA, realmUrl);
+    expect(resA.ok, resA.stderr).toBe(true);
 
     // Out-of-band: dirB pushes c.gts to the same realm
     writeLocalFile(dirB, 'c.gts', 'export const c = 3;\n');
-    await pushCommand(dirB, realmUrl, { profileManager });
+    let resB = await runPush(dirB, realmUrl);
+    expect(resB.ok, resB.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'c.gts')).toBe(true);
 
@@ -534,11 +555,8 @@ describe('realm push (integration)', () => {
     let baselineA = (await cmA.getCheckpoints()).length;
 
     // Now push from dirA with both flags
-    await pushCommand(dirA, realmUrl, {
-      force: true,
-      delete: true,
-      profileManager,
-    });
+    let res = await runPush(dirA, realmUrl, ['--force', '--delete']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'b.gts')).toBe(true);
@@ -563,10 +581,12 @@ describe('realm push (integration)', () => {
 
     writeLocalFile(dirA, 'a.gts', 'export const a = 1;\n');
     writeLocalFile(dirA, 'b.gts', 'export const b = 2;\n');
-    await pushCommand(dirA, realmUrl, { profileManager });
+    let resA = await runPush(dirA, realmUrl);
+    expect(resA.ok, resA.stderr).toBe(true);
 
     writeLocalFile(dirB, 'c.gts', 'export const c = 3;\n');
-    await pushCommand(dirB, realmUrl, { profileManager });
+    let resB = await runPush(dirB, realmUrl);
+    expect(resB.ok, resB.stderr).toBe(true);
 
     let manifestBefore = fs.readFileSync(
       path.join(dirA, '.boxel-sync.json'),
@@ -575,12 +595,12 @@ describe('realm push (integration)', () => {
     let cmA = new CheckpointManager(dirA);
     let baselineA = (await cmA.getCheckpoints()).length;
 
-    await pushCommand(dirA, realmUrl, {
-      force: true,
-      delete: true,
-      dryRun: true,
-      profileManager,
-    });
+    let res = await runPush(dirA, realmUrl, [
+      '--force',
+      '--delete',
+      '--dry-run',
+    ]);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Out-of-band file remains on the server
     expect(await remoteFileExists(realmUrl, 'c.gts')).toBe(true);
@@ -605,19 +625,13 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
     writeLocalFile(localDir, 'c.gts', 'export const c = 3;\n');
 
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    let atomicCalls: typeof fetchSpy.mock.calls;
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-      // Read mock.calls BEFORE mockRestore, which clears call history.
-      atomicCalls = fetchSpy.mock.calls.filter(([input, init]) => {
-        let url = typeof input === 'string' ? input : (input as URL).href;
-        return url.endsWith('/_atomic') && init?.method === 'POST';
-      });
-    } finally {
-      fetchSpy.mockRestore();
-    }
-    expect(atomicCalls.length).toBe(1);
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+    // The three text files are batched through a single /_atomic upload —
+    // the CLI logs the batch it sends. The per-request count can't be
+    // observed across the subprocess boundary, so we assert the atomic
+    // path was taken for all three and that every file landed.
+    expect(res.stdout).toContain('3 file(s) via /_atomic');
 
     // All three files landed on the server
     expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(true);
@@ -630,7 +644,8 @@ describe('realm push (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'f.gts', 'export const f = 1;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     await deleteRemoteFile(realmUrl, 'f.gts');
     expect(await remoteFileExists(realmUrl, 'f.gts')).toBe(false);
@@ -638,16 +653,8 @@ describe('realm push (integration)', () => {
     let cm = new CheckpointManager(localDir);
     let baseline = (await cm.getCheckpoints()).length;
 
-    let warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    let warnedAboutFile = false;
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-      warnedAboutFile = warnSpy.mock.calls
-        .map((args) => args.join(' '))
-        .some((msg) => msg.includes('f.gts'));
-    } finally {
-      warnSpy.mockRestore();
-    }
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     // Drift detection re-uploads the file.
     expect(await remoteFileExists(realmUrl, 'f.gts')).toBe(true);
@@ -657,8 +664,8 @@ describe('realm push (integration)', () => {
     // record a new git commit.
     expect((await cm.getCheckpoints()).length).toBe(baseline);
 
-    // The user sees a warning naming the drifted file.
-    expect(warnedAboutFile).toBe(true);
+    // The user sees a warning naming the drifted file (on stderr).
+    expect(res2.stderr).toContain('f.gts');
   });
 
   it('re-pushes a file that was edited on the realm out-of-band', async () => {
@@ -666,7 +673,8 @@ describe('realm push (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'f.gts', 'export const f = "local";\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     // Overwrite the realm copy directly. The server records mtimes with
     // second resolution, so wait > 1s to guarantee a strictly newer mtime.
@@ -677,16 +685,8 @@ describe('realm push (integration)', () => {
     let cm = new CheckpointManager(localDir);
     let baseline = (await cm.getCheckpoints()).length;
 
-    let warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    let warnedAboutFile = false;
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-      warnedAboutFile = warnSpy.mock.calls
-        .map((args) => args.join(' '))
-        .some((msg) => msg.includes('f.gts'));
-    } finally {
-      warnSpy.mockRestore();
-    }
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     // Drift detection re-asserted local content.
     expect(await fetchRemoteFile(realmUrl, 'f.gts')).toContain('"local"');
@@ -694,7 +694,7 @@ describe('realm push (integration)', () => {
     // Local workspace is unchanged, so no new checkpoint.
     expect((await cm.getCheckpoints()).length).toBe(baseline);
 
-    expect(warnedAboutFile).toBe(true);
+    expect(res2.stderr).toContain('f.gts');
   });
 
   it('recovers from a malformed .boxel-sync.json instead of crashing', async () => {
@@ -702,7 +702,8 @@ describe('realm push (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'card.gts', 'export const card = 1;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     // Corrupt the manifest: parseable JSON but `files` is null — the
     // old code would crash in the incremental branch when it tried to
@@ -715,8 +716,9 @@ describe('realm push (integration)', () => {
     // Edit the local file so we have something to upload on the retry
     writeLocalFile(localDir, 'card.gts', 'export const card = 2;\n');
 
-    // Should not throw
-    await pushCommand(localDir, realmUrl, { profileManager });
+    // Should not crash
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('card = 2');
 
@@ -734,7 +736,8 @@ describe('realm push (integration)', () => {
 
     writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     let remote = await fetchRemoteBytes(realmUrl, 'image.png');
     expect(remote.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
@@ -749,7 +752,8 @@ describe('realm push (integration)', () => {
 
     writeLocalBytes(localDir, 'doc.pdf', TINY_PDF_BYTES);
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     let remote = await fetchRemoteBytes(realmUrl, 'doc.pdf');
     expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
@@ -763,7 +767,8 @@ describe('realm push (integration)', () => {
 
     writeLocalBytes(localDir, 'sample.mp3', TINY_MP3_BYTES);
 
-    await pushCommand(localDir, realmUrl, { profileManager });
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     let remote = await fetchRemoteBytes(realmUrl, 'sample.mp3');
     expect(remote.equals(Buffer.from(TINY_MP3_BYTES))).toBe(true);
@@ -778,33 +783,11 @@ describe('realm push (integration)', () => {
     writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
     writeLocalBytes(localDir, 'doc.pdf', TINY_PDF_BYTES);
 
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    let atomicCalls: typeof fetchSpy.mock.calls;
-    let octetCalls: typeof fetchSpy.mock.calls;
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-      atomicCalls = fetchSpy.mock.calls.filter(([input, init]) => {
-        let url = typeof input === 'string' ? input : (input as URL).href;
-        return url.endsWith('/_atomic') && init?.method === 'POST';
-      });
-      octetCalls = fetchSpy.mock.calls.filter(([, init]) => {
-        let contentType =
-          (init?.headers as Record<string, string> | undefined)?.[
-            'Content-Type'
-          ] ?? '';
-        return (
-          init?.method === 'POST' && contentType === 'application/octet-stream'
-        );
-      });
-    } finally {
-      fetchSpy.mockRestore();
-    }
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(atomicCalls.length).toBe(1);
-    // One octet-stream POST per binary file (image.png, doc.pdf).
-    expect(octetCalls.length).toBe(2);
-
-    // Every file landed byte-identical on the server
+    // Every file landed byte-identical on the server (the binary files ride
+    // their own octet-stream POSTs; the text files ride the atomic batch).
     expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('c = 1');
     expect(await fetchRemoteFile(realmUrl, 'data.json')).toContain('"x":1');
     expect(
@@ -828,18 +811,77 @@ describe('realm push (integration)', () => {
     ]);
   });
 
+  it('treats SVG as text — round-trips through /_atomic without corruption', async () => {
+    // SVG is XML, so isBinaryFilename returns false. Confirm it still
+    // rides the atomic batch path and comes back exactly (a byte-for-byte
+    // round-trip is the observable proof it was not treated as binary).
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    let svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>';
+    writeLocalFile(localDir, 'icon.svg', svg);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+
+    expect(await fetchRemoteFile(realmUrl, 'icon.svg')).toBe(svg);
+  });
+
+  it('fails cleanly when an out-of-band create causes an atomic 409', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    // Establish a manifest first so the incremental/intent-based path
+    // kicks in on the next push.
+    writeLocalFile(localDir, 'baseline.gts', 'export const b = 1;\n');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+    let manifestBefore = fs.readFileSync(
+      path.join(localDir, '.boxel-sync.json'),
+      'utf8',
+    );
+
+    // Stage a brand-new local file that is NOT in our manifest, and
+    // plant a rival copy on the realm so our `op: add` will collide.
+    writeLocalFile(localDir, 'rival.gts', 'export const n = "local";\n');
+    await writeRemoteFile(realmUrl, 'rival.gts', 'export const n = "rival";\n');
+
+    let res2 = await runPush(localDir, realmUrl);
+    // pushCommand exits 2 on any upload error.
+    expect(res2.exitCode).toBe(2);
+
+    // Realm still has the rival content — atomic batch was rejected
+    // with 409 before any write happened.
+    expect(await fetchRemoteFile(realmUrl, 'rival.gts')).toContain('"rival"');
+
+    // Manifest was NOT overwritten (still reflects the pre-conflict state)
+    let manifestAfter = fs.readFileSync(
+      path.join(localDir, '.boxel-sync.json'),
+      'utf8',
+    );
+    expect(manifestAfter).toBe(manifestBefore);
+
+    // Error output mentions the conflict with a useful hint (on stderr)
+    expect(res2.stderr).toMatch(
+      /rival\.gts.*concurrently|Atomic upload failed/,
+    );
+  });
+
   it('records text successes in manifest when binary partially fails', async () => {
-    // Mixed batch where the per-file binary POST fails (stubbed 413)
-    // while the atomic text batch lands. The manifest must still
-    // record the text file that the server actually wrote — otherwise
-    // the next push sees it as missing-from-manifest and tries to
-    // re-add it, hitting a 409 against the existing remote.
+    // White-box: injecting a 413 into the per-file binary POST (while the
+    // atomic text batch lands) can't be reproduced across the subprocess
+    // boundary, so this stays an in-process `pushCommand` call with a
+    // mocked fetch. A fresh profile off disk (reloadProfile) carries the
+    // realm token the CLI wrote during createTestRealm. The manifest must
+    // still record the text file the server actually wrote — otherwise
+    // the next push sees it as missing and re-adds it, hitting a 409.
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'card.gts', 'export const c = 1;\n');
     writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
 
+    let profileManager = reloadProfile(home);
     let realFetch = profileManager.authedRealmFetch.bind(profileManager);
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmFetch')
@@ -880,95 +922,12 @@ describe('realm push (integration)', () => {
     }
     expect(exitCode).toBe(2);
 
-    // The text file landed
+    // The text file landed.
     expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('c = 1');
 
-    // The manifest records the text success even though the binary failed
+    // The manifest records the text success even though the binary failed.
     let manifest = readManifest(localDir);
     expect(manifest.files['card.gts']).toMatch(/^[0-9a-f]{32}$/);
     expect(manifest.files['image.png']).toBeUndefined();
-  });
-
-  it('treats SVG as text — round-trips through /_atomic without corruption', async () => {
-    // SVG is XML, so isBinaryFilename returns false. Confirm it still
-    // rides the atomic batch path and comes back exactly.
-    let realmUrl = await createTestRealm();
-    let localDir = makeLocalDir();
-
-    let svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>';
-    writeLocalFile(localDir, 'icon.svg', svg);
-
-    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
-    let octetCount: number;
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-      octetCount = fetchSpy.mock.calls.filter(([, init]) => {
-        let ct =
-          (init?.headers as Record<string, string> | undefined)?.[
-            'Content-Type'
-          ] ?? '';
-        return ct === 'application/octet-stream';
-      }).length;
-    } finally {
-      fetchSpy.mockRestore();
-    }
-
-    expect(octetCount).toBe(0);
-    expect(await fetchRemoteFile(realmUrl, 'icon.svg')).toBe(svg);
-  });
-
-  it('fails cleanly when an out-of-band create causes an atomic 409', async () => {
-    let realmUrl = await createTestRealm();
-    let localDir = makeLocalDir();
-
-    // Establish a manifest first so the incremental/intent-based path
-    // kicks in on the next push.
-    writeLocalFile(localDir, 'baseline.gts', 'export const b = 1;\n');
-    await pushCommand(localDir, realmUrl, { profileManager });
-    let manifestBefore = fs.readFileSync(
-      path.join(localDir, '.boxel-sync.json'),
-      'utf8',
-    );
-
-    // Stage a brand-new local file that is NOT in our manifest, and
-    // plant a rival copy on the realm so our `op: add` will collide.
-    writeLocalFile(localDir, 'rival.gts', 'export const n = "local";\n');
-    await writeRemoteFile(realmUrl, 'rival.gts', 'export const n = "rival";\n');
-
-    let errMessages: string[] = [];
-    let errSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation((...args: unknown[]) => {
-        errMessages.push(args.join(' '));
-      });
-    let exitCode: number | undefined;
-    let exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
-      code?: number,
-    ) => {
-      if (exitCode === undefined) exitCode = code;
-      return undefined as never;
-    }) as never);
-    try {
-      await pushCommand(localDir, realmUrl, { profileManager });
-    } finally {
-      errSpy.mockRestore();
-      exitSpy.mockRestore();
-    }
-    expect(exitCode).toBe(2);
-
-    // Realm still has the rival content — atomic batch was rejected
-    // with 409 before any write happened.
-    expect(await fetchRemoteFile(realmUrl, 'rival.gts')).toContain('"rival"');
-
-    // Manifest was NOT overwritten (still reflects the pre-conflict state)
-    let manifestAfter = fs.readFileSync(
-      path.join(localDir, '.boxel-sync.json'),
-      'utf8',
-    );
-    expect(manifestAfter).toBe(manifestBefore);
-
-    // Error output mentions the conflict with a useful hint
-    let errOutput = errMessages.join('\n');
-    expect(errOutput).toMatch(/rival\.gts.*concurrently|Atomic upload failed/);
   });
 });

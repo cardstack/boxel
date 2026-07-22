@@ -3,19 +3,23 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { sync } from '../../src/commands/realm/sync.ts';
-import { status, statusAll } from '../../src/commands/realm/status.ts';
-import { createRealm } from '../../src/commands/realm/create.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
 } from '../helpers/integration.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel realm sync status [local-dir]` is driven as a subprocess. The command
+// has no `--json` mode, so its structured result is asserted against the
+// human-readable output the CLI renders (ANSI colors are disabled because the
+// piped stdout is not a TTY). Local-dir / manifest state and realm state are
+// set up and inspected in-process.
+
+let home: string;
 let cleanupProfile: () => void;
 let localDirs: string[] = [];
 
@@ -43,16 +47,93 @@ function manifestMtime(localDir: string): number {
   return fs.statSync(path.join(localDir, '.boxel-sync.json')).mtimeMs;
 }
 
-async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
+// Drive the sync subprocess (used to establish baselines).
+function runSync(
+  localDir: string,
+  realmUrl: string,
+  flags: string[] = [],
+): ReturnType<typeof runBoxel> {
+  return runBoxel(['realm', 'sync', localDir, realmUrl, ...flags], { home });
+}
+
+// Drive the status subprocess. `status` is nested under `sync`
+// (`realm sync status`).
+function runStatus(
+  dir: string,
+  flags: string[] = [],
+): ReturnType<typeof runBoxel> {
+  return runBoxel(['realm', 'sync', 'status', dir, ...flags], { home });
+}
+
+// --- Parse `renderStatus` output back into structured entries -------------
+//
+// renderStatus groups changed files under section headers, one item per line
+// as `   <marker> <file>`. We map each header to the same status string the
+// programmatic `status()` result used, so the ported assertions read the same.
+
+type ParsedStatus =
+  | 'new-remote'
+  | 'modified-remote'
+  | 'new-local'
+  | 'modified-local'
+  | 'conflict'
+  | 'deleted-local'
+  | 'deleted-remote'
+  | 'pulled';
+
+const HEADER_TO_STATUS: Array<[string, ParsedStatus]> = [
+  ['New on remote', 'new-remote'],
+  ['Modified on remote', 'modified-remote'],
+  ['New locally', 'new-local'],
+  ['Modified locally', 'modified-local'],
+  ['Conflicts', 'conflict'],
+  ['Deleted locally', 'deleted-local'],
+  ['Deleted on remote', 'deleted-remote'],
+  ['Pulled', 'pulled'],
+];
+
+function parseStatusEntries(
+  stdout: string,
+): Array<{ file: string; status: ParsedStatus }> {
+  let current: ParsedStatus | null = null;
+  let entries: Array<{ file: string; status: ParsedStatus }> = [];
+  for (let raw of stdout.split('\n')) {
+    // Headers are matched before item lines because the deleted-file section
+    // headers themselves begin with `- ` (which otherwise looks like an item).
+    let header = HEADER_TO_STATUS.find(([h]) => raw.includes(h));
+    if (header) {
+      current = header[1];
+      continue;
+    }
+    let item = raw.trim().match(/^([+~!✓-])\s+(.+?)\s*$/);
+    if (item && current) {
+      entries.push({ file: item[2], status: current });
+    }
   }
-  return entry[0];
+  return entries;
+}
+
+// The status-of-a-file, excluding the "Pulled" section — mirrors the original
+// `statusesFor(result, file)` which read `result.changes`.
+function statusesFor(stdout: string, file: string): string[] {
+  return parseStatusEntries(stdout)
+    .filter((e) => e.file === file && e.status !== 'pulled')
+    .map((e) => e.status);
+}
+
+function pulledFiles(stdout: string): string[] {
+  return parseStatusEntries(stdout)
+    .filter((e) => e.status === 'pulled')
+    .map((e) => e.file);
+}
+
+function isInSync(stdout: string): boolean {
+  return stdout.includes('✓ In sync');
+}
+
+async function createTestRealm(): Promise<string> {
+  let { realmUrl } = await createTestRealmViaCli(home);
+  return realmUrl;
 }
 
 function buildFileUrl(realmUrl: string, relPath: string): string {
@@ -66,7 +147,7 @@ async function writeRemoteFile(
   content: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain;charset=UTF-8',
@@ -86,7 +167,7 @@ async function deleteRemoteFile(
   relPath: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'DELETE',
     headers: { Accept: 'application/vnd.card+source' },
   });
@@ -109,24 +190,18 @@ async function establishBaseline(
   for (const [relPath, content] of Object.entries(files)) {
     writeLocalFile(localDir, relPath, content);
   }
-  await sync(localDir, realmUrl, { preferLocal: true, profileManager });
+  let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+  expect(res.ok, res.stderr).toBe(true);
   // Remote mtimes are second-precision — wait so subsequent edits get a new mtime.
   await sleep(1100);
 }
 
-function statusesFor(
-  result: { changes: Array<{ file: string; status: string }> },
-  file: string,
-): string[] {
-  return result.changes.filter((c) => c.file === file).map((c) => c.status);
-}
-
 beforeAll(async () => {
   await startTestRealmServer();
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -145,14 +220,12 @@ describe('realm sync status (integration)', () => {
       'a.gts': 'export const a = 1;\n',
     });
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.inSync).toBe(true);
-    expect(result.changes).toEqual([]);
-    expect(result.realmUrl.replace(/\/+$/, '')).toBe(
-      realmUrl.replace(/\/+$/, ''),
-    );
-    expect(result.hasError).toBe(false);
+    expect(isInSync(res.stdout)).toBe(true);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual([]);
+    expect(res.stdout).toContain(`Realm: ${realmUrl.replace(/\/+$/, '')}`);
   });
 
   it('detects new remote file', async () => {
@@ -163,10 +236,11 @@ describe('realm sync status (integration)', () => {
     });
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 1;\n');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.inSync).toBe(false);
-    expect(statusesFor(result, 'b.gts')).toEqual(['new-remote']);
+    expect(isInSync(res.stdout)).toBe(false);
+    expect(statusesFor(res.stdout, 'b.gts')).toEqual(['new-remote']);
   });
 
   it('detects modified remote file', async () => {
@@ -177,9 +251,10 @@ describe('realm sync status (integration)', () => {
     });
     await writeRemoteFile(realmUrl, 'a.gts', 'export const a = 2;\n');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'a.gts')).toEqual(['modified-remote']);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual(['modified-remote']);
   });
 
   it('detects new local file', async () => {
@@ -190,9 +265,10 @@ describe('realm sync status (integration)', () => {
     });
     writeLocalFile(localDir, 'c.gts', 'export const c = 1;\n');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'c.gts')).toEqual(['new-local']);
+    expect(statusesFor(res.stdout, 'c.gts')).toEqual(['new-local']);
   });
 
   it('detects modified local file', async () => {
@@ -203,9 +279,10 @@ describe('realm sync status (integration)', () => {
     });
     writeLocalFile(localDir, 'a.gts', 'export const a = 99;\n');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'a.gts')).toEqual(['modified-local']);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual(['modified-local']);
   });
 
   it('detects conflict when both sides modify the same file', async () => {
@@ -217,9 +294,10 @@ describe('realm sync status (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = "local";\n');
     await writeRemoteFile(realmUrl, 'a.gts', 'export const a = "remote";\n');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'a.gts')).toEqual(['conflict']);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual(['conflict']);
   });
 
   it('detects deleted local file', async () => {
@@ -230,9 +308,10 @@ describe('realm sync status (integration)', () => {
     });
     fs.unlinkSync(path.join(localDir, 'a.gts'));
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'a.gts')).toEqual(['deleted-local']);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual(['deleted-local']);
   });
 
   it('detects deleted remote file', async () => {
@@ -243,9 +322,10 @@ describe('realm sync status (integration)', () => {
     });
     await deleteRemoteFile(realmUrl, 'a.gts');
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(statusesFor(result, 'a.gts')).toEqual(['deleted-remote']);
+    expect(statusesFor(res.stdout, 'a.gts')).toEqual(['deleted-remote']);
   });
 
   it('--pull downloads safe remote changes and clears the diff', async () => {
@@ -258,14 +338,16 @@ describe('realm sync status (integration)', () => {
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 1;\n');
     await writeRemoteFile(realmUrl, 'a.gts', 'export const a = 2;\n');
 
-    let result = await status(localDir, { profileManager, pull: true });
+    let res = await runStatus(localDir, ['--pull']);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.pulled.sort()).toEqual(['a.gts', 'b.gts']);
+    expect(pulledFiles(res.stdout).sort()).toEqual(['a.gts', 'b.gts']);
     expect(readLocalFile(localDir, 'a.gts')).toContain('a = 2');
     expect(readLocalFile(localDir, 'b.gts')).toContain('b = 1');
 
-    let after = await status(localDir, { profileManager });
-    expect(after.inSync).toBe(true);
+    let after = await runStatus(localDir);
+    expect(after.ok, after.stderr).toBe(true);
+    expect(isInSync(after.stdout)).toBe(true);
   });
 
   it('--pull leaves conflicts untouched', async () => {
@@ -277,9 +359,10 @@ describe('realm sync status (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = "local";\n');
     await writeRemoteFile(realmUrl, 'a.gts', 'export const a = "remote";\n');
 
-    let result = await status(localDir, { profileManager, pull: true });
+    let res = await runStatus(localDir, ['--pull']);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.pulled).not.toContain('a.gts');
+    expect(pulledFiles(res.stdout)).not.toContain('a.gts');
     // Local file untouched
     expect(readLocalFile(localDir, 'a.gts')).toContain('a = "local"');
   });
@@ -294,19 +377,20 @@ describe('realm sync status (integration)', () => {
     // Wait long enough that a real write would change mtime measurably
     await sleep(50);
 
-    let result = await status(localDir, { profileManager, pull: true });
+    let res = await runStatus(localDir, ['--pull']);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.pulled).toEqual([]);
+    expect(pulledFiles(res.stdout)).toEqual([]);
     expect(manifestMtime(localDir)).toBe(mtimeBefore);
   });
 
   it('errors when manifest is missing', async () => {
     let localDir = makeLocalDir();
 
-    let result = await status(localDir, { profileManager });
+    let res = await runStatus(localDir);
 
-    expect(result.hasError).toBe(true);
-    expect(result.error).toMatch(/\.boxel-sync\.json/);
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toMatch(/\.boxel-sync\.json/);
   });
 
   it('--all walks current root and reports each sync dir', async () => {
@@ -318,9 +402,11 @@ describe('realm sync status (integration)', () => {
     fs.mkdirSync(dirA, { recursive: true });
     fs.mkdirSync(dirB, { recursive: true });
     writeLocalFile(dirA, 'one.gts', 'export const x = 1;\n');
-    await sync(dirA, realmUrl1, { preferLocal: true, profileManager });
+    let syncA = await runSync(dirA, realmUrl1, ['--prefer-local']);
+    expect(syncA.ok, syncA.stderr).toBe(true);
     writeLocalFile(dirB, 'two.gts', 'export const y = 1;\n');
-    await sync(dirB, realmUrl2, { preferLocal: true, profileManager });
+    let syncB = await runSync(dirB, realmUrl2, ['--prefer-local']);
+    expect(syncB.ok, syncB.stderr).toBe(true);
 
     // Nested dir under an ignored node_modules should NOT be discovered
     let ignored = path.join(root, 'node_modules', 'pkg');
@@ -331,10 +417,12 @@ describe('realm sync status (integration)', () => {
       JSON.stringify({ realmUrl: realmUrl1, files: {} }, null, 2),
     );
 
-    let result = await statusAll(root, { profileManager });
+    let res = await runStatus(root, ['--all']);
 
-    let discovered = result.workspaces.map((w) => w.localDir).sort();
-    expect(discovered).toEqual([dirA, dirB].sort());
+    // Both real sync dirs are reported; the node_modules dir is not walked.
+    expect(res.stdout).toContain(dirA);
+    expect(res.stdout).toContain(dirB);
+    expect(res.stdout).not.toContain(ignored);
   });
 
   it('--all continues past a malformed manifest', async () => {
@@ -345,17 +433,16 @@ describe('realm sync status (integration)', () => {
     fs.mkdirSync(dirOk, { recursive: true });
     fs.mkdirSync(dirBad, { recursive: true });
     writeLocalFile(dirOk, 'one.gts', 'export const x = 1;\n');
-    await sync(dirOk, realmUrl, { preferLocal: true, profileManager });
+    let syncOk = await runSync(dirOk, realmUrl, ['--prefer-local']);
+    expect(syncOk.ok, syncOk.stderr).toBe(true);
     fs.writeFileSync(path.join(dirBad, '.boxel-sync.json'), '{ not valid json');
 
-    let result = await statusAll(root, { profileManager });
+    let res = await runStatus(root, ['--all']);
 
-    let bad = result.workspaces.find((w) => w.localDir === dirBad);
-    expect(bad).toBeDefined();
-    expect(bad!.skipped).toBe('malformed');
-    let ok = result.workspaces.find((w) => w.localDir === dirOk);
-    expect(ok).toBeDefined();
-    expect(ok!.hasError).toBe(false);
+    // The malformed dir is flagged and the good dir is still reported.
+    expect(res.stdout).toContain(`${dirBad}  [malformed]`);
+    expect(res.stdout).toContain(dirOk);
+    expect(res.stdout).not.toContain(`${dirOk}  [malformed]`);
   });
 
   it('--all flags a valid-JSON-but-wrong-shape manifest as malformed', async () => {
@@ -368,11 +455,9 @@ describe('realm sync status (integration)', () => {
       JSON.stringify({ wrong: 'shape' }),
     );
 
-    let result = await statusAll(root, { profileManager });
+    let res = await runStatus(root, ['--all']);
 
-    let entry = result.workspaces.find((w) => w.localDir === dirShape);
-    expect(entry).toBeDefined();
-    expect(entry!.skipped).toBe('malformed');
+    expect(res.stdout).toContain(`${dirShape}  [malformed]`);
   });
 
   it('--all walker discovers sync dirs under non-ignored dot-prefixed dirs', async () => {
@@ -381,24 +466,21 @@ describe('realm sync status (integration)', () => {
     let dotDir = path.join(root, '.workspaces', 'project');
     fs.mkdirSync(dotDir, { recursive: true });
     writeLocalFile(dotDir, 'one.gts', 'export const x = 1;\n');
-    await sync(dotDir, realmUrl, { preferLocal: true, profileManager });
+    let syncRes = await runSync(dotDir, realmUrl, ['--prefer-local']);
+    expect(syncRes.ok, syncRes.stderr).toBe(true);
 
-    let result = await statusAll(root, { profileManager });
+    let res = await runStatus(root, ['--all']);
 
-    let discovered = result.workspaces.map((w) => w.localDir);
-    expect(discovered).toContain(dotDir);
+    expect(res.stdout).toContain(dotDir);
   });
 
   it('rejects --all combined with --pull', async () => {
     let root = makeLocalDir();
 
-    let result = await statusAll(root, {
-      profileManager,
-      pull: true,
-    });
+    let res = await runStatus(root, ['--all', '--pull']);
 
-    expect(result.hasError).toBe(true);
-    expect(result.workspaces).toEqual([]);
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('Cannot use --pull with --all');
   });
 
   it('localDir defaults are the caller responsibility; status accepts an explicit dir', async () => {
@@ -408,10 +490,11 @@ describe('realm sync status (integration)', () => {
       'a.gts': 'export const a = 1;\n',
     });
 
-    // Note: CLI action layer is what defaults to process.cwd(); the
-    // programmatic API requires an explicit dir. This test pins that contract.
-    let result = await status(localDir, { profileManager });
-    expect(result.localDir).toBe(localDir);
+    // Note: the CLI action layer is what defaults to process.cwd(); passing an
+    // explicit dir pins that the command honors it.
+    let res = await runStatus(localDir);
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toContain(`Local: ${localDir}`);
     expect(localFileExists(localDir, 'a.gts')).toBe(true);
   });
 });

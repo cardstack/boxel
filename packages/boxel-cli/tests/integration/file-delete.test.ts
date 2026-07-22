@@ -3,21 +3,30 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { deleteFile } from '../../src/commands/file/delete.ts';
-import { BoxelCLIClient } from '../../src/lib/boxel-cli-client.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
-let client: BoxelCLIClient;
+// `boxel file delete <path> --realm <url>` DELETEs a realm-relative path.
+// We drive the installed binary and verify the effect by reading the file
+// back from the realm in-process with the profile the CLI wrote to disk.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
+
+async function readBack(relPath: string): Promise<Response> {
+  return reloadProfile(home).authedRealmFetch(`${realmUrl}${relPath}`, {
+    method: 'GET',
+    headers: { Accept: 'application/vnd.card+source' },
+  });
+}
 
 beforeAll(async () => {
   await startTestRealmServer({
@@ -49,11 +58,11 @@ beforeAll(async () => {
     },
   });
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
-  client = new BoxelCLIClient(profileManager);
+
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -64,34 +73,38 @@ afterAll(async () => {
 describe('file delete (integration)', () => {
   it('deletes a file and confirms it no longer exists via read', async () => {
     // Verify the file exists first
-    let before = await client.read(realmUrl, 'delete-me.json');
+    let before = await readBack('delete-me.json');
     expect(before.ok, 'file should exist before delete').toBe(true);
 
     // Delete it
-    let result = await deleteFile(realmUrl, 'delete-me.json', {
-      profileManager,
-    });
-    expect(result.ok).toBe(true);
+    let res = await runBoxel(
+      ['file', 'delete', 'delete-me.json', '--realm', realmUrl],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
 
     // Verify it's gone
-    let after = await client.read(realmUrl, 'delete-me.json');
+    let after = await readBack('delete-me.json');
     expect(after.ok).toBe(false);
     expect(after.status).toBe(404);
   });
 
   it('other files remain after deleting one', async () => {
-    let result = await client.read(realmUrl, 'keep-this.json');
+    let result = await readBack('keep-this.json');
     expect(result.ok, 'unrelated file should still exist').toBe(true);
   });
 
   it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-    let result = await deleteFile(realmUrl, 'keep-this.json', {
-      profileManager: emptyManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        ['file', 'delete', 'keep-this.json', '--realm', realmUrl],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });
