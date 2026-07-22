@@ -5191,6 +5191,45 @@ posts/ignore-me.json
     );
   });
 
+  test('isolated HTML for a default Workspace realm-index card is replaced with the boilerplate when realm has not opted in', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.strictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is the boilerplate constant when a Workspace-indexed realm has not opted in',
+    );
+  });
+
   test('isolated HTML for a non-CardsGrid index card is rendered normally regardless of opt-in', async function (assert) {
     class PlainHomePage extends CardDef {
       static displayName = 'Plain Home Page';
