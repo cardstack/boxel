@@ -10,6 +10,10 @@ import { resolvePrerenderManagerURL } from './config.ts';
 import type { BrowserManager } from './browser-manager.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import {
+  resolveQueueAgingIntervalMs,
+  selectNextWaiterIndex,
+} from './queue-aging.ts';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture.ts';
 import { attachNetworkInflightTracker } from './network-inflight-tracker.ts';
 
@@ -24,9 +28,12 @@ type RenderSemaphore = {
 // Exported so cancellation-plumbing unit tests can drive it
 // directly — it's a per-tab serializer with no Chrome dependency.
 //
-// Priority-bucketed dequeue: higher priority first, FIFO within the
-// same priority. Default priority is `0` so callers that don't
-// specify get straight FIFO.
+// Dequeue is priority-then-FIFO with anti-starvation aging: a queued
+// waiter's effective priority rises with how long it has waited (see
+// queue-aging.ts), so a continuous stream of higher-priority arrivals cannot
+// defer a lower-priority waiter on this tab indefinitely. Default priority is
+// `0`; `now` and the aging interval are injectable for deterministic tests,
+// defaulting to `Date.now` and the env-resolved interval.
 export class TabQueue {
   // `held` is true while a caller holds the lease (post-acquire,
   // pre-release). Subsequent acquires queue rather than running.
@@ -35,8 +42,17 @@ export class TabQueue {
     resolve: () => void;
     reject: (err: unknown) => void;
     priority: number;
+    enqueuedAt: number;
     settled: boolean;
   }> = [];
+  #now: () => number;
+  #agingIntervalMs: number;
+
+  constructor(options?: { now?: () => number; agingIntervalMs?: number }) {
+    this.#now = options?.now ?? Date.now;
+    this.#agingIntervalMs =
+      options?.agingIntervalMs ?? resolveQueueAgingIntervalMs();
+  }
 
   async acquire(
     signal?: AbortSignal,
@@ -55,20 +71,23 @@ export class TabQueue {
       resolve: () => void;
       reject: (err: unknown) => void;
       priority: number;
+      enqueuedAt: number;
       settled: boolean;
     };
     let onAbort: (() => void) | undefined;
     try {
       await new Promise<void>((resolve, reject) => {
-        entry = { resolve, reject, priority, settled: false };
-        // Priority-ordered insertion (matches `AsyncSemaphore`):
-        // highest priority first, FIFO within priority.
-        let insertIdx = this.#queue.findIndex((e) => e.priority < priority);
-        if (insertIdx === -1) {
-          this.#queue.push(entry);
-        } else {
-          this.#queue.splice(insertIdx, 0, entry);
-        }
+        entry = {
+          resolve,
+          reject,
+          priority,
+          enqueuedAt: this.#now(),
+          settled: false,
+        };
+        // Append; the release path (`selectNextWaiterIndex`) picks the
+        // highest effective priority — base priority plus aging boost —
+        // rather than trusting insertion order.
+        this.#queue.push(entry);
         if (signal) {
           onAbort = () => {
             if (entry.settled) return;
@@ -98,12 +117,17 @@ export class TabQueue {
     return () => {
       if (released) return;
       released = true;
-      // Highest-priority oldest waiter (front of queue) gets the lease.
-      // Skip already-settled (cancelled) entries — they were spliced
-      // by `onAbort` but for safety we tolerate stale entries here.
-      while (this.#queue.length > 0) {
-        let next = this.#queue.shift()!;
-        if (next.settled) continue;
+      // Hand the lease to the highest effective-priority waiter (base
+      // priority plus aging boost), breaking ties toward the oldest.
+      // `selectNextWaiterIndex` skips already-settled (cancelled) entries;
+      // when none remain the lease frees.
+      let idx = selectNextWaiterIndex(
+        this.#queue,
+        this.#now(),
+        this.#agingIntervalMs,
+      );
+      if (idx !== -1) {
+        let [next] = this.#queue.splice(idx, 1);
         next.settled = true;
         // `#held` stays true: the lease just transferred.
         next.resolve();

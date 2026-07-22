@@ -213,4 +213,214 @@ module(basename(import.meta.filename), function () {
       rLow();
     });
   });
+
+  // Anti-starvation aging for both wait-queues. Priority-then-FIFO alone lets
+  // an unbroken stream of higher-priority arrivals defer a lower-priority
+  // waiter forever — the shape of the single-account prerender starvation
+  // where on-demand (priority-10) index visits held a background
+  // (priority-0) prerender-html job visit off its realm-affinity lane until
+  // the manager aborted the request. Aging raises a waiter's effective
+  // priority with its wait, so a starved waiter eventually outranks fresh
+  // higher-priority work. A fake clock drives wait time deterministically.
+  module('priority aging (anti-starvation)', function () {
+    test('AsyncSemaphore: a starved low-priority waiter overtakes a fresh high-priority arrival once aged', async function (assert) {
+      let clock = { t: 0 };
+      // A priority-0 waiter reaches effective priority 10 (the top user tier)
+      // after 10 * 1000ms = 10s of waiting, then wins as the older entry.
+      let sem = new AsyncSemaphore(1, {
+        now: () => clock.t,
+        agingIntervalMs: 1000,
+      });
+      let hold = await sem.acquire(undefined, 10); // occupy the only slot
+
+      let order: string[] = [];
+      let job = sem.acquire(undefined, 0).then((r) => {
+        order.push('job');
+        return r;
+      });
+      await Promise.resolve();
+
+      // The job has now waited past the crossover; a fresh priority-10 visit
+      // arrives.
+      clock.t = 10_500;
+      let freshHi = sem.acquire(undefined, 10).then((r) => {
+        order.push('freshHi');
+        return r;
+      });
+      await Promise.resolve();
+      assert.strictEqual(sem.pendingCount, 2, 'job + freshHi queued');
+
+      // The running visit completes: the aged job outranks the fresh arrival.
+      hold();
+      let rJob = await job;
+      assert.deepEqual(
+        order,
+        ['job'],
+        'aged priority-0 waiter served before fresh priority-10',
+      );
+      rJob();
+      let rHi = await freshHi;
+      assert.deepEqual(order, ['job', 'freshHi'], 'fresh priority-10 next');
+      rHi();
+    });
+
+    test('AsyncSemaphore: before the aging crossover a fresh high-priority arrival still wins', async function (assert) {
+      let clock = { t: 0 };
+      let sem = new AsyncSemaphore(1, {
+        now: () => clock.t,
+        agingIntervalMs: 1000,
+      });
+      let hold = await sem.acquire(undefined, 10);
+
+      let order: string[] = [];
+      let job = sem.acquire(undefined, 0).then((r) => {
+        order.push('job');
+        return r;
+      });
+      await Promise.resolve();
+
+      // Job aged to effective priority 9 — still below the top user tier.
+      clock.t = 9000;
+      let freshHi = sem.acquire(undefined, 10).then((r) => {
+        order.push('freshHi');
+        return r;
+      });
+      await Promise.resolve();
+
+      hold();
+      let rHi = await freshHi;
+      assert.deepEqual(
+        order,
+        ['freshHi'],
+        'fresh priority-10 outranks a not-yet-aged priority-0 waiter',
+      );
+      rHi();
+      let rJob = await job;
+      assert.deepEqual(order, ['freshHi', 'job']);
+      rJob();
+    });
+
+    test('AsyncSemaphore: a continuous high-priority stream cannot defer a low-priority waiter past the aging window', async function (assert) {
+      let clock = { t: 0 };
+      let sem = new AsyncSemaphore(1, {
+        now: () => clock.t,
+        agingIntervalMs: 1000,
+      });
+      let flush = async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      };
+
+      let pending = new Map<string, () => void>();
+      let jobServedAt: number | null = null;
+      let record = (label: string) => (release: () => void) => {
+        if (label === 'job') {
+          jobServedAt = clock.t;
+        }
+        pending.set(label, release);
+        return release;
+      };
+
+      // A high-priority visit is already rendering (holds the only slot).
+      pending.set('boot', await sem.acquire(undefined, 10));
+      let holder = 'boot';
+
+      // The background job-lane visit enqueues while the stream is in flight.
+      void sem.acquire(undefined, 0).then(record('job'));
+      await flush();
+
+      // Each tick: a fresh priority-10 visit arrives, then the running visit
+      // completes and the scheduler picks the next waiter.
+      for (let tick = 0; tick < 1000 && jobServedAt == null; tick++) {
+        clock.t += 2000; // 2s between on-demand arrivals
+        void sem.acquire(undefined, 10).then(record(`hi${tick}`));
+        await flush();
+        let release = pending.get(holder)!;
+        pending.delete(holder);
+        release();
+        await flush();
+        holder = [...pending.keys()].find((k) => k !== 'job') ?? 'job';
+      }
+
+      assert.notStrictEqual(
+        jobServedAt,
+        null,
+        'the starved job-lane visit was eventually served',
+      );
+      let servedAt = jobServedAt ?? Infinity;
+      assert.ok(
+        servedAt <= 12_000,
+        `job served at t=${servedAt}ms — inside the aging window (~10s), not deferred toward the ~120s abort`,
+      );
+      pending.get('job')?.();
+    });
+
+    test('TabQueue: a starved low-priority waiter overtakes a fresh high-priority arrival once aged', async function (assert) {
+      let clock = { t: 0 };
+      let q = new TabQueue({ now: () => clock.t, agingIntervalMs: 1000 });
+      let hold = await q.acquire(undefined, 10); // hold the tab lease
+
+      let order: string[] = [];
+      let job = q.acquire(undefined, 0).then((r) => {
+        order.push('job');
+        return r;
+      });
+      await Promise.resolve();
+
+      clock.t = 10_500;
+      let freshHi = q.acquire(undefined, 10).then((r) => {
+        order.push('freshHi');
+        return r;
+      });
+      await Promise.resolve();
+
+      hold();
+      let rJob = await job;
+      assert.deepEqual(
+        order,
+        ['job'],
+        'aged priority-0 waiter takes the tab lease before fresh priority-10',
+      );
+      rJob();
+      let rHi = await freshHi;
+      assert.deepEqual(order, ['job', 'freshHi']);
+      rHi();
+    });
+
+    test('aging disabled (interval 0) keeps strict priority-then-FIFO', async function (assert) {
+      let clock = { t: 0 };
+      let sem = new AsyncSemaphore(1, {
+        now: () => clock.t,
+        agingIntervalMs: 0,
+      });
+      let hold = await sem.acquire(undefined, 10);
+
+      let order: string[] = [];
+      let job = sem.acquire(undefined, 0).then((r) => {
+        order.push('job');
+        return r;
+      });
+      await Promise.resolve();
+
+      // Advance far past any crossover — with aging off, wait time is ignored.
+      clock.t = 10_000_000;
+      let freshHi = sem.acquire(undefined, 10).then((r) => {
+        order.push('freshHi');
+        return r;
+      });
+      await Promise.resolve();
+
+      hold();
+      let rHi = await freshHi;
+      assert.deepEqual(
+        order,
+        ['freshHi'],
+        'priority-10 always wins with aging disabled, regardless of wait',
+      );
+      rHi();
+      let rJob = await job;
+      assert.deepEqual(order, ['freshHi', 'job']);
+      rJob();
+    });
+  });
 });

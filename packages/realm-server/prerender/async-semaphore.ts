@@ -1,4 +1,8 @@
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import {
+  resolveQueueAgingIntervalMs,
+  selectNextWaiterIndex,
+} from './queue-aging.ts';
 
 // Pure in-memory counting semaphore with AbortSignal-aware queueing.
 // Exported so cancellation-plumbing unit tests can drive it directly
@@ -7,6 +11,13 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 //   - PagePool global render-semaphore (per-server tab cap)
 //   - PagePool file-queue admission control (CS-10946)
 //
+// Dequeue is priority-then-FIFO, with anti-starvation aging: a queued
+// waiter's effective priority rises with how long it has waited (see
+// queue-aging.ts), so a continuous stream of higher-priority arrivals cannot
+// defer a lower-priority waiter indefinitely. `now` and the aging interval are
+// injectable for deterministic tests; production takes `Date.now` and the
+// env-resolved interval.
+//
 // Capacity is mutable post-construction via `setCapacity(n)` so callers
 // (PagePool dynamic tab expansion / contraction) can grow the
 // concurrency cap without rebuilding the semaphore. In-flight slots
@@ -14,24 +25,34 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 // admitting new waiters until `inUseCount` falls back under the new cap.
 export class AsyncSemaphore {
   #capacity: number;
+  #now: () => number;
+  #agingIntervalMs: number;
   // Tracked directly so resize works correctly. The original
   // `#capacity - #available` formulation fell apart when capacity could
   // change while requests were in flight.
   #inUse: number;
   // `resolve` hands the acquirer the release function once a slot
   // frees. `onCancel` gives the cancellation path a way to splice
-  // the entry out of the queue without racing #release. `priority`
-  // controls dequeue order: higher priority first, FIFO within the
-  // same priority. Default priority is `0`.
+  // the entry out of the queue without racing #release. `priority` is
+  // the base priority; `enqueuedAt` is the wait-start timestamp that
+  // aging uses to raise a starved waiter's effective priority. Dequeue
+  // order: highest effective priority first, FIFO within a tier.
   #queue: Array<{
     resolve: (release: () => void) => void;
     onCancel: () => void;
     priority: number;
+    enqueuedAt: number;
   }> = [];
 
-  constructor(max: number) {
+  constructor(
+    max: number,
+    options?: { now?: () => number; agingIntervalMs?: number },
+  ) {
     this.#capacity = normalizeCapacity(max);
     this.#inUse = 0;
+    this.#now = options?.now ?? Date.now;
+    this.#agingIntervalMs =
+      options?.agingIntervalMs ?? resolveQueueAgingIntervalMs();
   }
 
   // Current cap. Mutable via `setCapacity`; callers reading this
@@ -103,19 +124,14 @@ export class AsyncSemaphore {
           );
         },
         priority,
+        enqueuedAt: this.#now(),
       };
       let onAbort = entry.onCancel;
-      // Priority-ordered insertion: highest priority first, FIFO within
-      // the same priority. Find the first existing entry with strictly
-      // lower priority and insert before it; if none, append. Same-
-      // priority entries land after all existing same-priority entries
-      // → FIFO preserved.
-      let insertIdx = this.#queue.findIndex((e) => e.priority < priority);
-      if (insertIdx === -1) {
-        this.#queue.push(entry);
-      } else {
-        this.#queue.splice(insertIdx, 0, entry);
-      }
+      // Append; dequeue selection (`selectNextWaiterIndex`) picks the
+      // highest effective priority — base priority plus aging boost —
+      // rather than trusting insertion order, since aging changes relative
+      // order over time.
+      this.#queue.push(entry);
       signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
@@ -135,7 +151,15 @@ export class AsyncSemaphore {
     // Wake waiters up to the new cap. Same hand-off shape as #release
     // (increment inUse, resolve the next waiter), iterated.
     while (this.#inUse < this.#capacity && this.#queue.length > 0) {
-      let next = this.#queue.shift()!;
+      let idx = selectNextWaiterIndex(
+        this.#queue,
+        this.#now(),
+        this.#agingIntervalMs,
+      );
+      if (idx === -1) {
+        break;
+      }
+      let [next] = this.#queue.splice(idx, 1);
       this.#inUse++;
       next.resolve(this.#release);
     }
@@ -143,13 +167,20 @@ export class AsyncSemaphore {
 
   #release = () => {
     this.#inUse--;
-    // If a waiter is queued AND we have spare capacity, hand it the
-    // slot (no net change in `#inUse`). Otherwise the slot stays free
-    // until the next acquire.
+    // If a waiter is queued AND we have spare capacity, hand the slot to
+    // the highest effective-priority waiter (no net change in `#inUse`).
+    // Otherwise the slot stays free until the next acquire.
     if (this.#inUse < this.#capacity && this.#queue.length > 0) {
-      let next = this.#queue.shift()!;
-      this.#inUse++;
-      next.resolve(this.#release);
+      let idx = selectNextWaiterIndex(
+        this.#queue,
+        this.#now(),
+        this.#agingIntervalMs,
+      );
+      if (idx !== -1) {
+        let [next] = this.#queue.splice(idx, 1);
+        this.#inUse++;
+        next.resolve(this.#release);
+      }
     }
   };
 }
