@@ -14,10 +14,18 @@ interface Signature {
 }
 
 export default class ProgressBar extends Component<Signature> {
+  get max(): number {
+    return this.args.max ?? 100;
+  }
+
+  // The current value, clamped into [0, max] so it's always a valid
+  // `aria-valuenow` between `aria-valuemin` and `aria-valuemax`.
+  get valueNow(): number {
+    return Math.min(Math.max(this.args.value ?? 0, 0), this.max);
+  }
+
   get progressPercentage(): string {
-    const max = this.args.max ?? 100;
-    const value = this.args.value ?? 0;
-    return Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
+    return Math.round((this.valueNow / this.max) * 100) + '%';
   }
 
   get progressWidth(): ReturnType<typeof htmlSafe> {
@@ -36,6 +44,11 @@ export default class ProgressBar extends Component<Signature> {
     <div
       class='boxel-progress-bar'
       data-test-boxel-progress-bar
+      role='progressbar'
+      aria-valuenow={{this.valueNow}}
+      aria-valuemin='0'
+      aria-valuemax={{this.max}}
+      aria-valuetext={{this.progressPercentage}}
       aria-label={{@label}}
       ...attributes
     >
