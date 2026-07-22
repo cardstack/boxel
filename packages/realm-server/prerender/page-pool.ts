@@ -1892,10 +1892,13 @@ export class PagePool {
   // affinity's set synchronously before it awaits the per-entry close).
   // A parked `TabQueue` waiter that receives the lease across that
   // boundary would otherwise render on a page about to be closed under
-  // it. Cross-affinity donors are still tagged with their donor
-  // `affinityKey` here (the reassign to the requesting affinity happens
-  // back in `getPage`), so the membership check keys off the entry's
-  // own current `affinityKey`.
+  // it. Membership keys off the entry's own current `affinityKey`, which
+  // covers both selection shapes: commandeer / adoption paths re-tag the
+  // entry to the requesting affinity in place (`#assignStandbyToAffinity`
+  // / `#reassignAffinityTab`), while a cross-affinity steal returns the
+  // entry still tagged with its donor affinity and defers the reassign to
+  // `getPage`. Either way the entry is looked up under whatever affinity
+  // currently owns it.
   #isEntryLive(entry: PoolEntry): boolean {
     if (entry.closing) return false;
     let affinityKey = entry.affinityKey;
