@@ -42,6 +42,10 @@ async function parseFixture(name: string): Promise<ParseRealmResult> {
 //     (the `realmURL` symbol, the `Query` type).
 //   - boxel-host-tools: the `@cardstack/boxel-host/tools/*` alias + the
 //     bundled `tools/` source.
+//   - helpers-and-fields: a `@cardstack/boxel-ui/helpers` call
+//     (`formatDateTime` with its `format` named arg) plus direct
+//     interpolation of `contains(NumberField)` / `contains(TextAreaField)`
+//     field values.
 // ---------------------------------------------------------------------------
 const CLEAN_FIXTURES: { name: string; covers: string }[] = [
   {
@@ -50,6 +54,10 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
   },
   { name: 'runtime-common', covers: 'bare @cardstack/runtime-common import' },
   { name: 'boxel-host-tools', covers: '@cardstack/boxel-host/tools/* import' },
+  {
+    name: 'helpers-and-fields',
+    covers: 'boxel-ui helper call + field interpolation',
+  },
 ];
 
 describe('boxel parse (against the installed CLI)', () => {
@@ -100,8 +108,7 @@ describe('boxel parse (against the installed CLI)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Known typing gaps, deferred to follow-up work. Two card patterns don't
-// type-check clean yet:
+// Known typing gap, deferred to follow-up work:
 //
 //   - tracked-format-class — `@tracked` alongside a `<template>` inside a
 //     `static isolated = class … {}` expression trips glint's
@@ -109,19 +116,14 @@ describe('boxel parse (against the installed CLI)', () => {
 //     limitation for decorators in class expressions; it reproduces in
 //     both the monorepo and the published layout, so it isn't a
 //     bundled-types gap.
-//   - helpers-and-fields — the bundled `@cardstack/boxel-ui/helpers`
-//     `formatDateTime` typing rejects the common positional call
-//     `(formatDateTime @model.when 'MMM D')`. (Its field interpolations
-//     type-check now; the positional helper is the remaining error, and
-//     only in the published layout.)
 //
-// Marked `it.fails`: each is an expected failure while the published CLI
-// lacks support for the pattern, so it runs without failing CI. An
-// unexpected pass makes `it.fails` itself fail — the signal to remove the
-// marker and move the case into the block above.
+// Marked `it.fails`: an expected failure while the CLI lacks support for
+// the pattern, so it runs without failing CI. An unexpected pass makes
+// `it.fails` itself fail — the signal to remove the marker and move the
+// case into the block above.
 // ---------------------------------------------------------------------------
 describe('boxel parse — known typing gaps (deferred)', () => {
-  const DEFERRED = ['helpers-and-fields', 'tracked-format-class'];
+  const DEFERRED = ['tracked-format-class'];
 
   describe.each(DEFERRED)('%s', (name) => {
     it.fails(
