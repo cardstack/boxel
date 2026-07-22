@@ -11,7 +11,6 @@ import BrokenLink, {
   type BrokenLinkTemplateArgs,
   type BrokenLinkViewFn,
 } from './components/broken-link/index.gts';
-import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
@@ -43,7 +42,6 @@ import FittedCard, {
 import FittedCardContainer from './components/fitted-card-container/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
-import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
 import BoxelInput, {
   type InputBottomTreatment as BoxelInputBottomTreatment,
@@ -69,7 +67,6 @@ import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
-import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
 import BoxelMultiSelect, {
   BoxelMultiSelectBasic,
@@ -141,7 +138,7 @@ export {
   BoxelSelect,
   BoxelTag,
   BrokenLink as BrokenLinkTemplate,
-  Button,
+  BoxelButton as Button,
   CardContainer,
   CardHeader,
   cardsInColumn,
@@ -165,7 +162,7 @@ export {
   FittedCard,
   FittedCardContainer,
   GridContainer,
-  Header,
+  BoxelHeader as Header,
   IconButton,
   KanbanColumnConfigSidebar,
   kanbanColumnCount,
@@ -174,7 +171,7 @@ export {
   Label,
   LoadingIndicator,
   Menu,
-  Message,
+  BoxelMessage as Message,
   Modal,
   PhoneInput,
   Picker,
