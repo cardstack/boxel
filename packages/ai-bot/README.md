@@ -54,14 +54,14 @@ While the model generates a response, ai-bot can surface the in-flight text so t
 
 Regardless of mode, the final consolidated response always lands as a room event — to-device previews are ephemeral and not persisted, so durable state must live in the room.
 
-**`to-device` fallback.** to-device previews need to know which device to target. The client stamps its device id (`matrixClient.getDeviceId()`) on the prompt event under the `app.boxel.originating-device-id` key. If ai-bot can't find that id for a turn — an older client that never stamped it, or a tool/code-patch continuation that carries no prompt — it skips mid-turn previews for that turn (as in `off`), and the final room event still lands.
+**`to-device` fallback.** to-device previews need to know which device to target. The client stamps its device id (`matrixClient.getDeviceId()`) on the prompt event under the `app.boxel.originating-device-id` key. A tool/code-patch continuation carries no device id on its own triggering event, so ai-bot falls back to the most recent stamped prompt in the turn's history — streaming continues across multi-step turns on the originating device. Only when no event anywhere in the turn's history carries the id — e.g. an older client that never stamped it — does ai-bot skip mid-turn previews for that turn (as in `off`); the final room event still lands either way.
 
 ### Streaming throttle tuning
 
-Applies to `room-edits` and `to-device` mid-turn sends; `off` sends nothing mid-turn.
+`off` sends nothing mid-turn.
 
-- `AI_BOT_STREAM_THROTTLE_MS` (default `250`): min ms between mid-turn sends.
-- `AI_BOT_STREAM_MIN_DELTA` (default `0`): min new body characters before sending an update. New reasoning, a changed tool call, the first content, and the final send always go through regardless of this threshold.
+- `AI_BOT_STREAM_THROTTLE_MS` (default `250`): min ms between mid-turn sends. Gates both `room-edits` and `to-device`.
+- `AI_BOT_STREAM_MIN_DELTA` (default `0`): min new body characters before a `room-edits` update is sent. New reasoning, a changed tool call, the first content, and the final send always go through regardless of this threshold. Gates `room-edits` only — `to-device` previews ignore it and send on every throttle window.
 
 ### `app.boxel.response-stream` to-device event
 
@@ -69,14 +69,14 @@ In `to-device` streaming mode, ai-bot emits `app.boxel.response-stream` to-devic
 
 Content payload (`AppBoxelResponseStreamContent` in `packages/runtime-common/matrix-constants.ts`):
 
-| Field           | Type        | Description                                                                                                                                                                                                    |
-| --------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `roomId`        | `string`    | Room the response belongs to.                                                                                                                                                                                  |
-| `parentEventId` | `string`    | Event id of the thinking placeholder this stream will eventually replace. Keys the client's preview state so concurrent turns don't collide.                                                                   |
-| `sequence`      | `number`    | Monotonic per turn. Since the payload is cumulative, gaps or reordering are safe — apply last-writer-wins by sequence.                                                                                         |
-| `body`          | `string`    | Accumulated response text so far.                                                                                                                                                                              |
-| `reasoning`     | `string`    | Accumulated reasoning text so far.                                                                                                                                                                             |
-| `toolRequests`  | `unknown[]` | Tool calls in the same wire shape as the room event's `app.boxel.tool-requests` key: each entry is `{ id, name, arguments: <object> }`, where `arguments` is `{}` until the streamed tool-call JSON completes. |
+| Field           | Type        | Description                                                                                                                                                                                                   |
+| --------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `roomId`        | `string`    | Room the response belongs to.                                                                                                                                                                                 |
+| `parentEventId` | `string`    | Event id of the thinking placeholder this stream will eventually replace. Keys the client's preview state so concurrent turns don't collide.                                                                  |
+| `sequence`      | `number`    | Monotonic per turn. Since the payload is cumulative, gaps or reordering are safe — apply last-writer-wins by sequence.                                                                                        |
+| `body`          | `string`    | Accumulated response text so far.                                                                                                                                                                             |
+| `reasoning`     | `string`    | Accumulated reasoning text so far.                                                                                                                                                                            |
+| `toolRequests`  | `unknown[]` | Tool calls in the same wire shape as the room event's `app.boxel.toolRequests` key: each entry is `{ id, name, arguments: <object> }`, where `arguments` is `{}` until the streamed tool-call JSON completes. |
 
 ### Rationale
 
