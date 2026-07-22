@@ -7,7 +7,6 @@ import {
   logger,
   param,
   query,
-  RealmPaths,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -375,38 +374,33 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // a private routed path exists to an unauthenticated caller. The map is
     // also written into the @cardstack/host/config/environment meta tag
     // further down so the SPA can resolve the path post-hydration.
-    let routingMap: { path: string; id: string }[] = [];
-    if (routedRealm) {
-      routingMap = await routedRealm.getHostRoutingMap();
-      if (routingMap.length > 0) {
-        let realmURL = new URL(routedRealm.url);
-        realmURL.protocol = requestURL.protocol;
-        let realmPaths = new RealmPaths(realmURL);
-        let pathInRealm = '/' + realmPaths.local(requestURL);
-        let rule = routingMap.find((r) => r.path === pathInRealm);
-        if (rule) {
-          // Canonicalize the URL. A rule declared as '/pricing' matches both
-          // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
-          // slashes); the canonical form is the realm mount pathname joined
-          // with the rule's declared path — so the realm-root rule '/' keeps
-          // its trailing slash while a sub-path rule has none. Redirect any
-          // other form with a 308 so bookmarks, shared links and crawlers
-          // converge on one URL, and so relative links in the served HTML
-          // resolve against a stable document base (a trailing slash shifts
-          // that base and breaks './'-relative hrefs in the prerendered page).
-          let canonicalPathname =
-            realmURL.pathname + rule.path.replace(/^\//, '');
-          if (requestURL.pathname !== canonicalPathname) {
-            ctxt.redirect(
-              new URL(canonicalPathname + requestURL.search, requestURL).href,
-            );
-            ctxt.status = 308;
-            return;
-          }
-          // Rewrite cardURL so the head/isolated/scoped CSS fetched below
-          // render the routed target.
-          cardURL = new URL(rule.id);
+    let routingMap: { path: string; id: string }[] = routedRealm
+      ? await routedRealm.getHostRoutingMap()
+      : [];
+    if (routingMap.length > 0) {
+      // The match and its canonical form live once, in matchHostRoutingRule.
+      let matched = await matchHostRoutingRule(requestURL, routingDeps);
+      if (matched) {
+        // Canonicalize the URL. A rule declared as '/pricing' matches both
+        // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
+        // slashes); the canonical form is the realm mount pathname joined
+        // with the rule's declared path — so the realm-root rule '/' keeps
+        // its trailing slash while a sub-path rule has none. Redirect any
+        // other form with a 308 so bookmarks, shared links and crawlers
+        // converge on one URL, and so relative links in the served HTML
+        // resolve against a stable document base (a trailing slash shifts
+        // that base and breaks './'-relative hrefs in the prerendered page).
+        if (requestURL.pathname !== matched.canonicalPathname) {
+          ctxt.redirect(
+            new URL(matched.canonicalPathname + requestURL.search, requestURL)
+              .href,
+          );
+          ctxt.status = 308;
+          return;
         }
+        // Rewrite cardURL so the head/isolated/scoped CSS fetched below
+        // render the routed target.
+        cardURL = new URL(matched.rule.id);
       }
     }
 
