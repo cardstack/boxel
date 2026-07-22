@@ -17,9 +17,14 @@ import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueJobSpec,
+  type QueuePublisher,
   type Reader,
 } from '@cardstack/runtime-common';
-import { prerenderHtmlPriority } from '@cardstack/runtime-common/jobs/prerender-html';
+import {
+  enqueuePrerenderHtmlJob,
+  prerenderHtmlPriority,
+  type PrerenderHtmlEnqueueArgs,
+} from '@cardstack/runtime-common/jobs/prerender-html';
 import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
 // Registers the `prerender_html` coalesce handler at load time.
 import '@cardstack/runtime-common/tasks/prerender-html';
@@ -478,6 +483,54 @@ module(basename(import.meta.filename), function () {
         }),
         systemInitiatedPrerenderHtmlPriority,
         'the publish exception never lifts system-initiated work',
+      );
+    });
+
+    // Guards the hop that actually delivers the priority: enqueuePrerenderHtmlJob
+    // must thread awaitedByPublish into prerenderHtmlPriority. A stub publisher
+    // captures the enqueued spec, so this needs no DB.
+    test('enqueuePrerenderHtmlJob prices the render from its publish flag', async function (assert) {
+      let enqueueArgs = (
+        overrides: Partial<PrerenderHtmlEnqueueArgs>,
+      ): PrerenderHtmlEnqueueArgs => ({
+        realmURL: testRealm,
+        realmUsername: 'test_realm',
+        changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+        generation: 1,
+        loaderEpoch: 'epoch-a',
+        spawningJobId: 100,
+        spawningPriority: userInitiatedPriority,
+        timeoutSec: 60,
+        preWarm: false,
+        ...overrides,
+      });
+      let captured: { priority?: number } | undefined;
+      let stubPublisher = {
+        publish: (spec: { priority?: number }) => {
+          captured = spec;
+          return Promise.resolve(undefined);
+        },
+        destroy: () => Promise.resolve(),
+      } as unknown as QueuePublisher;
+
+      await enqueuePrerenderHtmlJob(
+        stubPublisher,
+        enqueueArgs({ awaitedByPublish: true }),
+      );
+      assert.strictEqual(
+        captured?.priority,
+        userInitiatedPriority,
+        'a publish-awaited render is enqueued co-equal with indexing',
+      );
+
+      await enqueuePrerenderHtmlJob(
+        stubPublisher,
+        enqueueArgs({ awaitedByPublish: false }),
+      );
+      assert.strictEqual(
+        captured?.priority,
+        userInitiatedPrerenderHtmlPriority,
+        'an ordinary user render is enqueued one tier below indexing',
       );
     });
   });
