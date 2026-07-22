@@ -41,4 +41,14 @@ module('Integration | Component | progress-bar', function (hooks) {
       .dom('[data-test-boxel-progress-bar]')
       .hasAttribute('aria-label', 'Importing files');
   });
+
+  test('falls back to a generic accessible name when no label is provided', async function (assert) {
+    await render(<template><ProgressBar @value={{3}} @max={{12}} /></template>);
+
+    // role="progressbar" requires a non-empty accessible name; an empty
+    // aria-label would fail the aria-progressbar-name axe rule.
+    assert
+      .dom('[data-test-boxel-progress-bar]')
+      .hasAttribute('aria-label', 'Progress');
+  });
 });
