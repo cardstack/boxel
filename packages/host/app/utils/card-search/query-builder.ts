@@ -60,12 +60,12 @@ function stripTypeFromFilter(filter: Filter): Filter | undefined {
     return on ? { every: children, on } : { every: children };
   }
   if (isAnyFilter(filter)) {
-    const children = filter.any
-      .map((f) => stripTypeFromFilter(f))
-      .filter((f): f is Filter => f !== undefined);
-    if (children.length === 0) return undefined;
-    if (children.length === 1) return on ? { ...children[0], on } : children[0];
-    return on ? { any: children, on } : { any: children };
+    // Never strip within an `any`: the branches are alternatives, so dropping
+    // a branch's type (or collapsing a stripped-empty branch) changes which
+    // rows match. e.g. the skill menu's `any: [{ type: skillCardRef }, { on:
+    // markdownDefRef, eq: { kind: 'skill' } }]` would collapse to the markdown
+    // branch alone, excluding skill cards. Keep the alternation intact.
+    return filter;
   }
   if (isNotFilter(filter)) {
     const inner = stripTypeFromFilter(filter.not);
@@ -211,8 +211,10 @@ export function buildSearchQuery(
   let filters: Filter[];
   if (baseFilter) {
     // When typeFilter is present, strip the baseFilter's (parent) type
-    // constraint as redundant — the picked subtype already implies it. Safe
-    // because the type picker only offers subtypes of the baseFilter type.
+    // constraint as redundant — the picked subtype already implies it.
+    // `stripTypeFromFilter` only unwraps a top-level `{ type }` node and leaves
+    // any `any`-alternation intact, so a compound base filter passes through
+    // whole.
     const effectiveBaseFilter = typeFilter
       ? stripTypeFromFilter(baseFilter)
       : baseFilter;

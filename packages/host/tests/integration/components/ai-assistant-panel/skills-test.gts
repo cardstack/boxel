@@ -10,6 +10,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
+  ensureTrailingSlash,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -22,6 +23,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -56,6 +58,8 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
+const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
+
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
@@ -79,6 +83,11 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
+    // Populate the user's realm list so `realmServer.userRealmIdentifiers` is
+    // non-empty — the skill menu scopes its mixed chooser to those realms, and
+    // without this the search fans out across every server realm (the large
+    // shared skills realm included) and the intended tiles never render.
+    activeRealmServers: [testRealmServerURL],
     autostart: true,
     now: (() => {
       // deterministic clock so that, for example, screenshots
@@ -416,23 +425,19 @@ Instructions live in the markdown body.
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
   });
 
-  test('skill picker can add a skill markdown file through the UI', async function (assert) {
+  test('skill picker can add a skill markdown file through the single mixed chooser', async function (assert) {
     const roomId = await renderAiAssistantPanel();
     let skillId = `${testRealmURL}realm-sync-skill.md`;
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await waitFor(
-      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
-    );
-    await click(
-      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
-    );
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
-    // The file chooser is scoped to skill markdown files.
-    await waitFor('[data-test-choose-file-modal]');
-    await waitFor('[data-test-file="realm-sync-skill.md"]');
-    await click('[data-test-file="realm-sync-skill.md"]');
-    await click('[data-test-choose-file-modal-add-button]');
+    // A skill markdown file surfaces as a result tile in the same mixed chooser
+    // as skill cards; picking it routes to the markdown-attach path by kind.
+    await waitFor(`[data-test-item-button="${skillId}"]`);
+    await click(`[data-test-item-button="${skillId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(
       () =>
@@ -468,37 +473,47 @@ Instructions live in the markdown body.
       );
   });
 
-  test('canceling the skill-file chooser re-enables the add-markdown button', async function (assert) {
+  test('the separate skill-file button is retired in favor of the single mixed chooser', async function (assert) {
     await renderAiAssistantPanel();
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await waitFor(
-      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
-    );
-    await click(
-      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
-    );
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
-    await waitFor('[data-test-choose-file-modal]');
-    await click('[data-test-choose-file-modal-cancel-button]');
+    assert
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+      .exists('a single add button remains');
+    assert
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]')
+      .doesNotExist(
+        'the second, file-tree skill button is gone — one chooser handles both kinds',
+      );
+  });
+
+  test('canceling the skill chooser re-enables the add button', async function (assert) {
+    await renderAiAssistantPanel();
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    await waitFor('[data-test-card-chooser-modal]');
+    await click('[data-test-card-chooser-cancel-button]');
 
     // Canceling settles the chooser promise, so the trigger button returns to
     // its enabled state. A chooser that left its deferred unsettled would hang
     // the attach task and leave this button stuck disabled.
     await waitUntil(
-      () => !document.querySelector('[data-test-choose-file-modal]'),
+      () => !document.querySelector('[data-test-card-chooser-modal]'),
     );
     assert
-      .dom('[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]')
-      .isNotDisabled('the add-markdown button is re-enabled after canceling');
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+      .isNotDisabled('the add button is re-enabled after canceling');
 
     // The chooser can be reopened after canceling.
-    await click(
-      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
-    );
-    await waitFor('[data-test-choose-file-modal]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await waitFor('[data-test-card-chooser-modal]');
     assert
-      .dom('[data-test-choose-file-modal]')
+      .dom('[data-test-card-chooser-modal]')
       .exists('the chooser reopens after canceling');
   });
 
@@ -527,6 +542,35 @@ Instructions live in the markdown body.
     assert
       .dom(`[data-test-item-button="${availableSkillId}"]`)
       .exists('a different skill remains available in the picker');
+  });
+
+  test('skill picker excludes an already-attached markdown skill', async function (assert) {
+    await renderAiAssistantPanel();
+    let attachedMarkdownSkillId = `${testRealmURL}realm-sync-skill.md`;
+    let availableCardSkillId = `${testRealmURL}Skill/example`;
+
+    // The file row carries `id` in its search doc (Phase 1), so the same
+    // client-built `not: { eq: { id } }` exclusion that hides an attached card
+    // skill also hides an attached markdown skill from the mixed chooser.
+    await addSkillToAiAssistant(attachedMarkdownSkillId);
+
+    if (
+      !document.querySelector(
+        '[data-test-skill-menu] [data-test-pill-menu-add-button]',
+      )
+    ) {
+      await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    }
+    await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await waitFor(`[data-test-item-button="${availableCardSkillId}"]`);
+
+    assert
+      .dom(`[data-test-item-button="${attachedMarkdownSkillId}"]`)
+      .doesNotExist('the already-attached markdown skill is excluded');
+    assert
+      .dom(`[data-test-item-button="${availableCardSkillId}"]`)
+      .exists('an unattached skill card remains available');
   });
 
   test('skill pill menu opens the skill card', async function (assert) {
