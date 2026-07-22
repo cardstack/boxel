@@ -2724,6 +2724,14 @@ export default class MatrixService extends Service {
     if (e.getType() !== APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE) {
       return;
     }
+    // A to-device message can be sent by any Matrix user directly to a device —
+    // room membership isn't required — so, unlike the room-event path (which
+    // implicitly trusts in-room ai-bot authorship), verify the sender before
+    // hydrating a preview into the assistant's bubble. This also short-circuits
+    // the fan-out for unrelated to-device traffic.
+    if (e.getSender() !== this.aiBotUserId) {
+      return;
+    }
     let payload = e.getContent() as AppBoxelResponseStreamContent;
     for (let handler of this.#responseStreamPreviewHandlers) {
       handler(payload);

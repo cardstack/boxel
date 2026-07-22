@@ -120,15 +120,21 @@ module(
       sequence: number,
       body: string,
       reasoning = '',
+      toolRequests: unknown[] = [],
+      sender: string = matrixService.aiBotUserId,
     ) {
-      simulateToDeviceEvent(APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE, {
-        roomId,
-        parentEventId,
-        sequence,
-        body,
-        reasoning,
-        toolRequests: [],
-      });
+      simulateToDeviceEvent(
+        APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        {
+          roomId,
+          parentEventId,
+          sequence,
+          body,
+          reasoning,
+          toolRequests,
+        },
+        sender,
+      );
     }
 
     test('a preview hydrates body and reasoning into the streaming message', async function (assert) {
@@ -163,7 +169,12 @@ module(
       await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
 
       let roomResource = matrixService.roomResources.get(roomId)!;
-      let createdAt = roomResource.messages[0].created.getTime();
+
+      // Capture `updated` *after* the placeholder loads but *before* any preview.
+      // `updated` is seeded to construction time, so asserting it merely exceeds
+      // `created` (an earlier ts) would pass even if `setUpdated` never ran — we
+      // want to prove a preview actually advances it.
+      let updatedBeforePreviews = roomResource.messages[0].updated.getTime();
 
       preview(roomId, eventId, 0, 'You should');
       await settled();
@@ -178,8 +189,8 @@ module(
       // is exactly the value room-message.gts compares against to decide the
       // streaming stall timeout — so the timeout resets for free.
       assert.ok(
-        roomResource.messages[0].updated.getTime() >= createdAt,
-        'the message updated timestamp advances as previews arrive',
+        roomResource.messages[0].updated.getTime() > updatedBeforePreviews,
+        'an applied preview advances the message updated timestamp',
       );
     });
 
@@ -236,6 +247,77 @@ module(
       assert
         .dom('[data-test-message-idx="0"]')
         .containsText('A valid preview lands.');
+    });
+
+    test('overlapping tool-request previews resolve to the highest sequence, without duplicating the tool', async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      let eventId = sendPlaceholder(roomId);
+      await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+
+      let roomResource = matrixService.roomResources.get(roomId)!;
+
+      // Two previews carrying the same tool id arrive back-to-back (no settle in
+      // between) so both applies are enqueued on #previewApplyChain before
+      // either finishes. The chain runs them in sequence order, and updateMessage
+      // reuses the existing MessageTool for a known id — so the message must end
+      // with a single tool whose arguments come from the higher-sequence preview.
+      let toolRequest = (firstName: string) => [
+        {
+          id: 'tool-1',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName } },
+            },
+          }),
+        },
+      ];
+
+      preview(roomId, eventId, 0, 'Renaming', '', toolRequest('Alice'));
+      preview(roomId, eventId, 1, 'Renaming', '', toolRequest('Bob'));
+      await settled();
+
+      let tools = roomResource.messages[0].tools;
+      assert.strictEqual(tools.length, 1, 'the tool id is not duplicated');
+      assert.strictEqual(
+        (tools[0].arguments as any)?.attributes?.patch?.attributes?.firstName,
+        'Bob',
+        'the higher-sequence preview owns the tool arguments',
+      );
+    });
+
+    test('a preview from a sender other than the ai bot is ignored', async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      let eventId = sendPlaceholder(roomId);
+      await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+
+      // A to-device message can be delivered by any Matrix user, so a spoofed
+      // sender must never reach the assistant's bubble.
+      preview(
+        roomId,
+        eventId,
+        0,
+        'Injected by an impostor.',
+        '',
+        [],
+        '@impostor:localhost',
+      );
+      await settled();
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .doesNotContainText('Injected by an impostor.');
+
+      // The genuine ai-bot sender still applies.
+      preview(roomId, eventId, 1, 'The real preview.');
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-message-idx="0"]')
+          ?.textContent?.includes('The real preview.'),
+      );
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText('The real preview.');
     });
   },
 );

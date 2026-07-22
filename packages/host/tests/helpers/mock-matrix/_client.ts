@@ -759,8 +759,12 @@ export class MockClient implements ExtendedClient {
   // streaming previews) to ClientEvent.ToDeviceEvent listeners. To-device
   // messages are ephemeral, so unlike room events they are not recorded in
   // serverState.
-  simulateToDeviceEvent(type: string, content: Record<string, any>) {
-    let event = new MatrixEvent({ type, content });
+  simulateToDeviceEvent(
+    type: string,
+    content: Record<string, any>,
+    sender?: string,
+  ) {
+    let event = new MatrixEvent({ type, content, sender });
     let handlers = this.listeners[this.sdk.ClientEvent.ToDeviceEvent];
     if (handlers) {
       for (let handler of handlers) {

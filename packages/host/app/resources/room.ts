@@ -793,6 +793,18 @@ export class RoomResource extends Resource<Args> {
     message: Message,
     payload: AppBoxelResponseStreamContent,
   ) {
+    // The synchronous gate checked isStreamingOfEventFinished at *enqueue* time,
+    // but this apply may have waited behind a predecessor on the chain while the
+    // final consolidated room edit landed and finalized the message. Re-check
+    // now: updateMessage rewrites body / reasoning / isStreamingFinished
+    // synchronously (before its first await), so an apply that *starts* after
+    // finalization would un-finish the completed message with stale content —
+    // leaving it stuck "streaming" until the stall timeout trips. An apply that
+    // started before finalization is safe: the final edit's synchronous writes
+    // still land last.
+    if (message.isStreamingOfEventFinished) {
+      return;
+    }
     try {
       let author = this.upsertRoomMember({
         roomId: payload.roomId,
