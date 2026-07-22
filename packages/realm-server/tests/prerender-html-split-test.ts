@@ -6,6 +6,10 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  systemInitiatedPrerenderHtmlPriority,
+  systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
+  userInitiatedPriority,
   type DefinitionLookup,
   type Diagnostics,
   type IndexingProgressEvent,
@@ -13,8 +17,14 @@ import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueJobSpec,
+  type QueuePublisher,
   type Reader,
 } from '@cardstack/runtime-common';
+import {
+  enqueuePrerenderHtmlJob,
+  prerenderHtmlPriority,
+  type PrerenderHtmlEnqueueArgs,
+} from '@cardstack/runtime-common/jobs/prerender-html';
 import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
 // Registers the `prerender_html` coalesce handler at load time.
 import '@cardstack/runtime-common/tasks/prerender-html';
@@ -406,6 +416,122 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.deepEqual(decision, { type: 'insert' });
+    });
+  });
+
+  // Prerender-html normally floors one tier below its initiator so a worker
+  // pool that floors at the indexing tier reserves itself to indexing and
+  // never carries a render sweep (see queue.ts and the user-index lane in
+  // worker-manager). The two initiator tiers mirror each other. The sole
+  // co-equal case is a publish-awaited render (a publish blocks on its HTML).
+  // Guard both the gap and the exception so neither drifts.
+  module('priority tiers', function () {
+    test('prerender-html floors strictly below its initiator in both tiers', function (assert) {
+      assert.ok(
+        userInitiatedPrerenderHtmlPriority < userInitiatedPriority,
+        'user-initiated prerender-html floors below user-initiated indexing',
+      );
+      assert.ok(
+        systemInitiatedPrerenderHtmlPriority < systemInitiatedPriority,
+        'system-initiated prerender-html floors below system-initiated indexing',
+      );
+    });
+
+    test('user-initiated prerender-html outranks every system-initiated job', function (assert) {
+      // The high-priority pool floors at the user prerender-html tier;
+      // keeping that tier above every system tier is what lets a floor-9 pool
+      // serve user renders while excluding system indexing (1) and system
+      // renders (0). (The all-priority pool still serves user renders too;
+      // this is about which pools the floor lets in, not exclusivity.)
+      assert.ok(
+        userInitiatedPrerenderHtmlPriority > systemInitiatedPriority,
+        'user-initiated prerender-html floors above system-initiated indexing',
+      );
+    });
+
+    test('prerenderHtmlPriority maps an index pass to the render tier one notch below it', function (assert) {
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority),
+        userInitiatedPrerenderHtmlPriority,
+        'a user-initiated index pass spawns user-initiated prerender-html',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(systemInitiatedPriority),
+        systemInitiatedPrerenderHtmlPriority,
+        'a system-initiated index pass spawns system-initiated prerender-html',
+      );
+    });
+
+    test('a publish-awaited render runs co-equal with indexing, but only for user work', function (assert) {
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority, {
+          awaitedByPublish: true,
+        }),
+        userInitiatedPriority,
+        'a publish-awaited user render is lifted to the indexing tier',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority, {
+          awaitedByPublish: false,
+        }),
+        userInitiatedPrerenderHtmlPriority,
+        'a non-publish user render stays one tier below indexing',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(systemInitiatedPriority, {
+          awaitedByPublish: true,
+        }),
+        systemInitiatedPrerenderHtmlPriority,
+        'the publish exception never lifts system-initiated work',
+      );
+    });
+
+    // Guards the hop that actually delivers the priority: enqueuePrerenderHtmlJob
+    // must thread awaitedByPublish into prerenderHtmlPriority. A stub publisher
+    // captures the enqueued spec, so this needs no DB.
+    test('enqueuePrerenderHtmlJob prices the render from its publish flag', async function (assert) {
+      let enqueueArgs = (
+        overrides: Partial<PrerenderHtmlEnqueueArgs>,
+      ): PrerenderHtmlEnqueueArgs => ({
+        realmURL: testRealm,
+        realmUsername: 'test_realm',
+        changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+        generation: 1,
+        loaderEpoch: 'epoch-a',
+        spawningJobId: 100,
+        spawningPriority: userInitiatedPriority,
+        timeoutSec: 60,
+        preWarm: false,
+        ...overrides,
+      });
+      let captured: { priority?: number } | undefined;
+      let stubPublisher = {
+        publish: (spec: { priority?: number }) => {
+          captured = spec;
+          return Promise.resolve(undefined);
+        },
+        destroy: () => Promise.resolve(),
+      } as unknown as QueuePublisher;
+
+      await enqueuePrerenderHtmlJob(
+        stubPublisher,
+        enqueueArgs({ awaitedByPublish: true }),
+      );
+      assert.strictEqual(
+        captured?.priority,
+        userInitiatedPriority,
+        'a publish-awaited render is enqueued co-equal with indexing',
+      );
+
+      await enqueuePrerenderHtmlJob(
+        stubPublisher,
+        enqueueArgs({ awaitedByPublish: false }),
+      );
+      assert.strictEqual(
+        captured?.priority,
+        userInitiatedPrerenderHtmlPriority,
+        'an ordinary user render is enqueued one tier below indexing',
+      );
     });
   });
 
