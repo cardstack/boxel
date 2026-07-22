@@ -516,7 +516,17 @@ export default class PanelContent extends Component<Signature> {
            existing scrollbar gutter. */
         padding-block: var(--boxel-sp-xs);
         padding-inline: var(--boxel-sp-xs) var(--boxel-sp);
-        transition: opacity calc(var(--boxel-transition) / 4);
+        transition: opacity var(--boxel-transition);
+      }
+      /* While persistScrollPosition is still working a saved offset toward
+         sticking (content laying out, the sheet's open transition running),
+         hide the list so its clamped-to-top intermediate states never paint;
+         removing the tag fades the results in already at the right offset.
+         The transition: none here keeps the hide itself instant — only the
+         reveal animates. */
+      .search-sheet-content[data-scroll-restore-pending] {
+        opacity: 0;
+        transition: none;
       }
       .search-sheet-content.compact {
         flex-direction: row;

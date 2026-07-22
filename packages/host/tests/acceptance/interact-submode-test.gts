@@ -8,6 +8,7 @@ import {
   triggerKeyEvent,
   settled,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -264,6 +265,20 @@ module('Acceptance | interact submode tests', function (hooks) {
         expected,
         'the scroll position is restored on reopen',
       );
+      // While the offset hadn't stuck the list was hidden behind this tag (so
+      // the restore never paints a clamped-to-top frame); once restored — and
+      // the container's box has been quiet for the reveal's short gate — it
+      // must be visible again.
+      await waitUntil(
+        () => !restoredContainer.hasAttribute('data-scroll-restore-pending'),
+        { timeout: 3000 },
+      );
+      assert
+        .dom(restoredContainer)
+        .doesNotHaveAttribute(
+          'data-scroll-restore-pending',
+          'the restored list is revealed once the offset sticks',
+        );
     });
 
     test('the Cancel button clears the persisted search', async function (assert) {
