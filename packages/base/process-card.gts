@@ -1,5 +1,3 @@
-import { htmlSafe } from '@ember/template';
-
 import {
   CardDef,
   Component,
@@ -11,6 +9,7 @@ import {
 import NumberField from './number';
 import DateTimeField from './datetime';
 
+import { ProgressBar } from '@cardstack/boxel-ui/components';
 import ProgressIcon from '@cardstack/boxel-icons/progress';
 
 // A setup-progress job: a long-running task (indexing, import, a guided
@@ -28,15 +27,7 @@ class ProcessTemplate extends Component<typeof ProcessCard> {
         </span>
         <h3 class='process-card__name'><@fields.cardTitle /></h3>
       </header>
-      <div
-        class='process-card__bar'
-        role='progressbar'
-        aria-valuenow={{@model.percentComplete}}
-        aria-valuemin='0'
-        aria-valuemax='100'
-      >
-        <div class='process-card__fill' style={{@model.barStyle}}></div>
-      </div>
+      <ProgressBar @value={{@model.percentComplete}} @max={{100}} />
       <footer class='process-card__footer'>
         <span class='process-card__count'>{{@model.progressLabel}}</span>
         <span
@@ -56,40 +47,34 @@ class ProcessTemplate extends Component<typeof ProcessCard> {
       .process-card__header {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         min-width: 0;
       }
       .process-card__stage {
-        color: var(--boxel-450);
-        font: 500 var(--boxel-font-xs);
+        color: var(--muted-foreground);
+        font-weight: 500;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         letter-spacing: var(--boxel-lsp-sm);
         text-transform: uppercase;
       }
       .process-card__name {
         margin: 0;
-        font: 600 var(--boxel-font);
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
+        line-height: var(--boxel-line-height);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .process-card__bar {
-        height: 6px;
-        border-radius: var(--boxel-border-radius-sm);
-        background-color: var(--boxel-200);
-        overflow: hidden;
-      }
-      .process-card__fill {
-        height: 100%;
-        border-radius: inherit;
-        background-color: var(--boxel-highlight);
-        transition: width 0.3s ease;
       }
       .process-card__footer {
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
-        color: var(--boxel-450);
-        font: 500 var(--boxel-font-xs);
+        color: var(--muted-foreground);
+        font-weight: 500;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         letter-spacing: var(--boxel-lsp-sm);
       }
       .process-card__status {
@@ -147,10 +132,6 @@ export class ProcessCard extends CardDef {
 
   get statusLabel(): string {
     return this.processStatus ?? 'running';
-  }
-
-  get barStyle() {
-    return htmlSafe(`width: ${this.percentComplete}%`);
   }
 
   static isolated = ProcessTemplate;
