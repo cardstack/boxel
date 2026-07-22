@@ -100,7 +100,7 @@ class ProcessTemplate extends Component<typeof ProcessCard> {
 }
 
 export class ProcessCard extends CardDef {
-  static displayName = 'Process Card';
+  static displayName = 'Process';
   static icon = ProgressIcon;
 
   // The name shown on the setup bar; falls back to the card title.
