@@ -90,7 +90,7 @@ If you pick the wrong category you waste a day. The diagnostic fields in the [Cl
 
 ## Prerender priorities
 
-Every prerender request — visit, module, run-command — carries a numeric `priority` that flows from the originating worker job all the way to the per-tab queue, the per-affinity file-admission semaphore, and the per-server render semaphore. The value is the worker-job priority of the job that produced the render, so it splits by both initiator (user vs. system) and job family (indexing vs. prerender-html):
+A prerender request a worker job spawns carries a numeric `priority` — threaded from that job through the per-tab queue, the per-affinity file-admission semaphore, and the per-server render semaphore (a request with no originating job priority omits the field). The value is the worker-job priority of the job that produced the render, so it splits by both initiator (user vs. system) and job family (indexing vs. prerender-html):
 
 - **`10` — `userInitiatedPriority`**. A user-initiated index visit: the `_reindex` endpoint, ad-hoc card publishes, manual UI-driven reindex actions.
 - **`9` — `userInitiatedPrerenderHtmlPriority`**. The HTML render a user-initiated index pass spawns — one tier below the index visit so it stays off the indexing hot path. **Exception:** a render a publish is awaiting (published-realm readiness gates on it) is lifted to `10`, co-equal with indexing, so the prerender server admits it ahead of ordinary user renders.

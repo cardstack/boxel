@@ -433,8 +433,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('user-initiated prerender-html outranks every system-initiated job', function (assert) {
-      // Keeps user renders in the high-priority pool (which floors at the
-      // user prerender-html tier) and out of reach of system-tier workers.
+      // The high-priority pool floors at the user prerender-html tier;
+      // keeping that tier above every system tier is what lets a floor-9 pool
+      // serve user renders while excluding system indexing (1) and system
+      // renders (0). (The all-priority pool still serves user renders too;
+      // this is about which pools the floor lets in, not exclusivity.)
       assert.ok(
         userInitiatedPrerenderHtmlPriority > systemInitiatedPriority,
         'user-initiated prerender-html floors above system-initiated indexing',
@@ -456,7 +459,9 @@ module(basename(import.meta.filename), function () {
 
     test('a publish-awaited render runs co-equal with indexing, but only for user work', function (assert) {
       assert.strictEqual(
-        prerenderHtmlPriority(userInitiatedPriority, { awaitedByPublish: true }),
+        prerenderHtmlPriority(userInitiatedPriority, {
+          awaitedByPublish: true,
+        }),
         userInitiatedPriority,
         'a publish-awaited user render is lifted to the indexing tier',
       );
