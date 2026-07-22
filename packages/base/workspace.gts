@@ -94,19 +94,44 @@ type JobCard = CardDef & {
 
 // honest ETA (same rules as the job card): linear from arrival rate,
 // only once 3 pieces are in, suppressed when implausible (> 30 min).
-function etaMinutes(job: JobCard): number | undefined {
+// The subset of a job card the ETA reads. A full `JobCard` satisfies it.
+export interface EtaJob {
+  progressDone?: number;
+  progressTotal?: number;
+  startedAt?: string | Date;
+}
+
+export function etaMinutes(
+  job: EtaJob,
+  now: number = Date.now(),
+): number | undefined {
   let done = job.progressDone ?? 0;
   let total = job.progressTotal ?? 0;
   let started = job.startedAt ? new Date(job.startedAt).getTime() : undefined;
   if (done < 3 || total <= done || !started) {
     return undefined;
   }
-  let elapsed = Date.now() - started;
+  let elapsed = now - started;
   if (elapsed <= 0) {
     return undefined;
   }
   let mins = Math.round(((elapsed / done) * (total - done)) / 60000);
   return mins > 30 ? undefined : mins;
+}
+
+// A card modified within this window of its creation reads as "Created" in
+// the Activity feed rather than "Updated".
+const CREATED_WINDOW_MS = 120000;
+
+export function classifyActivityVerb(
+  modMs: number | undefined,
+  createdMs: number | undefined,
+): 'Created' | 'Updated' {
+  return modMs !== undefined &&
+    createdMs !== undefined &&
+    Math.abs(modMs - createdMs) < CREATED_WINDOW_MS
+    ? 'Created'
+    : 'Updated';
 }
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
@@ -3226,12 +3251,7 @@ class Isolated extends Component<typeof Workspace> {
       let card = instance as CardDef;
       let modMs = toMs(getCardMeta(card, 'lastModified'));
       let createdMs = toMs(getCardMeta(card, 'resourceCreatedAt'));
-      let verb: 'Created' | 'Updated' =
-        modMs !== undefined &&
-        createdMs !== undefined &&
-        Math.abs(modMs - createdMs) < 120000
-          ? 'Created'
-          : 'Updated';
+      let verb = classifyActivityVerb(modMs, createdMs);
       let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       let ctor = card.constructor as typeof CardDef; // type identity for the log line
       this.feedItems.push({
