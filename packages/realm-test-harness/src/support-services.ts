@@ -40,14 +40,9 @@ function hostStartupLooksLikePortContention(logs: string): boolean {
   return /EADDRINUSE|address already in use/i.test(logs);
 }
 
-function boxelUIDistIsUsable(hostPackageDir: string): boolean {
-  let boxelUIDistDir = join(hostPackageDir, '..', 'boxel-ui', 'addon', 'dist');
-  return [
-    join(boxelUIDistDir, 'components.js'),
-    join(boxelUIDistDir, 'helpers.js'),
-    join(boxelUIDistDir, 'icons.js'),
-    join(boxelUIDistDir, 'styles', 'global.css'),
-  ].every((path) => existsSync(path));
+function boxelUIIsUsable(hostPackageDir: string): boolean {
+  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  return existsSync(join(boxelUIDir, 'declarations', 'components.d.ts'));
 }
 
 /**
@@ -56,56 +51,12 @@ function boxelUIDistIsUsable(hostPackageDir: string): boolean {
  *   2. Symlink from the root repo's built boxel-ui dist (fast, avoids rebuild)
  *   3. Build boxel-ui in the current worktree (slow but always works)
  */
-function ensureBoxelUIDist(hostPackageDir: string): void {
-  if (boxelUIDistIsUsable(hostPackageDir)) {
+function ensureBoxelUIReady(hostPackageDir: string): void {
+  if (boxelUIIsUsable(hostPackageDir)) {
     return;
   }
 
   let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
-  let boxelUIDistDir = join(boxelUIAddonDir, 'dist');
-
-  // Try to symlink from root repo first (fast path for worktrees).
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
-    let rootRepoBoxelUIDistDir = join(
-      rootRepoCheckoutDir,
-      'packages',
-      'boxel-ui',
-      'addon',
-      'dist',
-    );
-    if (
-      [
-        join(rootRepoBoxelUIDistDir, 'components.js'),
-        join(rootRepoBoxelUIDistDir, 'helpers.js'),
-        join(rootRepoBoxelUIDistDir, 'icons.js'),
-        join(rootRepoBoxelUIDistDir, 'styles', 'global.css'),
-      ].every((p) => existsSync(p))
-    ) {
-      supportLog.info(
-        `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
-      );
-      try {
-        if (existsSync(boxelUIDistDir)) {
-          rmSync(boxelUIDistDir, { recursive: true, force: true });
-        }
-        symlinkSync(rootRepoBoxelUIDistDir, boxelUIDistDir);
-        if (boxelUIDistIsUsable(hostPackageDir)) {
-          return;
-        }
-      } catch (error) {
-        supportLog.debug(
-          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-
-  // Remove any leftover symlink so the build writes into the worktree,
-  // not through a symlink into the root repo.
-  if (existsSync(boxelUIDistDir)) {
-    rmSync(boxelUIDistDir, { recursive: true, force: true });
-  }
 
   // Fall back to building boxel-ui.
   supportLog.info(`building boxel-ui dist at ${boxelUIAddonDir}...`);
@@ -120,10 +71,8 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
         `Run \`cd ${boxelUIAddonDir} && pnpm build\` manually to diagnose.`,
     );
   }
-  if (!boxelUIDistIsUsable(hostPackageDir)) {
-    throw new Error(
-      `boxel-ui build succeeded but dist is still incomplete at ${boxelUIDistDir}`,
-    );
+  if (!boxelUIIsUsable(hostPackageDir)) {
+    throw new Error(`boxel-ui build succeeded but boxelUIIsUsable failed`);
   }
 }
 
@@ -404,7 +353,7 @@ async function ensureHostReady(): Promise<{
         // cache:prepare works in a fresh worktree without manual setup.
         hostPackageDir = buildHostDist();
       }
-      ensureBoxelUIDist(hostPackageDir);
+      ensureBoxelUIReady(hostPackageDir);
       assertUsableHostDist(hostPackageDir);
       // Hold the port until just before spawn so a sibling allocation
       // cannot race in and take it. See findAndHoldAvailablePort comment
