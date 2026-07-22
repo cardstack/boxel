@@ -59,6 +59,8 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
+  APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+  type AppBoxelResponseStreamContent,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
@@ -439,6 +441,7 @@ export default class MatrixService extends Service {
       [this.matrixSDK.RoomEvent.Timeline, this.onTimeline],
       [this.matrixSDK.RoomEvent.LocalEchoUpdated, this.onUpdateEventStatus],
       [this.matrixSDK.RoomEvent.Receipt, this.onReceipt],
+      [this.matrixSDK.ClientEvent.ToDeviceEvent, this.onToDeviceEvent],
       [this.matrixSDK.RoomStateEvent.Update, this.onRoomStateUpdate],
       [
         this.matrixSDK.ClientEvent.AccountData,
@@ -2753,6 +2756,42 @@ export default class MatrixService extends Service {
     this.timelineQueue.push({ event: e });
     debounce(this, this.drainTimeline, 100);
   };
+
+  // ai-bot streams in-flight response previews as `app.boxel.response-stream`
+  // to-device messages (see AI_BOT_STREAMING_MODE=to-device). The raw client is
+  // private and all its event bindings live here, so we fan the previews out to
+  // the RoomResource(s) that registered via `onResponseStreamPreview`; each
+  // handler self-filters by roomId.
+  #responseStreamPreviewHandlers = new Set<
+    (payload: AppBoxelResponseStreamContent) => void
+  >();
+
+  private onToDeviceEvent = (e: MatrixEvent) => {
+    if (e.getType() !== APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE) {
+      return;
+    }
+    // A to-device message can be sent by any Matrix user directly to a device —
+    // room membership isn't required — so, unlike the room-event path (which
+    // implicitly trusts in-room ai-bot authorship), verify the sender before
+    // hydrating a preview into the assistant's bubble. This also short-circuits
+    // the fan-out for unrelated to-device traffic.
+    if (e.getSender() !== this.aiBotUserId) {
+      return;
+    }
+    let payload = e.getContent() as AppBoxelResponseStreamContent;
+    for (let handler of this.#responseStreamPreviewHandlers) {
+      handler(payload);
+    }
+  };
+
+  onResponseStreamPreview(
+    handler: (payload: AppBoxelResponseStreamContent) => void,
+  ): () => void {
+    this.#responseStreamPreviewHandlers.add(handler);
+    return () => {
+      this.#responseStreamPreviewHandlers.delete(handler);
+    };
+  }
 
   private onUpdateEventStatus = (
     e: MatrixEvent,

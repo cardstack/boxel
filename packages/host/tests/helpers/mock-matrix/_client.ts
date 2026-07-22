@@ -755,6 +755,24 @@ export class MockClient implements ExtendedClient {
     }
   }
 
+  // Dispatch a to-device event (e.g. ai-bot's `app.boxel.response-stream`
+  // streaming previews) to ClientEvent.ToDeviceEvent listeners. To-device
+  // messages are ephemeral, so unlike room events they are not recorded in
+  // serverState.
+  simulateToDeviceEvent(
+    type: string,
+    content: Record<string, any>,
+    sender?: string,
+  ) {
+    let event = new MatrixEvent({ type, content, sender });
+    let handlers = this.listeners[this.sdk.ClientEvent.ToDeviceEvent];
+    if (handlers) {
+      for (let handler of handlers) {
+        handler(event);
+      }
+    }
+  }
+
   private emitLocalEchoUpdated(event: MatrixEvent, oldEventId?: string) {
     let handlers = this.listeners[this.sdk.RoomEvent.LocalEchoUpdated];
     if (handlers) {

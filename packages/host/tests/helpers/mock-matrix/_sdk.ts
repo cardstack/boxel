@@ -15,6 +15,7 @@ type PublicAPI<T> = { [K in keyof T]: T[K] };
 
 export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   serverState: ServerState;
+  client: MockClient | undefined;
 
   constructor(
     private sdkOpts: Config,
@@ -27,13 +28,14 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   }
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
-    return new MockClient(
+    this.client = new MockClient(
       this.owner,
       this,
       this.serverState,
       clientOpts,
       this.sdkOpts,
     );
+    return this.client;
   }
 
   getRoomEvents(roomId: string) {
@@ -58,6 +60,7 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
 
   ClientEvent = {
     AccountData: 'accountData',
+    ToDeviceEvent: 'toDeviceEvent',
   } as ExtendedMatrixSDK['ClientEvent'];
 
   RoomStateEvent = {
