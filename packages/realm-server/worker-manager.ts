@@ -672,21 +672,19 @@ let adapter: PgAdapter;
   eventSink.setAdapter(adapter);
 
   // Each pool's minimum priority is a dequeue floor: its workers only
-  // claim jobs at or above it, oldest-first among those. User-initiated
-  // indexing and prerender-html are co-equal (both `userInitiatedPriority`
-  // — a published realm's rendered HTML is as first-class as its search
-  // index), so a priority floor alone cannot keep the two kinds of work
-  // from occupying the same workers. What separates them is the claim
-  // query's job-type filter: a worker only dequeues job types it has
-  // registered handlers for, and the user-index pool starts with
-  // `--indexJobsOnly` so it registers exactly the indexing job types.
-  // That makes it a lane a prerender-html sweep can never hold — indexing
-  // gates realm provisioning and every write's read-your-writes drain, so
-  // it must stay responsive even when long render sweeps saturate the
-  // high-priority pool. The high-priority pool serves all user-initiated
-  // work, indexing and prerender-html alike; the all-priority pool floors
-  // at the lowest tier and serves everything, including system-initiated
-  // prerender-html.
+  // claim jobs at or above it, oldest-first among those. The user-index
+  // pool floors at the user-initiated indexing tier, one notch above
+  // user-initiated prerender-html, so its floor alone excludes render work —
+  // an index job always has a lane a prerender-html sweep can't hold.
+  // Indexing gates realm provisioning and every write's read-your-writes
+  // drain, so it must stay responsive even when long render sweeps saturate
+  // the high-priority pool. The `--indexJobsOnly` flag on this pool is
+  // defense-in-depth on top of that floor: it registers only the indexing
+  // job types, so the lane stays index-only even if the tier gap were ever
+  // narrowed. The high-priority pool floors at the user-initiated
+  // prerender-html tier and serves all user-initiated work — indexing and
+  // prerender-html alike; the all-priority pool floors at the lowest tier and
+  // serves everything, including system-initiated prerender-html.
   for (let i = 0; i < userIndexCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings, {
       indexJobsOnly: true,

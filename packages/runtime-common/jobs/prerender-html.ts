@@ -11,10 +11,12 @@ import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
-// User-initiated HTML work shares its initiator's tier — for a published
-// realm the rendered HTML is a first-class artifact, as important as the
-// search index (see the tier table in queue.ts). System-initiated HTML work
-// still drops to the background tier only the all-priority pool takes.
+// A prerender-html job takes the tier one notch below the index pass that
+// spawned it: a user-initiated index (userInitiatedPriority) yields
+// userInitiatedPrerenderHtmlPriority, anything lower yields
+// systemInitiatedPrerenderHtmlPriority. Keeping HTML rendering one tier below
+// its initiator is what holds it off the indexing hot path — see the tier
+// table in queue.ts for why the gap is load-bearing.
 export function prerenderHtmlPriority(spawningPriority: number): number {
   return spawningPriority >= userInitiatedPriority
     ? userInitiatedPrerenderHtmlPriority

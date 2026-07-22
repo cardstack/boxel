@@ -6,6 +6,10 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  systemInitiatedPrerenderHtmlPriority,
+  systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
+  userInitiatedPriority,
   type DefinitionLookup,
   type Diagnostics,
   type IndexingProgressEvent,
@@ -15,6 +19,7 @@ import {
   type QueueJobSpec,
   type Reader,
 } from '@cardstack/runtime-common';
+import { prerenderHtmlPriority } from '@cardstack/runtime-common/jobs/prerender-html';
 import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
 // Registers the `prerender_html` coalesce handler at load time.
 import '@cardstack/runtime-common/tasks/prerender-html';
@@ -406,6 +411,46 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.deepEqual(decision, { type: 'insert' });
+    });
+  });
+
+  // Prerender-html floors one tier below its initiator so a worker pool that
+  // floors at the indexing tier reserves itself to indexing and never carries
+  // a render sweep (see queue.ts and the user-index lane in worker-manager).
+  // The two initiator tiers mirror each other. Guard the relationship so it
+  // can't quietly collapse back to co-equal.
+  module('priority tiers', function () {
+    test('prerender-html floors strictly below its initiator in both tiers', function (assert) {
+      assert.ok(
+        userInitiatedPrerenderHtmlPriority < userInitiatedPriority,
+        'user-initiated prerender-html floors below user-initiated indexing',
+      );
+      assert.ok(
+        systemInitiatedPrerenderHtmlPriority < systemInitiatedPriority,
+        'system-initiated prerender-html floors below system-initiated indexing',
+      );
+    });
+
+    test('user-initiated prerender-html outranks every system-initiated job', function (assert) {
+      // Keeps user renders in the high-priority pool (which floors at the
+      // user prerender-html tier) and out of reach of system-tier workers.
+      assert.ok(
+        userInitiatedPrerenderHtmlPriority > systemInitiatedPriority,
+        'user-initiated prerender-html floors above system-initiated indexing',
+      );
+    });
+
+    test('prerenderHtmlPriority maps an index pass to the render tier one notch below it', function (assert) {
+      assert.strictEqual(
+        prerenderHtmlPriority(userInitiatedPriority),
+        userInitiatedPrerenderHtmlPriority,
+        'a user-initiated index pass spawns user-initiated prerender-html',
+      );
+      assert.strictEqual(
+        prerenderHtmlPriority(systemInitiatedPriority),
+        systemInitiatedPrerenderHtmlPriority,
+        'a system-initiated index pass spawns system-initiated prerender-html',
+      );
     });
   });
 
