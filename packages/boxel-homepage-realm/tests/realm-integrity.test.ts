@@ -294,3 +294,32 @@ test('navbar anchors exist in the home layout template', () => {
     `nav anchors with no matching id in boxel-home-layout.gts:\n${failures.join('\n')}`,
   );
 });
+
+test('frame and CTA tokens stay adopted (no literal 80rem, no per-use fallbacks)', () => {
+  // Guards the define-once token work: the page frame is
+  // --site-max-width/--content-gutter (site-page-shell), consumed via
+  // one --_max-width/--_gutter alias per component; the CTA palette
+  // (--cta-contrast-*, --cta-arrow-*, --border-strong) is defined only
+  // in the shell and read plainly everywhere else.
+  const siteDir = join(CONTENTS, 'boxel-ai-website');
+  const failures: string[] = [];
+  for (const f of files.sourceFiles) {
+    if (!f.startsWith(siteDir)) continue;
+    const source = readFileSync(f, 'utf8');
+    const shortName = rel(f);
+    const isShell = shortName.endsWith('components/site-page-shell.gts');
+    for (const [index, line] of source.split('\n').entries()) {
+      const at = `${shortName}:${index + 1}`;
+      if (/max-width:\s*80rem/.test(line) && !isShell) {
+        failures.push(`${at}: literal 80rem (use the --_max-width alias)`);
+      }
+      if (/var\(--(cta-contrast|cta-arrow)-[a-z]+\s*,/.test(line)) {
+        failures.push(`${at}: per-use fallback on a CTA token`);
+      }
+      if (/var\(--border-strong\s*,/.test(line)) {
+        failures.push(`${at}: per-use fallback on --border-strong`);
+      }
+    }
+  }
+  assert.deepEqual(failures, [], failures.join('\n'));
+});
