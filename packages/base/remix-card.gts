@@ -21,5 +21,3 @@ export class RemixCard extends ProcessCard {
     },
   });
 }
-
-export default RemixCard;
