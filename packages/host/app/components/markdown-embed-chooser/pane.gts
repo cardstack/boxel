@@ -118,10 +118,13 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     this.args.selection.setKind(kind);
   }
 
-  // A Custom-size fitted embed with no dimensions would insert a size-less
-  // bare `fitted`, so the CTA is held disabled until a valid size is entered.
+  // A fresh Custom-size pick left empty would insert a size-less bare `fitted`,
+  // so the CTA is held disabled until a valid size is entered. The `isDirty`
+  // conjunct scopes that to an actual edit: a bare `::card[url | fitted]` opened
+  // for editing seeds the Custom category with no dimensions but is a valid,
+  // supported form, so its unchanged (non-dirty) state keeps the CTA enabled.
   private get ctaDisabled(): boolean {
-    return !this.args.selection.hasValidSize;
+    return !this.args.selection.hasValidSize && this.args.selection.isDirty;
   }
 
   @action

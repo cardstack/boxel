@@ -370,6 +370,57 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     );
   });
 
+  test('editing an existing bare fitted embed keeps Done enabled and re-inserts it unchanged', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
+    assert.ok(view, 'codemirror view is reachable');
+    view!.focus();
+
+    // A bare `::card[url | fitted]` (no dimensions) is a valid supported form.
+    // Opening the chooser on it seeds the Custom category with no size, so the
+    // size gate must not disable Done for the unchanged edit — the gate only
+    // blocks a fresh, dirty Custom pick.
+    view!.dispatch({
+      changes: { from: 0, insert: `::card[../Pet/mango | fitted]` },
+    });
+    view!.dispatch({ selection: { anchor: 3, head: 3 } });
+
+    await waitFor('[data-test-toolbar="edit-embed"]', { timeout: 5000 });
+    await click('[data-test-toolbar="edit-embed"]');
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+    await waitFor('[data-test-markdown-embed-preview-cta]', { timeout: 5000 });
+
+    assert
+      .dom('[data-test-markdown-embed-preview-cta]')
+      .isNotDisabled('Done stays enabled for an unchanged bare fitted embed');
+
+    await click('[data-test-markdown-embed-preview-cta]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let docText = cmContext.EditorView.findFromDOM(editorEl!)
+      ?.state.doc.toString()
+      ?.trim();
+    assert.strictEqual(
+      docText,
+      `::card[../Pet/mango | fitted]`,
+      'accepting the unchanged edit re-inserts the bare fitted directive',
+    );
+  });
+
   test('cursor at the end of a block directive line keeps the Edit pencil', async function (assert) {
     // A block directive is the only content on its line, so the caret at the
     // line end (`head == to`, reached via End / clicking the block widget) must
