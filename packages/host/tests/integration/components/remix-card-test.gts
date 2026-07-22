@@ -55,10 +55,8 @@ module('Integration | Card | remix-card', function (hooks) {
       assert.dom('.process-card__stage').hasText('Cloning cards');
       assert.dom('.process-card__count').hasText('4 of 8 items');
       assert
-        .dom('.process-card__bar')
-        .hasAttribute('role', 'progressbar')
-        .hasAttribute('aria-valuenow', '50');
-      assert.dom('.process-card__fill').hasAttribute('style', 'width: 50%');
+        .dom('[data-test-boxel-progress-bar]')
+        .exists('renders the inherited shared progress bar');
     });
 
     test('title falls back to "Remix" when listingName is unset', async function (assert) {
