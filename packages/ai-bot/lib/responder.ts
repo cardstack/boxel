@@ -59,6 +59,15 @@ export class Responder {
   private streamPreviewTarget: { userId: string; deviceId: string } | undefined;
   private _streamPreviewSequence = 0;
 
+  // Per-turn telemetry, logged once from finalize() to compare streaming modes.
+  // startedAt is set at construction — the turn boundary as the Responder sees
+  // it. Room-event count lives on the publisher; to-device previews and token
+  // usage are tallied here.
+  private startedAt = Date.now();
+  private toDeviceEventsEmitted = 0;
+  private promptTokens: number | undefined;
+  private completionTokens: number | undefined;
+
   constructor(
     client: MatrixClient,
     roomId: string,
@@ -181,6 +190,7 @@ export class Responder {
         APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
         contentMap,
       );
+      this.toDeviceEventsEmitted++;
     } catch (e) {
       // Preview loss is non-fatal; the final room edit still lands. Log at
       // debug so a wedged homeserver doesn't spam sentry.
@@ -270,6 +280,8 @@ export class Responder {
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
+      this.promptTokens = chunk.usage.prompt_tokens;
+      this.completionTokens = chunk.usage.completion_tokens;
       log.info(
         `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens} completion tokens`,
       );
@@ -340,5 +352,39 @@ export class Responder {
       await this.sendMessageEventWithThrottling();
     }
     await this.flush();
+    this.logTurnTelemetry();
+  }
+
+  // Per-turn measurements used to compare streaming modes. Exposed as a getter
+  // so tests can assert the counts directly rather than parse the log line.
+  get turnTelemetry() {
+    return {
+      mode: this.streamingMode,
+      durationMs: Date.now() - this.startedAt,
+      roomEvents: this.matrixResponsePublisher.roomEventsEmitted,
+      toDeviceEvents: this.toDeviceEventsEmitted,
+      promptTokens: this.promptTokens,
+      completionTokens: this.completionTokens,
+      canceled: this.responseState.isCanceled,
+      roomId: this.matrixResponsePublisher.roomId,
+      agentId: this.matrixResponsePublisher.agentId,
+      responseEventId: this.responseEventId,
+    };
+  }
+
+  // One structured, greppable line per turn so a scripted load run can compare
+  // Matrix event volume and latency across streaming modes in Loki. Keep it
+  // single-line key=value to stay consistent with the repo's other
+  // request-timing channels (e.g. realm:requests `dur=`).
+  private logTurnTelemetry() {
+    let t = this.turnTelemetry;
+    log.info(
+      `[turn-telemetry] mode=${t.mode} durationMs=${t.durationMs} ` +
+        `roomEvents=${t.roomEvents} toDeviceEvents=${t.toDeviceEvents} ` +
+        `promptTokens=${t.promptTokens ?? ''} ` +
+        `completionTokens=${t.completionTokens ?? ''} ` +
+        `canceled=${t.canceled} roomId=${t.roomId} agentId=${t.agentId} ` +
+        `responseEventId=${t.responseEventId ?? ''}`,
+    );
   }
 }

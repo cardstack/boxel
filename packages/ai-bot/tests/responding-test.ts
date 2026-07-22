@@ -352,6 +352,58 @@ module('Responding', (hooks) => {
     }
   });
 
+  test('per-turn telemetry records mode, event counts, and token usage', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      // The final chunk carries usage (the only chunk that does), which the
+      // Responder tallies for the telemetry line.
+      await responder.onChunk(
+        { usage: { prompt_tokens: 120, completion_tokens: 42 } } as any,
+        snapshotWithContent('content 4'),
+      );
+
+      let toDeviceCount = fakeMatrixClient.getSentToDeviceEvents().length;
+      await responder.finalize();
+
+      let telemetry = responder.turnTelemetry;
+      assert.equal(telemetry.mode, 'to-device', 'mode is recorded');
+      assert.equal(
+        telemetry.roomEvents,
+        2,
+        'room events = thinking placeholder + one final consolidated event',
+      );
+      assert.equal(
+        telemetry.toDeviceEvents,
+        toDeviceCount,
+        'to-device count matches the previews actually sent',
+      );
+      assert.ok(telemetry.toDeviceEvents >= 1, 'at least one preview was sent');
+      assert.equal(telemetry.promptTokens, 120, 'prompt tokens captured');
+      assert.equal(
+        telemetry.completionTokens,
+        42,
+        'completion tokens captured',
+      );
+      assert.equal(telemetry.canceled, false, 'not canceled');
+      assert.equal(telemetry.roomId, 'room-id', 'roomId recorded');
+      assert.equal(telemetry.agentId, 'abc123agentId', 'agentId recorded');
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('`to-device` streaming mode without a target device falls back to `off` behavior', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {

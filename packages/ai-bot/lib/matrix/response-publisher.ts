@@ -63,6 +63,11 @@ export default class MatrixResponsePublisher {
   readonly responseState: ResponseState;
   eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   responseEvents: ResponseEventData[] | undefined;
+  // Count of Matrix room events this publisher has sent this turn (thinking
+  // placeholder, streamed message edits, continuation splits, and errors).
+  // Read by the Responder's per-turn telemetry line to compare room-event
+  // volume across streaming modes.
+  roomEventsEmitted = 0;
   private sendingMessage = Promise.resolve(); // track pending send operation
 
   get currentResponseEvent() {
@@ -146,6 +151,7 @@ export default class MatrixResponsePublisher {
           ),
           reasoningAndContent.reasoning,
         );
+        this.roomEventsEmitted++;
         if (!this.currentResponseEvent.eventId) {
           this.currentResponseEvent.eventId = messageEvent.event_id;
         }
@@ -189,6 +195,7 @@ export default class MatrixResponsePublisher {
           ),
         contentAndReasoning.reasoning,
       );
+      this.roomEventsEmitted++;
       if (!this.currentResponseEvent.eventId) {
         this.currentResponseEvent.eventId = messageEvent.event_id;
       }
@@ -209,6 +216,7 @@ export default class MatrixResponsePublisher {
       this.originalResponseEventId,
       opts,
     );
+    this.roomEventsEmitted++;
   }
 
   async ensureThinkingMessageSent() {
@@ -231,5 +239,6 @@ export default class MatrixResponsePublisher {
     this.responseEvents = [
       new ResponseEventData(initialMessage.event_id, this.eventSizeMax),
     ];
+    this.roomEventsEmitted++;
   }
 }
