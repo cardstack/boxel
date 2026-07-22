@@ -281,7 +281,9 @@ test('navbar anchors exist in the home layout template', () => {
       if (typeof href !== 'string') continue;
       const match = href.match(/#([\w-]+)/);
       if (!match) continue;
-      if (!new RegExp(`id=['"]${match[1]}['"]`).test(layout)) {
+      // anchors render either as a literal id or via a SectionSlot @anchor
+      const anchorPattern = new RegExp(`(id|@anchor)=['"]${match[1]}['"]`);
+      if (!anchorPattern.test(layout)) {
         failures.push(`${rel(f)}: ${href}`);
       }
     }
