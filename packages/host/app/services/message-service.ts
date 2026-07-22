@@ -3,18 +3,18 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import type NetworkService from './network';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export default class MessageService extends Service {
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
     new Map();
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   register() {
@@ -22,6 +22,14 @@ export default class MessageService extends Service {
   }
 
   resetState() {
+    // Unlike RealmServerService.eventSubscribers (app-scoped wiring registered
+    // once in a service constructor — must survive logout), these callbacks are
+    // held by components and resources that subscribe on mount and unsubscribe
+    // in their destructor. The <Auth/> swap on logout unmounts them, so this
+    // wipe is normally redundant; it stays as a safety net for the test
+    // environment, where subscribers aren't always torn down between sessions.
+    // Re-login re-subscribes fresh (RealmResource.subscribe(), etc.), so a clear
+    // here can't strand a live session's wiring.
     this.listenerCallbacks = new Map();
     if ((globalThis as any)._CARDSTACK_REALM_SUBSCRIBE === this) {
       delete (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE;

@@ -17,7 +17,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as yaml from 'yaml';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
 import { cleanupMonacoEditorModels } from './index';
@@ -868,12 +868,27 @@ export function setupApplicationTest(hooks: NestedHooks) {
     resetServiceIfPresent(this.owner, 'service:matrix-service');
     resetServiceIfPresent(this.owner, 'service:operator-mode-state-service');
     await settled();
-    (
-      this.owner.lookup('service:reset') as ResetService | undefined
-    )?.resetAll();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
+}
+
+// A SessionParticipant whose resetState()/sessionStarted() threw during this
+// test was buffered by SessionService rather than thrown or floated (a
+// synchronous throw is swallowed by MatrixService.start()/logout(); a floated
+// rejection can be blamed on the next test). Drain the buffer here — after the
+// teardown notifySessionEnded() above has run — so the failure lands
+// deterministically on the test that actually caused it.
+function failOnParticipantErrors(session: SessionService | undefined) {
+  let errors = session?.takeParticipantErrorsForTest?.() ?? [];
+  if (errors.length > 0) {
+    throw errors[0];
+  }
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
@@ -883,12 +898,23 @@ export function setupRenderingTest(hooks: NestedHooks) {
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
+    // MatrixService is the session orchestrator, not a participant, so
+    // notifySessionEnded() no longer resets it. Reset it explicitly (as
+    // setupApplicationTest does) so its client/room state doesn't bleed
+    // across rendering tests. Reset the AI panel first — its resetState()
+    // cancels an in-flight loadRoomsTask, so cancelling before
+    // MatrixService.resetState() replaces the initial-sync barrier avoids a
+    // task hanging on a deferred nothing re-fulfills.
+    resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
+    resetServiceIfPresent(this.owner, 'service:matrix-service');
     await settled();
-    (
-      this.owner.lookup('service:reset') as ResetService | undefined
-    )?.resetAll();
+    let session = this.owner.lookup('service:session') as
+      | SessionService
+      | undefined;
+    session?.notifySessionEnded();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    failOnParticipantErrors(session);
   });
 }
 
