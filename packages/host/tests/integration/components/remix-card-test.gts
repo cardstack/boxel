@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 import type { Loader } from '@cardstack/runtime-common';
 
 import {
+  CardDef,
   ProcessCard,
   RemixCard,
   setupBaseRealm,
@@ -38,6 +39,16 @@ module('Integration | Card | remix-card', function (hooks) {
     assert.strictEqual(card.percentComplete, 50);
     assert.strictEqual(card.progressLabel, '4 of 8 items');
     assert.strictEqual(card.statusLabel, 'running');
+  });
+
+  test('links to the card it was remixed from', function (assert) {
+    let source = new CardDef({});
+    let card = new RemixCard({ remixedFrom: source });
+    assert.strictEqual(
+      card.remixedFrom,
+      source,
+      'remixedFrom holds the source the remix was cloned from',
+    );
   });
 
   module('rendering', function () {
