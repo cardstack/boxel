@@ -120,3 +120,60 @@ test('gridCards getter in animated-grid.gts stays @cached', () => {
     'gridCards must delegate to the tested lib/grid-cards module',
   );
 });
+
+test('hero grid animation contracts in animated-grid.gts', () => {
+  const source = readFileSync(
+    fileURLToPath(
+      new URL(
+        '../contents/boxel-ai-website/animated-grid.gts',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /captureGridPlane = modifier[\s\S]*?IntersectionObserver/,
+    'animation loop must be gated behind an IntersectionObserver',
+  );
+  assert.match(
+    source,
+    /\} finally \{[\s\S]*?delete activeCard\.dataset\.active;[\s\S]*?delete popup\.dataset\.visible;/,
+    'cancellation must clear the highlighted tile and popup (regression: ' +
+      'stranded data-active tiles accumulated after scroll-out cancels)',
+  );
+  assert.match(
+    source,
+    /for \(const card of cards\) \{\s*delete card\.dataset\.active;/,
+    'each run must sweep stale highlights from prior cancelled runs',
+  );
+  assert.match(
+    source,
+    /resumeSignal/,
+    'pause must park on a promise resolved by resumeAnimation',
+  );
+  assert.doesNotMatch(
+    source,
+    /await timeout\(200\)/,
+    'pause must not busy-poll',
+  );
+  assert.doesNotMatch(
+    source,
+    /classList\./,
+    'JS-driven state uses data attributes, not classnames',
+  );
+});
+
+test('grid tile active state is a data attribute, not a class', () => {
+  const source = readFileSync(
+    fileURLToPath(
+      new URL(
+        '../contents/boxel-ai-website/components/animated-grid-card.gts',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  );
+  assert.match(source, /\.hero-mini-card\[data-active\]/);
+  assert.doesNotMatch(source, /\.hero-mini-card\.active/);
+});
