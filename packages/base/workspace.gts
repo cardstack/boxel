@@ -34,6 +34,7 @@ import {
   subscribeToRealm,
   codeRefFromInternalKey,
   type Query,
+  type Filter,
   type CodeRef,
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -191,6 +192,17 @@ const SYSTEM_TYPE_NAMES = new Set([
   'Onboarding Survey',
   'Setup Survey',
 ]);
+
+// The Workspace index card and the legacy Cards Grid index card are
+// self-referential: every Library / search / feed / pin query hides them so a
+// workspace never lists itself. Kept in one place — hiding a third
+// self-referential type means editing only this list, not each query site.
+const SELF_REFERENTIAL_CARD_TYPES = ['Cards Grid', 'Workspace'];
+function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
+  return SELF_REFERENTIAL_CARD_TYPES.map((_cardType) =>
+    on ? { not: { on, eq: { _cardType } } } : { not: { eq: { _cardType } } },
+  );
+}
 
 function toMs(value: unknown): number | undefined {
   let ms =
@@ -2256,6 +2268,7 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
+  @cached
   get runningJobs() {
     return this.jobComponents.filter(
       (j) => j.status === 'running' || j.status === 'queued',
@@ -2298,8 +2311,7 @@ class Isolated extends Component<typeof Workspace> {
         filter: {
           every: [
             { type: baseCardRef },
-            { not: { on: baseCardRef, eq: { _cardType: 'Cards Grid' } } },
-            { not: { on: baseCardRef, eq: { _cardType: 'Workspace' } } },
+            ...excludeSelfReferentialCards(baseCardRef),
           ],
         },
         page: { size: 100 },
@@ -2403,8 +2415,7 @@ class Isolated extends Component<typeof Workspace> {
     let clauses: unknown[] = [
       { type: baseCardRef },
       { on: baseCardRef, contains: { cardTitle: term } },
-      { not: { on: baseCardRef, eq: { _cardType: 'Cards Grid' } } },
-      { not: { on: baseCardRef, eq: { _cardType: 'Workspace' } } },
+      ...excludeSelfReferentialCards(baseCardRef),
     ];
     if (this.args.model.searchIncludesSystem !== true) {
       // machinery stays out of results unless opted in
@@ -2453,8 +2464,7 @@ class Isolated extends Component<typeof Workspace> {
           every: [
             { type: baseCardRef },
             { on: baseCardRef, contains: { cardTitle: term } },
-            { not: { on: baseCardRef, eq: { _cardType: 'Cards Grid' } } },
-            { not: { on: baseCardRef, eq: { _cardType: 'Workspace' } } },
+            ...excludeSelfReferentialCards(baseCardRef),
           ],
         },
       },
@@ -2646,12 +2656,10 @@ class Isolated extends Component<typeof Workspace> {
     let instances = await this.searchRealm({
       // Keep Home preview lookup inside this realm.
       filter: {
-        every: [
-          { not: { eq: { _cardType: 'Cards Grid' } } },
-          { not: { eq: { _cardType: 'Workspace' } } },
-        ],
+        every: [...excludeSelfReferentialCards()],
       },
       sort: [{ by: 'lastModified', direction: 'desc' }],
+      page: { size: 1 }, // Home preview reads only the single newest card.
     } as Query);
     let first = (instances ?? []).find((i) => isCardInstance(i) && i.id) as
       | CardDef
@@ -2800,7 +2808,9 @@ class Isolated extends Component<typeof Workspace> {
       // Never fall back to all available realms.
       return []; // An unscoped search must remain idle.
     } //
-    return store.search({ ...query, page: { size: 100 } } as Query, [realm]); // Bound hydration and federated-search scope.
+    // Bound hydration and federated-search scope. Default to 100 but let a
+    // caller that needs fewer (e.g. a single-row preview) request a smaller page.
+    return store.search({ page: { size: 100 }, ...query } as Query, [realm]);
   }; //
 
   // The four library-group rows keep stable identities (@cached, no tracked
@@ -2814,10 +2824,7 @@ class Isolated extends Component<typeof Workspace> {
       icon: LayoutGridIcon,
       query: {
         filter: {
-          every: [
-            { not: { eq: { _cardType: 'Cards Grid' } } },
-            { not: { eq: { _cardType: 'Workspace' } } },
-          ],
+          every: [...excludeSelfReferentialCards()],
         },
       },
     };
@@ -2850,8 +2857,7 @@ class Isolated extends Component<typeof Workspace> {
       query: {
         filter: {
           every: [
-            { not: { eq: { _cardType: 'Cards Grid' } } },
-            { not: { eq: { _cardType: 'Workspace' } } },
+            ...excludeSelfReferentialCards(),
             { not: { type: this.fileDefRef } },
           ],
         },
@@ -3083,16 +3089,19 @@ class Isolated extends Component<typeof Workspace> {
         return;
       }
       let kind = summary.attributes.kind ?? 'instance';
-      if (kind === 'file') {
-        fileTotal += summary.attributes.total ?? 0;
-      } else {
-        cardTotal += summary.attributes.total ?? 0;
-      }
       if (excludedTypeIds.includes(summary.id)) {
         return;
       }
       if (summary.id.endsWith('workspace/Workspace')) {
         return;
+      }
+      // Accumulate after the exclusion guards so the rail counts match the
+      // grid each row opens: the Workspace card (always present, rendering
+      // itself) and the excluded system types must not inflate the totals.
+      if (kind === 'file') {
+        fileTotal += summary.attributes.total ?? 0;
+      } else {
+        cardTotal += summary.attributes.total ?? 0;
       }
       // Types stay one flat vocabulary (JPGs and PDFs are types like Product
       // and Order) but the rail groups them by kind: CARD TYPES / FILE TYPES.
@@ -3229,10 +3238,7 @@ class Isolated extends Component<typeof Workspace> {
     let instances = await store.search(
       {
         filter: {
-          every: [
-            { not: { eq: { _cardType: 'Cards Grid' } } },
-            { not: { eq: { _cardType: 'Workspace' } } },
-          ],
+          every: [...excludeSelfReferentialCards()],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
         page: { size: 100 }, // Bound server results before instance hydration.

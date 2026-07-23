@@ -351,10 +351,6 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>('@cardstack/base/cards-grid')
   ).CardsGrid;
 
-  Workspace = (
-    await loader.import<typeof WorkspaceModule>('@cardstack/base/workspace')
-  ).Workspace;
-
   Skill = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .Skill;
 
@@ -425,6 +421,21 @@ async function initialize() {
 
 export async function setupBaseRealm(hooks: NestedHooks) {
   hooks.beforeEach(initialize);
+}
+
+// Workspace pulls in a large transitive module graph (CardsGridLayout, several
+// icons, BoxelInput, the publish-realm host tool). Loading it in the shared
+// `initialize()` would import that graph into every setupBaseRealm test, so it
+// is opt-in: only tests that exercise the Workspace card call this.
+async function initializeWorkspace() {
+  let loader = getService('loader-service').loader;
+  Workspace = (
+    await loader.import<typeof WorkspaceModule>('@cardstack/base/workspace')
+  ).Workspace;
+}
+
+export function setupWorkspaceCard(hooks: NestedHooks) {
+  hooks.beforeEach(initializeWorkspace);
 }
 
 export {

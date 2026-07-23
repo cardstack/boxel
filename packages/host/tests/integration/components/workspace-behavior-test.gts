@@ -5,7 +5,11 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { Workspace, setupBaseRealm } from '../../helpers/base-realm';
+import {
+  Workspace,
+  setupBaseRealm,
+  setupWorkspaceCard,
+} from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -16,6 +20,7 @@ const ACTIVITY = 'nav.tabs .tab:nth-child(3)';
 module('Integration | Card | workspace | segments', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
+  setupWorkspaceCard(hooks);
 
   let loader: Loader;
 
