@@ -187,8 +187,9 @@ module(basename(import.meta.filename), function () {
     // realm. ensureMounted publishes the Realm into reconciler.mounted
     // synchronously and then awaits realm.start(). For a brand-new
     // realm, start() awaits the first full index, which prerenders
-    // index.json. The CardsGrid in index.json fires _federated-search
-    // against the new realm. If resolveRealmsForFederatedRequest were
+    // index.json. The Workspace index card in index.json fires
+    // _federated-search against the new realm. If
+    // resolveRealmsForFederatedRequest were
     // to re-enter lookupOrMount() for the same URL, it would find the
     // URL in pendingMounts and await the very start() it is nested
     // inside — deadlocking until the prerender's 90s render timeout
