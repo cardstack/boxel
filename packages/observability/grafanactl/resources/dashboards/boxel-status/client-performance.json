@@ -847,6 +847,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "max settle_ms"
+                  }
+                }
               }
             ]
           },
@@ -1354,6 +1365,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "count"
+                  }
+                }
               }
             ]
           },
@@ -1601,6 +1623,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "count"
+                  }
+                }
               }
             ]
           }
@@ -1854,6 +1887,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "wedges"
+                  }
+                }
               }
             ]
           },
@@ -2135,6 +2179,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "rebuilds"
+                  }
+                }
               }
             ]
           }
@@ -2751,6 +2806,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "wedges"
+                  }
+                }
               }
             ]
           },
@@ -2832,6 +2898,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "max settle_ms"
+                  }
+                }
               }
             ]
           },
@@ -2913,6 +2990,17 @@
               {
                 "id": "merge",
                 "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "events"
+                  }
+                }
               }
             ]
           }
