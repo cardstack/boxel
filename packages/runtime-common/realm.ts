@@ -227,9 +227,10 @@ export type RealmInfo = {
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
   // Opt-in to producing the full prerendered isolated HTML for the
-  // realm's default CardsGrid index card. When undefined / null /
-  // false the host's render route substitutes a small boilerplate
-  // placeholder instead and skips the (expensive) isolated render.
+  // realm's default index card (CardsGrid or Workspace). When
+  // undefined / null / false the host's render route substitutes a
+  // small boilerplate placeholder instead and skips the (expensive)
+  // isolated render.
   // The lever is primarily set by the publish handler on the
   // published realm snapshot so anonymous-visitor SSR injection has
   // real content; unpublished realms typically have nothing reading
