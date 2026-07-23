@@ -38,6 +38,7 @@ import type * as TimeFieldModule from '@cardstack/base/time';
 import type * as DurationFieldModule from '@cardstack/base/time/duration';
 import type * as RelativeTimeFieldModule from '@cardstack/base/time/relative-time';
 import type * as TimeRangeFieldModule from '@cardstack/base/time/time-range';
+import type * as WorkspaceModule from '@cardstack/base/workspace';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -128,6 +129,9 @@ let PhoneNumberField: PhoneNumberField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
+
+type Workspace = (typeof WorkspaceModule)['Workspace'];
+let Workspace: Workspace;
 
 type ProcessCard = (typeof ProcessCardModule)['ProcessCard'];
 let ProcessCard: ProcessCard;
@@ -437,6 +441,21 @@ export async function setupBaseRealm(hooks: NestedHooks) {
   hooks.beforeEach(initialize);
 }
 
+// Workspace pulls in a large transitive module graph (CardsGridLayout, several
+// icons, BoxelInput, the publish-realm host tool). Loading it in the shared
+// `initialize()` would import that graph into every setupBaseRealm test, so it
+// is opt-in: only tests that exercise the Workspace card call this.
+async function initializeWorkspace() {
+  let loader = getService('loader-service').loader;
+  Workspace = (
+    await loader.import<typeof WorkspaceModule>('@cardstack/base/workspace')
+  ).Workspace;
+}
+
+export function setupWorkspaceCard(hooks: NestedHooks) {
+  hooks.beforeEach(initializeWorkspace);
+}
+
 export {
   cardAPI,
   StringField,
@@ -470,6 +489,7 @@ export {
   RichMarkdownField,
   PhoneNumberField,
   CardsGrid,
+  Workspace,
   ProcessCard,
   RemixCard,
   SystemCard,
