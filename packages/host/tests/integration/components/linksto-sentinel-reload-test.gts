@@ -125,12 +125,12 @@ module('Integration | linksTo sentinel reload', function (hooks) {
   // re-armed link kicks off on the next render.
   function trackGhostLoads(): { count: () => number; restore: () => void } {
     let count = 0;
-    let original = cardStore.loadCardDocument.bind(cardStore);
-    (cardStore as any).loadCardDocument = (url: string, opts: any) => {
+    let original = cardStore.loadCardDocument;
+    (cardStore as any).loadCardDocument = function (url: string, opts: any) {
       if (url.includes('Pet/ghost')) {
         count++;
       }
-      return original(url, opts);
+      return original.call(cardStore, url, opts);
     };
     return {
       count: () => count,
@@ -161,7 +161,7 @@ module('Integration | linksTo sentinel reload', function (hooks) {
     );
   }
 
-  test('N reloads with an unchanged broken reference produce no re-fetch (AC1)', async function (assert) {
+  test('N reloads with an unchanged broken reference produce no re-fetch', async function (assert) {
     let person = await loadHassan();
     readLinks(person);
     await waitUntil(() => petKind(person) === 'not-found');
@@ -199,7 +199,7 @@ module('Integration | linksTo sentinel reload', function (hooks) {
     );
   });
 
-  test('creating the missing target heals the card on the next reload (AC2)', async function (assert) {
+  test('creating the missing target heals the card on the next reload', async function (assert) {
     let person = await loadHassan();
     readLinks(person);
     await waitUntil(() => petKind(person) === 'not-found');
