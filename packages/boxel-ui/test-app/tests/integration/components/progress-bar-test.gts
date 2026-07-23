@@ -30,6 +30,27 @@ module('Integration | Component | progress-bar', function (hooks) {
       .hasAttribute('aria-valuetext', '100%');
   });
 
+  test('clamps a negative value up to 0', async function (assert) {
+    await render(
+      <template><ProgressBar @value={{-5}} @max={{12}} /></template>,
+    );
+
+    assert
+      .dom('[data-test-boxel-progress-bar]')
+      .hasAttribute('aria-valuenow', '0')
+      .hasAttribute('aria-valuetext', '0%');
+  });
+
+  test('reports 0% rather than NaN% when max is 0', async function (assert) {
+    await render(<template><ProgressBar @value={{5}} @max={{0}} /></template>);
+
+    assert
+      .dom('[data-test-boxel-progress-bar]')
+      .hasAttribute('aria-valuenow', '0')
+      .hasAttribute('aria-valuemax', '0')
+      .hasAttribute('aria-valuetext', '0%');
+  });
+
   test('uses the label as the accessible name when provided', async function (assert) {
     await render(
       <template>

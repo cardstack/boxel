@@ -25,7 +25,10 @@ export default class ProgressBar extends Component<Signature> {
   }
 
   get progressPercentage(): string {
-    return Math.round((this.valueNow / this.max) * 100) + '%';
+    // Guard the degenerate max=0 case so aria-valuetext (announced by screen
+    // readers) and the CSS width don't become "NaN%".
+    const pct = this.max === 0 ? 0 : (this.valueNow / this.max) * 100;
+    return Math.round(pct) + '%';
   }
 
   get progressWidth(): ReturnType<typeof htmlSafe> {
