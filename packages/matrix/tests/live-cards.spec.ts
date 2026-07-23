@@ -226,14 +226,15 @@ test.describe('Live Cards', () => {
     const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await createRealm(page, realmName);
 
-    // Land on the realm's grid so the create-new-card affordance is present.
+    // Open the card chooser via the operator-mode "New" button — an
+    // index-agnostic affordance, so this doesn't depend on whether the realm
+    // index is a CardsGrid or a Workspace. Its "Choose a card type..." item
+    // opens the same chooser CardsGrid's create button did.
     await page.goto(realmURL);
-    await showAllCards(page);
-    await expect(
-      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-    ).toHaveCount(1);
-
-    await page.locator('[data-test-create-new-card-button]').click();
+    await page.locator('[data-test-new-file-button]').click();
+    await page
+      .locator('[data-test-boxel-menu-item-text="Choose a card type..."]')
+      .click();
     await expect(page.locator('[data-test-card-chooser-modal]')).toBeVisible();
     await expect(page.locator('[data-test-item-button]').first()).toBeVisible();
 
