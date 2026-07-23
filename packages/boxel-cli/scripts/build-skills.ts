@@ -37,7 +37,7 @@ import {
 import { relative, resolve } from 'path';
 import { format, resolveConfig } from 'prettier';
 
-const BOXEL_SKILLS_VERSION = 'v0.0.28';
+const BOXEL_SKILLS_VERSION = 'v0.0.29';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
