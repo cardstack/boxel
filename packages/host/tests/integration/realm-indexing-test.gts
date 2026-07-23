@@ -2507,7 +2507,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/1'),
             type: 'card',
             links: {
-              self: `../Chain/1`,
+              self: `./1`,
             },
             attributes: {
               name: 'Ethereum Mainnet',
@@ -2544,7 +2544,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/2'),
             type: 'card',
             links: {
-              self: `../Chain/2`,
+              self: `./2`,
             },
             attributes: {
               name: 'Polygon',
@@ -3048,7 +3048,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/mango'),
           type: 'card',
-          links: { self: `../Pet/mango` },
+          links: { self: `./mango` },
           attributes: {
             cardDescription: null,
             firstName: 'Mango',
@@ -3082,7 +3082,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/vanGogh'),
           type: 'card',
-          links: { self: `../Pet/vanGogh` },
+          links: { self: `./vanGogh` },
           attributes: {
             cardDescription: null,
             firstName: 'Van Gogh',

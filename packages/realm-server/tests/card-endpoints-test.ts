@@ -3205,7 +3205,7 @@ module(basename(import.meta.filename), function () {
                   relationships: {
                     'friends.0': {
                       links: {
-                        self: './Friend/local-id-2',
+                        self: './local-id-2',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-2`,
@@ -3214,7 +3214,7 @@ module(basename(import.meta.filename), function () {
                     },
                     'friends.1': {
                       links: {
-                        self: './Friend/local-id-3',
+                        self: './local-id-3',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-3`,
@@ -3224,7 +3224,7 @@ module(basename(import.meta.filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
@@ -3241,7 +3241,7 @@ module(basename(import.meta.filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
@@ -3258,7 +3258,7 @@ module(basename(import.meta.filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
