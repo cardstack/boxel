@@ -1,0 +1,2989 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-client-perf"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "Client-side performance telemetry (channel boxel:client-perf) re-emitted by realm-server as structured JSON log lines and read from Loki. Overview headline signals plus a collapsible row per event type; the User/Session variables drill the whole board into a single client.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 2,
+        "panels": [],
+        "title": "Overview",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Distinct client sessions that emitted any boxel:client-perf event in the selected time range. Drill filters (user/session) narrow this.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 1
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "count(count by (session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range])))",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Active sessions",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Count of card-load events in the selected range.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 1
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range]))",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Card loads (range)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Count of wedge events (main-thread stalls) in the selected range. Non-zero is worth investigating in the wedge row below.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 1
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range]))",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Wedges \u226510s (range)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Count of rebuild events (loader/module refetch cycles) in the selected range.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 1
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range]))",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Rebuilds (range)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "p95 card-to-interactive latency (card-load settle_ms) alongside p95 server-request duration_ms. The headline responsiveness signals.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "ms",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap settle_ms [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "card settle p95"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "B",
+            "legendFormat": "server-request p95"
+          }
+        ],
+        "title": "Interactivity p95 (ms)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Rate of the signal-gated event types that flag anomalies. wedge and rebuild spikes correlate with degraded client sessions.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 5
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "wedge"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+            "queryType": "range",
+            "refId": "B",
+            "legendFormat": "rebuild"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+            "queryType": "range",
+            "refId": "C",
+            "legendFormat": "realm-event"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+            "queryType": "range",
+            "refId": "D",
+            "legendFormat": "card-load"
+          }
+        ],
+        "title": "Signal event rate (events / interval)",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 14
+        },
+        "id": 13,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Card-to-interactive time (settle_ms): p50/p95/p99 across all card-load events in each interval.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 15
+            },
+            "id": 9,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap settle_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "p50"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap settle_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap settle_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "p99"
+              }
+            ],
+            "title": "card-load settle_ms percentiles",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Network/loading time (loading_ms): p50/p95/p99 across all card-load events in each interval.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 15
+            },
+            "id": 10,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap loading_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "p50"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap loading_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap loading_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "p99"
+              }
+            ],
+            "title": "card-load loading_ms percentiles",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Top 20 card_id values by worst observed settle_ms over the selected range. Instant query; widen the time range to survey more history.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 23
+            },
+            "id": 11,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(20, max by (card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap settle_ms [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Slowest card loads by card_id (max settle_ms)",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Card-load event rate per interval, plus the average num_loads (link/dependency loads) per card-load event.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 23
+            },
+            "id": 12,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "card-loads"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap num_loads [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "avg num_loads"
+              }
+            ],
+            "title": "card-load rate & avg num_loads",
+            "type": "timeseries"
+          }
+        ],
+        "title": "card-load",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        },
+        "id": 19,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 duration_ms grouped by endpoint. Isolates which realm-server endpoints dominate client-observed request latency.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 25
+            },
+            "id": 14,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by (endpoint)",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{endpoint}}"
+              }
+            ],
+            "title": "server-request duration p95 by endpoint",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p50/p95/p99 of duration_ms across all server-request events in each interval.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 25
+            },
+            "id": 15,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "p50"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "p99"
+              }
+            ],
+            "title": "server-request duration percentiles (all endpoints)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Rate of 4xx/5xx server-request responses grouped by status code.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "errors",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 33
+            },
+            "id": 16,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (status) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | status=~\"[45]..\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{status}}"
+              }
+            ],
+            "title": "server-request error rate by status",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Per-endpoint worst-case duration_ms (query A) and retried-request count (query B) over the selected range. Instant queries merged on endpoint.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 33
+            },
+            "id": 17,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(15, max by (endpoint) (max_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (endpoint) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range]))",
+                "queryType": "instant",
+                "refId": "B",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Slowest & most-retried endpoints",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Raw server-request telemetry lines, newest first. Each carries correlation_id for cross-referencing realm-server request logs.",
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 41
+            },
+            "id": 18,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "server-request log lines (correlation_id)",
+            "type": "logs"
+          }
+        ],
+        "title": "server-request",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 42
+        },
+        "id": 22,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 deserialize duration_ms grouped by card_type. Surfaces card types whose document deserialization is expensive.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 43
+            },
+            "id": 20,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by (card_type)",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{card_type}}"
+              }
+            ],
+            "title": "deserialize duration p95 by card_type",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Per card_type: avg duration_ms (A), avg doc_bytes (B), avg included_count (C) over the range. Intended as a cost table to spot large-document / high-fan-in card types (a scatter of duration vs size).",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 43
+            },
+            "id": 21,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__range]))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap doc_bytes [$__range]))",
+                "queryType": "instant",
+                "refId": "B",
+                "legendFormat": ""
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg by (card_type) (avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"deserialize\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap included_count [$__range]))",
+                "queryType": "instant",
+                "refId": "C",
+                "legendFormat": ""
+              }
+            ],
+            "title": "deserialize cost by card_type (duration vs bytes vs included)",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          }
+        ],
+        "title": "deserialize",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        },
+        "id": 25,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Wedge event rate per interval (left axis) and the worst blocked_ms observed per interval (right axis, ms). A wedge is a main-thread stall; blocked_ms is how long the thread was blocked.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "wedges",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "max blocked_ms"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.axisPlacement",
+                      "value": "right"
+                    },
+                    {
+                      "id": "unit",
+                      "value": "ms"
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 45
+            },
+            "id": 23,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "wedges"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap blocked_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "max blocked_ms"
+              }
+            ],
+            "title": "wedge rate & max blocked_ms",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Raw wedge telemetry lines, newest first. Expand a line to inspect the nested loaf_scripts (long-animation-frame script attribution) and profiler_stacks payloads.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "gridPos": {
+              "h": 12,
+              "w": 24,
+              "x": 0,
+              "y": 53
+            },
+            "id": 24,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "wedge detail (loaf_scripts + profiler_stacks)",
+            "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Which script frame appears most as the main blocking frame across wedges. top_frame_* is the worst LoAF script per wedge; empty frames (longtask fallback) are excluded.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 24,
+              "x": 0,
+              "y": 65
+            },
+            "id": 38,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(15, sum by (top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | event_type=\"wedge\" | top_frame_function!=\"\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Top wedging frames (by blocking script)",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Each wedge with its worst blocking scripts (fn @ url:char). The char offset resolves to a line via source map even for minified builds; expand a line for the full loaf_scripts / profiler_stacks.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "fieldConfig": {
+              "defaults": {},
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 120
+            },
+            "id": 39,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | event_type=\"wedge\" | line_format \"{{.matrix_user_id}}  gap={{.worst_gap_ms}}ms blocked={{.blocked_ms}}ms  {{.top_frames}}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "Recent wedges (blocking scripts)",
+            "type": "logs"
+          }
+        ],
+        "title": "wedge (\u226510s main-thread freeze)",
+        "type": "row",
+        "description": "A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that."
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 46
+        },
+        "id": 28,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Rebuild event rate per interval (left axis) and p95 rebuild duration_ms (right axis, ms).",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "rebuilds",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "p95 duration_ms"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.axisPlacement",
+                      "value": "right"
+                    },
+                    {
+                      "id": "unit",
+                      "value": "ms"
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 47
+            },
+            "id": 26,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "rebuilds"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95 duration_ms"
+              }
+            ],
+            "title": "rebuild rate & p95 duration_ms",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Per trigger_modules group: rebuild count (A), avg modules_refetched (B), avg cards_reloaded (C) over the range. Identifies which module changes drive the most expensive client rebuilds.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 47
+            },
+            "id": 27,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (trigger_module) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__range]))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap modules_refetched [$__range]))",
+                "queryType": "instant",
+                "refId": "B",
+                "legendFormat": ""
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap cards_reloaded [$__range]))",
+                "queryType": "instant",
+                "refId": "C",
+                "legendFormat": ""
+              }
+            ],
+            "title": "rebuild cost by trigger_modules",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          }
+        ],
+        "title": "rebuild",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 48
+        },
+        "id": 32,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Sum of invalidations_count and reloads_triggered per interval, from realm-event telemetry (index updates observed by the client).",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 8,
+              "x": 0,
+              "y": 49
+            },
+            "id": 29,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap invalidations_count [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "invalidations"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap reloads_triggered [$__interval]))",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "reloads triggered"
+              }
+            ],
+            "title": "realm-event invalidations & reloads",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Realm-event rate split by own_write: true = the client's own write echoed back, false = a change from elsewhere. External churn is the more interesting signal.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "events",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 8,
+              "x": 8,
+              "y": 49
+            },
+            "id": 30,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (own_write) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "own_write={{own_write}}"
+              }
+            ],
+            "title": "realm-event own_write vs external",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p50/p95 of processing_ms (client-side handling time per realm-event).",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 8,
+              "x": 16,
+              "y": 49
+            },
+            "id": 31,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap processing_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "p50"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap processing_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95"
+              }
+            ],
+            "title": "realm-event processing_ms percentiles",
+            "type": "timeseries"
+          }
+        ],
+        "title": "realm-event",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 50
+        },
+        "id": 34,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "keepalive heartbeats: window_ms (beacon window length) and the max_gap_ms observed within it. Large gaps indicate the tab was backgrounded or the main thread was starved between flushes.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 51
+            },
+            "id": 33,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap max_gap_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "max_gap_ms"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "avg_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | unwrap window_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "avg window_ms"
+              }
+            ],
+            "title": "keepalive window & max_gap_ms",
+            "type": "timeseries"
+          }
+        ],
+        "title": "keepalive",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 52
+        },
+        "id": 37,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Every boxel:client-perf event except keepalive, newest first. These signal-gated flushes are the anomaly feed \u2014 card-load / server-request / deserialize / wedge / rebuild / realm-event lines as they arrive. Apply the user/session drill filters to focus one client.",
+            "gridPos": {
+              "h": 12,
+              "w": 24,
+              "x": 0,
+              "y": 53
+            },
+            "id": 35,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | event_type!=\"keepalive\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "Signal feed (non-keepalive events, newest first)",
+            "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Raw boxel:client-perf feed filtered to the chosen user/session, newest first \u2014 the full client timeline including keepalives. Set the session_id textbox (and optionally the user) above to drill into a single client.",
+            "gridPos": {
+              "h": 12,
+              "w": 24,
+              "x": 0,
+              "y": 65
+            },
+            "id": 36,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "Per-session timeline (all events for the selected session)",
+            "type": "logs"
+          }
+        ],
+        "title": "Signals / outliers",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 54
+        },
+        "id": 40,
+        "title": "By user \u2014 who is hitting issues",
+        "type": "row",
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Users ranked by number of main-thread wedges over the range.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 8,
+              "x": 0,
+              "y": 55
+            },
+            "id": 41,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(25, sum by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | event_type=\"wedge\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Wedges by user",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Users ranked by their slowest observed card settle time.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 8,
+              "x": 8,
+              "y": 55
+            },
+            "id": 42,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(25, max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | event_type=\"card-load\" | unwrap settle_ms [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Worst card-to-interactive by user (max settle_ms)",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Total non-keepalive telemetry events per user \u2014 overall anomaly volume.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 8,
+              "x": 16,
+              "y": 55
+            },
+            "id": 43,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(25, sum by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\"${session_id}\" | event_type!=\"keepalive\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A",
+                "legendFormat": ""
+              }
+            ],
+            "title": "Signal events by user",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {}
+              },
+              {
+                "id": "merge",
+                "options": {}
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "client-perf",
+      "forensics"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "allValue": ".*",
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "definition": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "description": "Filter every panel to one client's events. 'All' = no user filter.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "User",
+          "multi": false,
+          "name": "matrix_user_id",
+          "options": [],
+          "query": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Free-form session id. Leave empty for no session filter; set it to drill the whole board into a single client session.",
+          "hide": 0,
+          "label": "Session",
+          "name": "session_id",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Client Performance",
+    "weekStart": ""
+  }
+}
