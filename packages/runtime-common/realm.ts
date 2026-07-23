@@ -4480,12 +4480,11 @@ export class Realm {
         ? searchDoc.contentSize
         : undefined;
     // `realm_file_meta` is written in the same critical section as the file's
-    // bytes, so it is authoritative for content-derived values. The indexed
-    // values lag one batch promotion behind: a render inside the very batch
-    // that re-indexes this file reads the pre-swap production row, so a card
-    // linking the file would otherwise index the file's PREVIOUS
-    // contentHash/contentSize — and a reindex re-serializes the same stale
-    // values rather than healing them. The indexed values remain as
+    // bytes, so it is authoritative for content-derived values. It is
+    // preferred over the indexed values, which lag one batch promotion behind:
+    // a render inside the batch that re-indexes this file reads the pre-swap
+    // production row, so a card linking the file sees the file's index row at
+    // its previous contentHash/contentSize. The indexed values remain as
     // fallbacks for files whose bytes were never hashed at write time.
     let persistedMeta = this.#dbAdapter
       ? await getContentMeta(this.#dbAdapter, this.url, localPath)
