@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { element } from '../../helpers.ts';
+import { element } from '../../helpers.gts';
 
 /**
  * FittedCard — generic responsive card layout for the fitted format.

@@ -164,6 +164,9 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
          pierced directly. */
       .path-cell :deep(.text-accessory) {
         padding-right: 0;
+        /* Match the mono input text so the fixed leading "/" reads as part
+           of the same path string rather than a separate label. */
+        font-family: var(--boxel-font-family-mono, monospace);
       }
       .path-cell :deep(.form-control) {
         padding-left: var(--boxel-sp-xxs);

@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { cn, sanitizeHtmlSafe } from '../../helpers.ts';
+import { cn, sanitizeHtmlSafe } from '../../helpers.gts';
 import CheckMark from '../../icons/check-mark.gts';
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';

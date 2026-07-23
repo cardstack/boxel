@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { FITTED_FORMATS } from '../../helpers.ts';
+import { FITTED_FORMATS } from '../../helpers.gts';
 import type { Icon } from '../../icons.ts';
 import CardContainer from '../card-container/index.gts';
 import {

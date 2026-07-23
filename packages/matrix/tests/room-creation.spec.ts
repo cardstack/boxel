@@ -8,6 +8,7 @@ import {
   openRoom,
   openRenameMenu,
   reloadAndOpenAiAssistant,
+  openAiAssistant,
   clearLocalStorage,
   sendMessage,
   getRoomId,
@@ -35,7 +36,10 @@ test.describe('Room creation', () => {
   });
 
   test('it can create a room', async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
 
     let room1: string;
     await expect(async () => {
@@ -54,6 +58,7 @@ test.describe('Room creation', () => {
     const page2 = await context.newPage();
     await setRealmRedirects(page2);
     await page2.goto(appURL);
+    await openAiAssistant(page2);
     await openRoom(page, room1);
     await openRoom(page2, room2);
     await page.reload();
@@ -66,7 +71,10 @@ test.describe('Room creation', () => {
     }).toPass();
 
     await logout(page);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await expect(async () => {
       await assertRooms(page, [room1, room2]);
     }).toPass();
@@ -75,6 +83,7 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
+      openAiAssistant: true,
     });
     await expect(async () => {
       let room1New = await getRoomId(page); // Automatically created room
@@ -87,7 +96,10 @@ test.describe('Room creation', () => {
   test('it does not create a new room when another new room is available [CS-6640]', async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
 
     let room = await getRoomId(page); // Automatically created room
     await expect(page.locator(`[data-test-create-room-btn]`)).toBeDisabled();
@@ -109,13 +121,17 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room, newRoom]);
 
     await logout(page);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await assertRooms(page, [room, newRoom]);
 
     // user2 should not be able to see user1's room
     await logout(page);
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
+      openAiAssistant: true,
     });
     await expect(async () => {
       let user2Room = await getRoomId(page);
@@ -128,7 +144,10 @@ test.describe('Room creation', () => {
   // skipping flaky test: re-enabled while we work on the fix.
   // https://linear.app/cardstack/issue/CS-7637/flaky-test-room-creationspects1217-%E2%80%BA-room-creation-%E2%80%BA-it-can-rename-a
   test('it can rename a room [CS-7637]', async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
 
     let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
@@ -176,12 +195,18 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1, room2, room3]);
 
     await logout(page);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await assertRooms(page, [room1, room2, room3]);
   });
 
   test('it can cancel renaming a room', async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
 
     let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
@@ -219,7 +244,10 @@ test.describe('Room creation', () => {
   test('room names do not persist across different user sessions', async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
 
     let room = await getRoomId(page);
     await sendMessage(page, room, 'Hello');
@@ -242,6 +270,7 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, xUser.username, xUser.password, {
       url: appURL,
+      openAiAssistant: true,
     });
 
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
@@ -251,7 +280,10 @@ test.describe('Room creation', () => {
   });
   // CS-9594 tracking this test erroring
   test.skip('it can delete a room', async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let roomsBeforeDeletion = await getRoomsFromSync(
       firstUser.username,
@@ -313,7 +345,10 @@ test.describe('Room creation', () => {
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room = await getRoomId(page);
     await assertRooms(page, [room]);
 
@@ -345,7 +380,10 @@ test.describe('Room creation', () => {
     // This test creates 3 rooms, sends messages, deletes all 3, then waits
     // for auto-creation — needs more than the default 60s timeout.
     test.setTimeout(120_000);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
@@ -412,7 +450,10 @@ test.describe('Room creation', () => {
   test('it orders past-sessions list items based on last activity in reverse chronological order [CS-7603]', async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');
     let room2 = await createRoomWithMessage(page, 'Room 2');

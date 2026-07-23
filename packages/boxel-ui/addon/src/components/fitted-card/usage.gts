@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { FITTED_FORMATS } from '../../helpers.ts';
+import { FITTED_FORMATS } from '../../helpers.gts';
 import CardContainer from '../card-container/index.gts';
 import FittedCardContainer from '../fitted-card-container/index.gts';
 import BoxelInput from '../input/index.gts';

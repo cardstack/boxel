@@ -31,6 +31,7 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   showAllCards?: boolean; //default true
+  openAiAssistant?: boolean; //default false; opens the AI assistant panel after login
 }
 
 // Shared SQL executor is created on demand for tests
@@ -157,7 +158,21 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 }
 
 export async function openAiAssistant(page: Page) {
-  await page.locator('[data-test-open-ai-assistant]').click();
+  // The AI assistant panel is closed by default; the toggle button both opens
+  // and closes it. Wait for the toggle to render (operator mode's open/closed
+  // state is restored synchronously before first paint, so once the button is
+  // present the panel's presence already reflects that state) and only click
+  // when the panel is actually closed — otherwise a call made when it is
+  // already open (restored from URL/localStorage state) would toggle it back
+  // closed.
+  let openButton = page.locator('[data-test-open-ai-assistant]');
+  await openButton.waitFor();
+  let panel = page.locator('[data-test-ai-assistant-panel]');
+  if (await panel.isVisible()) {
+    return;
+  }
+  await openButton.click();
+  await panel.waitFor();
 }
 
 export async function createRealm(
@@ -440,6 +455,10 @@ export async function login(
   }, localStorageAuth);
 
   await openRoot(page, opts?.url);
+
+  if (opts?.openAiAssistant) {
+    await openAiAssistant(page);
+  }
 }
 
 export async function enterWorkspace(

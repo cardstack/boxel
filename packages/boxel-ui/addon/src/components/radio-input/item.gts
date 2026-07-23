@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import { cn, not } from '../../helpers.ts';
+import { cn, not } from '../../helpers.gts';
 import cssVar from '../../helpers/css-var.ts';
 
 export interface Signature {
