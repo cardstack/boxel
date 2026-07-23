@@ -39,6 +39,21 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 ## Prerequisites
 
+- Node >= 24 (the repo pins `24.17.0` via `.nvmrc` / Volta — run `nvm use` or let Volta pick it up)
+- **One-time build/setup** — on a fresh `pnpm install`-only checkout, run:
+
+  ```bash
+  cd packages/software-factory
+  pnpm factory:setup
+  ```
+
+  This is idempotent (skips anything already built) and provisions the three
+  artifacts the factory needs that aren't committed: the boxel-cli API bundle
+  (`boxel-cli/dist/api.js`), a dev-mode host build with test entries
+  (`host/dist/tests/index.html`), and the Playwright Chromium headless-shell
+  binary. `pnpm factory:go` also detects any missing prerequisite up front and
+  points you back here. Pass `--force` to rebuild everything.
+
 - Docker running
 - `mise run dev-all` (starts realm server, host app, icons server, Postgres, Synapse)
 - Active Boxel CLI profile (`boxel profile add`)
