@@ -1456,7 +1456,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     loadedValue: any,
     relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
-  ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
+  ): Promise<
+    | BaseInstanceType<CardT>
+    | null
+    | NotLoadedValue
+    | LinkErrorValue
+    | LinkNotFoundValue
+  > {
     if (!isRelationship(value)) {
       throw new Error(
         `linkTo field '${

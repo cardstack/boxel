@@ -126,9 +126,8 @@ module('Integration | linksTo sentinel reload', function (hooks) {
   function trackGhostLoads(): { count: () => number; restore: () => void } {
     let count = 0;
     let original = cardStore.loadCardDocument.bind(cardStore);
-    (cardStore as any).loadCardDocument = (url: string | URL, opts: any) => {
-      let href = typeof url === 'string' ? url : url.href;
-      if (href.includes('Pet/ghost')) {
+    (cardStore as any).loadCardDocument = (url: string, opts: any) => {
+      if (url.includes('Pet/ghost')) {
         count++;
       }
       return original(url, opts);
