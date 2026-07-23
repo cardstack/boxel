@@ -74,9 +74,7 @@ test.describe('Live Cards', () => {
     await page.goto(realmURL);
     await showAllCards(page);
 
-    await expect(
-      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-    ).toHaveCount(1);
+    await expect(page.locator(`[data-test-cards-grid-cards]`)).toBeVisible();
 
     await postCardSource(
       page,
