@@ -1,0 +1,108 @@
+name: boxel-skills pin bump
+
+# Watches cardstack/boxel-skills for new releases and opens a PR bumping
+# BOXEL_SKILLS_VERSION in packages/boxel-cli/scripts/build-skills.ts.
+# Merging that PR triggers boxel-cli-publish.yml, which regenerates the
+# vendored plugin/ content from the new tag and publishes the plugin —
+# approving the bump PR is the only human step between a boxel-skills
+# release and updated skills for the factory, local workspaces, and end
+# users of the Claude Code plugin.
+#
+# Runs on a schedule (plus manual dispatch) rather than on a boxel-skills
+# release event so no cross-repo credentials are needed: the release
+# lookup is unauthenticated-public, and branch + PR creation stay inside
+# this repo under GITHUB_TOKEN.
+#
+# GITHUB_TOKEN-created PRs do not trigger pull_request workflows; that is
+# acceptable here because the bump PR is a one-line pin change and the
+# real validation (build:skills against the new tag) runs in the publish
+# workflow after merge.
+#
+# A closed-unmerged bump PR for a given tag is treated as a rejection of
+# that tag: the existence check looks at PRs in any state, so the
+# schedule won't reopen it.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: boxel-skills-pin-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Open pin-bump PR when boxel-skills has a newer release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compare pinned version against the latest release
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep -oE "BOXEL_SKILLS_VERSION = '[^']+'" packages/boxel-cli/scripts/build-skills.ts | cut -d"'" -f2)
+          LATEST=$(gh api repos/cardstack/boxel-skills/releases/latest --jq .tag_name)
+          echo "Pinned: $CURRENT — latest release: $LATEST"
+          {
+            echo "current=$CURRENT"
+            echo "latest=$LATEST"
+            echo "branch=bump-boxel-skills-$LATEST"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" = "$LATEST" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if a PR for this tag already exists (open, merged, or rejected)
+        id: existing
+        if: steps.versions.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          N=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --head "${{ steps.versions.outputs.branch }}" \
+            --state all --json number --jq length)
+          if [ "$N" -gt 0 ]; then
+            echo "PR for ${{ steps.versions.outputs.latest }} already exists — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the bump PR
+        if: steps.versions.outputs.skip != 'true' && steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          BRANCH: ${{ steps.versions.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          FILE=packages/boxel-cli/scripts/build-skills.ts
+          sed -i "s/BOXEL_SKILLS_VERSION = '$CURRENT'/BOXEL_SKILLS_VERSION = '$LATEST'/" "$FILE"
+          grep -q "BOXEL_SKILLS_VERSION = '$LATEST'" "$FILE" || {
+            echo "Pin rewrite failed — $FILE does not contain the expected constant."
+            exit 1
+          }
+
+          git checkout -b "$BRANCH"
+          git add "$FILE"
+          git commit -m "feat: bump boxel-skills to $LATEST"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "feat: bump boxel-skills to $LATEST" \
+            --body "$(printf 'Bumps the pinned boxel-skills release consumed by `build:skills` from `%s` to `%s`.\n\nRelease notes: https://github.com/cardstack/boxel-skills/releases/tag/%s\n\nOn merge, the publish workflow regenerates `packages/boxel-cli/plugin/` from the new tag and publishes the plugin.\n\nOpened automatically by the `boxel-skills pin bump` workflow.' "$CURRENT" "$LATEST" "$LATEST")"
