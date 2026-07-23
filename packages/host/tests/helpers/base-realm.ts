@@ -25,7 +25,9 @@ import type * as FileApiModule from '@cardstack/base/file-api';
 import type * as MarkdownFieldModule from '@cardstack/base/markdown';
 import type * as NumberFieldModule from '@cardstack/base/number';
 import type * as PhoneNumberFieldModule from '@cardstack/base/phone-number';
+import type * as ProcessCardModule from '@cardstack/base/process-card';
 import type * as RealmFieldModule from '@cardstack/base/realm';
+import type * as RemixCardModule from '@cardstack/base/remix-card';
 import type * as RichMarkdownModule from '@cardstack/base/rich-markdown';
 import type * as SearchableModule from '@cardstack/base/searchable';
 import type * as SkillModule from '@cardstack/base/skill';
@@ -126,6 +128,12 @@ let PhoneNumberField: PhoneNumberField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
+
+type ProcessCard = (typeof ProcessCardModule)['ProcessCard'];
+let ProcessCard: ProcessCard;
+
+type RemixCard = (typeof RemixCardModule)['RemixCard'];
+let RemixCard: RemixCard;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
@@ -347,6 +355,16 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>('@cardstack/base/cards-grid')
   ).CardsGrid;
 
+  ProcessCard = (
+    await loader.import<typeof ProcessCardModule>(
+      '@cardstack/base/process-card',
+    )
+  ).ProcessCard;
+
+  RemixCard = (
+    await loader.import<typeof RemixCardModule>('@cardstack/base/remix-card')
+  ).RemixCard;
+
   Skill = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .Skill;
 
@@ -452,6 +470,8 @@ export {
   RichMarkdownField,
   PhoneNumberField,
   CardsGrid,
+  ProcessCard,
+  RemixCard,
   SystemCard,
   ModelConfiguration,
   FileDef,
