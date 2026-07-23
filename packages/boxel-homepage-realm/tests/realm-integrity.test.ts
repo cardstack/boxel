@@ -22,16 +22,6 @@ const CONTENTS = resolve(
 const EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.js', '.gjs'];
 const SKIP_DIRS = new Set(['.git', '.boxel-history', 'node_modules']);
 
-// Fields every card inherits from CardDef (base realm card-api).
-const CARD_DEF_FIELDS = new Set([
-  'cardInfo',
-  'cardTitle',
-  'cardDescription',
-  'title',
-  'description',
-  'thumbnailURL',
-]);
-
 // Instances that are deliberately not linked from any routed page.
 // Prune entries when the instance gets wired in or deleted; a NEW unlisted
 // orphan fails the reachability test.
@@ -220,14 +210,16 @@ test('instance attribute keys match a declared @field', () => {
       if (Array.isArray(node)) return node.forEach(collectKeys);
       if (node == null || typeof node !== 'object') return;
       for (const [key, value] of Object.entries(node)) {
-        if (key === 'cardInfo') continue; // free-form base field
+        // cardInfo is CardDef's free-form base field; its subtree (name,
+        // summary, cardThumbnailURL, ...) is declared in base card-api, not
+        // in this realm's sources.
+        if (key === 'cardInfo') continue;
         keys.push(key);
         collectKeys(value);
       }
     };
     collectKeys(attributes);
     for (const key of new Set(keys)) {
-      if (CARD_DEF_FIELDS.has(key)) continue;
       if (!new RegExp(`@field\\s+${key}\\b`).test(allSource)) {
         failures.push(`${rel(f)}: "${key}"`);
       }
