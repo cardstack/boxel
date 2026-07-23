@@ -115,6 +115,7 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
+import type ClientTelemetryService from './client-telemetry';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -592,11 +593,19 @@ export default class StoreService extends Service implements StoreInterface {
       ).fileMetaDocLoadsInFlight?.() ?? []
     );
   }
-  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+  recentCardDocLoads(): Array<{
+    url: string;
+    ms: number;
+    outcome?: 'ok' | 'error';
+  }> {
     return (
       (
         this.store as unknown as {
-          recentCardDocLoads?: () => Array<{ url: string; ms: number }>;
+          recentCardDocLoads?: () => Array<{
+            url: string;
+            ms: number;
+            outcome?: 'ok' | 'error';
+          }>;
         }
       ).recentCardDocLoads?.() ?? []
     );
@@ -1752,10 +1761,32 @@ export default class StoreService extends Service implements StoreInterface {
         store: this.store,
         dependencyTrackingContext,
       })) as T;
+    // Time the deserialize and report it (no-op when telemetry is disabled).
+    let telemetry = this.#clientTelemetry();
+    let deserializeStart = telemetry?.isEnabled ? performance.now() : undefined;
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
       : await performCreate();
+    if (telemetry?.isEnabled && deserializeStart !== undefined) {
+      telemetry.recordDeserialize({
+        durationMs: performance.now() - deserializeStart,
+        doc,
+        resource,
+      });
+    }
     return card;
+  }
+
+  // Defensive lookup of the telemetry service — never forces the hooked path
+  // to depend on telemetry being present or healthy.
+  #clientTelemetry(): ClientTelemetryService | undefined {
+    try {
+      return getOwner(this)?.lookup('service:client-telemetry') as
+        | ClientTelemetryService
+        | undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async setup() {
@@ -1820,10 +1851,39 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
 
+    let telemetry = this.#clientTelemetry();
+    let processingStart = telemetry?.isEnabled ? performance.now() : undefined;
+
+    if (event.indexType === 'full') {
+      // A full reindex carries no per-file invalidation list; report it as a
+      // thin realm-event so the dashboard still sees the pass happened.
+      telemetry?.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'full',
+        invalidations_count: 0,
+        invalidated_ids: [],
+        reloads_triggered: 0,
+        own_write: false,
+        processing_ms: 0,
+      });
+      return;
+    }
+
     if (event.indexType !== 'incremental') {
       return;
     }
     let invalidations = event.invalidations as string[];
+    // Count reloads triggered while handling this event, shared by the
+    // realm-event and (when a loader reset fires) rebuild telemetry.
+    let reloadsTriggered = 0;
+    let ownWrite = event.clientRequestId
+      ? this.cardService.clientRequestIds.has(event.clientRequestId)
+      : false;
+    let rebuildStart: number | undefined;
+    let rebuildTriggerModules: string[] = [];
+    let rebuildModulesRefetched = 0;
+    let rebuildTask: { then: (...a: unknown[]) => unknown } | undefined;
 
     if (
       invalidations.find(
@@ -1836,9 +1896,22 @@ export default class StoreService extends Service implements StoreInterface {
       // loaded. in this case we need to flush the loader so that we can pick
       // up the updated code before re-running the card. net-new modules that
       // have never been loaded don't require a loader reset.
+      if (telemetry?.isEnabled) {
+        rebuildStart = performance.now();
+        rebuildTriggerModules = invalidations.filter((i) =>
+          hasExecutableExtension(i),
+        );
+        rebuildModulesRefetched = invalidations.filter(
+          (i) =>
+            hasExecutableExtension(i) &&
+            this.loaderService.loader.isModuleLoaded(i),
+        ).length;
+      }
       this.loaderService.resetLoader();
       this.store.reset();
-      this.reestablishReferences.perform();
+      rebuildTask = this.reestablishReferences.perform() as unknown as {
+        then: (...a: unknown[]) => unknown;
+      };
     }
 
     for (let invalidation of invalidations) {
@@ -1854,6 +1927,7 @@ export default class StoreService extends Service implements StoreInterface {
           `reloading file-meta resource ${invalidation} because it was previously loaded`,
         );
         this.reloadFileMetaTask.perform(invalidation);
+        reloadsTriggered++;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
 
@@ -1912,6 +1986,7 @@ export default class StoreService extends Service implements StoreInterface {
 
           if (reloadFile) {
             this.reloadTask.perform(instance);
+            reloadsTriggered++;
           } else {
             realmEventsLogger.debug(
               `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
@@ -1922,6 +1997,7 @@ export default class StoreService extends Service implements StoreInterface {
             `reloading file resource ${invalidation} because it is in an error state`,
           );
           this.loadInstanceTask.perform(invalidation);
+          reloadsTriggered++;
         }
       } else {
         realmEventsLogger.debug(
@@ -1948,6 +2024,48 @@ export default class StoreService extends Service implements StoreInterface {
           `reloading index card ${indexCardId} because the realm config card was re-indexed`,
         );
         this.reloadTask.perform(indexCard);
+        reloadsTriggered++;
+      }
+    }
+
+    if (telemetry?.isEnabled) {
+      telemetry.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'incremental',
+        invalidations_count: invalidations.length,
+        invalidated_ids: invalidations.slice(0, 50),
+        reloads_triggered: reloadsTriggered,
+        own_write: ownWrite,
+        processing_ms:
+          processingStart !== undefined
+            ? Math.round(performance.now() - processingStart)
+            : 0,
+      });
+
+      // When a loader reset was triggered, report the rebuild once the
+      // reference re-establishment settles so its duration spans the whole
+      // reset → reload cascade. cards_reloaded reflects the reloads counted
+      // above (this handler runs to completion before the task settles).
+      if (rebuildStart !== undefined && rebuildTask) {
+        let reporter = telemetry;
+        let startedAt = rebuildStart;
+        let triggerModules = rebuildTriggerModules.slice(0, 20);
+        let modulesRefetched = rebuildModulesRefetched;
+        let realmURL = event.realmURL;
+        Promise.resolve(rebuildTask as unknown as Promise<unknown>)
+          .then(() => {
+            reporter.recordEvent({
+              event_type: 'rebuild',
+              realm: realmURL,
+              duration_ms: Math.round(performance.now() - startedAt),
+              trigger_modules: triggerModules,
+              trigger_module: triggerModules[0] ?? '',
+              modules_refetched: modulesRefetched,
+              cards_reloaded: reloadsTriggered,
+            });
+          })
+          .catch(() => {});
       }
     }
   };
