@@ -204,6 +204,11 @@ function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
   );
 }
 
+// Debounce window for the post-index refresh. Active editing (e.g. an AI setup
+// flow writing many cards) emits a burst of index events; coalescing them into
+// one refresh avoids firing the panel searches several times per keystroke.
+const INDEX_REFRESH_DEBOUNCE_MS = 200;
+
 function toMs(value: unknown): number | undefined {
   let ms =
     typeof value === 'number'
@@ -624,7 +629,7 @@ class Isolated extends Component<typeof Workspace> {
                   type='button'
                   class='rail-row
                     {{if
-                      (eq option.displayName this.activeFilter.displayName)
+                      (eq option.id this.activeFilter.id)
                       "selected"
                     }}'
                   {{on 'click' (this.selectFilter option)}}
@@ -648,7 +653,7 @@ class Isolated extends Component<typeof Workspace> {
                       type='button'
                       class='rail-row type
                         {{if
-                          (eq option.displayName this.activeFilter.displayName)
+                          (eq option.id this.activeFilter.id)
                           "selected"
                         }}'
                       {{on 'click' (this.selectFilter option)}}
@@ -688,7 +693,7 @@ class Isolated extends Component<typeof Workspace> {
                     type='button'
                     class='rail-row type
                       {{if
-                        (eq option.displayName this.activeFilter.displayName)
+                        (eq option.id this.activeFilter.id)
                         "selected"
                       }}'
                     {{on 'click' (this.selectFilter option)}}
@@ -2457,6 +2462,7 @@ class Isolated extends Component<typeof Workspace> {
       return undefined;
     }
     return {
+      id: 'search',
       displayName: `Search: “${term}”`,
       icon: SearchIcon,
       query: {
@@ -2820,6 +2826,7 @@ class Isolated extends Component<typeof Workspace> {
   @cached
   private get everythingFilter(): RailOption {
     return {
+      id: 'everything',
       displayName: 'Everything',
       icon: LayoutGridIcon,
       query: {
@@ -2837,6 +2844,7 @@ class Isolated extends Component<typeof Workspace> {
     // touching `.constructor` on an unresolved entry there crashes prerender.
     let model = this.args.model;
     return {
+      id: 'entry-points',
       displayName: 'Entry points',
       icon: DoorOpenIcon,
       get cards() {
@@ -2852,6 +2860,7 @@ class Isolated extends Component<typeof Workspace> {
   @cached
   private get cardsFilter(): RailOption {
     return {
+      id: 'cards',
       displayName: 'Cards',
       icon: Captions,
       query: {
@@ -2868,6 +2877,7 @@ class Isolated extends Component<typeof Workspace> {
   @cached
   private get filesFilter(): RailOption {
     return {
+      id: 'files',
       displayName: 'Files',
       icon: FileIcon,
       query: {
@@ -2906,14 +2916,14 @@ class Isolated extends Component<typeof Workspace> {
   }
 
   countFor = (option: RailOption) => {
-    switch (option.displayName) {
-      case 'Everything':
+    switch (option.id) {
+      case 'everything':
         return this.cardTotal + this.fileTotal;
-      case 'Entry points':
+      case 'entry-points':
         return this.args.model.entryPoints?.length ?? 0;
-      case 'Cards':
+      case 'cards':
         return this.cardTotal;
-      case 'Files':
+      case 'files':
         return this.fileTotal;
       default:
         return option.count ?? 0;
@@ -3107,6 +3117,7 @@ class Isolated extends Component<typeof Workspace> {
       // and Order) but the rail groups them by kind: CARD TYPES / FILE TYPES.
       let group = kind === 'file' ? this.fileTypeFilters : this.cardTypeFilters;
       group.push({
+        id: summary.id,
         displayName: summary.attributes.displayName ?? ref.name,
         icon:
           summary.attributes.iconHTML ??
@@ -3125,7 +3136,7 @@ class Isolated extends Component<typeof Workspace> {
 
     this.activeFilter =
       this.filterOptions.find(
-        (filter) => filter.displayName === this.activeFilter.displayName,
+        (filter) => filter.id === this.activeFilter.id,
       ) ?? this.filterOptions[0];
   });
 
@@ -3166,15 +3177,33 @@ class Isolated extends Component<typeof Workspace> {
   });
 
   private refreshOnIndex = (ev: RealmEventContent) => {
-    if (ev.eventName === 'index' && ev.indexType === 'incremental') {
-      this.loadFilterList.perform();
-      this.loadJobs.perform();
-      this.loadLatest.perform();
-      if (this.segment === 'activity') {
-        this.loadFeed.perform();
-      }
+    // React to a completed index pass — incremental, full, or copy — not the
+    // 'incremental-index-initiation' pre-index signal, whose new state is not
+    // queryable yet. Widening past 'incremental' keeps the rail, counts, jobs
+    // dock, and feed fresh after a full reindex or a realm copy/remix, not just
+    // after incremental edits.
+    if (
+      ev.eventName === 'index' &&
+      (ev.indexType === 'incremental' ||
+        ev.indexType === 'full' ||
+        ev.indexType === 'copy')
+    ) {
+      this.refreshAfterIndex.perform();
     }
   };
+
+  // Coalesce a burst of index events into a single refresh: each event restarts
+  // the task, cancelling the pending timeout, so the panel searches fan out once
+  // the burst settles rather than 3–4× per event.
+  private refreshAfterIndex = restartableTask(async () => {
+    await timeout(INDEX_REFRESH_DEBOUNCE_MS);
+    this.loadFilterList.perform();
+    this.loadJobs.perform();
+    this.loadLatest.perform();
+    if (this.segment === 'activity') {
+      this.loadFeed.perform();
+    }
+  });
 
   // The Activity log: everything in the realm, reverse-chron by
   // lastModified. Each row carries when / what / why: timestamp rail,
