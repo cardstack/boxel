@@ -88,7 +88,8 @@ export class ProcessCard extends CardDef {
   static displayName = 'Process';
   static icon = ProgressIcon;
 
-  // The name shown on the setup bar; falls back to the card title.
+  // The name shown on the setup bar. `cardTitle` reads this, defaulting to
+  // "Setup process" when it is unset.
   @field listingName = contains(StringField);
   // Human-readable label for the current step, e.g. "Importing files".
   @field stage = contains(StringField);

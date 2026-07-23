@@ -67,7 +67,7 @@ module('Integration | Card | process-card', function (hooks) {
   });
 
   module('rendering', function () {
-    test('renders the progress bar with accessible attributes and copy', async function (assert) {
+    test('renders the progress bar and copy', async function (assert) {
       let card = new ProcessCard({
         listingName: 'My Workspace',
         stage: 'Importing files',
