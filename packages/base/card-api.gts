@@ -1491,6 +1491,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let resource =
       resourceId != null ? resourceFrom(doc, resourceId) : undefined;
     if (!resource) {
+      // A terminal sentinel (link-error / link-not-found) is carried forward only
+      // when the wire reference is unchanged, so a known-broken link is not
+      // re-armed to a fresh not-loaded marker — which the getter WOULD retry — on
+      // reload. A re-pointed reference re-arms (the sentinel no longer describes
+      // the target); a target that has since become resolvable is present in the
+      // reload document, so `resource` is truthy above and this branch never runs.
+      if (isLinkError(loadedValue) || isLinkNotFound(loadedValue)) {
+        return resolveRef(loadedValue.reference, relativeTo) === href
+          ? loadedValue
+          : { type: 'not-loaded', reference };
+      }
       if (loadedValue !== undefined) {
         return loadedValue;
       }
@@ -2081,6 +2092,24 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           resource = resourceFrom(doc, reference);
         }
         if (!resource) {
+          // Carry a terminal sentinel (link-error / link-not-found) forward when
+          // the wire reference is unchanged, so a known-broken element is not
+          // re-armed to a fresh not-loaded marker — which the next render would
+          // re-fetch — on every reload. The WatchedArray hides sentinels from
+          // index access, so scan the raw backing array to find one. A target
+          // that has since become resolvable is present in the reload document,
+          // so `resource` is truthy above and this branch never runs: the element
+          // loads and the card heals.
+          if (Array.isArray(loadedValues)) {
+            let carried = rawArrayValues(loadedValues).find(
+              (v) =>
+                (isLinkError(v) || isLinkNotFound(v)) &&
+                resolveRef(v.reference, relativeTo) === normalizedReference,
+            );
+            if (carried) {
+              return carried;
+            }
+          }
           return {
             type: 'not-loaded',
             reference,
