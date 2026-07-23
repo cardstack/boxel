@@ -111,8 +111,9 @@ if (testModules) {
   }
 }
 
-if (process.env.QUNIT_FILTER) {
-  QUnit.config.filter = process.env.QUNIT_FILTER;
+const qunitFilter = process.env.QUNIT_FILTER?.trim();
+if (qunitFilter) {
+  QUnit.config.filter = qunitFilter;
 }
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
