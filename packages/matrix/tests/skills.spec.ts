@@ -427,8 +427,10 @@ test.describe('Skills', () => {
       )
       .waitFor();
 
-    // Update the uploaded skill card
-    await page.locator('[data-test-filter-list-item="Skill"]').click();
+    // Update the uploaded skill card — reach the realm's card grid (CardsGrid's
+    // "All Cards" or the Workspace Library) and open the skill directly by its
+    // id, rather than the CardsGrid-only "Skill" type filter.
+    await showAllCards(page);
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
     await page.locator('[data-test-edit-button]').click();
     await page

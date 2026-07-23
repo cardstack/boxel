@@ -452,16 +452,23 @@ export async function enterWorkspace(
 export async function showAllCards(page: Page) {
   // A realm's index is either the legacy CardsGrid — whose "All Cards" filter
   // lists every card — or the default Workspace, whose Library tab renders the
-  // same live card grid. Use whichever this realm's index provides; do nothing
-  // if neither is present (a realm with a bespoke index card).
+  // same live card grid. `.count()` is point-in-time, so wait for the index to
+  // render one of its browse affordances before deciding; checking right after
+  // a `goto` would otherwise miss both and silently no-op. A bespoke index has
+  // neither — leave it be.
   let allCardsFilter = page.locator(
     `[data-test-boxel-filter-list-button="All Cards"]`,
   );
+  let libraryTab = page.locator(`[data-test-workspace-tab="library"]`);
+  try {
+    await allCardsFilter.or(libraryTab).first().waitFor({ timeout: 30_000 });
+  } catch {
+    return;
+  }
   if ((await allCardsFilter.count()) > 0) {
     await allCardsFilter.click();
     return;
   }
-  let libraryTab = page.locator(`[data-test-workspace-tab="library"]`);
   if ((await libraryTab.count()) > 0) {
     await libraryTab.click();
   }
