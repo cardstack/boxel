@@ -111,6 +111,10 @@ if (testModules) {
   }
 }
 
+if (process.env.QUNIT_FILTER) {
+  QUnit.config.filter = process.env.QUNIT_FILTER;
+}
+
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish — and equivalently, don't leave
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by

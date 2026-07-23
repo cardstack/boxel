@@ -4503,7 +4503,6 @@ module(basename(import.meta.filename), function () {
           }
         `,
         );
-        await realm.write('searchable-note.txt', 'note v1');
         await realm.write(
           'searchable-file-consumer.json',
           JSON.stringify({
@@ -4521,7 +4520,15 @@ module(basename(import.meta.filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        // Each write of the file re-renders the consumer through the
+        // dependency fan-out, inside the same batch that re-indexes the file
+        // itself. That render fetches the file's meta doc from the realm,
+        // which must reflect the just-written bytes — the file's own updated
+        // index row is not promoted to production until the batch completes,
+        // so serving from the index alone would hand the consumer the
+        // previous bytes' contentHash/contentSize.
         let consumerURL = `${testRealm}searchable-file-consumer.json`;
+        await realm.write('searchable-note.txt', 'note v1');
         let before = await searchDocForIndexEntry(testDbAdapter, consumerURL);
         assert.strictEqual(
           before?.primaryFile?.contentSize,
@@ -4529,13 +4536,6 @@ module(basename(import.meta.filename), function () {
           'consumer indexes the original file bytes',
         );
 
-        // The rewrite's incremental batch re-renders the consumer in the
-        // same pass that re-indexes the file (the consumer's deps include the
-        // file). That render fetches the file's meta doc from the realm,
-        // which must reflect the just-written bytes — the file's own updated
-        // index row is not promoted to production until the batch completes,
-        // so serving from the index alone would hand the consumer the
-        // previous bytes' contentHash/contentSize.
         let rewritten = 'note v2 with more bytes';
         await realm.write('searchable-note.txt', rewritten);
 
