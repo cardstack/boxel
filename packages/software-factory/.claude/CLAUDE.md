@@ -13,6 +13,10 @@ pnpm factory:go --brief-url <url> --target-realm <url>
 - `--debug` — verbose logs.
 - `--agent openrouter` — use the opencode-OpenRouter passthrough agent
   (routes via the realm-server's `/_openrouter/chat/completions` proxy).
+- `--skills-dir <path>` — replace the on-demand skill library with this
+  directory (bundled plugin skills are not read; workflow skills still
+  front-load from the factory package). Fails fast if it yields no
+  skills. Repeatable.
 
 ## Running tests
 
@@ -25,11 +29,18 @@ pnpm factory:go --brief-url <url> --target-realm <url>
 Two parallel skill paths exist, one per factory run mode:
 
 - **SDK orchestrator** (`pnpm factory:go`): the loader at
-  `src/factory-skill-loader.ts` reads from
-  **`.agents/skills-orchestrator/`** first. Those skills describe the
-  factory-MCP-tool surface (`signal_done`, `get_card_schema`,
-  `run_lint`, …) that `ToolUseFactoryAgent` actually provides at
-  runtime.
+  `src/factory-skill-loader.ts` searches exactly two directories —
+  **`.agents/skills-orchestrator/`** (the factory workflow skills,
+  which describe the factory-MCP-tool surface: `signal_done`,
+  `get_card_schema`, `run_lint`, …) and
+  **`packages/boxel-cli/plugin/skills/`** (the domain-skill library:
+  skills bundled from `cardstack/boxel-skills` plus CLI-native skills
+  like `boxel-api` / `boxel-command`). Only the workflow skill is
+  front-loaded into the system prompt; every other skill appears as a
+  one-line index entry and is fetched on demand via the `read_skill`
+  factory tool. A small exclusion list in the loader keeps
+  realm-lifecycle skills (`realm-sync`, `file-ops`, …) out of the
+  index — the orchestrator owns workspace→realm sync.
 - **Interactive Claude Code** (paste the prompt from
   `docs/runbook.md`): Claude Code reads
   **`.agents/skills/`** via the `.claude/skills` symlink. Those
@@ -37,20 +48,10 @@ Two parallel skill paths exist, one per factory run mode:
   status lifecycle. The interactive flow has no orchestrator
   process; the agent drives the loop directly.
 
-Fallback dirs for both modes (skills that aren't software-factory
-specific):
-
-1. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code
-   plugin skills (`boxel-api`, `boxel-command`); same directory
-   the plugin distributes to end users.
-2. monorepo root `.agents/skills/` — general domain skills
-   (`boxel-development`, `boxel-file-structure`,
-   `ember-best-practices`).
-
-The two software-factory skill sets diverged during CS-11149. They
-stay separated until the SDK orchestrator is retired; at that
-point the orchestrator code and `.agents/skills-orchestrator/` get deleted
-together.
+The two software-factory skill sets diverged during CS-11149 and stay
+separated permanently — each run mode has its own tool surface, so
+neither skill set can serve the other. Keep edits to workflow guidance
+in sync across both when the change isn't surface-specific.
 
 ## Architectural principle
 

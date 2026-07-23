@@ -473,6 +473,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
       enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
       skills,
+      skillIndex: context.skillIndex ?? [],
     });
   }
 

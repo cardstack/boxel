@@ -326,6 +326,47 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     assert.notOk(result.includes('# Skill:'), 'no skill section when empty');
   });
 
+  test('renders the on-demand skill index with suggested markers', function (assert) {
+    let loader = new FilePromptLoader();
+    let ctx = makeMinimalContext({
+      skills: [],
+      skillIndex: [
+        {
+          name: 'boxel',
+          description: 'Core Boxel coding skill.',
+          suggested: true,
+        },
+        { name: 'boxel-patterns', description: 'Copy-paste patterns.' },
+      ],
+    });
+    let result = assembleSystemPrompt({ context: ctx, loader });
+
+    assert.ok(
+      result.includes('# Skill library (load on demand)'),
+      'skill library section present',
+    );
+    assert.ok(
+      result.includes('`boxel` **(suggested)** — Core Boxel coding skill.'),
+      'suggested entry carries the marker',
+    );
+    assert.ok(
+      result.includes('`boxel-patterns` — Copy-paste patterns.'),
+      'unsuggested entry has no marker',
+    );
+    assert.ok(result.includes('read_skill'), 'explains how to load skills');
+  });
+
+  test('omits the skill library section when the index is empty', function (assert) {
+    let loader = new FilePromptLoader();
+    let ctx = makeMinimalContext({ skills: [], skillIndex: [] });
+    let result = assembleSystemPrompt({ context: ctx, loader });
+
+    assert.notOk(
+      result.includes('# Skill library'),
+      'no skill library section without index entries',
+    );
+  });
+
   test('snapshot: system prompt with sample skills', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({

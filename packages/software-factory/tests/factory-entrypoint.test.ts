@@ -76,7 +76,41 @@ module('factory-entrypoint', function (hooks) {
       debug: undefined,
       retryBlocked: true,
       enableBoxelUiDiscovery: undefined,
+      skillsDirs: undefined,
     });
+  });
+
+  test('parseFactoryEntrypointArgs collects repeatable --skills-dir flags', function (assert) {
+    let options = parseFactoryEntrypointArgs([
+      '--brief-url',
+      briefUrl,
+      '--target-realm',
+      targetRealm,
+      '--skills-dir',
+      '/tmp/skill-overrides',
+      '--skills-dir',
+      './more-skills',
+    ]);
+
+    assert.deepEqual(options.skillsDirs, [
+      '/tmp/skill-overrides',
+      './more-skills',
+    ]);
+  });
+
+  test('parseFactoryEntrypointArgs rejects an empty --skills-dir', function (assert) {
+    assert.throws(
+      () =>
+        parseFactoryEntrypointArgs([
+          '--brief-url',
+          briefUrl,
+          '--target-realm',
+          targetRealm,
+          '--skills-dir',
+          '',
+        ]),
+      /--skills-dir requires a non-empty path/,
+    );
   });
 
   test('parseFactoryEntrypointArgs accepts --agent claude', function (assert) {

@@ -114,6 +114,22 @@ export interface ResolvedSkill {
   references?: string[];
 }
 
+/**
+ * One row of the on-demand skill index rendered into the system prompt.
+ * The agent reads the description to decide relevance, then loads the full
+ * skill via the `read_skill` factory tool.
+ */
+export interface SkillIndexEntry {
+  name: string;
+  description: string;
+  /**
+   * Set when the resolver flagged this skill as likely relevant to the
+   * current issue. A hint for the agent, not a gate — any indexed skill is
+   * loadable.
+   */
+  suggested?: boolean;
+}
+
 export interface ToolArg {
   name: string;
   type: string;
@@ -216,7 +232,14 @@ export interface AgentContext {
   project: ProjectData;
   issue: IssueData;
   knowledge: KnowledgeArticleData[];
+  /** Front-loaded skills, rendered in full into the system prompt. */
   skills: ResolvedSkill[];
+  /**
+   * On-demand skill index: every skill the agent may load via `read_skill`,
+   * one line each in the system prompt. Entries the resolver considers
+   * relevant to the current issue carry `suggested: true`.
+   */
+  skillIndex?: SkillIndexEntry[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
   tools?: ToolManifest[];
   /** @deprecated Use validationResults/validationContext instead. */

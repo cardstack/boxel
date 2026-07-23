@@ -186,6 +186,119 @@ module('factory-tool-builder > tool building', function () {
 });
 
 // ---------------------------------------------------------------------------
+// read_skill
+// ---------------------------------------------------------------------------
+
+module('factory-tool-builder > read_skill', function () {
+  function makeSkillReader() {
+    return {
+      async buildIndex() {
+        return [
+          { name: 'boxel', description: 'Core Boxel coding skill' },
+          { name: 'boxel-patterns', description: 'Copy-paste patterns' },
+        ];
+      },
+      async readSkill(skillName: string) {
+        if (skillName !== 'boxel') {
+          throw new Error(`unknown skill "${skillName}"`);
+        }
+        return {
+          name: 'boxel',
+          content: '# Boxel skill body',
+          referenceFiles: ['lint-workflow.md'],
+        };
+      },
+      async readReference(skillName: string, fileName: string) {
+        if (skillName === 'boxel' && fileName === 'lint-workflow.md') {
+          return 'Lint workflow content';
+        }
+        throw new Error(`no reference "${fileName}"`);
+      },
+    };
+  }
+
+  test('not registered when config has no skillReader', function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let tools = buildFactoryTools(makeConfig(), executor, registry);
+
+    assert.false(tools.some((t) => t.name === 'read_skill'));
+  });
+
+  test('reads a skill and lists its reference files', async function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ skillReader: makeSkillReader() });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'read_skill');
+
+    let result = (await tool.execute({ skill: 'boxel' })) as {
+      ok: boolean;
+      skill: string;
+      content: string;
+      referenceFiles: string[];
+    };
+
+    assert.true(result.ok);
+    assert.strictEqual(result.skill, 'boxel');
+    assert.strictEqual(result.content, '# Boxel skill body');
+    assert.deepEqual(result.referenceFiles, ['lint-workflow.md']);
+  });
+
+  test('reads a named reference document', async function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ skillReader: makeSkillReader() });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'read_skill');
+
+    let result = (await tool.execute({
+      skill: 'boxel',
+      reference: 'lint-workflow.md',
+    })) as { ok: boolean; content: string };
+
+    assert.true(result.ok);
+    assert.strictEqual(result.content, 'Lint workflow content');
+  });
+
+  test('unknown skill returns error listing available skills', async function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ skillReader: makeSkillReader() });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'read_skill');
+
+    let result = (await tool.execute({ skill: 'realm-sync' })) as {
+      ok: boolean;
+      error: string;
+    };
+
+    assert.false(result.ok, 'index-gated: excluded/unknown skills rejected');
+    assert.true(result.error.includes('realm-sync'));
+    assert.true(
+      result.error.includes('boxel, boxel-patterns'),
+      'error lists the loadable skills',
+    );
+  });
+
+  test('unknown reference surfaces the loader error', async function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ skillReader: makeSkillReader() });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'read_skill');
+
+    let result = (await tool.execute({
+      skill: 'boxel',
+      reference: 'nope.md',
+    })) as { ok: boolean; error: string };
+
+    assert.false(result.ok);
+    assert.true(result.error.includes('nope.md'));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Signal tools
 // ---------------------------------------------------------------------------
 
