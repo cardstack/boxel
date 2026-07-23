@@ -36,7 +36,8 @@ export interface Model {
   // True when this render should be short-circuited to the realm-
   // index boilerplate placeholder instead of running through Glimmer.
   // Set only when `format === 'isolated'`, the card is the realm's
-  // default index, the type chain is base CardsGrid, and the realm
+  // default index, the type chain begins with a recognized default
+  // index card (CardsGrid or Workspace), and the realm
   // has not opted in via `includePrerenderedDefaultRealmIndex` on its
   // RealmConfig card. The orchestrator in `card-prerender.gts`
   // honours this flag by substituting the boilerplate string and

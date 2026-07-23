@@ -46,7 +46,7 @@ import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts'
 
 const log = logger('handle-publish');
 
-// The CardsGrid CardDef can be referenced two equivalent ways in a
+// A base CardDef can be referenced two equivalent ways in a
 // `meta.adoptsFrom.module` field — the absolute base-realm URL, or
 // the registered `@cardstack/base/` prefix form. `@cardstack/base/`
 // isn't currently wired as a virtual-network mapping in production
