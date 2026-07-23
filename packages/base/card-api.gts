@@ -4891,6 +4891,12 @@ function myLoader(): Loader {
 }
 
 class FallbackCardStore implements CardStore {
+  // Marks this as the storeless fallback (`getStore` hands one back when an
+  // instance isn't registered in `stores`). Its `getSearchResource` returns a
+  // permanently-empty, non-updating resource, so query-backed relationships
+  // resolved against it can never populate. Query-field support reads this brand
+  // to rebuild such a resource once a real store is available. [CS-12111]
+  readonly isFallbackCardStore = true;
   #instances: Map<string, CardDef> = new Map();
   #fileMetaInstances: Map<string, FileDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();

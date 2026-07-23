@@ -58,6 +58,16 @@ interface QueryFieldState {
     status?: number;
   }>;
   searchResource?: StoreSearchResource;
+  // Provenance of `searchResource`, used to detect an inert cached resource that
+  // must be rebuilt rather than reused. A resource built against a
+  // FallbackCardStore returns a permanently-empty result set, and one built
+  // before its `$this.*` inputs resolved has no query to run. Both happen when a
+  // query field is first read in edit mode (a nested FieldDef has no real store,
+  // and a just-created card's refs aren't resolved yet); reusing that resource
+  // in the saved isolated/embedded render is what left freshly-added embeds as
+  // broken links. [CS-12111]
+  resourceStoreWasFallback?: boolean;
+  resourceHadResolvableQuery?: boolean;
   renderCycleBarrier?: Promise<void>;
   // The sentinel `surfaceSearchResourceErrorState` planted on the most
   // recent transition into an errored state, kept as an identity handle
@@ -119,6 +129,30 @@ export function ensureQueryFieldSearchResource(
     queryFieldState.set(field.name, fieldState);
   }
   let searchResource = fieldState.searchResource;
+  if (searchResource) {
+    // Rebuild an inert cached resource once a real store / resolvable query is
+    // available. A resource first built against a FallbackCardStore (a nested
+    // FieldDef read in edit mode) or before `$this.*` resolved (a just-created
+    // card) never populates on its own; the saved isolated/embedded render
+    // reuses it and shows freshly-added embeds as broken links. The `store`
+    // brand and query resolvability are the two "is it inert?" signals. The
+    // rebuilt resource records real provenance below, so this is a one-shot
+    // transition — it does not re-fire on later renders (and never fires while
+    // the store is still the fallback, which would loop). [CS-12111]
+    let storeIsFallback = Boolean((store as any)?.isFallbackCardStore);
+    let rebuildInertResource =
+      (fieldState.resourceStoreWasFallback === true && !storeIsFallback) ||
+      (fieldState.resourceHadResolvableQuery === false &&
+        !storeIsFallback &&
+        Boolean(resolveQueryAndRealm(instance, field, fieldDefinition)?.query));
+    if (rebuildInertResource) {
+      log.debug(
+        `ensureQueryFieldSearchResource: rebuilding inert resource for field=${field.name} (storeWasFallback=${fieldState.resourceStoreWasFallback}, hadResolvableQuery=${fieldState.resourceHadResolvableQuery})`,
+      );
+      fieldState.searchResource = undefined;
+      searchResource = undefined;
+    }
+  }
   if (searchResource) {
     // Intentionally do NOT call `trackQueryFieldLoads` here. The barrier
     // it registers exists to plug a one-shot timing race at resource
@@ -190,6 +224,14 @@ export function ensureQueryFieldSearchResource(
     },
   );
   fieldState.searchResource = searchResource;
+  // Record whether this resource was built against an inert store or before its
+  // query resolved, so a later read with a real store / resolvable query
+  // rebuilds it instead of reusing the empty result (see the reuse branch and
+  // the QueryFieldState fields). [CS-12111]
+  fieldState.resourceStoreWasFallback = Boolean(
+    (store as any)?.isFallbackCardStore,
+  );
+  fieldState.resourceHadResolvableQuery = Boolean(args()?.query);
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
