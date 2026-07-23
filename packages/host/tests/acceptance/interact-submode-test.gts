@@ -168,6 +168,43 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('the results are restored');
     });
 
+    test('reopens a filter-only search (no term) to its results, not the compact prompt', async function (assert) {
+      await visitOperatorMode({});
+
+      // Reproduce code mode's "Find instances": a type filter with no search
+      // term. The reopen gate keys on the service's `hasActiveSearch` (term OR
+      // type OR realm), so this must reopen to the live type-filtered results
+      // rather than the recents-only compact prompt.
+      let searchSheetState = getService('search-sheet-state');
+      searchSheetState.selectedTypes = [
+        { module: rri(`${testRealmURL}pet`), name: 'Pet' },
+      ];
+
+      await click('[data-test-open-search-field]');
+      assert
+        .dom('[data-test-search-sheet]')
+        .hasClass('results', 'a filter-only search opens to the results view');
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists('the type-filtered results are shown');
+
+      // Close by clicking outside (a plain close keeps the search).
+      await click('[data-test-submode-layout]');
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+
+      // Reopening must land on the results view even though the term is empty.
+      await click('[data-test-open-search-field]');
+      assert
+        .dom('[data-test-search-sheet]')
+        .hasClass(
+          'results',
+          'reopening a filter-only search restores the results view',
+        );
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists('the type-filtered results are restored on reopen');
+    });
+
     test('reopening an unchanged search does not re-run the query', async function (assert) {
       await visitOperatorMode({});
 

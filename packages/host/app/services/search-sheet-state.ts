@@ -79,7 +79,7 @@ export default class SearchSheetStateService extends Service {
   // or realm-only search is NOT idle — code mode's "Find instances" sets a type
   // with no term and must still search. This is what lets `resetState()`, which
   // clears all three, drive the resource idle.
-  private get hasActiveSearch(): boolean {
+  get hasActiveSearch(): boolean {
     return (
       !isSearchKeyEmpty(this.searchKey) ||
       (this.selectedTypes?.length ?? 0) > 0 ||

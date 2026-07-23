@@ -119,4 +119,29 @@ module('Unit | Service | search-sheet-state', function (hooks) {
       'no realm selection => empty realms (the resource searches all)',
     );
   });
+
+  test('a type-only search (empty term) is active and derives a type-filtered query', function (assert) {
+    // Code mode's "Find instances" sets a type with no term. This must count as
+    // an active search so the reopen gate lands on the results view, and the
+    // derived query must carry the type filter (never run unfiltered).
+    service.selectedTypes = [CODE_REF];
+
+    assert.true(
+      service.hasActiveSearch,
+      'a type filter with no term is an active search',
+    );
+    let query = service.mainQuery;
+    assert.ok(query, 'a type-only selection yields a derived query');
+    assert.ok(
+      JSON.stringify(query?.filter ?? {}).includes(CODE_REF.name),
+      'the derived query carries the selected type filter',
+    );
+  });
+
+  test('an empty search is not active', function (assert) {
+    assert.false(
+      service.hasActiveSearch,
+      'no term, no type, no realm => no active search',
+    );
+  });
 });

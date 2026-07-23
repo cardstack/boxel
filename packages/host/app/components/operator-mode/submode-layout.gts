@@ -351,7 +351,11 @@ export default class SubmodeLayout extends Component<Signature> {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
       // Reopen straight to the results view when a search is persisted, so the
       // restored results are shown immediately rather than the compact prompt.
-      this.searchSheetMode = this.searchSheetState.searchKey.trim()
+      // Gate on the service's own `hasActiveSearch` (term OR type OR realm) —
+      // the same predicate that produces `mainQuery` — so a filter-only search
+      // (e.g. code mode's "Find instances", which sets a type with no term)
+      // reopens to its live results rather than the recents-only compact prompt.
+      this.searchSheetMode = this.searchSheetState.hasActiveSearch
         ? SearchSheetModes.SearchResults
         : SearchSheetModes.SearchPrompt;
     }
