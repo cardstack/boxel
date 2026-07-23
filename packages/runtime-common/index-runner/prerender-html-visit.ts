@@ -24,6 +24,12 @@ import {
 } from '../index.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
 import { uniqueDeps } from './dependency-collections.ts';
@@ -83,8 +89,12 @@ export interface PrerenderHtmlPassResult {
 // 'prerender-html' visit that renders from card+source (it never reads
 // `boxel_index`), writing HTML or render-error rows into
 // `prerendered_html_working`; 'delete' URLs are never visited so their
-// tombstones survive. `batch.done()` swaps the set into production under the
-// monotonic generation guard.
+// tombstones survive. A visit that fails without producing a response
+// document at all (its prerender request aborting/timing out, a reader
+// error) lands error rows too, via the same per-URL isolation the index
+// loop applies (`handleVisitFailure`) — one URL's failure never discards
+// the rest of the batch. `batch.done()` swaps the set into production under
+// the monotonic generation guard.
 export async function runPrerenderHtmlPass({
   realmURL,
   changes,
@@ -271,22 +281,34 @@ export async function runPrerenderHtmlPass({
         // authoritative for this job.
         resumedSkipped++;
       } else {
-        await visitForPrerenderedHtml({
-          url: new URL(href),
-          realmURL,
-          realmPaths,
-          reader,
-          batch,
-          prerenderer,
-          virtualNetwork,
-          auth,
-          batchId,
-          jobInfo,
-          jobPriority,
-          loaderEpoch,
-          stats,
-          log,
-        });
+        try {
+          await visitForPrerenderedHtml({
+            url: new URL(href),
+            realmURL,
+            realmPaths,
+            reader,
+            batch,
+            prerenderer,
+            virtualNetwork,
+            auth,
+            batchId,
+            jobInfo,
+            jobPriority,
+            loaderEpoch,
+            stats,
+            log,
+          });
+        } catch (err) {
+          await handleVisitFailure({
+            url: new URL(href),
+            err,
+            batch,
+            reader,
+            jobInfo,
+            stats,
+            log,
+          });
+        }
       }
       filesCompleted++;
       onProgress?.({
@@ -532,5 +554,105 @@ async function visitForPrerenderedHtml({
       ...(diagnostics ? { diagnostics } : {}),
     });
     stats.filesIndexed++;
+  }
+}
+
+// Per-URL failure isolation, mirroring the index visit loop's
+// (`IndexRunner`'s) handling of the same class of failure. A
+// transport-level failure of the visit — its prerender request timing out /
+// aborting before a response document exists, or a reader/network error —
+// never reaches the in-band error-entry construction in
+// `visitForPrerenderedHtml`; the visit rejects instead. Left uncaught, one
+// URL's failure propagates out of the visit loop, skips `batch.done()`, and
+// discards every other rendered URL's rows for the whole job — and because
+// nothing is persisted for the failed URL either, the reconcile sweep reads
+// it as "never attempted" and re-enqueues the identical batch every tick.
+// Persisting error rows contains the failure to this URL: they carry the
+// batch's generation and the last-known-good HTML is preserved beneath the
+// error like any other render failure's row.
+//
+// The error is marked `visitRequestFailure` because this failure describes
+// the request, not the content — the render never returned a verdict, so a
+// retry can legitimately succeed (e.g. an abort under temporary prerender
+// congestion). The reconcile sweep gives such rows a bounded retry lane:
+// re-rendered at most `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive
+// times, spaced by the sweep cadence, then terminal exactly like a
+// deterministic render error. The bound is what protects the fleet — each
+// retry of a genuinely pathological visit burns its realm's prerender
+// affinity lane for the full request timeout, so retries must converge to
+// "recorded error, move on" rather than repeat indefinitely.
+async function handleVisitFailure({
+  url,
+  err,
+  batch,
+  reader,
+  jobInfo,
+  stats,
+  log,
+}: {
+  url: URL;
+  err: unknown;
+  batch: Batch;
+  reader: Reader;
+  jobInfo: JobInfo;
+  stats: Stats;
+  log: ReturnType<typeof logger>;
+}): Promise<void> {
+  if (isCardError(err) && err.status === 404) {
+    log.info(
+      `${jobIdentity(jobInfo)} tried to prerender file ${url.href}, but it no longer exists`,
+    );
+    return;
+  }
+  let message = coerceErrorMessage(
+    err,
+    `Prerendering failed for ${url.href} with no error message (${jobIdentity(jobInfo)})`,
+  );
+  log.warn(
+    `${jobIdentity(jobInfo)} failed to prerender ${url.href}, recording error rows: ${message}`,
+  );
+  let error = isCardError(err)
+    ? serializableError(err)
+    : serializableError(
+        Object.assign(new CardError(message, { status: 500 }), {
+          stack: (err as Error)?.stack,
+        }),
+      );
+  error.message = message;
+  error.visitRequestFailure = true;
+  await batch.updatePrerenderedHtmlEntry(url, { type: 'file-error', error });
+  stats.fileErrors++;
+  // The up-front seeding tombstoned every type this URL previously had in
+  // `prerendered_html` — for an existing card that's both `instance` and
+  // `file`. Overwriting only the `file` tombstone above would let the swap
+  // promote the untouched `instance` tombstone, silently removing a
+  // previously-good card's HTML over a transient failure. The batch records
+  // which live row types it tombstoned, so an existing card is protected
+  // even when the file can't be read — which may be exactly how the visit
+  // failed. Re-parsing the source is only the fallback for a URL with no
+  // prior rendering, which has no row to protect but should still surface
+  // its failure as an instance error when it's a card.
+  let isCardInstance =
+    batch.prerenderedHtmlTombstonedLiveTypes(url.href)?.includes('instance') ??
+    false;
+  if (!isCardInstance && url.href.endsWith('.json')) {
+    try {
+      let fileRef = await reader.readFile(url);
+      let resource = fileRef?.content
+        ? (JSON.parse(fileRef.content)?.data as unknown)
+        : undefined;
+      isCardInstance = Boolean(resource && isCardResource(resource));
+    } catch (parseErr) {
+      log.warn(
+        `${jobIdentity(jobInfo)} could not determine whether ${url.href} is a card instance after its visit failed: ${(parseErr as Error)?.message}`,
+      );
+    }
+  }
+  if (isCardInstance) {
+    await batch.updatePrerenderedHtmlEntry(url, {
+      type: 'instance-error',
+      error,
+    });
+    stats.instanceErrors++;
   }
 }

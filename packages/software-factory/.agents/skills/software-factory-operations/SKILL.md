@@ -65,7 +65,7 @@ Files that live in the workspace:
 **Inspect before writing.** Read or grep the file you plan to
 change, and glob for sibling files (e.g. existing card definitions
 in the same directory) before creating new ones. The
-`boxel-development` skill has the authoring patterns; this skill
+`boxel` skill has the authoring patterns; this skill
 just covers the loop around them.
 
 ## Tracker-schema cards — write JSON directly
@@ -730,7 +730,7 @@ understanding Boxel patterns, and not a general reference.
   realm regenerates the transpiled JS on every write, so any edit
   there is silently discarded.
 - **When in doubt, favor idiomatic card development practices.**
-  The `boxel-development` skill and existing cards in the target
+  The `boxel` skill and existing cards in the target
   realm are the right references — not what the compiler happens to
   emit.
 
@@ -837,7 +837,7 @@ table stakes; without it your tests don't get past validation.
 - `software-factory-bootstrap` — what to do when the Issue's
   `issueType` is `bootstrap` (create Project / IssueTracker /
   Knowledge Articles / implementation Issues from a brief).
-- `boxel-development` — `.gts` card authoring patterns
+- `boxel` — `.gts` card authoring patterns
   (CardDef / FieldDef, fields, formats, templates, common
   pitfalls). The agent-facing reference for "what does the
   `.gts` actually look like".

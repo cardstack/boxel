@@ -3,7 +3,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
 
-import { cn, eq } from '../../helpers.ts';
+import { cn, eq } from '../../helpers.gts';
 import { FailureBordered, Warning } from '../../icons.gts';
 import Button, { type BoxelButtonKind } from '../button/index.gts';
 

@@ -30,6 +30,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
 
+    test('validateRoutingPath: advises when the path has a trailing slash', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
     test('validateRoutingPath: trims surrounding whitespace before validating', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
@@ -53,6 +57,16 @@ module(basename(import.meta.filename), function () {
     });
 
     test('findDuplicateRoutingPaths: treats surrounding whitespace as equivalent', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findDuplicateRoutingPaths: treats trailing-slash variants as the same route', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
+
+  module('normalizeRoutingPath', function () {
+    test('normalizeRoutingPath: strips trailing slashes and preserves the root', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
   });

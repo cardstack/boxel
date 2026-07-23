@@ -8,23 +8,39 @@ import type { Deferred } from './deferred.ts';
 //
 // The tiers:
 //
-//   | priority | job                                          |
-//   | -------- | -------------------------------------------- |
-//   | 10       | any user-initiated job, incl. prerender-html |
-//   | 1        | system-initiated job (non-prerender-html)    |
-//   | 0        | system-initiated prerender-html              |
+//   | priority | job                                                     |
+//   | -------- | ------------------------------------------------------- |
+//   | 10       | user indexing (+ any user job); publish-awaited render  |
+//   |  9       | user prerender-html (the common case)                   |
+//   |  1       | system indexing (+ any system job)                      |
+//   |  0       | system prerender-html                                   |
 //
-// User-initiated prerender-html is co-equal with user indexing (both 10):
-// for a published realm the rendered HTML is the deliverable served to
-// visitors — as important as the search index — so it is NOT deprioritized
-// below its initiator tier. System-initiated prerender-html stays one notch
-// below system work (background); boot rendering is gated separately and must
-// not crowd out user-tier jobs. The high-priority pool floors at
-// `userInitiatedPrerenderHtmlPriority` (serving all user-initiated work and
-// never system-tier jobs); the all-priority pool floors at
-// `systemInitiatedPrerenderHtmlPriority` and serves everything.
+// Prerender-html floors one tier below its initiator. The two initiator tiers
+// mirror each other: user prerender-html (9) is to user indexing (10) as
+// system prerender-html (0) is to system indexing (1). The gap does two
+// things. Everywhere, the same value rides to the prerender server as the
+// render's in-render admission priority (see prerender-headers), where higher
+// is dequeued first — so an index visit's render (its initiator tier) outranks
+// the slower prerender-html renders, keeping HTML rendering off the indexing
+// hot path at the render layer. And it lets a worker pool that floors at the
+// indexing tier reserve itself to indexing; that reserved lane is opt-in via
+// `--userIndexCount` + `--indexJobsOnly` (the contended matrix test stack runs
+// it to keep provisioning responsive — see worker-manager), and deployments
+// without it lean on high-priority-pool capacity instead.
+//
+// One render escapes the gap: a publish does not report its realm ready until
+// the published HTML exists, so a publish-awaited render is on the publish's
+// critical path and runs co-equal with indexing (10), admitted ahead of
+// ordinary user renders. Where the index lane is configured, its
+// `--indexJobsOnly` filter (not the priority floor) is what keeps a co-equal
+// publish render out of it.
+//
+// The high-priority pool floors at `userInitiatedPrerenderHtmlPriority` (9),
+// serving all user-initiated work — both render tiers and user indexing — and
+// never system-tier jobs; the all-priority pool floors at
+// `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 export const userInitiatedPriority = 10;
-export const userInitiatedPrerenderHtmlPriority = 10;
+export const userInitiatedPrerenderHtmlPriority = 9;
 export const systemInitiatedPriority = 1;
 export const systemInitiatedPrerenderHtmlPriority = 0;
 

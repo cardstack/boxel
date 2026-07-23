@@ -64,7 +64,7 @@ import type ErrorDisplayService from './error-display';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type { RecentFile } from './recent-files-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
@@ -77,6 +77,7 @@ export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
   openCardIds?: RealmResourceIdentifier[];
+  supportingCardIds?: RealmResourceIdentifier[];
   declarationKind: 'card' | 'field';
 }
 
@@ -142,12 +143,13 @@ export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 // Read the user's persisted AI Assistant open/closed preference. Defaults to
-// `true` for first-ever visits; URL state still takes precedence over this.
+// `false` for first-ever visits, so the panel is closed unless the URL state
+// (which takes precedence) or a remembered preference opens it.
 function readPersistedAiAssistantOpen(): boolean {
   let raw = window.localStorage.getItem(AiAssistantOpen);
   if (raw === 'true') return true;
   if (raw === 'false') return false;
-  return true;
+  return false;
 }
 
 export default class OperatorModeStateService extends Service {
@@ -229,7 +231,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private router: RouterService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -238,7 +240,7 @@ export default class OperatorModeStateService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
 
     let moduleInspectorHistory = window.localStorage.getItem(
       ModuleInspectorSelections,

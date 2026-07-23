@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { cn, cssVar, eq } from '../../helpers.ts';
+import { cn, cssVar, eq } from '../../helpers.gts';
 import ColorPicker from '../color-picker/index.gts';
 import IconButton from '../icon-button/index.gts';
 import Tooltip from '../tooltip/index.gts';

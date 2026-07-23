@@ -464,18 +464,15 @@ export async function startServer({
     // workers (fullyParallel) funnel their realm provisioning into one
     // worker manager, and each new workspace enqueues a from-scratch index
     // plus a prerender-html job whose realm-wide module pre-warm sweep runs
-    // for tens of seconds. User indexing and prerender-html are co-equal
-    // (both priority 10 — see runtime-common/queue.ts: a published realm's
-    // rendered HTML is as first-class as its search index), so priority
-    // alone cannot keep sweeps from occupying every high-tier worker while
-    // a user write's incremental index job sits queued. That queue wait is
-    // what test assertions feel: createRealm blocks on the from-scratch
-    // index, and read-your-writes endpoints (card GET, _publishability)
-    // drain in-flight incremental indexing before responding. The
-    // user-index worker claims only indexing job types, so an index job
-    // always has a lane no render sweep can hold; the two high-priority
-    // workers carry the prerender-html sweeps alongside any other
-    // user-initiated work.
+    // for tens of seconds. Prerender-html sits one tier below indexing (see
+    // runtime-common/queue.ts), so the user-index worker — flooring at the
+    // indexing tier and further restricted to indexing job types — can never
+    // be held by a render sweep. That matters here because test assertions
+    // feel the queue wait: createRealm blocks on the from-scratch index, and
+    // read-your-writes endpoints (card GET, _publishability) drain in-flight
+    // incremental indexing before responding. The two high-priority workers
+    // carry the prerender-html sweeps alongside any other user-initiated
+    // work.
     `--userIndexCount=1`,
     `--highPriorityCount=2`,
 

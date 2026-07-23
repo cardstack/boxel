@@ -144,7 +144,7 @@ export class RealmIndexUpdater {
 
   publishFullIndex(
     priority = systemInitiatedPriority,
-    opts?: { clearLastModified?: boolean },
+    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
   ): {
     published: Promise<Job<FromScratchResult>>;
     completed: Promise<FromScratchResult>;
@@ -163,6 +163,7 @@ export class RealmIndexUpdater {
         priority,
         {
           clearLastModified: opts?.clearLastModified,
+          awaitedByPublish: opts?.awaitedByPublish,
         },
       );
       return job;
@@ -235,6 +236,15 @@ export class RealmIndexUpdater {
         meta: { generation?: number },
       ) => Promise<void>;
       onSettled?: () => Promise<void> | void;
+      // Runs when the worker job rejects, inside the same deferred lifecycle
+      // as onSettled (before the quiescence deferred fulfills). A failed
+      // incremental job may still have persisted setup-phase error docs, so
+      // callers use this to run the cache-invalidation / broadcast work the
+      // success path routes through onInvalidation — otherwise those rows
+      // stay hidden behind stale caches and silent subscribers until the
+      // next successful swap. Best-effort: a hook failure is logged and the
+      // job's own rejection still propagates through `settled`.
+      onFailed?: (error: unknown) => Promise<void> | void;
       clientRequestId?: string | null;
     },
   ): Promise<{ settled: Promise<void> }> {
@@ -289,6 +299,17 @@ export class RealmIndexUpdater {
         if (opts?.onSettled) {
           await opts.onSettled();
         }
+      } catch (e) {
+        if (opts?.onFailed) {
+          try {
+            await opts.onFailed(e);
+          } catch (hookError: any) {
+            this.#log.warn(
+              `onFailed hook for ${this.realmURL.href} threw: ${hookError?.message}`,
+            );
+          }
+        }
+        throw e;
       } finally {
         indexingDeferred.fulfill();
         this.#incrementalIndexingDeferreds.delete(indexingDeferred);

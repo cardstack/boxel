@@ -4,17 +4,17 @@ import { service } from '@ember/service';
 
 import { BrowserQueue } from '../lib/browser-queue';
 
-import type ResetService from './reset';
+import type SessionService from './session';
 
 // Tests inject an implementation of this service to help perform indexing
 // for the test-realm-adapter
 export default class QueueService extends Service {
   queue = new BrowserQueue();
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

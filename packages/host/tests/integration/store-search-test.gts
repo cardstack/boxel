@@ -235,6 +235,28 @@ module('Integration | store search public API', function (hooks) {
     );
   });
 
+  test('a file is matchable by eq on its id (the unified card/file identity key)', async function (assert) {
+    // The file-indexer stamps `id` (= the file URL) into the file search_doc,
+    // so a file is addressable by `eq: { id }` the same way a card instance is.
+    let fileURL = `${testRealmURL}files/hello.txt`;
+    let doc = await storeService.searchEntries(
+      {
+        filter: {
+          'item.on': baseFileRef,
+          eq: { 'item.id': fileURL },
+        },
+        fields: { entry: ['item'] },
+      },
+      [testRealmURL],
+    );
+
+    assert.deepEqual(
+      doc.data.map((entry) => entry.id),
+      [fileURL],
+      'exactly the file with that id is returned',
+    );
+  });
+
   test('the file tree consumer works via searchEntries', async function (assert) {
     let fileTree = fileTreeFromIndex(storeService, () => testRealmURL);
     fileTree.entries; // reading the resource activates it

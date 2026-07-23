@@ -12,7 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type NetworkService from './network';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type { FileDef } from '@cardstack/base/file-api';
 
@@ -49,7 +49,7 @@ export class FileUploadTask {
 
 export default class FileUploadService extends Service {
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
 
   @tracked activeUploads: FileUploadTask[] = [];
@@ -58,7 +58,7 @@ export default class FileUploadService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

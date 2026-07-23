@@ -188,14 +188,7 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {
-      // True locally so `pnpm start` shows the Sign in with Google button by
-      // default; staging/prod stays false until the staging Synapse OIDC
-      // config lands and flips this on via the deployed env var.
-      GOOGLE_AUTH_ENABLED: process.env.GOOGLE_AUTH_ENABLED
-        ? process.env.GOOGLE_AUTH_ENABLED === 'true'
-        : environment === 'development',
-    },
+    featureFlags: {},
   };
 
   if (environment === 'test') {
@@ -247,9 +240,17 @@ function getLatestSchemaFile() {
   const migrationsDir = path.resolve(
     path.join(__dirname, '..', '..', 'postgres', 'migrations'),
   );
-  let migrations = fs.readdirSync(migrationsDir);
-  // Only timestamped migration files — ignores non-migration entries in the dir
-  // such as `package.json` (pins the dir to type:commonjs) and `.eslintrc.js`.
+  const removalMigrationsDir = path.resolve(
+    path.join(__dirname, '..', '..', 'postgres', 'migrations-removal'),
+  );
+  // Latest timestamped migration across both phases (additive in migrations/,
+  // destructive in migrations-removal/). Only timestamped migration files count
+  // — ignores non-migration entries such as `package.json` (pins the dir to
+  // type:commonjs) and `.eslintrc.js`.
+  let migrations = [
+    ...fs.readdirSync(migrationsDir),
+    ...fs.readdirSync(removalMigrationsDir),
+  ];
   let lastMigration = migrations
     .filter((f) => /^\d+_/.test(f))
     .sort()

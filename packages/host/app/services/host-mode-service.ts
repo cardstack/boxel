@@ -4,7 +4,10 @@ import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
-import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+import {
+  normalizeRoutingPath,
+  sanitizeHeadHTML,
+} from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
@@ -20,20 +23,11 @@ function ensureSingleTitle(headHTML: string): string {
     : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
 }
 
-// Normalize trailing-slash variance for routing-map matching. `/realm/`
-// and `/realm` are the same destination from the user's perspective,
-// but the injected map keys and Ember's `params.path` disagree on
-// the trailing slash. Stripping it on both sides makes the comparator
-// robust. Preserve the root `/` since stripping it would empty the path.
-function canonicalizeRoutingPath(path: string): string {
-  if (path === '/') return '/';
-  return path.replace(/\/+$/, '');
-}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -46,7 +40,7 @@ export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -56,7 +50,7 @@ export default class HostModeService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
@@ -145,13 +139,15 @@ export default class HostModeService extends Service {
   // rule's injected key is the realm's mount pathname WITH trailing
   // slash (e.g. `/progressive-cheetah/`), but Ember's catch-all strips
   // it (`params.path === 'progressive-cheetah'` for either visit form).
-  // Canonicalize both sides by stripping trailing slashes (except the
-  // root `/` itself) before comparing so `/realm` ↔ `/realm/` resolve.
+  // Canonicalize both sides with the shared `normalizeRoutingPath` (strips
+  // trailing slashes, preserves the root `/`) before comparing, so
+  // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
+  // map builder and the editor normalize.
   resolveRoutedPath(path: string): string | null {
     let normalized = path.startsWith('/') ? path : `/${path}`;
-    let canonical = canonicalizeRoutingPath(normalized);
+    let canonical = normalizeRoutingPath(normalized);
     let rule = this.hostRoutingMap.find(
-      (r) => canonicalizeRoutingPath(r.path) === canonical,
+      (r) => normalizeRoutingPath(r.path) === canonical,
     );
     return rule ? rule.id : null;
   }

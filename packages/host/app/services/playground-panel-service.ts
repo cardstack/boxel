@@ -20,7 +20,7 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import type CardService from './card-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 import type StoreService from './store';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -40,7 +40,7 @@ export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
   declare playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private cachedAPI?: typeof CardAPI;
@@ -58,7 +58,7 @@ export default class PlaygroundPanelService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
     registerDestructor(this, () => {
       this.clearPendingCardIdSubscriptions();
     });

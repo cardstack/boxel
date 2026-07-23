@@ -305,7 +305,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     let ctx = makeMinimalContext({
       skills: [
         {
-          name: 'boxel-development',
+          name: 'boxel',
           content: 'Use Boxel patterns for card definitions.',
           references: ['ref-guide.md'],
         },
@@ -313,7 +313,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     });
     let result = assembleSystemPrompt({ context: ctx, loader });
 
-    assert.ok(result.includes('boxel-development'), 'includes skill name');
+    assert.ok(result.includes('boxel'), 'includes skill name');
     assert.ok(result.includes('Use Boxel patterns'), 'includes skill content');
     assert.ok(result.includes('ref-guide.md'), 'includes skill references');
   });
@@ -331,7 +331,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     let ctx = makeMinimalContext({
       skills: [
         {
-          name: 'boxel-development',
+          name: 'boxel',
           content: 'Follow Boxel card patterns.',
         },
         {
@@ -347,7 +347,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     let roleIdx = result.indexOf('# Role');
     let rulesIdx = result.indexOf('# Rules');
     let realmsIdx = result.indexOf('# Realms');
-    let skill1Idx = result.indexOf('# Skill: boxel-development');
+    let skill1Idx = result.indexOf('# Skill: boxel');
     let skill2Idx = result.indexOf('# Skill: testing-guide');
 
     assert.ok(roleIdx >= 0, 'has Role section');

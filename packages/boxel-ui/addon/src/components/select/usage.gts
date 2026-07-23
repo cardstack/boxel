@@ -11,7 +11,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { cssVar } from '../../helpers.ts';
+import { cssVar } from '../../helpers.gts';
 import BoxelField from '../field-container/index.gts';
 import BoxelSelect from './index.gts';
 

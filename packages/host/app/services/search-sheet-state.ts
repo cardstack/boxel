@@ -25,7 +25,7 @@ import { SectionPagination } from '../utils/search/section-pagination';
 import { isSearchKeyEmpty, isURLSearchKey } from '../utils/search/url';
 
 import type NetworkService from './network';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 // The operator-mode search sheet searches everything the index knows — cards
 // (including specs, which the default `not: specRef` path excludes), field
@@ -44,11 +44,11 @@ export const SEARCH_SHEET_BASE_FILTER: Filter = { type: baseRef };
 // re-seed, no re-fetch), and the resource's realm subscriptions stay live while
 // closed, so index/prerender events during the closed window are applied in the
 // background. Deliberately NOT persisted to localStorage: a page reload clears
-// it. Cleared on logout/realm reset via the `reset` service, following
+// it. Cleared on logout via the `session` service, following
 // `RecentCardsService`. Scoped to the sheet only — the card choosers never read
 // or write it (they don't opt in via `@persist`).
 export default class SearchSheetStateService extends Service {
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
 
   @tracked searchKey = '';
@@ -70,7 +70,7 @@ export default class SearchSheetStateService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   // Whether the sheet currently has an active search to run. Idle (=> no query,

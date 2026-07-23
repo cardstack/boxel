@@ -10,7 +10,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { cssVar } from '../../helpers.ts';
+import { cssVar } from '../../helpers.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelTooltip, {
   type TooltipThemeVariant,

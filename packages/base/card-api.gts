@@ -4258,11 +4258,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  // A resource's references (adoptsFrom, relationship links) are relative to the
+  // resource's own id, independent of the document that delivered it. So resolve
+  // them against this instance's own id when it is saved, and fall back to the
+  // threaded deserialization context only for an unsaved instance that has no id
+  // of its own.
   let instanceRelativeTo: RealmResourceIdentifier | URL | undefined =
-    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? (instance.id as RealmResourceIdentifier)
-      : undefined);
+      : undefined) ?? instance[relativeTo];
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -4335,8 +4339,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
-      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
-      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
+      // A field override's module ref is relative to this resource's own id, the
+      // same rule as adoptsFrom; instanceRelativeTo already resolves to the
+      // instance's own id when saved, with resource.id as the fallback.
       relativeTo:
         instanceRelativeTo ?? (resource.id ? rri(resource.id) : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -4445,12 +4450,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
-      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
+      // A resource's relationship links are relative to the resource's own id,
+      // independent of the document that delivered it — so resolve against this
+      // instance's own id when saved, falling back to the threaded context only
+      // for an unsaved instance with no id of its own.
       let relativeToVal: RealmResourceIdentifier | URL | undefined =
-        instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
           ? (instance.id as RealmResourceIdentifier)
-          : undefined);
+          : undefined) ?? instance[relativeTo];
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),

@@ -28,7 +28,7 @@ import { logger, type SingleCardDocument } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type CardService from '@cardstack/host/services/card-service';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 import {
   type MonacoLanguageConfig,
   extendDefinition,
@@ -103,7 +103,7 @@ export default class MonacoService extends Service {
   @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
   @tracked hasFocus = false;
   @service declare cardService: CardService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
   // this is in the service so that we can manipulate it in our tests
   serverEchoDebounceMs = serverEchoDebounceMs;
 
@@ -121,7 +121,7 @@ export default class MonacoService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
     registerDestructor(this, () => {
       this.disposeEditorListeners();
       for (let d of this.globalDisposables) {

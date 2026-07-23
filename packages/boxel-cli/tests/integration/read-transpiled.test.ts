@@ -3,16 +3,28 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readTranspiledModule } from '../../src/commands/read-transpiled.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import {
+  readTranspiledModule,
+  type ReadTranspiledResult,
+} from '../../src/commands/read-transpiled.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
+// `boxel read-transpiled <path> --realm <url> [--json]` fetches a realm
+// module's transpiled JS. We drive the installed binary for the
+// observable behaviors (compiled output, extension handling, 404s,
+// no-profile). Two assertions inspect the exact outgoing request /
+// force a fetch rejection — surfaces only reachable in-process — so they
+// stay as in-process spies on the command function.
+
+let home: string;
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
 let realmUrl: string;
@@ -47,9 +59,10 @@ beforeAll(async () => {
 
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
+  let testHome = createTestHome();
+  home = testHome.home;
+  profileManager = testHome.profileManager;
+  cleanupProfile = testHome.cleanup;
   await setupTestProfile(profileManager);
 });
 
@@ -60,9 +73,18 @@ afterAll(async () => {
 
 describe('read-transpiled (integration)', () => {
   it('returns the compiled JavaScript for a .gts module (path with extension)', async () => {
-    let result = await readTranspiledModule(realmUrl, 'transpiled-check.gts', {
-      profileManager,
-    });
+    let res = await runBoxel(
+      [
+        'read-transpiled',
+        'transpiled-check.gts',
+        '--realm',
+        realmUrl,
+        '--json',
+      ],
+      { home },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+    let result = res.json<ReadTranspiledResult>();
 
     expect(
       result.ok,
@@ -85,19 +107,35 @@ describe('read-transpiled (integration)', () => {
   });
 
   it('accepts the path without the .gts extension', async () => {
-    let withExt = await readTranspiledModule(realmUrl, 'transpiled-check.gts', {
-      profileManager,
-    });
-    let withoutExt = await readTranspiledModule(realmUrl, 'transpiled-check', {
-      profileManager,
-    });
+    let withExt = await runBoxel(
+      [
+        'read-transpiled',
+        'transpiled-check.gts',
+        '--realm',
+        realmUrl,
+        '--json',
+      ],
+      { home },
+    );
+    let withoutExt = await runBoxel(
+      ['read-transpiled', 'transpiled-check', '--realm', realmUrl, '--json'],
+      { home },
+    );
 
-    expect(withoutExt.ok).toBe(true);
-    expect(withoutExt.status).toBe(200);
-    expect(withoutExt.content).toBe(withExt.content);
+    expect(withExt.ok, withExt.stderr).toBe(true);
+    expect(withoutExt.ok, withoutExt.stderr).toBe(true);
+    let withExtResult = withExt.json<ReadTranspiledResult>();
+    let withoutExtResult = withoutExt.json<ReadTranspiledResult>();
+
+    expect(withoutExtResult.ok).toBe(true);
+    expect(withoutExtResult.status).toBe(200);
+    expect(withoutExtResult.content).toBe(withExtResult.content);
   });
 
   it('uses authedRealmFetch with Accept: */*', async () => {
+    // White-box: asserts the exact request the command function issues.
+    // The outgoing fetch shape isn't observable across the subprocess
+    // boundary, so this stays an in-process spy on the command function.
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
     try {
       await readTranspiledModule(realmUrl, 'transpiled-check.gts', {
@@ -116,28 +154,35 @@ describe('read-transpiled (integration)', () => {
   });
 
   it('returns a not-ok result with 404 status for a nonexistent module', async () => {
-    let result = await readTranspiledModule(realmUrl, 'does-not-exist', {
-      profileManager,
-    });
+    let res = await runBoxel(
+      ['read-transpiled', 'does-not-exist', '--realm', realmUrl, '--json'],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    let result = res.json<ReadTranspiledResult>();
     expect(result.ok).toBe(false);
     expect(result.status).toBe(404);
     expect(result.error).toContain('404');
   });
 
-  it('throws when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-
-    await expect(
-      readTranspiledModule(realmUrl, 'transpiled-check.gts', {
-        profileManager: emptyManager,
-      }),
-    ).rejects.toThrow('No active profile');
-
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+  it('exits non-zero with a clear error when there is no active profile', async () => {
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        ['read-transpiled', 'transpiled-check.gts', '--realm', realmUrl],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 
   it('returns error when fetch throws', async () => {
+    // White-box: forces the underlying fetch to reject, which is only
+    // possible by mocking the command function's authenticator
+    // in-process.
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmFetch')
       .mockRejectedValueOnce(new Error('network failure'));

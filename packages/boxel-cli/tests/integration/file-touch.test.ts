@@ -3,19 +3,35 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { touchFiles } from '../../src/commands/file/touch.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel file touch [paths...] --realm <url> [--all] [--dry-run] --json`
+// prints `{ ok, touched, skipped, error? }` on stdout. We drive the
+// installed binary and verify realm state in-process.
+
+interface TouchJson {
+  ok: boolean;
+  touched: string[];
+  skipped: { path: string; reason: string }[];
+  error?: string;
+}
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
+// A ProfileManager reflecting the profile the CLI reads from disk, used for
+// in-process realm reads/writes during setup and verification. `touch` never
+// mutates the profile (the realm pre-exists), so a single instance is fine.
+let verifyPm: ProfileManager;
 
 const SOURCE_GTS = `import {
   CardDef,
@@ -79,10 +95,11 @@ beforeAll(async () => {
 
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
+  verifyPm = reloadProfile(home);
 });
 
 afterAll(async () => {
@@ -91,7 +108,7 @@ afterAll(async () => {
 });
 
 async function readMtimes(): Promise<Record<string, number>> {
-  let response = await profileManager.authedRealmFetch(`${realmUrl}_mtimes`, {
+  let response = await verifyPm.authedRealmFetch(`${realmUrl}_mtimes`, {
     method: 'GET',
     headers: { Accept: 'application/vnd.api+json' },
   });
@@ -105,13 +122,10 @@ async function readMtimes(): Promise<Record<string, number>> {
 }
 
 async function readFileContent(relPath: string): Promise<string> {
-  let response = await profileManager.authedRealmFetch(
-    `${realmUrl}${relPath}`,
-    {
-      method: 'GET',
-      headers: { Accept: 'application/vnd.card+source' },
-    },
-  );
+  let response = await verifyPm.authedRealmFetch(`${realmUrl}${relPath}`, {
+    method: 'GET',
+    headers: { Accept: 'application/vnd.card+source' },
+  });
   return response.text();
 }
 
@@ -119,11 +133,18 @@ async function writeFileContent(
   relPath: string,
   content: string,
 ): Promise<void> {
-  await profileManager.authedRealmFetch(`${realmUrl}${relPath}`, {
+  await verifyPm.authedRealmFetch(`${realmUrl}${relPath}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/vnd.card+source' },
     body: content,
   });
+}
+
+async function touch(args: string[], home_ = home): Promise<TouchJson> {
+  let res = await runBoxel(['file', 'touch', ...args, '--json'], {
+    home: home_,
+  });
+  return res.json<TouchJson>();
 }
 
 describe('file touch (integration)', () => {
@@ -136,7 +157,7 @@ describe('file touch (integration)', () => {
     // reliably observe a change.
     await new Promise((r) => setTimeout(r, 1100));
 
-    let result = await touchFiles(realmUrl, [target], { profileManager });
+    let result = await touch([target, '--realm', realmUrl]);
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(result.touched).toEqual([target]);
     expect(result.skipped).toEqual([]);
@@ -148,7 +169,7 @@ describe('file touch (integration)', () => {
   it('touching a .json file persists `_touched` in `meta`', async () => {
     let target = 'cards/three.json';
     let before = Date.now();
-    let result = await touchFiles(realmUrl, [target], { profileManager });
+    let result = await touch([target, '--realm', realmUrl]);
     expect(result.ok, JSON.stringify(result)).toBe(true);
 
     let content = await readFileContent(target);
@@ -168,7 +189,7 @@ describe('file touch (integration)', () => {
     // reliably observe a change.
     await new Promise((r) => setTimeout(r, 1100));
 
-    let result = await touchFiles(realmUrl, [target], { profileManager });
+    let result = await touch([target, '--realm', realmUrl]);
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(result.touched).toEqual([target]);
 
@@ -181,14 +202,14 @@ describe('file touch (integration)', () => {
     let initial = await readFileContent(target);
     let initiallyHasComment = initial.includes('// touched for re-index');
 
-    let firstTouch = await touchFiles(realmUrl, [target], { profileManager });
+    let firstTouch = await touch([target, '--realm', realmUrl]);
     expect(firstTouch.ok, JSON.stringify(firstTouch)).toBe(true);
     let afterFirst = await readFileContent(target);
     expect(afterFirst.includes('// touched for re-index')).toBe(
       !initiallyHasComment,
     );
 
-    let secondTouch = await touchFiles(realmUrl, [target], { profileManager });
+    let secondTouch = await touch([target, '--realm', realmUrl]);
     expect(secondTouch.ok, JSON.stringify(secondTouch)).toBe(true);
     let afterSecond = await readFileContent(target);
     expect(afterSecond.includes('// touched for re-index')).toBe(
@@ -197,10 +218,7 @@ describe('file touch (integration)', () => {
   });
 
   it('--all enumerates and touches every .json and .gts in the realm', async () => {
-    let result = await touchFiles(realmUrl, [], {
-      all: true,
-      profileManager,
-    });
+    let result = await touch(['--realm', realmUrl, '--all']);
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(result.touched).toContain('touch-check.gts');
     expect(result.touched).toContain('cards/one.json');
@@ -219,7 +237,7 @@ describe('file touch (integration)', () => {
     expect(original).toContain(`'// touched for re-index'`);
     expect(countMarker(original)).toBe(1);
 
-    let firstTouch = await touchFiles(realmUrl, [target], { profileManager });
+    let firstTouch = await touch([target, '--realm', realmUrl]);
     expect(firstTouch.ok, JSON.stringify(firstTouch)).toBe(true);
 
     let afterFirst = await readFileContent(target);
@@ -229,7 +247,7 @@ describe('file touch (integration)', () => {
       `static markerHint = '// touched for re-index';`,
     );
 
-    let secondTouch = await touchFiles(realmUrl, [target], { profileManager });
+    let secondTouch = await touch([target, '--realm', realmUrl]);
     expect(secondTouch.ok, JSON.stringify(secondTouch)).toBe(true);
 
     let afterSecond = await readFileContent(target);
@@ -244,10 +262,7 @@ describe('file touch (integration)', () => {
     let target = 'cards/two.json';
     let before = (await readMtimes())[`${realmUrl}${target}`];
 
-    let result = await touchFiles(realmUrl, [target], {
-      dryRun: true,
-      profileManager,
-    });
+    let result = await touch([target, '--realm', realmUrl, '--dry-run']);
     expect(result.ok).toBe(true);
     expect(result.touched).toEqual([target]);
 
@@ -257,9 +272,12 @@ describe('file touch (integration)', () => {
   });
 
   it('skips files with unsupported extensions', async () => {
-    let result = await touchFiles(realmUrl, ['cards/note.txt'], {
-      profileManager,
-    });
+    let res = await runBoxel(
+      ['file', 'touch', 'cards/note.txt', '--realm', realmUrl, '--json'],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    let result = res.json<TouchJson>();
     expect(result.ok).toBe(false);
     expect(result.touched).toEqual([]);
     expect(result.skipped).toEqual([
@@ -268,9 +286,19 @@ describe('file touch (integration)', () => {
   });
 
   it('skips paths that 404 on the realm', async () => {
-    let result = await touchFiles(realmUrl, ['cards/does-not-exist.json'], {
-      profileManager,
-    });
+    let res = await runBoxel(
+      [
+        'file',
+        'touch',
+        'cards/does-not-exist.json',
+        '--realm',
+        realmUrl,
+        '--json',
+      ],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    let result = res.json<TouchJson>();
     expect(result.ok).toBe(false);
     expect(result.touched).toEqual([]);
     expect(result.skipped).toHaveLength(1);
@@ -279,10 +307,20 @@ describe('file touch (integration)', () => {
   });
 
   it('--dry-run skips paths that would 404 instead of reporting them as touched', async () => {
-    let result = await touchFiles(realmUrl, ['cards/missing.json'], {
-      dryRun: true,
-      profileManager,
-    });
+    let res = await runBoxel(
+      [
+        'file',
+        'touch',
+        'cards/missing.json',
+        '--realm',
+        realmUrl,
+        '--dry-run',
+        '--json',
+      ],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    let result = res.json<TouchJson>();
     expect(result.ok).toBe(false);
     expect(result.touched).toEqual([]);
     expect(result.skipped).toHaveLength(1);
@@ -291,30 +329,47 @@ describe('file touch (integration)', () => {
   });
 
   it('returns error when no paths and no --all', async () => {
-    let result = await touchFiles(realmUrl, [], { profileManager });
+    let res = await runBoxel(['file', 'touch', '--realm', realmUrl, '--json'], {
+      home,
+    });
+    expect(res.exitCode).toBe(1);
+    let result = res.json<TouchJson>();
     expect(result.ok).toBe(false);
     expect(result.error).toContain('No file paths provided');
   });
 
   it('returns error when paths combined with --all', async () => {
-    let result = await touchFiles(realmUrl, ['cards/one.json'], {
-      all: true,
-      profileManager,
-    });
+    let res = await runBoxel(
+      [
+        'file',
+        'touch',
+        'cards/one.json',
+        '--realm',
+        realmUrl,
+        '--all',
+        '--json',
+      ],
+      { home },
+    );
+    expect(res.exitCode).toBe(1);
+    let result = res.json<TouchJson>();
     expect(result.ok).toBe(false);
     expect(result.error).toContain('--all');
   });
 
   it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-
-    let result = await touchFiles(realmUrl, ['cards/one.json'], {
-      profileManager: emptyManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No active profile');
-
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        ['file', 'touch', 'cards/one.json', '--realm', realmUrl, '--json'],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      let result = res.json<TouchJson>();
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 });

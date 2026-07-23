@@ -3,19 +3,23 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { pull } from '../../src/commands/realm/pull.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
-import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 import { TINY_PNG_BYTES } from '../helpers/binary-fixtures.ts';
 
-let profileManager: ProfileManager;
+// `boxel realm pull <realm-url> <local-dir>` is driven as a subprocess. The
+// local directory, `.boxel-history` checkpoints, and downloaded files are
+// inspected in-process; only the pull COMMAND goes through the binary.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 let localDirs: string[] = [];
@@ -24,6 +28,16 @@ function makeLocalDir(): string {
   let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-pull-int-'));
   localDirs.push(dir);
   return dir;
+}
+
+// Drive the pull subprocess. Note the argv order: pull takes <realm-url>
+// first, then <local-dir> (the reverse of push).
+function runPull(
+  realmUrlArg: string,
+  localDir: string,
+  flags: string[] = [],
+): ReturnType<typeof runBoxel> {
+  return runBoxel(['realm', 'pull', realmUrlArg, localDir, ...flags], { home });
 }
 
 beforeAll(async () => {
@@ -39,10 +53,10 @@ beforeAll(async () => {
 
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -57,11 +71,8 @@ describe('realm pull (integration)', () => {
   it('pulls seeded files into an empty local directory', async () => {
     let localDir = makeLocalDir();
 
-    let result = await pull(realmUrl, localDir, { profileManager });
-
-    expect(result.error).toBeUndefined();
-    expect(result.files).toContain('hello.gts');
-    expect(result.files).toContain('nested/card.gts');
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
     let helloPath = path.join(localDir, 'hello.gts');
     let nestedPath = path.join(localDir, 'nested', 'card.gts');
@@ -86,12 +97,8 @@ describe('realm pull (integration)', () => {
   it('writes nothing when invoked with --dry-run', async () => {
     let localDir = makeLocalDir();
 
-    let result = await pull(realmUrl, localDir, {
-      dryRun: true,
-      profileManager,
-    });
-
-    expect(result.error).toBeUndefined();
+    let res = await runPull(realmUrl, localDir, ['--dry-run']);
+    expect(res.ok, res.stderr).toBe(true);
 
     let entries = fs
       .readdirSync(localDir)
@@ -112,9 +119,9 @@ describe('realm pull (integration)', () => {
       '{"local":"only"}',
     );
 
-    let result = await pull(realmUrl, localDir, { profileManager });
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.error).toBeUndefined();
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
     expect(fs.existsSync(path.join(localOnlyDir, 'local-only.json'))).toBe(
       true,
@@ -127,12 +134,9 @@ describe('realm pull (integration)', () => {
     let stalePath = path.join(localDir, staleRel);
     fs.writeFileSync(stalePath, 'export const stale = true;\n', 'utf8');
 
-    let result = await pull(realmUrl, localDir, {
-      delete: true,
-      profileManager,
-    });
+    let res = await runPull(realmUrl, localDir, ['--delete']);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.error).toBeUndefined();
     expect(fs.existsSync(stalePath)).toBe(false);
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
 
@@ -152,9 +156,9 @@ describe('realm pull (integration)', () => {
   it('pulls subdirectories recursively', async () => {
     let localDir = makeLocalDir();
 
-    let result = await pull(realmUrl, localDir, { profileManager });
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
-    expect(result.error).toBeUndefined();
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
     expect(fs.existsSync(path.join(localDir, 'nested', 'card.gts'))).toBe(true);
     expect(
@@ -173,11 +177,8 @@ describe('realm pull (integration)', () => {
     let stalePath = path.join(localDir, 'stale.gts');
     fs.writeFileSync(stalePath, 'export const stale = true;\n', 'utf8');
 
-    await pull(realmUrl, localDir, {
-      delete: true,
-      dryRun: true,
-      profileManager,
-    });
+    let res = await runPull(realmUrl, localDir, ['--delete', '--dry-run']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(fs.existsSync(stalePath)).toBe(true);
     expect(fs.existsSync(path.join(localDir, '.boxel-history'))).toBe(false);
@@ -186,10 +187,8 @@ describe('realm pull (integration)', () => {
   it('creates only a post-pull checkpoint when --delete has nothing to delete', async () => {
     let localDir = makeLocalDir();
 
-    await pull(realmUrl, localDir, {
-      delete: true,
-      profileManager,
-    });
+    let res = await runPull(realmUrl, localDir, ['--delete']);
+    expect(res.ok, res.stderr).toBe(true);
 
     let cm = new CheckpointManager(localDir);
     let checkpoints = await cm.getCheckpoints();
@@ -201,11 +200,13 @@ describe('realm pull (integration)', () => {
   it('re-pulling an up-to-date directory adds no new checkpoint', async () => {
     let localDir = makeLocalDir();
 
-    await pull(realmUrl, localDir, { profileManager });
+    let res1 = await runPull(realmUrl, localDir);
+    expect(res1.ok, res1.stderr).toBe(true);
     let cm = new CheckpointManager(localDir);
     let afterFirst = (await cm.getCheckpoints()).length;
 
-    await pull(realmUrl, localDir, { profileManager });
+    let res2 = await runPull(realmUrl, localDir);
+    expect(res2.ok, res2.stderr).toBe(true);
     let afterSecond = (await cm.getCheckpoints()).length;
 
     expect(afterSecond).toBe(afterFirst);
@@ -217,7 +218,8 @@ describe('realm pull (integration)', () => {
     // sanity: directory does not exist before the pull
     expect(fs.existsSync(localDir)).toBe(false);
 
-    await pull(realmUrl, localDir, { profileManager });
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(fs.existsSync(localDir)).toBe(true);
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
@@ -232,7 +234,8 @@ describe('realm pull (integration)', () => {
     let helloPath = path.join(localDir, 'hello.gts');
     fs.writeFileSync(helloPath, 'export const hello = "local-edit";\n');
 
-    await pull(realmUrl, localDir, { profileManager });
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(fs.readFileSync(helloPath, 'utf8')).toContain('hello = "world"');
 
@@ -242,27 +245,26 @@ describe('realm pull (integration)', () => {
     expect(checkpoints[0].source).toBe('remote');
   });
 
-  it('returns an error (not process.exit) when no active profile is configured', async () => {
-    let emptyProfile = createTestProfileDir();
+  it('exits non-zero with a clear error when no active profile is configured', async () => {
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-pull-empty-'));
+    let localDir = makeLocalDir();
     try {
-      let result = await pull(realmUrl, makeLocalDir(), {
-        profileManager: emptyProfile.profileManager,
+      let res = await runBoxel(['realm', 'pull', realmUrl, localDir], {
+        home: emptyHome,
       });
-      expect(result.files).toEqual([]);
-      expect(result.error).toContain('No active profile');
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
     } finally {
-      emptyProfile.cleanup();
+      fs.rmSync(emptyHome, { recursive: true, force: true });
     }
   });
 
-  it('returns an error when the realm URL is unreachable', async () => {
+  it('exits non-zero when the realm URL is unreachable', async () => {
     let localDir = makeLocalDir();
-    let result = await pull('http://127.0.0.1:1/nonexistent/', localDir, {
-      profileManager,
-    });
+    let res = await runPull('http://127.0.0.1:1/nonexistent/', localDir);
 
-    expect(result.error).toBeDefined();
-    expect(result.files).toEqual([]);
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr.length).toBeGreaterThan(0);
   });
 
   // --- Binary file downloads (CS-11075) ---
@@ -273,16 +275,17 @@ describe('realm pull (integration)', () => {
     // Seed the realm with raw bytes via the octet-stream endpoint (the
     // canonical wire format the realm-server's upsertBinaryFile route
     // expects). The startTestRealmServer fileSystem option only accepts
-    // strings, so we POST after server start.
+    // strings, so we POST after server start (in-process realm state setup).
     let pngUrl = new URL('image.png', realmUrl).href;
-    let seedResponse = await profileManager.authedRealmFetch(pngUrl, {
+    let seedResponse = await reloadProfile(home).authedRealmFetch(pngUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: TINY_PNG_BYTES,
     });
     expect(seedResponse.ok).toBe(true);
 
-    await pull(realmUrl, localDir, { profileManager });
+    let res = await runPull(realmUrl, localDir);
+    expect(res.ok, res.stderr).toBe(true);
 
     let localPath = path.join(localDir, 'image.png');
     let pulled = fs.readFileSync(localPath);

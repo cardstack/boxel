@@ -34,6 +34,20 @@ export interface SerializedError {
   // existing UI read path (formattedError → CardErrorJSONAPI.meta.
   // diagnostics) continues to work unchanged.
   diagnostics?: Record<string, unknown>;
+  // Set when the failure describes the visit's own request — it aborted or
+  // errored before any response document existed — rather than a verdict
+  // about the content. A `prerendered_html` error row carrying this marker
+  // is eligible for the reconcile sweep's bounded retry lane, unlike a
+  // deterministic render error.
+  visitRequestFailure?: true;
+  // How many consecutive `visitRequestFailure` rows this URL has recorded,
+  // maintained by the prerendered-html writer: incremented while each
+  // successive write carries the marker, cleared whenever a render
+  // succeeds (the error row is simply replaced). The reconcile sweep stops
+  // retrying once this reaches its cap, making the row terminal so a
+  // persistently failing visit cannot keep consuming its realm's prerender
+  // affinity lane.
+  consecutiveVisitFailures?: number;
 }
 
 // A persisted error document: the `SerializedError` plus the index metadata

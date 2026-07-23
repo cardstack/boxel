@@ -278,6 +278,18 @@ export default class EmbedFormatSelection {
     }
   }
 
+  // A Custom-size fitted embed must carry at least one explicit dimension —
+  // otherwise it serializes to the size-less bare `fitted`, which defeats the
+  // point of the Custom option. Every named format (atom/embedded/isolated and
+  // the fixed fitted variants) already carries its size, so it is always
+  // insertable; the consumer disables the insert CTA when this is false.
+  get hasValidSize(): boolean {
+    if (this.category !== 'custom') {
+      return true;
+    }
+    return this.width !== undefined || this.height !== undefined;
+  }
+
   // True once any format/placement/size field has diverged from the seeded
   // snapshot. Target identity (the user swapped in a different card/file) is
   // tracked separately by the tab panel, which owns the resolved target.

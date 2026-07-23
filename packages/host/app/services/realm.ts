@@ -58,7 +58,7 @@ import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type {
   IndexRealmEventContent,
   RealmEventContent,
@@ -728,7 +728,7 @@ export default class RealmService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -758,7 +758,7 @@ export default class RealmService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   get realms(): ReadonlyMap<string, RealmResource> {

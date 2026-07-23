@@ -28,14 +28,14 @@ import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type { Ready } from '../resources/file';
 import type { BaseDef } from '@cardstack/base/card-api';
 
 export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   private onModuleEditCallback: ((state: State) => void) | undefined =
     undefined;
@@ -48,7 +48,7 @@ export default class CodeSemanticsService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {

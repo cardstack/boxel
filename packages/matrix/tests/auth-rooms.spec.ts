@@ -4,7 +4,7 @@ import {
   getRoomMembers,
   getRoomRetentionPolicy,
 } from '../support/synapse/index.ts';
-import { createSubscribedUser } from '../helpers/index.ts';
+import { createSubscribedUser, openAiAssistant } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
 test.describe('Auth rooms', () => {
@@ -21,6 +21,7 @@ test.describe('Auth rooms', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
+    await openAiAssistant(page);
     await page.locator('[data-test-room-settled]').waitFor();
     let realmRoomsByUser = new Map<string, string>();
     expect(async () => {

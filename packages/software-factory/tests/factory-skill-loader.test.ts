@@ -11,7 +11,10 @@ import type {
   IssueData,
 } from '../src/factory-agent/index.ts';
 import {
+  ALWAYS_LOAD_REFERENCES,
   DefaultSkillResolver,
+  PENDING_BOXEL_REFERENCES,
+  REFERENCE_KEYWORD_MAP,
   SkillLoader,
   SkillLoadError,
   enforceSkillBudget,
@@ -92,17 +95,14 @@ function makeProject(overrides?: Partial<ProjectData>): ProjectData {
 // ---------------------------------------------------------------------------
 
 module('factory-skill-loader > DefaultSkillResolver', function () {
-  test('always includes boxel-development and boxel-file-structure', function (assert) {
+  test('always includes boxel and boxel-file-structure', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue({ description: 'Generic task with no keywords' });
     let project = makeProject();
 
     let skills = resolver.resolve(issue, project);
 
-    assert.true(
-      skills.includes('boxel-development'),
-      'includes boxel-development',
-    );
+    assert.true(skills.includes('boxel'), 'includes boxel');
     assert.true(
       skills.includes('boxel-file-structure'),
       'includes boxel-file-structure',
@@ -305,14 +305,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       knowledge: [
         {
           id: 'Knowledge Articles/dup',
-          skills: ['boxel-development'],
+          skills: ['boxel'],
         },
       ],
     });
 
     let skills = resolver.resolve(issue, project);
-    let devCount = skills.filter((s) => s === 'boxel-development').length;
-    assert.strictEqual(devCount, 1, 'boxel-development appears only once');
+    let devCount = skills.filter((s) => s === 'boxel').length;
+    assert.strictEqual(devCount, 1, 'boxel appears only once');
   });
 
   test('reads issue text from title, description, tags, and labels', function (assert) {
@@ -340,7 +340,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let skills = resolver.resolve(issue, project);
 
     // Should still resolve the base skills without error
-    assert.true(skills.includes('boxel-development'));
+    assert.true(skills.includes('boxel'));
     assert.true(skills.includes('boxel-file-structure'));
   });
 });
@@ -665,23 +665,23 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     }
   });
 
-  test('filters boxel-development references by issue when loaded with issue', async function (assert) {
-    // Set up a boxel-development skill with references matching the real structure
-    writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
+  test('filters boxel references by issue when loaded with issue', async function (assert) {
+    // Set up a boxel skill with references matching the real structure
+    writeSkill(tempDir, 'boxel', '# Boxel Development', {
       references: {
-        'dev-core-concept.md': 'Core concept content',
-        'dev-technical-rules.md': 'Technical rules content',
-        'dev-quick-reference.md': 'Quick reference content',
-        'dev-styling-design.md': 'Styling design content',
-        'dev-file-editing.md': 'File editing content',
-        'dev-query-systems.md': 'Query systems content',
+        'core-concept.md': 'Core concept content',
+        'spec-usage.md': 'Spec usage content',
+        'quick-reference.md': 'Quick reference content',
+        'styling-design.md': 'Styling design content',
+        'file-editing.md': 'File editing content',
+        'query-systems.md': 'Query systems content',
       },
     });
 
     let loader = new SkillLoader(tempDir, []);
 
     // Load WITHOUT issue — should get all references
-    let allRefs = await loader.load('boxel-development');
+    let allRefs = await loader.load('boxel');
     assert.strictEqual(
       allRefs.references!.length,
       6,
@@ -693,7 +693,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     let stylingIssue = makeIssue({
       description: 'Fix the CSS styling on the card',
     });
-    let filtered = await loader.load('boxel-development', stylingIssue);
+    let filtered = await loader.load('boxel', stylingIssue);
 
     assert.true(
       filtered.references!.length < 6,
@@ -718,17 +718,17 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
 
   test('reference filtering works without budget (no-budget path)', async function (assert) {
     // Verifies the P1 fix: callers that omit maxSkillTokens still get
-    // issue-relevant references, not all 19. The filtering happens at load
+    // issue-relevant references, not all of them. The filtering happens at load
     // time, so enforceSkillBudget(skills, undefined) returns already-filtered
     // skills — no budget required.
-    writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
+    writeSkill(tempDir, 'boxel', '# Boxel Development', {
       references: {
-        'dev-core-concept.md': 'Core concept content',
-        'dev-technical-rules.md': 'Technical rules content',
-        'dev-quick-reference.md': 'Quick reference content',
-        'dev-styling-design.md': 'Styling design content',
-        'dev-file-editing.md': 'File editing content',
-        'dev-query-systems.md': 'Query systems content',
+        'core-concept.md': 'Core concept content',
+        'spec-usage.md': 'Spec usage content',
+        'quick-reference.md': 'Quick reference content',
+        'styling-design.md': 'Styling design content',
+        'file-editing.md': 'File editing content',
+        'query-systems.md': 'Query systems content',
       },
     });
 
@@ -738,7 +738,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     });
 
     // Load with issue — filtering happens at load time
-    let skills = await loader.loadAll(['boxel-development'], issue);
+    let skills = await loader.loadAll(['boxel'], issue);
     assert.strictEqual(skills.length, 1);
 
     // Pass through enforceSkillBudget with NO budget (undefined)
@@ -835,7 +835,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
 
     try {
       let skills: ResolvedSkill[] = [
-        { name: 'boxel-development', content: 'a'.repeat(2000) }, // 500 tokens
+        { name: 'boxel', content: 'a'.repeat(2000) }, // 500 tokens
         { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // 500 tokens
         { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // 500 tokens
       ];
@@ -844,11 +844,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
       let result = enforceSkillBudget(skills, 1000);
 
       assert.strictEqual(result.length, 2, 'only two skills fit');
-      assert.strictEqual(
-        result[0].name,
-        'boxel-development',
-        'highest priority kept',
-      );
+      assert.strictEqual(result[0].name, 'boxel', 'highest priority kept');
       assert.strictEqual(
         result[1].name,
         'boxel-file-structure',
@@ -872,18 +868,14 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         // Present in reverse priority order
         { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // not in SKILL_PRIORITY → lowest
         { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // priority 2
-        { name: 'boxel-development', content: 'a'.repeat(2000) }, // priority 1
+        { name: 'boxel', content: 'a'.repeat(2000) }, // priority 1
       ];
 
       // Budget enough for only 2 skills
       let result = enforceSkillBudget(skills, 1000);
 
       assert.strictEqual(result.length, 2);
-      assert.strictEqual(
-        result[0].name,
-        'boxel-development',
-        'highest priority first',
-      );
+      assert.strictEqual(result[0].name, 'boxel', 'highest priority first');
       assert.strictEqual(
         result[1].name,
         'boxel-file-structure',
@@ -901,7 +893,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
     try {
       let skills: ResolvedSkill[] = [
         { name: 'unknown-skill', content: 'x'.repeat(2000) }, // not in priority list
-        { name: 'boxel-development', content: 'a'.repeat(2000) },
+        { name: 'boxel', content: 'a'.repeat(2000) },
       ];
 
       let result = enforceSkillBudget(skills, 600);
@@ -909,7 +901,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
       assert.strictEqual(result.length, 1);
       assert.strictEqual(
         result[0].name,
-        'boxel-development',
+        'boxel',
         'known skill kept over unknown',
       );
     } finally {
@@ -960,21 +952,66 @@ module('factory-skill-loader > re-resolution on new issue', function () {
 
   test('cache can be cleared between issues for fresh loading', async function (assert) {
     tempDir = createTempSkillsDir();
-    writeSkill(tempDir, 'boxel-development', '# Dev v1');
+    writeSkill(tempDir, 'boxel', '# Dev v1');
 
     let loader = new SkillLoader(tempDir, []);
-    let first = await loader.load('boxel-development');
+    let first = await loader.load('boxel');
     assert.true(first.content.includes('Dev v1'));
 
     // Simulate moving to a new issue: clear cache, potentially new skill content
-    writeSkill(tempDir, 'boxel-development', '# Dev v2');
+    writeSkill(tempDir, 'boxel', '# Dev v2');
     loader.clearCache();
 
-    let second = await loader.load('boxel-development');
+    let second = await loader.load('boxel');
     assert.true(second.content.includes('Dev v2'), 'picks up new content');
 
     if (tempDir && existsSync(tempDir)) {
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Curated reference names vs the built boxel skill
+// ---------------------------------------------------------------------------
+
+module('factory-skill-loader > curated boxel references', function () {
+  // The reference filenames curated in REFERENCE_KEYWORD_MAP and
+  // ALWAYS_LOAD_REFERENCES are owned by a separate repo (boxel-skills,
+  // vendored into packages/boxel-cli/plugin/skills/boxel by build:skills).
+  // An upstream rename would otherwise silently drop a reference from the
+  // factory prompt — filterBoxelRefs only filters what exists on disk.
+  let builtRefsDir = join(
+    import.meta.dirname,
+    '../../boxel-cli/plugin/skills/boxel/references',
+  );
+
+  test('every curated reference name resolves in the built boxel skill', function (assert) {
+    let curated = new Set([
+      ...Object.keys(REFERENCE_KEYWORD_MAP),
+      ...ALWAYS_LOAD_REFERENCES,
+    ]);
+
+    for (let name of curated) {
+      if (PENDING_BOXEL_REFERENCES.includes(name)) {
+        continue;
+      }
+      assert.true(
+        existsSync(join(builtRefsDir, name)),
+        `${name} exists in the built boxel skill's references/`,
+      );
+    }
+  });
+
+  test('pending references are still pending', function (assert) {
+    // Strict on purpose: once a pending name ships in the built skill,
+    // remove it from PENDING_BOXEL_REFERENCES (and any transitional notes
+    // that reference it).
+    for (let name of PENDING_BOXEL_REFERENCES) {
+      assert.false(
+        existsSync(join(builtRefsDir, name)),
+        `${name} has shipped in the built boxel skill — remove it from PENDING_BOXEL_REFERENCES`,
+      );
     }
   });
 });

@@ -1502,6 +1502,31 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 
+  test('ai assistant panel is closed by default when the URL omits aiAssistantOpen', async function (assert) {
+    // Hand-build the state so the aiAssistantOpen key is absent (visitOperatorMode
+    // always injects it), and leave localStorage unseeded — a first-ever visit.
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+    assert.false(
+      getService('operator-mode-state-service').aiAssistantOpen,
+      'panel is closed by default with no URL param and no persisted preference',
+    );
+  });
+
   test('auto-attached cards behaviour', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',

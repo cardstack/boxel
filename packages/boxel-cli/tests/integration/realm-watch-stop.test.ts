@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { stopWatchProcesses } from '../../src/commands/realm/watch/stop.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
 const FIXTURE_PATH = path.resolve(
   __dirname,
@@ -130,9 +130,11 @@ describe('realm watch stop (integration)', () => {
     const before = readRegistry();
     expect(before.some((p) => p.pid === child.pid)).toBe(true);
 
-    const result = await stopWatchProcesses();
-    expect(result.failed).toEqual([]);
-    expect(result.stopped.map((p) => p.pid)).toContain(child.pid);
+    // The CLI reads the watch-process registry from `$HOME/.boxel-cli`.
+    let res = await runBoxel(['realm', 'watch', 'stop'], { home: tmpHome });
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toContain(`PID ${child.pid}`);
+    expect(res.stdout).not.toContain('Failed to stop');
 
     const exitCode = await waitForExit(child);
     expect(exitCode).toBe(0);
@@ -142,8 +144,9 @@ describe('realm watch stop (integration)', () => {
   });
 
   it('returns an empty result when no watchers are running', async () => {
-    const result = await stopWatchProcesses();
-    expect(result).toEqual({ stopped: [], failed: [] });
+    let res = await runBoxel(['realm', 'watch', 'stop'], { home: tmpHome });
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toContain('No running watch processes found.');
   });
 
   it.skipIf(process.platform === 'win32')(
@@ -162,8 +165,9 @@ describe('realm watch stop (integration)', () => {
       // Confirm the registry pass would have found nothing.
       expect(readRegistry().some((p) => p.pid === child.pid)).toBe(false);
 
-      const result = await stopWatchProcesses();
-      expect(result.stopped.map((p) => p.pid)).toContain(child.pid);
+      let res = await runBoxel(['realm', 'watch', 'stop'], { home: tmpHome });
+      expect(res.ok, res.stderr).toBe(true);
+      expect(res.stdout).toContain(`PID ${child.pid}`);
 
       const exitCode = await waitForExit(child);
       expect(exitCode).toBe(0);

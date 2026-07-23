@@ -273,6 +273,10 @@ export class Batch {
   // with stale content.
   #resumedRows = new Map<string, number | null>();
   #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
+  #prerenderedHtmlTombstonedLiveTypes = new Map<
+    string,
+    PrerenderedHtmlTable['type'][]
+  >();
   // Correlation ID minted once per Batch and stamped into every row's
   // `diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE diagnostics->>'invalidationId' = '...'`
@@ -534,6 +538,48 @@ export class Batch {
    */
   tombstonedLiveTypes(url: string): BoxelIndexTable['type'][] | undefined {
     return this.#tombstonedLiveTypes.get(url);
+  }
+
+  // Populate `#tombstonedLiveTypes` for `urls` straight from the production
+  // index, WITHOUT tombstoning or computing a fan-out — the same live-type
+  // memory `invalidate()` records, but for a batch that never invalidated.
+  // The setup-phase failure recovery uses a fresh batch (it must not reuse the
+  // in-flight batch, whose working table holds fan-out tombstones a `done()`
+  // would promote); that fresh batch has no tombstone memory, so without this
+  // it would fall back to re-reading each file to decide "was this a card?".
+  // Any URL it then failed to re-classify (a read blip, non-card on-disk
+  // content) would leave the in-flight batch's `instance` tombstone in the
+  // shared working table to be promoted — silently deleting a previously-good
+  // card. Seeding from the index (the reliable oracle) closes that.
+  async seedLiveTypesFromProduction(urls: URL[]): Promise<void> {
+    await this.ready;
+    if (urls.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingIndexTypes(urls.map((u) => u.href));
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#tombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
+  }
+
+  /**
+   * The prerendered_html analog of `tombstonedLiveTypes`: row types
+   * `tombstonePrerenderedHtmlEntries` overwrote with tombstones this pass,
+   * restricted to rows that were live in production `prerendered_html`.
+   * The prerender-html visit loop's per-URL failure isolation consults
+   * this to decide whether a failed URL had a card instance to protect —
+   * the rendered table is a more reliable oracle than re-reading the
+   * file, since the read path may be exactly what failed.
+   */
+  prerenderedHtmlTombstonedLiveTypes(
+    url: string,
+  ): PrerenderedHtmlTable['type'][] | undefined {
+    return this.#prerenderedHtmlTombstonedLiveTypes.get(url);
   }
 
   /**
@@ -1326,6 +1372,17 @@ export class Batch {
           },
           url,
         );
+        if (errorDoc.visitRequestFailure) {
+          // Consecutive-failure bookkeeping for the reconcile sweep's
+          // bounded retry lane: extend the prior row's run when it was also
+          // a visit-request failure, otherwise this write starts a run of
+          // one. A successful render ends the run by replacing the row
+          // outright, so no explicit clear is needed.
+          let priorRun = production?.error_doc?.visitRequestFailure
+            ? (production.error_doc.consecutiveVisitFailures ?? 1)
+            : 0;
+          errorDoc.consecutiveVisitFailures = priorRun + 1;
+        }
         payload = {
           type,
           fitted_html: production?.fitted_html ?? null,
@@ -1402,13 +1459,17 @@ export class Batch {
 
   private async existingPrerenderedHtmlTypes(
     invalidations: string[],
-  ): Promise<Map<string, PrerenderedHtmlTable['type'][]>> {
+  ): Promise<
+    Map<string, { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]>
+  > {
     if (invalidations.length === 0) {
       return new Map();
     }
     let uniqueInvalidations = [...new Set(invalidations)];
+    // One row per (url, type) — the table's primary key is
+    // (url, realm_url, type) and the realm is pinned below.
     let rows = (await this.#query([
-      'SELECT DISTINCT url, type FROM prerendered_html WHERE',
+      'SELECT url, type, is_deleted FROM prerendered_html WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         [
@@ -1418,20 +1479,38 @@ export class Batch {
           ),
         ],
       ]),
-    ] as Expression)) as Pick<PrerenderedHtmlTable, 'url' | 'type'>[];
-    let typesByUrl = new Map<string, PrerenderedHtmlTable['type'][]>();
+    ] as Expression)) as Pick<
+      PrerenderedHtmlTable,
+      'url' | 'type' | 'is_deleted'
+    >[];
+    let typesByUrl = new Map<
+      string,
+      { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]
+    >();
     for (let row of rows) {
+      let entry = { type: row.type, isDeleted: Boolean(row.is_deleted) };
       let existing = typesByUrl.get(row.url);
       if (existing) {
-        existing.push(row.type);
+        existing.push(entry);
       } else {
-        typesByUrl.set(row.url, [row.type]);
+        typesByUrl.set(row.url, [entry]);
       }
     }
     return typesByUrl;
   }
 
-  async done(): Promise<{ totalIndexEntries: number }> {
+  async done(opts?: {
+    // Write the previous generation's realm_meta value at this batch's
+    // generation instead of recomputing it from `boxel_index_working`. The
+    // setup-phase failure recovery finalizes while the working table still
+    // holds the failed pass's un-promoted fan-out tombstones; a recompute
+    // over that state would undercount live dependents in the type summary
+    // until the next successful pass. Its error rows don't change the
+    // realm's type counts, so the prior summary is the accurate one — and a
+    // row must exist at this generation, because reads join realm_meta to
+    // realm_generations.current_generation.
+    carryForwardRealmMeta?: true;
+  }): Promise<{ totalIndexEntries: number }> {
     // Drain any rows the visit loop left buffered before the swap reads the
     // working table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
@@ -1447,13 +1526,60 @@ export class Batch {
       return { totalIndexEntries: this.#invalidations.size };
     }
     await this.#query(['BEGIN']);
-    await this.updateRealmMeta();
+    if (opts?.carryForwardRealmMeta) {
+      await this.carryForwardRealmMeta();
+    } else {
+      await this.updateRealmMeta();
+    }
     await this.applyBatchUpdates();
     await this.pruneObsoleteEntries();
     await this.#query(['COMMIT']);
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
+  }
+
+  // Re-stamp the current committed generation's realm_meta value at this
+  // batch's generation. Runs inside done()'s transaction before
+  // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
+  // still resolves the prior row here. Falls back to a fresh compute when no
+  // prior row exists (a realm that has never completed a pass).
+  private async carryForwardRealmMeta(): Promise<void> {
+    let [row] = (await this.#query([
+      `SELECT rm.value
+       FROM realm_meta rm
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
+       WHERE`,
+      ...every([['rm.realm_url =', param(this.realmURL.href)]]),
+      `LIMIT 1`,
+    ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
+    if (!row) {
+      await this.updateRealmMeta();
+      return;
+    }
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        realm_url: this.realmURL.href,
+        generation: this.generation,
+        value: row.value,
+        indexed_at: unixTime(new Date().getTime()),
+      } as Omit<RealmMetaTable, 'indexed_at'> & {
+        indexed_at: number;
+      },
+      {
+        jsonFields: ['value'],
+      },
+    );
+    await this.#query([
+      ...upsert(
+        'realm_meta',
+        'realm_meta_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
   }
 
   #query(expression: Expression) {
@@ -1876,6 +2002,14 @@ export class Batch {
   // through the swap.
   private async tombstonePrerenderedHtmlEntries(urls: string[]): Promise<void> {
     let existingTypes = await this.existingPrerenderedHtmlTypes(urls);
+    for (let [url, entries] of existingTypes) {
+      let liveTypes = entries
+        .filter((entry) => !entry.isDeleted)
+        .map((entry) => entry.type);
+      if (liveTypes.length > 0) {
+        this.#prerenderedHtmlTombstonedLiveTypes.set(url, liveTypes);
+      }
+    }
     let columns = [
       'url',
       'file_alias',
@@ -1895,7 +2029,7 @@ export class Batch {
       if (!types || types.length === 0) {
         return [];
       }
-      return types.map((type) =>
+      return types.map(({ type }) =>
         [
           id,
           // The same file_alias form the live prerendered_html writes use, so

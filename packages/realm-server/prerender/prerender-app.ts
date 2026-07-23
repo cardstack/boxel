@@ -395,7 +395,9 @@ export function buildPrerenderApp(options: {
       let ac = new AbortController();
       const onClientClose = () => {
         if (ctxt.res.writableEnded) return;
-        ac.abort();
+        // The reason string rides on `PrerenderCancelledError.message`
+        // so cancel log lines say why the render was interrupted.
+        ac.abort('client disconnected');
       };
       ctxt.res.on('close', onClientClose);
       try {
@@ -656,7 +658,9 @@ export function buildPrerenderApp(options: {
     let ac = new AbortController();
     const onClientClose = () => {
       if (ctxt.res.writableEnded) return;
-      ac.abort();
+      // The reason string rides on `PrerenderCancelledError.message`
+      // so cancel log lines say why the render was interrupted.
+      ac.abort('client disconnected');
     };
     ctxt.res.on('close', onClientClose);
     try {

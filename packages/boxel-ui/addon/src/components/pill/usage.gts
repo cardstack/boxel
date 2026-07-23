@@ -8,7 +8,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { cssVar } from '../../helpers.ts';
+import { cssVar } from '../../helpers.gts';
 import { IconPlus } from '../../icons.gts';
 import { type BoxelButtonSize, buttonSizeOptions } from '../button/index.gts';
 import Pill, {

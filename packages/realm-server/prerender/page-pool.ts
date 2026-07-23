@@ -1885,7 +1885,94 @@ export class PagePool {
     }
   }
 
+  // Is this entry still a valid target to hand a caller? A tab is
+  // doomed the moment a dispose path marks it `closing` (the
+  // `awaitIdle: false` eviction lane) or detaches it from
+  // `#affinityPages` (the `awaitIdle: true` cancel lane deletes the
+  // affinity's set synchronously before it awaits the per-entry close).
+  // A parked `TabQueue` waiter that receives the lease across that
+  // boundary would otherwise render on a page about to be closed under
+  // it. Membership keys off the entry's own current `affinityKey`, which
+  // covers both selection shapes: commandeer / adoption paths re-tag the
+  // entry to the requesting affinity in place (`#assignStandbyToAffinity`
+  // / `#reassignAffinityTab`), while a cross-affinity steal returns the
+  // entry still tagged with its donor affinity and defers the reassign to
+  // `getPage`. Either way the entry is looked up under whatever affinity
+  // currently owns it.
+  #isEntryLive(entry: PoolEntry): boolean {
+    if (entry.closing) return false;
+    let affinityKey = entry.affinityKey;
+    if (!affinityKey) return false;
+    return this.#affinityPages.get(affinityKey)?.has(entry) ?? false;
+  }
+
+  // `#selectEntryForAffinityOnce` filters `entry.closing` at selection
+  // time, but a caller that parks on a tab's `TabQueue` and receives the
+  // lease later has no such guard: when a render ends on a pooled tab,
+  // its `release()` hands the lease to the next same-affinity waiter
+  // BEFORE the caller's error propagates to teardown, so a `rendering`-
+  // state cancel or a render-error eviction can dispose the tab in the
+  // window right after the handoff. The parked waiter would then start
+  // its visit on a page being closed under it — its first CDP call
+  // rejects with a raw protocol error (not a `PrerenderCancelledError`),
+  // which routes the visit through `#restartBrowser`, a full-pool
+  // restart paid by a bystander.
+  //
+  // Revalidate the entry after each selection resolves. If it was doomed
+  // in that window, release the dead lease (which also lets the dispose
+  // path's own `#closeEntry` acquire proceed) and re-select — the next
+  // pass filters the now-`closing` entry out and lands on a fresh tab
+  // (orphan-context spawn, standby commandeer, or cross-affinity steal).
+  // Bounded so a sustained dispose storm degrades to the prior behavior
+  // rather than spinning here.
   async #selectEntryForAffinity(
+    affinityKey: string,
+    queue: PrerenderQueue,
+    signal?: AbortSignal,
+    priority: number = 0,
+  ): Promise<{
+    entry: PoolEntry;
+    reused: boolean;
+    releaseTab: () => void;
+    tabStartupMs: number;
+  }> {
+    const MAX_RESELECT_ATTEMPTS = 3;
+    let carriedStartupMs = 0;
+    for (let attempt = 0; attempt < MAX_RESELECT_ATTEMPTS; attempt++) {
+      let result = await this.#selectEntryForAffinityOnce(
+        affinityKey,
+        queue,
+        signal,
+        priority,
+      );
+      if (
+        this.#isEntryLive(result.entry) ||
+        attempt === MAX_RESELECT_ATTEMPTS - 1
+      ) {
+        result.tabStartupMs += carriedStartupMs;
+        return result;
+      }
+      carriedStartupMs += result.tabStartupMs;
+      // A doomed cross-affinity donor was marked `transitioning` by the
+      // steal path; clear it so the donor isn't left half-migrated.
+      result.entry.transitioning = false;
+      try {
+        result.releaseTab();
+      } catch (_e) {
+        // best-effort — the dispose path's own close will clean up.
+      }
+      log.debug(
+        `re-selecting tab for ${affinityKey}: acquired lease on a doomed ` +
+          `entry (pageId=${result.entry.pageId}) disposed after handoff; ` +
+          `attempt ${attempt + 1}`,
+      );
+    }
+    // Unreachable: the final iteration always returns above. Present so
+    // the compiler sees a definite return.
+    throw new Error('No standby page available for prerender');
+  }
+
+  async #selectEntryForAffinityOnce(
     affinityKey: string,
     queue: PrerenderQueue,
     signal?: AbortSignal,

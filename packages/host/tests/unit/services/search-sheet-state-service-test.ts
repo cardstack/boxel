@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { SortOption } from '@cardstack/host/components/search/constants';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 
 const CODE_REF: ResolvedCodeRef = {
@@ -84,10 +84,10 @@ module('Unit | Service | search-sheet-state', function (hooks) {
     assertCleared(assert, service, 'resetState');
   });
 
-  test('is cleared by the reset service (logout/realm reset)', function (assert) {
+  test('is cleared by the session service on logout', function (assert) {
     populate(service);
-    (getService('reset') as ResetService).resetAll();
-    assertCleared(assert, service, 'resetAll');
+    (getService('session') as SessionService).notifySessionEnded();
+    assertCleared(assert, service, 'notifySessionEnded');
   });
 
   test('resetState() installs a fresh pagination instance', function (assert) {

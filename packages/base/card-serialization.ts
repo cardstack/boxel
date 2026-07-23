@@ -118,7 +118,14 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),
-        relativeTo: relativeTo ?? (resource.id ? rri(resource.id) : undefined),
+        // Every reference in a resource — its `adoptsFrom.module` and its
+        // relationship links alike — is transmitted relative to the resource's
+        // OWN id, independent of the document that delivered it. So a resource
+        // with an id resolves its module against that id, even when it arrived
+        // embedded in another document's `included[]`. The caller's `relativeTo`
+        // is the base only for an id-less resource (a contained field), which
+        // shares its parent's base.
+        relativeTo: resource.id ? rri(resource.id) : relativeTo,
       },
     );
     if (!card) {
