@@ -348,6 +348,30 @@ export async function depsForIndexEntry(
   ];
 }
 
+// The production `search_doc` for a row, parsed. Undefined when the URL has
+// no row of that type or the row carries no search doc.
+export async function searchDocForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<Record<string, any> | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT search_doc FROM boxel_index WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+    `ORDER BY generation DESC LIMIT 1`,
+  ] as Expression)) as { search_doc: Record<string, any> | string | null }[];
+  let raw = rows[0]?.search_doc;
+  if (raw == null) {
+    return undefined;
+  }
+  return typeof raw === 'string'
+    ? (JSON.parse(raw) as Record<string, any>)
+    : raw;
+}
+
 export async function indexedAtForIndexEntry(
   dbAdapter: DBAdapter,
   url: string,

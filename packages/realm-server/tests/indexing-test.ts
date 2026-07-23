@@ -39,11 +39,13 @@ import {
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
   maxPrerenderHtmlJobId,
+  searchDocForIndexEntry,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { basename } from 'path';
+import { createHash } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
@@ -4486,6 +4488,98 @@ module(basename(import.meta.filename), function () {
           afterLinksToManyInvalidation,
           beforeLinksToManyInvalidation,
           'updating FileDef linksToMany target invalidates consumer instance',
+        );
+      });
+
+      test('consumers of a searchable FileDef target index the rewritten bytes when re-rendered in the same batch as the rewrite', async function (assert) {
+        await realm.write(
+          'searchable-file-consumer.gts',
+          `
+          import { CardDef, field, linksTo } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
+
+          export class SearchableFileConsumer extends CardDef {
+            @field primaryFile = linksTo(() => FileDef, { searchable: true });
+          }
+        `,
+        );
+        await realm.write('searchable-note.txt', 'note v1');
+        await realm.write(
+          'searchable-file-consumer.json',
+          JSON.stringify({
+            data: {
+              relationships: {
+                primaryFile: { links: { self: './searchable-note.txt' } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./searchable-file-consumer'),
+                  name: 'SearchableFileConsumer',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let consumerURL = `${testRealm}searchable-file-consumer.json`;
+        let before = await searchDocForIndexEntry(testDbAdapter, consumerURL);
+        assert.strictEqual(
+          before?.primaryFile?.contentSize,
+          'note v1'.length,
+          'consumer indexes the original file bytes',
+        );
+
+        // The rewrite's incremental batch re-renders the consumer in the
+        // same pass that re-indexes the file (the consumer's deps include the
+        // file). That render fetches the file's meta doc from the realm,
+        // which must reflect the just-written bytes — the file's own updated
+        // index row is not promoted to production until the batch completes,
+        // so serving from the index alone would hand the consumer the
+        // previous bytes' contentHash/contentSize.
+        let rewritten = 'note v2 with more bytes';
+        await realm.write('searchable-note.txt', rewritten);
+
+        let after = await searchDocForIndexEntry(testDbAdapter, consumerURL);
+        assert.strictEqual(
+          after?.primaryFile?.contentSize,
+          rewritten.length,
+          'consumer indexes the rewritten contentSize',
+        );
+        assert.strictEqual(
+          after?.primaryFile?.contentHash,
+          createHash('md5').update(rewritten).digest('hex'),
+          'consumer indexes the rewritten contentHash',
+        );
+      });
+
+      test('file meta serves write-time contentHash/contentSize over indexed values', async function (assert) {
+        let content = 'bytes behind the file meta doc';
+        await realm.write('meta-note.txt', content);
+
+        // Emulate the state a mid-batch render observes: the production
+        // index row still carries the previous bytes' content values while
+        // `realm_file_meta` (written in the same critical section as the
+        // bytes) already has the current ones. The pristine resource is
+        // dropped so the served doc must choose between the indexed search
+        // doc and the persisted meta.
+        await testDbAdapter.execute(
+          `UPDATE boxel_index SET search_doc = COALESCE(search_doc, '{}'::jsonb) || '{"contentHash":"stale-hash","contentSize":1}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}meta-note.txt' AND type = 'file'`,
+        );
+
+        let response = await fetch(`${testRealm}meta-note.txt`, {
+          headers: { Accept: SupportedMimeType.FileMeta },
+        });
+        assert.strictEqual(response.status, 200, 'file meta response is ok');
+        let doc = (await response.json()) as LooseSingleCardDocument;
+        assert.strictEqual(
+          doc.data.attributes?.contentHash,
+          createHash('md5').update(content).digest('hex'),
+          'contentHash reflects the bytes on disk, not the indexed value',
+        );
+        assert.strictEqual(
+          doc.data.attributes?.contentSize,
+          content.length,
+          'contentSize reflects the bytes on disk, not the indexed value',
         );
       });
 
