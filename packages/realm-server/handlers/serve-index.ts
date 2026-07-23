@@ -311,6 +311,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     ctxt.type = 'html';
 
+    // Permit the JS Self-Profiling API so client-telemetry's Tier-2 wedge
+    // stack sampling can run. Harmless for documents that never construct a
+    // Profiler, and ignored by browsers that don't support the policy.
+    ctxt.set('Document-Policy', 'js-profiling');
+
     // Resolve the realm once and reuse it for the permissions check and the
     // routing-map lookup below. `findOrMountRealm` can fall back to a DB probe
     // when the in-memory registry is cold, so we don't want to pay that cost
