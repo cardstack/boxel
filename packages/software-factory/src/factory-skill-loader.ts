@@ -90,16 +90,36 @@ const GTS_KEYWORDS = [
 /**
  * Keywords in issue content that indicate file/media-asset work, which pulls
  * in the `boxel-file-def` skill (FileDef, ImageDef, MarkdownDef, and the
- * binary-persistence rules).
+ * binary-persistence rules). Mirrors the trigger surface that skill's own
+ * SKILL.md description advertises.
  */
-const FILE_DEF_KEYWORDS = ['file', 'asset', 'FileDef', 'upload', 'image'];
+const FILE_DEF_KEYWORDS = [
+  'file',
+  'asset',
+  'FileDef',
+  'ImageDef',
+  'MarkdownDef',
+  'PngDef',
+  'CsvFileDef',
+  'upload',
+  'image',
+  'document',
+  'media',
+];
 
 /**
  * Reference files in the `boxel` skill's `references/` directory and the
  * keywords that trigger their inclusion. When an issue doesn't match any
  * keyword, only the "always load" references are included.
+ *
+ * `technical-rules.md` is deliberately absent from both this map and the
+ * always-load list: boxel-skills folded its content into the `boxel`
+ * SKILL.md Cardinal Rules table and the core-patterns.md schema-hygiene
+ * checklist (both of which the factory already loads) and removed the file;
+ * the copy still in the built plugin skill only lingers until the next
+ * BOXEL_SKILLS_VERSION bump.
  */
-const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
+export const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'core-patterns.md': ['pattern', 'card', 'structure', 'safe'],
   'template-syntax.md': ['template', 'component', 'render'],
   'delegated-rendering.md': ['delegat', 'render', 'template'],
@@ -130,13 +150,22 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
 };
 
 /** References that are always loaded for the `boxel` skill. */
-const ALWAYS_LOAD_REFERENCES: readonly string[] = [
+export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'core-concept.md',
   'quick-reference.md',
   'common-imports.md',
   'qunit-testing.md',
   'spec-usage.md',
 ];
+
+/**
+ * Curated reference names not yet present in the built `boxel` skill —
+ * listed ahead of a boxel-skills release that adds them. Missing names are
+ * harmless at runtime (`filterBoxelRefs` filters what's actually on disk),
+ * and the validation test uses this set strictly: once a name ships in the
+ * built skill, the test fails until it is removed from here.
+ */
+export const PENDING_BOXEL_REFERENCES: readonly string[] = ['qunit-testing.md'];
 
 // ---------------------------------------------------------------------------
 // Internal types for tracking reference metadata

@@ -11,7 +11,10 @@ import type {
   IssueData,
 } from '../src/factory-agent/index.ts';
 import {
+  ALWAYS_LOAD_REFERENCES,
   DefaultSkillResolver,
+  PENDING_BOXEL_REFERENCES,
+  REFERENCE_KEYWORD_MAP,
   SkillLoader,
   SkillLoadError,
   enforceSkillBudget,
@@ -964,6 +967,51 @@ module('factory-skill-loader > re-resolution on new issue', function () {
 
     if (tempDir && existsSync(tempDir)) {
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Curated reference names vs the built boxel skill
+// ---------------------------------------------------------------------------
+
+module('factory-skill-loader > curated boxel references', function () {
+  // The reference filenames curated in REFERENCE_KEYWORD_MAP and
+  // ALWAYS_LOAD_REFERENCES are owned by a separate repo (boxel-skills,
+  // vendored into packages/boxel-cli/plugin/skills/boxel by build:skills).
+  // An upstream rename would otherwise silently drop a reference from the
+  // factory prompt — filterBoxelRefs only filters what exists on disk.
+  let builtRefsDir = join(
+    import.meta.dirname,
+    '../../boxel-cli/plugin/skills/boxel/references',
+  );
+
+  test('every curated reference name resolves in the built boxel skill', function (assert) {
+    let curated = new Set([
+      ...Object.keys(REFERENCE_KEYWORD_MAP),
+      ...ALWAYS_LOAD_REFERENCES,
+    ]);
+
+    for (let name of curated) {
+      if (PENDING_BOXEL_REFERENCES.includes(name)) {
+        continue;
+      }
+      assert.true(
+        existsSync(join(builtRefsDir, name)),
+        `${name} exists in the built boxel skill's references/`,
+      );
+    }
+  });
+
+  test('pending references are still pending', function (assert) {
+    // Strict on purpose: once a pending name ships in the built skill,
+    // remove it from PENDING_BOXEL_REFERENCES (and any transitional notes
+    // that reference it).
+    for (let name of PENDING_BOXEL_REFERENCES) {
+      assert.false(
+        existsSync(join(builtRefsDir, name)),
+        `${name} has shipped in the built boxel skill — remove it from PENDING_BOXEL_REFERENCES`,
+      );
     }
   });
 });
