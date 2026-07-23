@@ -9,8 +9,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { SortOption } from '@cardstack/host/components/search/constants';
-import type SessionService from '@cardstack/host/services/session';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
+import type SessionService from '@cardstack/host/services/session';
 
 const CODE_REF: ResolvedCodeRef = {
   module: rri('http://test-realm/test/pet'),
