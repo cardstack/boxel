@@ -2913,6 +2913,14 @@ export class CSSField extends TextAreaField {
   };
 }
 
+// A plain markdown StringField. BFM embed directives (`:card[…]` / `:file[…]`)
+// in its content render as (correctly-sized) broken-link placeholders and do
+// NOT resolve: a StringField is a bare string with no `id` to resolve relative
+// refs against, no `linksToMany` storage to hold resolved instances, and no
+// query to populate them at index time. Resolution is an index-time
+// relationship concern — use `RichMarkdownField` (or a `.md` `MarkdownDef`
+// file), which own the `linkedCards`/`linkedFiles` relationships, when embeds
+// must render live.
 export class MarkdownField extends StringField {
   static displayName = 'Markdown';
   static icon = MarkdownIcon;

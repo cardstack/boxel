@@ -8,6 +8,7 @@ import {
   extractBfmReferences,
   extractBfmRefRanges,
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   bfmCardReferenceExtensions,
   bfmExtensionsForKeyword,
   parseBfmSizeSpec,
@@ -1044,6 +1045,60 @@ module('Unit | bfm-card-references', function () {
         format: 'fitted',
         sizeStyle: 'width: 400px',
       });
+    });
+  });
+
+  module('bfmResolvedEmbedStyle', function () {
+    test('atom has no footprint in either placement', function (assert) {
+      assert.strictEqual(bfmResolvedEmbedStyle('atom', 'inline'), undefined);
+      assert.strictEqual(bfmResolvedEmbedStyle('atom', 'block'), undefined);
+    });
+
+    test('inline embedded gets a definite footprint so it does not collapse', function (assert) {
+      assert.strictEqual(
+        bfmResolvedEmbedStyle('embedded', 'inline'),
+        'width: 16rem; height: 9.375rem; overflow: hidden',
+      );
+    });
+
+    test('block embedded flows naturally (no footprint)', function (assert) {
+      assert.strictEqual(bfmResolvedEmbedStyle('embedded', 'block'), undefined);
+    });
+
+    test('inline isolated gets a definite footprint so it does not collapse', function (assert) {
+      assert.strictEqual(
+        bfmResolvedEmbedStyle('isolated', 'inline'),
+        'width: 24rem; height: 18.75rem; overflow: hidden',
+      );
+    });
+
+    test('block isolated gets a growable min-height so it does not collapse', function (assert) {
+      assert.strictEqual(
+        bfmResolvedEmbedStyle('isolated', 'block'),
+        'min-height: 18.75rem',
+      );
+    });
+
+    test('fitted with dimensions carries them plus overflow clipping', function (assert) {
+      assert.strictEqual(
+        bfmResolvedEmbedStyle('fitted', 'block', 'width: 400px; height: 300px'),
+        'width: 400px; height: 300px; overflow: hidden',
+      );
+      assert.strictEqual(
+        bfmResolvedEmbedStyle(
+          'fitted',
+          'inline',
+          'width: 400px; height: 300px',
+        ),
+        'width: 400px; height: 300px; overflow: hidden',
+      );
+    });
+
+    test('fitted without dimensions still clips overflow', function (assert) {
+      assert.strictEqual(
+        bfmResolvedEmbedStyle('fitted', 'block'),
+        'overflow: hidden',
+      );
     });
   });
 
