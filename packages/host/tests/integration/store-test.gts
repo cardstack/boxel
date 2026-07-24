@@ -1923,7 +1923,11 @@ module('Integration | Store', function (hooks) {
     );
     assert.false(didSave, 'instance has not been persisted yet');
 
-    await waitUntil(() => didSave);
+    // The fire-and-forget save (doNotWaitForPersist) completes a write +
+    // incremental index round-trip before onSave fires — comfortably over the
+    // 1s waitUntil default under load. Match the save slack the sibling
+    // "adding to the store" test uses.
+    await waitUntil(() => didSave, { timeout: 10000 });
 
     let file = await testRealmAdapter.openFile('Person/hassan.json');
     assert.strictEqual(
