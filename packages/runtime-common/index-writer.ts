@@ -2420,7 +2420,7 @@ export class Batch {
       unresolvedPath !== resolvedPath &&
       this.isRegisteredPrefix(unresolvedPath);
     let scanTable = async (
-      tableName: 'boxel_index_working' | 'prerendered_html',
+      tableName: 'boxel_index_working' | 'prerendered_html' | 'boxel_index',
     ) => {
       let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: BoxelIndexTable['type'];
@@ -2476,6 +2476,19 @@ export class Batch {
             // probably need to reevaluate this condition when we get to cross
             // realm invalidation
             [`i.realm_url =`, param(this.realmURL.href)],
+            // A promoted tombstone is a deleted file — it has nothing to
+            // re-render, and pulling it into the fan-out would visit a path
+            // with no backing file. The working/prerendered scans carry
+            // tombstones from in-flight batches whose skip logic handles
+            // them, so only the production scan filters.
+            ...(tableName === 'boxel_index'
+              ? [
+                  any([
+                    ['i.is_deleted = false'],
+                    ['i.is_deleted IS NULL'],
+                  ]) as Expression,
+                ]
+              : []),
           ]),
           `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
         ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
@@ -2492,15 +2505,30 @@ export class Batch {
     // — a rendered non-searchable link, the scoped-CSS artifacts of linked
     // instances. Both edge sets must feed the fan-out or a change to a
     // render-only dependency would never re-render its consumers.
-    let [workingScan, prerenderedScan] = await Promise.all([
+    //
+    // Production `boxel_index` is scanned as well because the working table
+    // is a staging area whose coverage is not guaranteed: a row only exists
+    // there once a visit has written it in this deployment's lifetime, so
+    // promoted rows can lack a working counterpart (an index imported from a
+    // dump that carries only the production tables, or rows staged under a
+    // since-changed schema). Without the production scan, a module edit
+    // never reaches such dependents — their indexed computed values sit
+    // stale until each file is touched individually. Rows present in both
+    // tables collapse in the (url, type) dedup below.
+    let [workingScan, prerenderedScan, productionScan] = await Promise.all([
       scanTable('boxel_index_working'),
       scanTable('prerendered_html'),
+      scanTable('boxel_index'),
     ]);
     let seen = new Set<string>();
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: BoxelIndexTable['type'];
     })[] = [];
-    for (let row of [...workingScan.results, ...prerenderedScan.results]) {
+    for (let row of [
+      ...workingScan.results,
+      ...prerenderedScan.results,
+      ...productionScan.results,
+    ]) {
       let key = `${row.url}|${row.type}`;
       if (seen.has(key)) {
         continue;
@@ -2511,7 +2539,11 @@ export class Batch {
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms (page count=${workingScan.pageNumber + prerenderedScan.pageNumber})`,
+      } ms (page count=${
+        workingScan.pageNumber +
+        prerenderedScan.pageNumber +
+        productionScan.pageNumber
+      })`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
