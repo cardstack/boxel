@@ -377,9 +377,9 @@ export async function runFactoryEntrypoint(
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
 
-  // For a realm the factory just created, replace the default CardsGrid
-  // index page with a RealmDashboard instance so the realm opens to the
-  // factory dashboard. A pre-existing realm keeps its current index page.
+  // For a realm the factory just created, replace the default index page
+  // with a RealmDashboard instance so the realm opens to the factory
+  // dashboard. A pre-existing realm keeps its current index page.
   if (targetRealm.createdRealm) {
     let writeRealmIndex =
       dependencies?.writeRealmIndex ?? writeRealmDashboardCard;

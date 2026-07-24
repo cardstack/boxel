@@ -266,6 +266,7 @@ class Isolated extends Component<typeof Workspace> {
   <template>
     <section
       class='card-grid'
+      data-test-workspace-index
       {{this.setupRealmSubscription this.primaryRealm}}
     >
       <header class='frame'>
@@ -273,16 +274,19 @@ class Isolated extends Component<typeof Workspace> {
           <button
             type='button'
             class='tab {{if (eq this.segment "home") "active"}}'
+            data-test-workspace-tab='home'
             {{on 'click' (this.setSegment 'home')}}
           ><HouseIcon class='tab-icon' /> Home</button>
           <button
             type='button'
             class='tab {{if (eq this.segment "library") "active"}}'
+            data-test-workspace-tab='library'
             {{on 'click' (this.setSegment 'library')}}
           ><LayoutGridIcon class='tab-icon' /> Library</button>
           <button
             type='button'
             class='tab {{if (eq this.segment "activity") "active"}}'
+            data-test-workspace-tab='activity'
             {{on 'click' (this.setSegment 'activity')}}
           ><ActivityIcon class='tab-icon' />
             Activity{{#if this.runningJobs.length}}<span
