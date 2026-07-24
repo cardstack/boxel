@@ -213,7 +213,19 @@ export default class CardService extends Service {
         err.responseHeaders = response.headers;
         throw err;
       }
-      return await response.json();
+      let doc = await response.json();
+      // Stamp the transferred body size (O(1)) so the client-telemetry
+      // deserialize hook can report it without re-serializing the whole
+      // document to measure it. Non-enumerable so it never reaches the wire.
+      let contentLength = Number(response.headers.get('content-length') ?? '');
+      if (Number.isFinite(contentLength) && doc && typeof doc === 'object') {
+        Object.defineProperty(doc, Symbol.for('boxel-doc-response-bytes'), {
+          value: contentLength,
+          enumerable: false,
+          configurable: true,
+        });
+      }
+      return doc;
     }
     return;
   }

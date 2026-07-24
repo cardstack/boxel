@@ -90,7 +90,16 @@ module('Integration | Service | client-telemetry', function (hooks) {
     svc.enableForTest();
     svc.drainBufferForTest();
 
-    let doc = { data: { id: 'x' }, included: [{}, {}] };
+    let doc: Record<string, unknown> = {
+      data: { id: 'x' },
+      included: [{}, {}],
+    };
+    // The fetch stamps the response byte size on the doc; the hook reads it
+    // rather than re-serializing the document.
+    Object.defineProperty(doc, Symbol.for('boxel-doc-response-bytes'), {
+      value: 4096,
+      enumerable: false,
+    });
     svc.recordDeserialize({
       durationMs: 12.2,
       doc,
@@ -111,7 +120,11 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.strictEqual(e.included_count, 2);
     assert.strictEqual(e.card_type, 'Person');
     assert.strictEqual(e.realm, 'https://realm.example/my-realm/');
-    assert.ok(e.doc_bytes > 0, 'doc size measured');
+    assert.strictEqual(
+      e.doc_bytes,
+      4096,
+      'doc size is read from the stamped response byte size',
+    );
   });
 
   test('a recorded event carries the wedge breadcrumb shape', function (assert) {

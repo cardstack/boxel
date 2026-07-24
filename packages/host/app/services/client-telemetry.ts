@@ -354,12 +354,13 @@ export default class ClientTelemetryService
     }
     try {
       let { durationMs, doc, resource } = args;
-      let docBytes = 0;
-      try {
-        docBytes = JSON.stringify(doc).length;
-      } catch {
-        docBytes = 0;
-      }
+      // The fetch stamps the response body size on the doc (O(1)); read it
+      // rather than re-serializing the whole document. 0 when the doc came from
+      // a source that didn't provide a size (e.g. a locally-built instance).
+      let stamped = (doc as { [k: symbol]: unknown } | null | undefined)?.[
+        Symbol.for('boxel-doc-response-bytes')
+      ];
+      let docBytes = typeof stamped === 'number' ? stamped : 0;
       let included = (doc as { included?: unknown[] } | undefined)?.included;
       let realm =
         typeof resource?.meta?.realmURL === 'string'
