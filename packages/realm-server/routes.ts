@@ -29,6 +29,7 @@ import {
 } from './middleware/index.ts';
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
+import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
 import handleSkillValidation from './handlers/handle-skill-validation.ts';
 import handleReindex from './handlers/handle-reindex.ts';
@@ -201,6 +202,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleRequestForward({
       dbAdapter: args.dbAdapter,
     }),
+  );
+  // Batched client performance beacons. The host sends its server session
+  // token as `Authorization: Bearer <token>`, so the standard jwtMiddleware
+  // authenticates the caller and the authenticated matrix user id is used in
+  // preference to the body's self-reported value.
+  router.post(
+    '/_client-telemetry',
+    jwtMiddleware(args.realmSecretSeed),
+    handleClientTelemetry(),
   );
   router.post(
     '/_openrouter/chat/completions',
