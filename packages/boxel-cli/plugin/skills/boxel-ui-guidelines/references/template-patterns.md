@@ -200,3 +200,21 @@ Same rule applies to `transform: scaleX(0)` "drawn rule" effects, staggered card
 ```
 
 Reduced-motion override works correctly either way (`animation: none` simply skips the keyframe), but only the fixed version produces a sensible result for users who never see the animation at all.
+
+### Replay an entrance animation when tracked state changes
+
+A Glimmer rerender updates existing DOM; it does not replay a CSS entrance animation. For a stepper, survey, carousel, or wizard that should animate each new tracked value, key a single-item `{{#each}}` by that value so Glimmer removes the old block and inserts a new one:
+
+```gts
+import { array } from '@ember/helper';
+```
+
+```hbs
+{{#each (array this.activeStep) key='@identity' as |stepKey|}}
+  <section class='step-entrance' data-step-key={{stepKey}}>
+    {{! content for the active step }}
+  </section>
+{{/each}}
+```
+
+Use the block parameter in a `data-*` attribute so the key remains explicit. Keep persistent controls, progress, and navigation outside the keyed block: remounting intentionally resets focus and local DOM state inside it. Pair this with the visible resting-state rule above so reduced-motion and canceled animations remain usable.

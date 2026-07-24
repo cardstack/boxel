@@ -100,6 +100,11 @@ module('Responding', (hooks) => {
     clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
     responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+    // Most tests here exercise room-edit streaming mechanics (thinking-message
+    // replacement, throttled edits, event splitting). Since the default mode is
+    // now to-device, pin room-edits as the module baseline; tests that target a
+    // different mode override this and reset it in their own teardown.
+    process.env.AI_BOT_STREAMING_MODE = 'room-edits';
   });
 
   hooks.afterEach(() => {
@@ -108,6 +113,7 @@ module('Responding', (hooks) => {
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
     responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
+    delete process.env.AI_BOT_STREAMING_MODE;
   });
 
   test('Sends thinking message', async () => {
@@ -410,8 +416,8 @@ module('Responding', (hooks) => {
   });
 
   test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {
-    // Default mode is room-edits with no preview target — the "before" side of
-    // the streaming-mode comparison, where each mid-turn edit is its own room
+    // The module baseline is room-edits (set in beforeEach) — the "before" side
+    // of the streaming-mode comparison, where each mid-turn edit is its own room
     // event. Pins that this stays high, so a regression that stopped counting
     // mid-turn edits can't silently collapse it to ~2 like the other modes.
     await responder.ensureThinkingMessageSent();
@@ -422,7 +428,7 @@ module('Responding', (hooks) => {
     await responder.finalize();
 
     let telemetry = responder.turnTelemetry;
-    assert.equal(telemetry.mode, 'room-edits', 'default mode is room-edits');
+    assert.equal(telemetry.mode, 'room-edits', 'room-edits mode is active');
     assert.ok(
       telemetry.roomEvents > 2,
       `room-edits emits a room event per mid-turn edit (got ${telemetry.roomEvents})`,
@@ -431,6 +437,27 @@ module('Responding', (hooks) => {
       telemetry.toDeviceEvents,
       0,
       'room-edits never uses the to-device channel',
+    );
+  });
+
+  test('default streaming mode (no env var) is to-device', async () => {
+    // Guards the default flip: with AI_BOT_STREAMING_MODE unset the turn runs
+    // in to-device mode, so only the placeholder + one consolidated room edit
+    // land regardless of whether a preview target is present.
+    delete process.env.AI_BOT_STREAMING_MODE;
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'to-device', 'default mode is to-device');
+    assert.equal(
+      telemetry.roomEvents,
+      2,
+      `default collapses to placeholder + one final room edit (got ${telemetry.roomEvents})`,
     );
   });
 

@@ -51,7 +51,7 @@
 
 **⚠️ CRITICAL CLARIFICATION:** 
 - Level 3 is NOT called "parameters" — it's just the key-value pairs INSIDE `attributes`
-- The keys at level 3 vary per command (e.g., `cardId` for show-card, `realm` + `path` for write-text-file)
+- The keys at level 3 vary per command (e.g., `cardId` for show-card, `submode` + `codePath` for switch-submode)
 - `attributes` is ALWAYS a JSON object `{ }`, NEVER a string
 
 ### 🔴 THE ONE TRUE FORMAT (Copy This Exactly)
@@ -106,22 +106,21 @@ Before generating ANY command call, verify:
 }
 ```
 
-### Example 2: write-text-file  
+### Example 2: switch-submode (multiple attributes)
 ```json
 {
-  "name": "write-text-file_e5a1",
+  "name": "switch-submode_dd88",
   "payload": {
-    "description": "Create product instance file",
+    "description": "Open code mode on a new file in the target realm",
     "attributes": {
-      "realm": "https://realm-url/",
-      "path": "Product/item.json",
-      "content": "{\"data\": {...}}",
-      "overwrite": true
+      "submode": "code",
+      "createFile": true,
+      "codePath": "https://realm-url/product-catalog.gts"
     }
   }
 }
 ```
-**Note:** `content` is a STRING containing serialized JSON or other escaped text content
+**Note:** `codePath` pins code mode to the target realm — a bare `submode` switch stays in whatever realm the UI last showed
 
 ### Example 3: Empty attributes (when no params needed)
 ```json

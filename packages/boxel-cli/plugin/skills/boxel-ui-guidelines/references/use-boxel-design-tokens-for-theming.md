@@ -1,6 +1,13 @@
 ## Use Boxel Design Tokens for Theming
 
-Never hard-code colors. Always use CSS custom properties. Do not provide hardcoded fallback values inside `var()` — e.g. `var(--token, 1rem)` or `var(--token, white)`. If fallbacks are needed, define them once on the parent container class rather than repeating them throughout child selectors. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`.
+Never hard-code colors. Always use CSS custom properties.
+
+**Fallback rule — scoped to theme/semantic tokens.** Do not provide hardcoded fallback values inside `var()` when referencing theme or semantic tokens — e.g. `var(--primary, #6366f1)`, `var(--boxel-sp, 1rem)`, `var(--background, white)`. Those tokens are always defined, so the fallback is dead weight that drifts out of sync with the theme. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`.
+
+Two exemptions — both resolved by declaring on a parent container, never inline per selector:
+
+1. **Locally-defined component variables** (`--fit-*`, `--stagger-d`, …): declare them once, with their default values, on the component's parent/root element; descendants reference them bare (`var(--fit-headline-size)`), never with inline fallbacks scattered through child selectors.
+2. **Conditionally-existing runtime tokens** — tokens that only exist on themed containers (the scale-driven `--boxel-fs-*` ladder) or have no default at all (`--font-serif`). These genuinely need a fallback; give it ONCE, in a local-variable declaration on the parent container (e.g. `--serif: var(--font-serif, Georgia, serif);` on the composition root), and reference the local variable bare below.
 
 Hardcoded hex inside `linear-gradient()` is also a violation: `linear-gradient(180deg, #fef7ed 0%, #fed7aa 100%)` must become `linear-gradient(180deg, var(--muted) 0%, var(--accent) 100%)`.
 

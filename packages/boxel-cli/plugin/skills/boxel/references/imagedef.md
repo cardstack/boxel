@@ -110,4 +110,4 @@ const result = await upload.execute({
 
 - [`base-field-catalog.md`](./base-field-catalog.md) "Image fields — the URL/ImageDef pair pattern" — the pair pattern in detail.
 - [`core-concept.md`](./core-concept.md) "Relationship path resolution" — why `links.self` needs `./` / `../` / `http` prefix.
-- Cardinal Rule 13 in `CLAUDE.md` — never put external URLs in relationship `links.self`.
+- Cardinal Rule 12 in `CLAUDE.md` — never put external URLs in relationship `links.self`.

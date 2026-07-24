@@ -44,6 +44,7 @@ import {
 } from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { basename } from 'path';
+import { createHash } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
@@ -4486,6 +4487,37 @@ module(basename(import.meta.filename), function () {
           afterLinksToManyInvalidation,
           beforeLinksToManyInvalidation,
           'updating FileDef linksToMany target invalidates consumer instance',
+        );
+      });
+
+      test('file meta serves write-time contentHash/contentSize over indexed values', async function (assert) {
+        let content = 'bytes behind the file meta doc';
+        await realm.write('meta-note.txt', content);
+
+        // Emulate the state a mid-batch render observes: the production
+        // index row still carries the previous bytes' content values while
+        // `realm_file_meta` (written in the same critical section as the
+        // bytes) already has the current ones. The pristine resource is
+        // dropped so the served doc must choose between the indexed search
+        // doc and the persisted meta.
+        await testDbAdapter.execute(
+          `UPDATE boxel_index SET search_doc = COALESCE(search_doc, '{}'::jsonb) || '{"contentHash":"stale-hash","contentSize":1}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}meta-note.txt' AND type = 'file'`,
+        );
+
+        let response = await fetch(`${testRealm}meta-note.txt`, {
+          headers: { Accept: SupportedMimeType.FileMeta },
+        });
+        assert.strictEqual(response.status, 200, 'file meta response is ok');
+        let doc = (await response.json()) as LooseSingleCardDocument;
+        assert.strictEqual(
+          doc.data.attributes?.contentHash,
+          createHash('md5').update(content).digest('hex'),
+          'contentHash reflects the bytes on disk, not the indexed value',
+        );
+        assert.strictEqual(
+          doc.data.attributes?.contentSize,
+          content.length,
+          'contentSize reflects the bytes on disk, not the indexed value',
         );
       });
 

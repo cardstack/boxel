@@ -93,3 +93,11 @@ Platform evidence: `packages/realm-server/tests/card-endpoints-test.ts` includes
 For the wider story on `links.self` shapes (`./Foo/bar` vs `../Foo/bar` vs bare-specifier traps), see `boxel/references/card-references.md`.
 
 ---
+
+## Raw images in published host mode
+
+Keep the `linksTo(ImageDef)` relationship so publishing carries the file, but do not assume `image.url` is safe in a raw `<img>` tag on an anonymous published page. Prerendered data can retain an authenticated source-realm URL, which returns 401 to public visitors even though the asset exists in the published realm.
+
+For raw tags, use a verified public URL or a root-relative path under the published realm's mount point. Prefer `/published-mount/assets/image.svg` over `./assets/image.svg`: the relative form changes meaning when the page is served both with and without a trailing slash. The built-in FileDef field renderer remains preferable when it owns fetching and rendering.
+
+If card JSON and realm files are current but published HTML still contains an old asset URL, force a full source-realm reindex before publishing again.

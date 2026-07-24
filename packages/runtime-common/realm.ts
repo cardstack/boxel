@@ -4479,13 +4479,18 @@ export class Realm {
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
         : undefined;
-    // Only hit the DB when the indexed searchDoc is missing a value.
-    let persistedMeta =
-      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
-        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-        : { contentHash: undefined, contentSize: undefined };
-    let contentHash = searchHash ?? persistedMeta.contentHash;
-    let contentSize = searchSize ?? persistedMeta.contentSize;
+    // `realm_file_meta` is written in the same critical section as the file's
+    // bytes, so it is authoritative for content-derived values. It is
+    // preferred over the indexed values, which lag one batch promotion behind:
+    // a render inside the batch that re-indexes this file reads the pre-swap
+    // production row, so a card linking the file sees the file's index row at
+    // its previous contentHash/contentSize. The indexed values remain as
+    // fallbacks for files whose bytes were never hashed at write time.
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    let contentHash = persistedMeta.contentHash ?? searchHash;
+    let contentSize = persistedMeta.contentSize ?? searchSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -4501,8 +4506,11 @@ export class Realm {
         resourceAttributes.contentType ??
         searchDoc.contentType ??
         inferredContentType,
-      contentHash: resourceAttributes.contentHash ?? contentHash,
-      contentSize: resourceAttributes.contentSize ?? contentSize,
+      // The persisted write-time values win over the indexed resource's for
+      // the same staleness reason as above; the resource's extract-computed
+      // values cover files that predate write-time hashing.
+      contentHash: contentHash ?? resourceAttributes.contentHash,
+      contentSize: contentSize ?? resourceAttributes.contentSize,
       lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
       createdAt: createdAt ?? unixTime(Date.now()),
     };

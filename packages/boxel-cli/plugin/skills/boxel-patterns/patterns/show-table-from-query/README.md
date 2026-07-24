@@ -25,4 +25,4 @@ validated: source-proven
 
 **Source:** catalog-realm `components/table.gts:33-45` (TableSignature), `components/field-renderer.gts:40-79` (WeakMap cache), `components/grid.gts:16-47` (the grid variant).
 
-**See also:** `automate-linked-to-me-lookup`, `show-card-list-with-views`, `boxel/references/query-systems.md`, `boxel/references/fitted-formats.md`.
+**See also:** `show-list-prefer-prerendered` (when a display list should *not* hydrate instances the way this table does), `automate-linked-to-me-lookup`, `show-card-list-with-views`, `boxel/references/query-systems.md`, `boxel/references/fitted-formats.md`.

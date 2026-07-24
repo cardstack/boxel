@@ -212,13 +212,13 @@ export class RatingsSummary extends FieldDef {
 export class ReviewCard extends CardDef {
   static displayName = 'Review';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field rating = contains(RatingsSummary);
 
   static isolated = class Isolated extends Component<typeof ReviewCard> {
     <template>
       <article class='review'>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         <@fields.rating @format='embedded' />
       </article>
     </template>

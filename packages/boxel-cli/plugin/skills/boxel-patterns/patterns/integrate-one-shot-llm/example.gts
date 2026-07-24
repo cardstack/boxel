@@ -4,6 +4,7 @@ import { restartableTask } from 'ember-concurrency';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { Button } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import OneShotLlmRequestCommand from '@cardstack/boxel-host/tools/one-shot-llm-request';
 

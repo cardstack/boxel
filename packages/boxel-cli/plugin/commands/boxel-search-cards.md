@@ -27,13 +27,13 @@ boxel:
 ## Procedure
 
 1. If the query is title-based and simple → `SearchCardsByTypeAndTitleCommand_a959`.
-2. If the query needs filters (`eq`, `gt`, `range`, `on`-typed) → `SearchCardsByQueryCommand_847d`.
-3. Build the `filter.on` reference — typically `{ module: <full URL>, name: <ClassName> }`.
+2. If the query needs filters (`eq`, `gt`, `range`) → `SearchCardsByQueryCommand_847d`.
+3. Build the type reference as `{ module: <full URL>, name: <ClassName> }`. To match **all cards of a type**, use `filter: { type: ref }`. Use `on: ref` **only** to scope predicates (`eq`/`contains`/`range`) or a custom-field sort — a bare `{ on: ref }` with no predicate returns zero rows silently (Cardinal Rule 5, `boxel/references/query-systems.md`).
 4. Display results — use `show-card_566f` if the user wants to see one; just list otherwise.
 
 ## Done Criteria (self-verify)
 
-- [ ] The query filter has an `on` property (required for Boxel queries).
+- [ ] Type matching uses `filter.type`; `on` appears only alongside a predicate or custom sort.
 - [ ] `module` is the full URL, not a relative path.
 - [ ] The realm list is explicit (no implicit "current realm").
 - [ ] Results count is reported back to the user.

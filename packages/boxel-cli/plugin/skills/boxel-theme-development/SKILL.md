@@ -1,6 +1,6 @@
 ---
 name: boxel-theme-development
-description: Develop Boxel Theme, StructuredTheme, StyleReference, DetailedStyleReference, and BrandGuide cards. Use when creating, converting, auditing, or patching theme/style/brand-guide artifacts; importing or exporting Google DESIGN.md design-system briefs; choosing Boxel Brand Guide vs custom brand styling; or working with logo/mark usage, functional palettes, typography, and theme tokens.
+description: Use when the deliverable is a theme ARTIFACT — creating, converting, auditing, or patching Theme, StructuredTheme, StyleReference, DetailedStyleReference, or BrandGuide cards; importing/exporting Google DESIGN.md design-system briefs; logo/mark usage and functional palettes. NOT for deciding a card's visual language (boxel-design) and NOT for applying tokens inside card templates (boxel-ui-guidelines).
 boxel:
   kind: skill
 ---

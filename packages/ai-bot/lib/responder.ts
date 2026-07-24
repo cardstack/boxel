@@ -103,12 +103,17 @@ export class Responder {
     return this.matrixResponsePublisher.originalResponseEventId;
   }
 
+  // to-device is the default: mid-turn previews stream over the ephemeral
+  // to-device channel and only one consolidated room edit lands per turn,
+  // keeping Synapse's room-event load flat. `room-edits` (the legacy per-edit
+  // behavior) and `off` (no mid-turn previews at all) remain available as
+  // explicit AI_BOT_STREAMING_MODE overrides.
   private get streamingMode(): 'room-edits' | 'off' | 'to-device' {
     const mode = process.env.AI_BOT_STREAMING_MODE;
-    if (mode === 'off' || mode === 'to-device') {
+    if (mode === 'off' || mode === 'room-edits') {
       return mode;
     }
-    return 'room-edits';
+    return 'to-device';
   }
 
   // Whether mid-turn state changes should trigger a throttled preview send.

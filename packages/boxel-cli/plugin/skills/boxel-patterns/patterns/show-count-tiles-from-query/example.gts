@@ -1,4 +1,4 @@
-// ¹ Pattern example: query metadata count tiles.
+// Pattern example: query metadata count tiles.
 import {
   CardDef,
   Component,

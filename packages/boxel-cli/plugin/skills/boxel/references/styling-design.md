@@ -124,7 +124,7 @@ body { margin: 0; }
 {{formatNumber @model.count size="tiny"}}
 ```
 
-Canonical formatter imports live in `@cardstack/boxel-ui/helpers`, not the catalog realm. See `references/formatters.md` for the full list. For static `markdown` templates, use `https://cardstack.com/base/markdown-helpers` instead.
+Canonical formatter imports live in `@cardstack/boxel-ui/helpers`, not the catalog realm. See `formatters.md` for the full list. For static `markdown` templates, use `https://cardstack.com/base/markdown-helpers` instead.
 
 ## Design Philosophy and Competitive Styling
 
@@ -151,13 +151,13 @@ Dense professional layouts with thoughtful scaling:
 - Radius: match the aesthetic (sharp for technical, soft for friendly)
 - Shadows: subtle elevation for interactive elements; keep z-index conservative (<10)
 
-Implementation tip: Define CSS variables at component root and use fallbacks.
+Implementation tip: Define local CSS variables at the component root, referencing theme tokens directly — no hardcoded fallbacks (the `--boxel-*` tokens are always defined).
 
 ```css
 .component {
-  --card-padding: var(--boxel-sp, 1rem);
-  --card-radius: var(--boxel-border-radius-sm, 0.5rem);
-  --card-shadow: var(--boxel-box-shadow, 0 2px 4px rgba(0,0,0,0.1));
+  --card-padding: var(--boxel-sp);
+  --card-radius: var(--boxel-border-radius-sm);
+  --card-shadow: var(--boxel-box-shadow);
   padding: var(--card-padding);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
