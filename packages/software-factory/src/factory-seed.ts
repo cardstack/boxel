@@ -72,7 +72,7 @@ export interface SeedIssueOptions {
 
 const SEED_ISSUE_PATH = 'Issues/bootstrap-seed';
 const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
-const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
+export const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
 const ANALYSIS_ISSUE_FILE = `${ANALYSIS_ISSUE_PATH}.json`;
 export const DESIGN_FOUNDATION_ISSUE_PATH = 'Issues/design-foundation-seed';
 const DESIGN_FOUNDATION_ISSUE_FILE = `${DESIGN_FOUNDATION_ISSUE_PATH}.json`;
@@ -236,6 +236,13 @@ export interface LinkProjectToSeedIssueOptions {
   /** From `inferDarkfactoryModuleUrl(realmUrl)`. */
   darkfactoryModuleUrl: string;
   /**
+   * Realm-relative seed issue path WITHOUT the `.json` extension.
+   * Defaults to the bootstrap seed; pass the design-foundation or
+   * port-analysis seed path to wire those. A missing seed file is a
+   * no-op (returns false), so callers can link speculatively.
+   */
+  seedIssuePath?: string;
+  /**
    * How many times to retry the Project search when it comes back empty.
    * The Project is synced to the realm fire-and-forget (no `waitForIndex`),
    * so an empty result can just mean the indexer hasn't caught up. The
@@ -264,12 +271,17 @@ export async function linkProjectToSeedIssue(
 ): Promise<boolean> {
   let { client, realmUrl, workspaceDir, darkfactoryModuleUrl } = options;
   let issueTrackerModuleUrl = inferIssueTrackerModuleUrl(darkfactoryModuleUrl);
+  // Defaults to the bootstrap seed; callers pass the design-foundation or
+  // port-analysis seed path to wire those too — the project-scoped board
+  // only shows linked issues, and an unlinked seed is invisible on it even
+  // while the loop is actively working it.
+  let seedIssuePath = options.seedIssuePath ?? SEED_ISSUE_PATH;
 
   return linkRelationshipToCard({
     client,
     realmUrl,
     workspaceDir,
-    cardFile: SEED_ISSUE_FILE,
+    cardFile: `${seedIssuePath}.json`,
     relationshipKey: 'project',
     targetLabel: 'Project',
     search: () =>
@@ -284,7 +296,7 @@ export async function linkProjectToSeedIssue(
     // the agent encodes implementation-issue project links (`../Projects/<slug>`).
     buildLink: (id, realm) =>
       posix.relative(
-        posix.dirname(SEED_ISSUE_PATH),
+        posix.dirname(seedIssuePath),
         toRealmRelativePath(id, realm),
       ),
     log,

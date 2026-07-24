@@ -30,7 +30,9 @@ import {
   type IssueLoopWiringConfig,
 } from './factory-issue-loop-wiring.ts';
 import {
+  ANALYSIS_ISSUE_PATH,
   createSeedIssue,
+  DESIGN_FOUNDATION_ISSUE_PATH,
   linkProjectToSeedIssue,
   type LinkProjectToSeedIssueOptions,
   type SeedIssueResult,
@@ -919,13 +921,24 @@ export async function runFactoryEntrypoint(
     // dashboard was written), so there is no board relationship to patch
     // — skip linkBoard entirely; only the seed issue's project link (a
     // control-plane file) still gets wired.
-    let [boardLinked, projectLinked] = await Promise.all([
-      controlRealmUrl
-        ? Promise.resolve(false)
-        : linkBoard({ ...linkArgs, absoluteLink: false }),
-      linkSeedProject(linkArgs),
-    ]);
-    if (boardLinked || projectLinked) {
+    // The design-foundation and port-analysis seeds are written by the
+    // seeder before any Project exists and nothing else ever links them —
+    // leaving the project-scoped board blind to the issue the loop is
+    // actively working. Link them alongside the bootstrap seed; a seed
+    // that doesn't exist for this run shape is a no-op.
+    let [boardLinked, projectLinked, foundationLinked, analysisLinked] =
+      await Promise.all([
+        controlRealmUrl
+          ? Promise.resolve(false)
+          : linkBoard({ ...linkArgs, absoluteLink: false }),
+        linkSeedProject(linkArgs),
+        linkSeedProject({
+          ...linkArgs,
+          seedIssuePath: DESIGN_FOUNDATION_ISSUE_PATH,
+        }),
+        linkSeedProject({ ...linkArgs, seedIssuePath: ANALYSIS_ISSUE_PATH }),
+      ]);
+    if (boardLinked || projectLinked || foundationLinked || analysisLinked) {
       await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
       // The seed issue's project link is a control-plane change.
       if (controlSync) {

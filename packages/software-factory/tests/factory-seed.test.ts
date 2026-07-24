@@ -120,6 +120,52 @@ module('factory-seed > linkProjectToSeedIssue', function (hooks) {
       'second run is a no-op once the link is set',
     );
   });
+
+  test('seedIssuePath links an auxiliary seed (design foundation)', async function (assert) {
+    workspace.write(
+      'Issues/design-foundation-seed.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: { issueId: 'DESIGN-0', status: 'backlog' },
+            meta: { adoptsFrom: { module: DARKFACTORY, name: 'Issue' } },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    let modified = await linkProjectToSeedIssue({
+      client: clientFindingProjects([{ id: `${REALM}Projects/sticky-note` }]),
+      realmUrl: REALM,
+      workspaceDir: workspace.dir,
+      darkfactoryModuleUrl: DARKFACTORY,
+      seedIssuePath: 'Issues/design-foundation-seed',
+    });
+
+    assert.true(modified, 'foundation seed linked');
+    let seed = JSON.parse(workspace.read('Issues/design-foundation-seed.json'));
+    assert.deepEqual(seed.data.relationships.project, {
+      links: { self: '../Projects/sticky-note' },
+    });
+    // The bootstrap seed is untouched by an aux-seed link.
+    let bootstrap = JSON.parse(workspace.read(SEED_ISSUE_FILE));
+    assert.strictEqual(bootstrap.data.relationships, undefined);
+  });
+
+  test('seedIssuePath for a seed that does not exist is a no-op', async function (assert) {
+    let modified = await linkProjectToSeedIssue({
+      client: clientFindingProjects([{ id: `${REALM}Projects/sticky-note` }]),
+      realmUrl: REALM,
+      workspaceDir: workspace.dir,
+      darkfactoryModuleUrl: DARKFACTORY,
+      seedIssuePath: 'Issues/port-analysis-seed',
+    });
+
+    assert.false(modified, 'missing seed file is a clean no-op');
+  });
 });
 
 const ANALYSIS_ISSUE_FILE = 'Issues/port-analysis-seed.json';
