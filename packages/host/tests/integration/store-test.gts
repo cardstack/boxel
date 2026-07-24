@@ -3251,4 +3251,140 @@ module('Integration | Store', function (hooks) {
       `reference count for ${jade} is 1`,
     );
   });
+
+  // Count full rebuilds by the loader flush each one performs: the coalesced
+  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
+  // in these tests, so resetLoader-call-count == rebuild-count.
+  function countRebuilds() {
+    let count = 0;
+    let realResetLoader = loaderService.resetLoader.bind(loaderService);
+    loaderService.resetLoader = ((
+      options?: Parameters<LoaderService['resetLoader']>[0],
+    ) => {
+      count++;
+      return realResetLoader(options);
+    }) as LoaderService['resetLoader'];
+    return {
+      get count() {
+        return count;
+      },
+      restore() {
+        loaderService.resetLoader = realResetLoader;
+      },
+    };
+  }
+
+  async function renderCard(id: string) {
+    class Driver {
+      @tracked id: string | undefined;
+    }
+    let driver = new Driver();
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id);
+      get renderedCard() {
+        return this.resource.card?.constructor.getComponent(this.resource.card);
+      }
+      <template>
+        {{#if this.resource.card}}
+          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><ResourceConsumer /></template>
+      },
+    );
+    driver.id = id;
+    await waitFor(`[data-test-rendered-card="${id}"]`, { timeout: 5_000 });
+  }
+
+  test('a burst of executable invalidations coalesces to at most two rebuilds', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let rebuilds = countRebuilds();
+    try {
+      // Deliver executable invalidations faster than a rebuild can complete —
+      // synchronously, before the first rebuild's re-fetch settles.
+      let event: RealmEventContent = {
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      };
+      for (let i = 0; i < 6; i++) {
+        (storeService as any).handleInvalidations(event);
+      }
+      await settled();
+    } finally {
+      rebuilds.restore();
+    }
+
+    let coalesced = rebuilds.count >= 1 && rebuilds.count <= 2;
+    assert.ok(
+      coalesced,
+      `6 rapid executable invalidations coalesce to at most 2 rebuilds (saw ${rebuilds.count})`,
+    );
+
+    // End state reflects the latest generation: the open card is re-established
+    // and rendered against current server state.
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    let instance = storeService.peek(hassan);
+    assert.true(
+      isCardInstance(instance),
+      'the open card is re-established after the burst',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan',
+      'the re-established card reflects current server state',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(hassan),
+      1,
+      'reference count stays balanced across the burst',
+    );
+  });
+
+  test('an isolated executable invalidation still triggers exactly one rebuild', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let rebuilds = countRebuilds();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      rebuilds.restore();
+    }
+
+    assert.strictEqual(
+      rebuilds.count,
+      1,
+      'a single executable invalidation resets exactly once, as before',
+    );
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    assert.true(
+      isCardInstance(storeService.peek(hassan)),
+      'the card is re-established after the single rebuild',
+    );
+  });
 });
