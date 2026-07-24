@@ -99,6 +99,14 @@ const BOXEL_UI_PATH = BUNDLED_TYPES_DIR
 const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'local-types')
   : join(PACKAGES_PATH, 'local-types');
+// `@cardstack/runtime-common` is a devDependency, so `npm install` of a
+// published CLI never installs it. Bundle its generated `.d.ts` and
+// alias the bare + subpath specifiers to it; base's bundled `.d.ts`
+// import its `primitive` symbol and field/query types, which card
+// field-value typing depends on.
+const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'runtime-common')
+  : join(PACKAGES_PATH, 'runtime-common');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -592,6 +600,8 @@ async function runGlintCheck(
           paths: {
             '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+            '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
+            '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],

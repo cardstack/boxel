@@ -14,6 +14,14 @@
  *                                   --declaration --emitDeclarationOnly`).
  *                                   Source `.d.ts` files in `base/types`
  *                                   are passed through as-is.
+ * - `bundled-types/runtime-common/` — auto-generated `.d.ts` for
+ *                                   `packages/runtime-common`. See
+ *                                   `buildRuntimeCommonDts()`. Backs the
+ *                                   `@cardstack/runtime-common` path
+ *                                   alias; base's `.d.ts` import its
+ *                                   `primitive`/`realmURL` symbols and
+ *                                   field/query types, on which card
+ *                                   field-value typing depends.
  * - `bundled-types/host-types/`  — `packages/host/types/*` ambient
  *                                   `.d.ts` files, referenced via the
  *                                   `'*': ['<host>/types/*']` fallback
@@ -303,8 +311,108 @@ function annotateInferredTypes(code: string): string {
     );
 }
 
+/**
+ * Generate `.d.ts` for every module in `packages/runtime-common` and
+ * copy them into the destination. Runtime-common is plain `.ts` (no
+ * `<template>`), so unlike `base/` there's no content-tag preprocess and
+ * no `: any` annotation — the declarations emit faithfully.
+ *
+ * That fidelity is the point: `base/`'s bundled `.d.ts` imports the
+ * `primitive` / `realmURL` `unique symbol`s and the field / query types
+ * from `@cardstack/runtime-common`, and card-api's field-value mapping
+ * (`@model.someNumberField` → `number`, via `T extends { [primitive]:
+ * infer P }`) only resolves when those symbol identities are present.
+ * Card code reaches these through the `@cardstack/runtime-common` path
+ * alias in parse.ts's tsconfig.
+ */
+function buildRuntimeCommonDts(rcSrc: string, rcDst: string): void {
+  let tmpDir = mkdtempSync(join(tmpdir(), 'boxel-cli-rc-dts-'));
+  try {
+    // Copy `.ts` source into tmpDir (skip node_modules/dist/tests).
+    // Pre-existing `.d.ts` are passed through; tsc emits the rest.
+    let preexistingDts: string[] = [];
+    let walk = (dir: string): void => {
+      for (let entry of readdirSync(dir, { withFileTypes: true })) {
+        if (
+          entry.name === 'node_modules' ||
+          entry.name === 'dist' ||
+          entry.name.startsWith('.cache')
+        ) {
+          continue;
+        }
+        let full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        let rel = relative(rcSrc, full);
+        if (!rel.endsWith('.ts')) continue;
+        // Tests aren't part of the type surface and drag in test deps.
+        if (rel.endsWith('.test.ts') || rel.startsWith('tests/')) continue;
+        let dst = join(tmpDir, rel);
+        mkdirSync(dirname(dst), { recursive: true });
+        writeFileSync(dst, readFileSync(full, 'utf8'), 'utf8');
+        if (rel.endsWith('.d.ts')) preexistingDts.push(rel);
+      }
+    };
+    walk(rcSrc);
+
+    // Link host's node_modules so runtime-common's imports resolve.
+    let nodeModulesLink = join(tmpDir, 'node_modules');
+    if (!existsSync(nodeModulesLink)) {
+      execFileSync(
+        'ln',
+        [
+          '-sf',
+          join(MONOREPO_PACKAGES, 'host', 'node_modules'),
+          'node_modules',
+        ],
+        { cwd: tmpDir },
+      );
+    }
+
+    let outDir = join(tmpDir, '.dts-out');
+    let tsconfig = {
+      extends: join(MONOREPO_PACKAGES, 'host', 'tsconfig.json'),
+      compilerOptions: {
+        noEmit: false,
+        declaration: true,
+        emitDeclarationOnly: true,
+        outDir,
+        inlineSourceMap: false,
+        inlineSources: false,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+        skipLibCheck: true,
+        rootDir: tmpDir,
+      },
+      include: ['**/*.ts'],
+    };
+    let tsconfigPath = join(tmpDir, 'tsconfig.json');
+    writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf8');
+
+    // Same sandboxed emit as base/: declarations for imports that reach
+    // outside rootDir (host, base) are dropped rather than written to
+    // their source locations.
+    runTscEmitOnly(tsconfigPath, outDir);
+
+    rmSync(rcDst, { recursive: true, force: true });
+    mkdirSync(rcDst, { recursive: true });
+    if (existsSync(outDir)) {
+      cpSync(outDir, rcDst, { recursive: true });
+    }
+    for (let rel of preexistingDts) {
+      let to = join(rcDst, rel);
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(join(tmpDir, rel), to);
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Simple-copy vendors (everything except `base/`)
+// Simple-copy vendors (everything except `base/` and `runtime-common/`)
 // ---------------------------------------------------------------------------
 
 interface Vendor {
@@ -482,6 +590,21 @@ function main(): void {
   let baseSize = dirSize(baseDst);
   total += baseSize;
   console.log(`${(baseSize / 1024 / 1024).toFixed(2)} MB`);
+
+  // runtime-common runs through the .d.ts pipeline too: base's bundled
+  // declarations import its symbols and types, and card field-value
+  // typing depends on them.
+  let rcSrc = join(MONOREPO_PACKAGES, 'runtime-common');
+  let rcDst = join(outRoot, 'runtime-common');
+  if (!safeIsDirectory(rcSrc)) {
+    console.error(`Missing packages/runtime-common at ${rcSrc}`);
+    process.exit(1);
+  }
+  process.stdout.write('  runtime-common … (running tsc --declaration) ');
+  buildRuntimeCommonDts(rcSrc, rcDst);
+  let rcSize = dirSize(rcDst);
+  total += rcSize;
+  console.log(`${(rcSize / 1024 / 1024).toFixed(2)} MB`);
 
   // Other vendors are simple copies with filters.
   for (let vendor of VENDORS) {

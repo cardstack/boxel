@@ -33,22 +33,47 @@ async function parseFixture(name: string): Promise<ParseRealmResult> {
 
 // ---------------------------------------------------------------------------
 // Primary behavior: glint runs against an npm install and the CLI's
-// tsconfig aliases resolve, so real cards type-check clean.
+// tsconfig aliases + bundled types resolve, so real cards type-check
+// clean. Each fixture pins a distinct resolution surface:
+//   - plain-glimmer: field value types (`@model.someNumberField` →
+//     `number`), which resolve through the `primitive` symbol bundled
+//     from @cardstack/runtime-common.
+//   - runtime-common: the bare `@cardstack/runtime-common` import
+//     (the `realmURL` symbol, the `Query` type).
+//   - boxel-host-tools: the `@cardstack/boxel-host/tools/*` alias + the
+//     bundled `tools/` source.
+//   - helpers-and-fields: a `@cardstack/boxel-ui/helpers` call
+//     (`formatDateTime` with its `format` named arg) plus direct
+//     interpolation of `contains(NumberField)` / `contains(TextAreaField)`
+//     field values.
 // ---------------------------------------------------------------------------
+const CLEAN_FIXTURES: { name: string; covers: string }[] = [
+  {
+    name: 'plain-glimmer',
+    covers: 'field value types via the primitive symbol',
+  },
+  { name: 'runtime-common', covers: 'bare @cardstack/runtime-common import' },
+  { name: 'boxel-host-tools', covers: '@cardstack/boxel-host/tools/* import' },
+  {
+    name: 'helpers-and-fields',
+    covers: 'boxel-ui helper call + field interpolation',
+  },
+];
+
 describe('boxel parse (against the installed CLI)', () => {
-  it(
-    'type-checks a card importing @cardstack/boxel-host/tools/* clean',
-    async () => {
-      // Exercises the host-tools path alias + the bundled `tools/`
-      // source. Also proves glint ran end-to-end on a real card in the
-      // installed layout.
-      let result = await parseFixture('boxel-host-tools');
-      expect(result.errors).toEqual([]);
-      expect(result.status).toBe('passed');
-      expect(result.filesChecked).toBeGreaterThanOrEqual(1);
-    },
-    { timeout: 180_000 },
-  );
+  describe.each(CLEAN_FIXTURES)('$name — $covers', ({ name }) => {
+    it(
+      'type-checks clean',
+      async () => {
+        let result = await parseFixture(name);
+        // Surface the actual diagnostics on failure, not a bare count.
+        expect(result.errors).toEqual([]);
+        expect(result.status).toBe('passed');
+        expect(result.filesChecked).toBeGreaterThanOrEqual(1);
+      },
+      { timeout: 180_000 },
+    );
+  });
 
   it(
     'type-checks a .test.gts using assert.dom clean (qunit-dom augmentation)',
@@ -83,36 +108,22 @@ describe('boxel parse (against the installed CLI)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Known typing gaps, deferred to follow-up work. These are card patterns
-// that type-check clean in the monorepo (against host's real types) but
-// not yet in a published install, because the bundled types / glint
-// config don't cover them:
+// Known typing gap, deferred to follow-up work:
 //
-//   - runtime-common / field values: card-api resolves field value types
-//     (`@model.someNumberField` → `number`) through the `primitive`
-//     unique symbol imported from `@cardstack/runtime-common`. That
-//     package is a devDependency, which `npm install` of the published
-//     CLI does not install, so the mapping collapses to the field class
-//     (`NumberField`). Fix: bundle runtime-common's generated types.
-//   - decorators: `@tracked` alongside a `<template>` inside a
+//   - tracked-format-class — `@tracked` alongside a `<template>` inside a
 //     `static isolated = class … {}` expression trips glint's
 //     "Decorators are not valid here". A glint/ember-tsc transform
-//     limitation for decorators in class expressions.
-//   - helper arg shapes: the bundled `formatDateTime` typing rejects the
-//     common positional call `(formatDateTime @model.when 'MMM D')`.
+//     limitation for decorators in class expressions; it reproduces in
+//     both the monorepo and the published layout, so it isn't a
+//     bundled-types gap.
 //
-// Marked `it.fails`: each is an expected failure while the published CLI
-// lacks support for the pattern, so it runs without failing CI. An
-// unexpected pass makes `it.fails` itself fail — the signal to remove the
-// marker and move the case into the block above.
+// Marked `it.fails`: an expected failure while the CLI lacks support for
+// the pattern, so it runs without failing CI. An unexpected pass makes
+// `it.fails` itself fail — the signal to remove the marker and move the
+// case into the block above.
 // ---------------------------------------------------------------------------
 describe('boxel parse — known typing gaps (deferred)', () => {
-  const DEFERRED = [
-    'plain-glimmer',
-    'runtime-common',
-    'helpers-and-fields',
-    'tracked-format-class',
-  ];
+  const DEFERRED = ['tracked-format-class'];
 
   describe.each(DEFERRED)('%s', (name) => {
     it.fails(
