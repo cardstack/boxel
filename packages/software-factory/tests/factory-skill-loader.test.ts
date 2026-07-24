@@ -1010,7 +1010,6 @@ module('factory-skill-loader > curated boxel references', function () {
     // is awaiting a boxel-skills release — which is a valid state.
     if (PENDING_BOXEL_REFERENCES.length === 0) {
       assert.ok(true, 'no references awaiting a boxel-skills release');
-      return;
     }
     for (let name of PENDING_BOXEL_REFERENCES) {
       assert.false(
