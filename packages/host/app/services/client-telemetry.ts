@@ -152,6 +152,13 @@ const CARD_LOAD_WATCHDOG_MS = 30_000;
 // main-thread freeze, not the sub-second jank a keepalive's max_gap_ms already
 // captures.
 const WEDGE_GAP_MS = 10_000;
+// A genuine freeze always leaves a LoAF/longtask entry, but that observer
+// callback can be delivered a little after the heartbeat that detected the gap.
+// Re-check for corroboration a few times across this grace window before
+// concluding an uncorroborated gap was an OS sleep/suspend wake (which runs no
+// task and so never corroborates, no matter how long we wait).
+const WEDGE_CORROBORATION_GRACE_MS = 120;
+const WEDGE_CORROBORATION_RETRIES = 2;
 // Keep the buffer under the server's per-request event cap so a single flush
 // never exceeds it; the flush also chunks by count and serialized-body size.
 const MAX_BUFFERED_EVENTS = 400;
@@ -645,24 +652,39 @@ export default class ClientTelemetryService
     this.#pollCardLoad();
   }
 
-  #emitWedge(windowStart: number, windowEnd: number, gap: number): void {
+  #emitWedge(
+    windowStart: number,
+    windowEnd: number,
+    gap: number,
+    retriesLeft = WEDGE_CORROBORATION_RETRIES,
+  ): void {
+    if (!this.#started) {
+      return;
+    }
     let loafInWindow = this.#loafHistory.filter(
       (e) => e.startTime >= windowStart && e.startTime <= windowEnd,
     );
     let longtasksInWindow = this.#longtaskHistory.filter(
       (e) => e.startTime >= windowStart && e.startTime <= windowEnd,
     );
-    // A wake from OS sleep/suspend (or a throttled timer) surfaces as a huge
-    // heartbeat gap with no task actually having run — drop it rather than
-    // reporting a phantom freeze. A real freeze of this length always leaves a
-    // longtask/LoAF entry. Only enforce this where an observer is active; with
-    // neither, the heartbeat is the only signal we have.
+    // A wake from OS sleep/suspend surfaces as a huge heartbeat gap with no task
+    // actually having run — drop it rather than reporting a phantom freeze. A
+    // real freeze of this length always leaves a longtask/LoAF entry, but that
+    // observer callback can lag the detecting heartbeat, so re-check across a
+    // short grace window before giving up. Only enforce this where an observer
+    // is active; with neither, the heartbeat is the only signal we have.
     let hasObserver = Boolean(this.#loafObserver || this.#longtaskObserver);
     if (
       hasObserver &&
       loafInWindow.length === 0 &&
       longtasksInWindow.length === 0
     ) {
+      if (retriesLeft > 0) {
+        setTimeout(
+          () => this.#emitWedge(windowStart, windowEnd, gap, retriesLeft - 1),
+          WEDGE_CORROBORATION_GRACE_MS,
+        );
+      }
       return;
     }
     let blockedMs = 0;
