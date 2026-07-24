@@ -38,7 +38,7 @@ export class CardCarousel extends CardDef {
   static icon = CubeIcon;
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof CardCarousel> {
     @tracked isRotating = false;
@@ -85,7 +85,7 @@ export class CardCarousel extends CardDef {
     <template>
       <div class='stage'>
         <header>
-          <h1>{{if @model.title @model.title 'Carousel'}}</h1>
+          <h1>{{if @model.cardTitle @model.cardTitle 'Carousel'}}</h1>
           <button type='button' {{on 'click' this.toggleRotate}}>
             {{if this.isRotating 'Stop' 'Auto-rotate'}}
           </button>

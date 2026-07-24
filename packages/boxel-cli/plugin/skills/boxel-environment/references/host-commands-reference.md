@@ -7,59 +7,59 @@ boxel:
     - codeRef:
         module: '@cardstack/boxel-host/tools/switch-submode'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/show-card'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/transform-cards'
         name: default
-        requiresApproval: true
+      requiresApproval: true
     - codeRef:
         module: '@cardstack/boxel-host/tools/read-card-for-ai-assistant'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/read-file-for-ai-assistant'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/set-active-llm'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/open-workspace'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/preview-format'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/update-code-path-with-selection'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/write-text-file'
         name: default
-        requiresApproval: true
+      requiresApproval: true
     - codeRef:
         module: '@cardstack/boxel-host/tools/copy-card'
         name: default
-        requiresApproval: true
+      requiresApproval: true
     - codeRef:
         module: '@cardstack/boxel-host/tools/copy-source'
         name: default
-        requiresApproval: true
+      requiresApproval: true
     - codeRef:
         module: '@cardstack/boxel-host/tools/patch-fields'
         name: default
-        requiresApproval: true
+      requiresApproval: true
     - codeRef:
         module: '@cardstack/boxel-host/tools/update-room-skills'
         name: default
-        requiresApproval: false
+      requiresApproval: false
 ---
 
 # Host Commands Reference
@@ -68,8 +68,8 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Editing
 
-- **SEARCH/REPLACE** — Primary way to create or edit `.gts` and `.json` files. Streams as visible text so the user sees real-time progress.
-- `write-text-file_e5a1` — OK for `.json` instances. **NEVER use for `.gts` files** — tool calls don't stream, causing the UI to appear frozen during long generation. Always SEARCH/REPLACE for `.gts`.
+- **SEARCH/REPLACE** — The way to create or edit files, `.gts` and `.json` alike. Streams as visible text so the user sees real-time progress, and runs through the code-patch pipeline with correctness checking. Create a new file by marking its URL line with `(new)`.
+- `write-text-file_e5a1` — **Avoid; use SEARCH/REPLACE instead.** Tool calls don't stream, so the UI appears frozen during long generation, and the write skips the code-patch pipeline.
 - `patch-fields_3e67` — Fine-grained card field updates (requires approval).
 - `patchCardInstance` — Update card data only.
 - `ApplyMarkdownEditCommand_c112` — Edit long markdown fields (>500 chars) surgically without truncation (requires approval).
@@ -84,11 +84,11 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Navigation
 
-- `switch-submode_dd88` — Toggle interact/code modes. Pass `submode: "code"`, `createFile: true`, `codePath: realmUrl + filename` to create a new file from interact mode.
+- `switch-submode_dd88` — Toggle interact/code modes. A bare `submode: "code"` opens code mode in whatever realm the UI last showed — when the task targets a specific realm, always pass `codePath` with a file URL in that realm (add `createFile: true` when the file doesn't exist yet).
 - `show-card_566f` — Display card in current mode.
 - `preview-format_cb94` — Open module + preview card (code mode; use after edits).
 - `update-code-path-with-selection_f749` — Open file in code editor.
-- `open-workspace_1696` — Navigate to workspace by URL.
+- `open-workspace_1696` — Navigate to a workspace by URL. Lands in **interact mode** — it exits code mode. To work on a specific realm in code mode, use `switch-submode` with a `codePath` in that realm instead.
 
 ## Search
 

@@ -187,8 +187,8 @@ export async function createRealm(
         type: 'card',
         meta: {
           adoptsFrom: {
-            module: '@cardstack/base/cards-grid',
-            name: 'CardsGrid',
+            module: '@cardstack/base/workspace',
+            name: 'Workspace',
           },
         },
       },

@@ -11,7 +11,7 @@ import DateTimeField from 'https://cardstack.com/base/datetime';
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
 
-  @field title       = contains(StringField);
+  @field cardTitle   = contains(StringField);
   @field publishedAt = contains(DateTimeField);
   @field body        = contains(MarkdownField);
 
@@ -19,7 +19,7 @@ export class BlogPost extends CardDef {
     <template>
       <article class='post'>
         <header>
-          <h1>{{@model.title}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
           {{#if @model.publishedAt}}
             <time>{{@model.publishedAt}}</time>
           {{/if}}
@@ -51,7 +51,7 @@ export class BlogPost extends CardDef {
   static embedded = class extends Component<typeof BlogPost> {
     <template>
       <article class='post-preview'>
-        <h2>{{@model.title}}</h2>
+        <h2>{{@model.cardTitle}}</h2>
         {{!--
           For embedded view, you typically want a shorter rendering.
           One option: render just a derived excerpt field.

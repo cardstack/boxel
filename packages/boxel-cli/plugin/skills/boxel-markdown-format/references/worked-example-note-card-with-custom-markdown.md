@@ -11,14 +11,14 @@ import { Author } from './author';
 export class Note extends CardDef {
   static displayName = 'Note';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field body = contains(MarkdownField);
   @field author = linksTo(Author);
   @field publishedAt = contains(DateTimeField);
 
   static markdown = class Markdown extends Component<typeof this> {
     get header() {
-      let title = markdownEscape(this.args.model?.title ?? 'Untitled');
+      let title = markdownEscape(this.args.model?.cardTitle ?? 'Untitled');
       let byline = this.args.model?.author
         ? `By ${markdownLinkForCard(this.args.model.author)}`
         : '';
