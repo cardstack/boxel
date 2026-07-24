@@ -142,6 +142,16 @@ export interface FactoryEntrypointOptions {
   /** Effort for phase-split build turns. Default `medium`. */
   buildEffort?: string;
   /**
+   * Model for the review turn (the PM gate after the render gate). By
+   * default the review inherits the session flagship — cheap-tier reviews
+   * shipped false verdicts, so downgrading is an explicit experiment, not
+   * a default. Pass e.g. `claude-sonnet-5` to opt in; `inherit` is a
+   * no-op.
+   */
+  reviewModel?: string;
+  /** Effort for the review turn when --review-model is set. Default `medium`. */
+  reviewEffort?: string;
+  /**
    * Orchestrator monitor level (v3, requires --v2): quiet | normal |
    * verbose. Default `normal` — stall narration, per-turn telemetry,
    * scheduler notes, and sync failures on the run log.
@@ -293,6 +303,11 @@ export function getFactoryEntrypointUsage(): string {
     '  --no-phase-split            Disable the v3 default phase-split (DESIGN turn on the',
     '                              flagship model + BUILD turn on claude-sonnet-5, forked).',
     '                              Only meaningful with --v2, where phase-split is on by default.',
+    '  --review-model <model>      Model for the post-issue review turn. Default: inherit the',
+    '                              session flagship (cheap-tier reviews shipped false verdicts,',
+    '                              so downgrading is an explicit experiment). `inherit` is a no-op.',
+    '  --review-effort <effort>    Effort for the review turn when --review-model is set',
+    '                              (low|medium|high|xhigh|max). Default medium.',
     "  --include-polish            Execute factory-generated polish issues (the bootstrap's",
     '                              pass-2 enhancement scope) unattended. By default they stay',
     '                              on the board awaiting operator approval.',
@@ -388,6 +403,12 @@ export function parseFactoryEntrypointArgs(
         },
         'no-render-gate': {
           type: 'boolean',
+        },
+        'review-model': {
+          type: 'string',
+        },
+        'review-effort': {
+          type: 'string',
         },
         'build-model': {
           type: 'string',
@@ -503,6 +524,14 @@ export function parseFactoryEntrypointArgs(
           ? true
           : undefined,
     renderGate: parsed.values['no-render-gate'] === true ? false : undefined,
+    reviewModel:
+      typeof parsed.values['review-model'] === 'string'
+        ? parsed.values['review-model']
+        : undefined,
+    reviewEffort:
+      typeof parsed.values['review-effort'] === 'string'
+        ? parsed.values['review-effort']
+        : undefined,
     buildModel:
       typeof parsed.values['build-model'] === 'string'
         ? parsed.values['build-model']
@@ -571,6 +600,8 @@ export function buildModelPolicy(options: {
   phaseSplit?: boolean;
   buildModel?: string;
   buildEffort?: string;
+  reviewModel?: string;
+  reviewEffort?: string;
 }):
   | {
       design?: TurnBudget;
@@ -597,13 +628,23 @@ export function buildModelPolicy(options: {
       ...(fixModel ? { model: fixModel } : {}),
       effort: normalizeEffort(options.fixEffort, 'medium'),
     },
-    // Review turn (PM gate): deliberately NOT budgeted — it inherits the
+    // Review turn (PM gate): NOT budgeted by default — it inherits the
     // session flagship. The reviewer makes taste + product judgments
     // (ship / bounce / reprioritize the backlog) that the cheap tier
     // shipped false verdicts on; a fresh unforked context has no
     // cache-family concern either way. (Operator directive 2026-07-17:
-    // review is the powerful model's job.)
+    // review is the powerful model's job.) `--review-model` opts into a
+    // downgrade as an explicit experiment.
   };
+
+  let reviewModel =
+    options.reviewModel === 'inherit' ? undefined : options.reviewModel;
+  if (reviewModel !== undefined || options.reviewEffort !== undefined) {
+    policy.acceptance = {
+      ...(reviewModel ? { model: reviewModel } : {}),
+      effort: normalizeEffort(options.reviewEffort, 'medium'),
+    };
+  }
 
   // Phase-split build turns: LARGE output (the .gts emissions) — the one
   // turn type where a family switch beats the cache re-ingest cost, so

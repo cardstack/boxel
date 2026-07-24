@@ -6,6 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
+  buildModelPolicy,
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
@@ -744,5 +745,33 @@ module('factory-entrypoint', function (hooks) {
       linkProjectCalled,
       'linkBootstrapIssueProject must not run for a pre-existing realm',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildModelPolicy — review turn budget
+// ---------------------------------------------------------------------------
+
+module('factory-entrypoint > buildModelPolicy review budget', function () {
+  test('review turn is unbudgeted by default (inherits flagship)', function (assert) {
+    let policy = buildModelPolicy({ v2: true });
+    assert.strictEqual(policy?.acceptance, undefined);
+  });
+
+  test('--review-model opts the review turn into a cheaper budget', function (assert) {
+    let policy = buildModelPolicy({ v2: true, reviewModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.acceptance, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('review-model inherit keeps the flagship, effort-only budgets effort', function (assert) {
+    let policy = buildModelPolicy({
+      v2: true,
+      reviewModel: 'inherit',
+      reviewEffort: 'low',
+    });
+    assert.deepEqual(policy?.acceptance, { effort: 'low' });
   });
 });
