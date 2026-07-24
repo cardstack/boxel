@@ -753,7 +753,7 @@ async function withRetries(
   }
 }
 
-async function buildRequest(url: string, originalRequest: Request) {
+export async function buildRequest(url: string, originalRequest: Request) {
   if (url === originalRequest.url) {
     return originalRequest;
   }

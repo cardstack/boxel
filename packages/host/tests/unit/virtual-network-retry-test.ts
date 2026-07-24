@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import {
+  buildRequest,
   shouldRetryFetch,
   shouldTimeoutRetryableFetch,
 } from '@cardstack/runtime-common/virtual-network';
@@ -192,12 +193,16 @@ function stallingThenOkFetch(): {
         signal.addEventListener('abort', onAbort, { once: true });
       });
     }
-    return Promise.resolve(
-      new Response('{"ok":true}', {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+    let ok = new Response('{"ok":true}', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+    // A real fetch response carries its resolved URL; mirror that (configurable
+    // so the virtual network's own url bookkeeping can still overwrite it)
+    // rather than returning the empty-url default a bare Response would have.
+    let url = input instanceof Request ? input.url : String(input);
+    Object.defineProperty(ok, 'url', { value: url, configurable: true });
+    return Promise.resolve(ok);
   }) as typeof globalThis.fetch;
   return { fetch, attempts: () => attempt, signalSeen: () => sawAbort };
 }
@@ -213,14 +218,6 @@ module('Unit | virtual-network header-stall recovery', function () {
       // Tiny header timeout so the stalled first attempt is aborted promptly;
       // the second attempt then succeeds.
       let vn = new VirtualNetwork(fetch, { fetchHeaderTimeoutMs: 20 });
-      // The host reaches the base realm through a virtual-to-real URL mapping,
-      // so exercise that path: the per-attempt timeout signal is attached
-      // before the mapping runs and must survive the request being rebuilt at
-      // the mapped URL, or the native fetch never sees the abort.
-      vn.addURLMapping(
-        new URL('https://cardstack.com/base/'),
-        new URL('https://realm-server.ci.localhost/base/'),
-      );
       let response = await vn.fetch('https://cardstack.com/base/card-api');
       assert.strictEqual(
         response.status,
@@ -233,7 +230,7 @@ module('Unit | virtual-network header-stall recovery', function () {
       );
       assert.true(
         signalSeen(),
-        'the native fetch received an abort signal through the URL mapping',
+        'the aborted attempt fired the per-attempt timeout signal',
       );
     } finally {
       if (had) {
@@ -242,5 +239,33 @@ module('Unit | virtual-network header-stall recovery', function () {
         delete g.__environment;
       }
     }
+  });
+
+  // The host reaches the base realm through a virtual-to-real URL mapping, and
+  // the per-attempt timeout signal is attached before that mapping runs. The
+  // remapped request must carry the signal through, or the native fetch for a
+  // base artifact addressed at the virtual host never sees the abort.
+  test('buildRequest carries the abort signal onto the remapped request', async function (assert) {
+    let controller = new AbortController();
+    let original = new Request('https://cardstack.com/base/_info', {
+      method: 'QUERY',
+      body: JSON.stringify({ realms: ['https://cardstack.com/base/'] }),
+      signal: controller.signal,
+    });
+    let remapped = await buildRequest(
+      'https://realm-server.ci.localhost/base/_info',
+      original,
+    );
+    assert.notStrictEqual(
+      remapped.url,
+      original.url,
+      'the request was rebuilt at the mapped real URL',
+    );
+    assert.false(remapped.signal.aborted, 'not aborted before the abort fires');
+    controller.abort(new Error('stall'));
+    assert.true(
+      remapped.signal.aborted,
+      'aborting the original aborts the remapped request',
+    );
   });
 });
